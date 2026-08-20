@@ -21,6 +21,7 @@ from .component_style import (
     parent_layout,
     relative_bbox,
 )
+from .factorized import observed_structure_keys
 from .geometry import bbox, resample, signature_key
 from .samples import iter_index, sha256_file
 from .schemas import (
@@ -28,6 +29,7 @@ from .schemas import (
     ComponentRelationPrototype,
     ComponentStrokePrototype,
     ComponentTrajectoryPrototype,
+    FactorizedStyleProfile,
     Point2D,
     StrokePrototype,
     StyleProfile,
@@ -39,6 +41,50 @@ DEFAULT_PROFILE_ROOT = Path("profiles")
 
 def _mean(values: list[float], default: float) -> float:
     return float(np.mean(values)) if values else default
+
+
+def _factorized_style_from_checkpoint(
+    checkpoint: Path | None,
+    style_tokens: list[list[float]],
+    characters: set[str],
+    structures: StructureRepository,
+) -> FactorizedStyleProfile | None:
+    if checkpoint is None or not style_tokens:
+        return None
+    try:
+        import torch
+
+        from .model import HierarchicalResidualModel, ModelConfig
+
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        config = ModelConfig(**payload["model_config"])
+        if not config.use_factorized_style:
+            return None
+        model = HierarchicalResidualModel(config)
+        model.load_state_dict(payload["model_state"])
+        model.eval()
+        values = torch.tensor([style_tokens[:256]], dtype=torch.float32)
+        with torch.inference_mode():
+            _, mean, log_variance = model.encode_writer(values)
+    except (ImportError, KeyError, RuntimeError, ValueError):
+        return None
+    observed = set()
+    for character in characters:
+        observed.update(observed_structure_keys(structures.get(character)))
+    log_variance_values = log_variance[0].float().tolist()
+    standard_deviation = np.exp(0.5 * np.asarray(log_variance_values, dtype=np.float64))
+    return FactorizedStyleProfile(
+        model_version=str(payload.get("model_version", "hierarchical_residual_v2")),
+        checkpoint_sha256=sha256_file(Path(checkpoint)),
+        writer_latent=[float(value) for value in mean[0].float().tolist()],
+        writer_log_variance=[float(value) for value in log_variance_values],
+        observed_structure_keys=sorted(observed),
+        uncertainty_summary={
+            "latent_std_mean": float(standard_deviation.mean()),
+            "latent_std_max": float(standard_deviation.max()),
+            "observed_key_count": float(len(observed)),
+        },
+    )
 
 
 def _glyph_bbox(strokes: list[list[Point2D]]) -> tuple[float, float, float, float]:
@@ -109,6 +155,7 @@ def build_profile(
     index_path: Path,
     structures: StructureRepository,
     profile_root: Path = DEFAULT_PROFILE_ROOT,
+    style_checkpoint: Path | None = None,
 ) -> tuple[StyleProfile, Path]:
     x_scales: list[float] = []
     y_scales: list[float] = []
@@ -550,10 +597,19 @@ def build_profile(
         character_component_trajectory_values
     )
     index_sha256 = sha256_file(Path(index_path))
-    profile_seed = f"{writer_id}:{index_sha256}:profile_v4_component_trajectory".encode()
+    factorized_style = _factorized_style_from_checkpoint(
+        style_checkpoint, style_tokens, characters, structures
+    )
+    profile_schema = "style_profile_v5" if factorized_style is not None else "style_profile_v4"
+    checkpoint_identity = (
+        factorized_style.checkpoint_sha256 if factorized_style is not None else "deterministic"
+    )
+    profile_seed = (
+        f"{writer_id}:{index_sha256}:{profile_schema}:component_trajectory:{checkpoint_identity}"
+    ).encode()
     profile_version = hashlib.sha256(profile_seed).hexdigest()[:16]
     profile = StyleProfile(
-        schema_version="style_profile_v4",
+        schema_version=profile_schema,
         profile_version=profile_version,
         writer_id=writer_id,
         created_at=datetime.now(UTC).isoformat(),
@@ -596,6 +652,7 @@ def build_profile(
         },
         excluded_samples=excluded,
         style_tokens=style_tokens[:256],
+        factorized_style=factorized_style,
     )
     target_dir = Path(profile_root).resolve() / writer_id
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -639,6 +696,11 @@ def load_profile(path: Path) -> StyleProfile:
         key: ComponentTrajectoryPrototype(**item)
         for key, item in value.get("character_component_trajectories", {}).items()
     }
+    factorized_style = (
+        FactorizedStyleProfile(**value["factorized_style"])
+        if value.get("factorized_style")
+        else None
+    )
     return StyleProfile(
         **{
             **value,
@@ -649,5 +711,6 @@ def load_profile(path: Path) -> StyleProfile:
             "component_relations": component_relations,
             "component_trajectories": component_trajectories,
             "character_component_trajectories": character_component_trajectories,
+            "factorized_style": factorized_style,
         }
     )

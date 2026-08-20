@@ -109,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     profile_build.add_argument("--index", type=_path)
     profile_build.add_argument("--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE)
     profile_build.add_argument("--destination", type=_path, default=PROJECT_ROOT / "profiles")
+    profile_build.add_argument("--style-checkpoint", type=_path)
 
     collect = groups.add_parser("collect", help="active sample selection")
     collect_commands = collect.add_subparsers(dest="command", required=True)
@@ -243,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             index,
             StructureRepository(args.database),
             args.destination,
+            args.style_checkpoint,
         )
         _emit(
             {
@@ -260,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
                     profile.character_component_trajectories
                 ),
                 "excluded_count": len(profile.excluded_samples),
+                "factorized_style": profile.factorized_style is not None,
             }
         )
         return 0

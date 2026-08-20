@@ -23,6 +23,7 @@ from .component_style import (
     relative_bbox,
     transform_between_bboxes,
 )
+from .factorized import stroke_context_tokens
 from .geometry import bbox, clamp01, cubic_bspline, path_length, resample, signature_key
 from .profile import load_profile
 from .render import render_png, render_svg
@@ -779,11 +780,18 @@ class HybridGenerator(DeterministicGenerator):
             if calibrated_threshold is not None
             else 0.55
         )
+        self.factorized_fallback = (
+            self.model.config.use_factorized_style and profile.factorized_style is None
+        )
 
     def generate(self, graph: CharacterGraph) -> GeneratedGlyph:
         if not self.profile.style_tokens:
             glyph = super().generate(graph)
             glyph.generator = "deterministic_fallback_missing_style_tokens"
+            return glyph
+        if self.factorized_fallback:
+            glyph = super().generate(graph)
+            glyph.generator = "deterministic_fallback_missing_factorized_profile"
             return glyph
         torch = self.torch
         style_values = self.profile.style_tokens[:96]
@@ -793,9 +801,36 @@ class HybridGenerator(DeterministicGenerator):
         ]
         style = torch.tensor([style_values], dtype=torch.float32, device="cuda")
         structure = torch.tensor([structure_values], dtype=torch.float32, device="cuda")
+        context = torch.tensor(
+            stroke_context_tokens(graph)[None, ...], dtype=torch.float32, device="cuda"
+        )
+        writer_latent = (
+            torch.tensor(
+                [self.profile.factorized_style.writer_latent],
+                dtype=torch.float32,
+                device="cuda",
+            )
+            if self.model.config.use_factorized_style
+            and self.profile.factorized_style is not None
+            else None
+        )
         with torch.inference_mode():
-            prediction = self.model(style, structure)
+            prediction = self.model(
+                style,
+                structure,
+                context_tokens=context,
+                writer_latent=writer_latent,
+            )
         confidences = prediction["confidence"][0].float().cpu().numpy()
+        uncertainties = (
+            np.exp(
+                0.5 * prediction["residual_log_variance"][0].float().cpu().numpy()
+            )
+            if "residual_log_variance" in prediction
+            else np.zeros_like(confidences)
+        )
+        if self.model.config.use_factorized_style:
+            confidences = confidences * np.exp(-0.5 * uncertainties)
         mean_confidence = float(np.mean(confidences))
         if mean_confidence < self.confidence_threshold or (
             self.trained_steps < 1000 and self.confidence_threshold > 0
@@ -812,6 +847,9 @@ class HybridGenerator(DeterministicGenerator):
         pressures = prediction["pressure"][0].float().cpu().numpy()
         durations = prediction["duration"][0].float().cpu().numpy()
         densities = prediction["density"][0].float().cpu().numpy()
+        deterministic_memory = (
+            super().generate(graph) if self.model.config.use_factorized_style else None
+        )
         generated: list[GeneratedStroke] = []
         time_cursor = 0
         for index, standard in enumerate(graph.strokes):
@@ -822,6 +860,18 @@ class HybridGenerator(DeterministicGenerator):
             local_scale = max(float(span.max()), 1e-6)
             local = (transformed - minimum) / local_scale
             controls = minimum + (local + residuals[index]) * local_scale
+            if deterministic_memory is not None:
+                memory_stroke = deterministic_memory.strokes[index]
+                memory_controls = np.asarray(
+                    resample([(point.x, point.y) for point in memory_stroke.points], 8),
+                    dtype=np.float64,
+                )
+                neural_weight = float(np.clip(np.exp(-uncertainties[index]), 0.15, 0.85))
+                if memory_stroke.style_source.startswith(
+                    ("component_trajectory_direct", "component_trajectory_exact")
+                ):
+                    neural_weight = 0.0
+                controls = neural_weight * controls + (1.0 - neural_weight) * memory_controls
             controls = [(clamp01(point[0]), clamp01(point[1])) for point in controls]
             point_count = max(8, min(64, round(float(densities[index]) * 64)))
             duration = max(80.0, float(durations[index]) * 1000.0)
@@ -861,9 +911,13 @@ class HybridGenerator(DeterministicGenerator):
             structure_version=self.structure_version,
             profile_version=self.profile.profile_version,
             generator=(
-                "hierarchical_residual_v2_refined"
-                if self.model.config.use_refiner
-                else "hierarchical_residual_v1"
+                "hierarchical_residual_v3_factorized"
+                if self.model.config.use_factorized_style
+                else (
+                    "hierarchical_residual_v2_refined"
+                    if self.model.config.use_refiner
+                    else "hierarchical_residual_v1"
+                )
             ),
             confidence=round(mean_confidence, 6),
             strokes=generated,
