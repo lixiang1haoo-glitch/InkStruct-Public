@@ -198,3 +198,4 @@ def test_whole_component_trajectory_places_all_strokes_in_one_frame():
     assert [[(point.x, point.y) for point in stroke.points] for stroke in whole.strokes[:3]] != [
         [(point.x, point.y) for point in stroke.points] for stroke in baseline.strokes[:3]
     ]
+    assert all(len(stroke.points) >= 24 for stroke in whole.strokes)

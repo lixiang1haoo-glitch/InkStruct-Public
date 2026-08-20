@@ -145,6 +145,7 @@ def evaluate_writer(
     component_strength: float = 1.0,
     heldout_characters: set[str] | None = None,
     style_checkpoint: Path | None = None,
+    confidence_threshold: float | None = None,
 ) -> dict:
     if not 0.1 <= heldout_ratio <= 0.4:
         raise ValueError("heldout ratio must be between 0.1 and 0.4")
@@ -184,6 +185,7 @@ def evaluate_writer(
         run_id="heldout",
         png=False,
         checkpoint=checkpoint,
+        confidence_threshold=confidence_threshold,
         component_conditioning=component_conditioning,
         component_strength=component_strength,
     )

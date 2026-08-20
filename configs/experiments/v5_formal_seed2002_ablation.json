@@ -1,0 +1,15 @@
+{
+  "schema_version": "experiment_config_v1",
+  "writer_id": "user_001",
+  "index": "artifacts/samples_merged_202608201606/user_001/index.jsonl",
+  "database": "artifacts/structures/characters.sqlite3",
+  "output_root": "artifacts/experiments/v5_formal_seed2002_ablation",
+  "seed": 1001,
+  "style_checkpoint": "artifacts/models/v5_formal_seed2002.pt",
+  "variants": [
+    {"name": "skeleton", "generation": "skeleton", "component_mode": "off"},
+    {"name": "v4_adaptive", "component_mode": "adaptive"},
+    {"name": "v5_safe_adaptive", "checkpoint": "artifacts/models/v5_formal_seed2002.pt", "component_mode": "adaptive"},
+    {"name": "v5_forced_diagnostic", "checkpoint": "artifacts/models/v5_formal_seed2002.pt", "component_mode": "adaptive", "confidence_threshold": 0.0}
+  ]
+}
