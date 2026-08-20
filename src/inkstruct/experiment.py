@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -270,11 +271,13 @@ def run_budget_sweep(config: dict[str, Any], *, allow_dirty: bool = False) -> di
     folds = grouped_character_folds(
         index_path, structures, folds=int(config.get("folds", 5)), seed=int(config.get("seed", 1001))
     )
+    fold_indices = [int(value) for value in config.get("fold_indices", range(len(folds)))]
     budgets = config.get("budgets", list(DEFAULT_BUDGETS))
     strategies = config.get("strategies", list(DEFAULT_STRATEGIES))
     random_seeds = config.get("random_seeds", [1001, 2002, 3003, 4004, 5005])
     runs: list[dict[str, Any]] = []
-    for fold_index, heldout_list in enumerate(folds):
+    for fold_index in fold_indices:
+        heldout_list = folds[fold_index]
         heldout = set(heldout_list)
         candidates = sorted(set(samples_by_character) - heldout, key=ord)
         for strategy in strategies:
@@ -335,6 +338,7 @@ def run_budget_sweep(config: dict[str, Any], *, allow_dirty: bool = False) -> di
         "experiment": "budget_sweep",
         "metadata": metadata,
         "folds": folds,
+        "evaluated_fold_indices": fold_indices,
         "budgets": budgets,
         "strategies": strategies,
         "summary": summary,
@@ -358,10 +362,13 @@ def run_ablation(config: dict[str, Any], *, allow_dirty: bool = False) -> dict[s
     folds = grouped_character_folds(index_path, structures, folds=5, seed=int(config.get("seed", 1001)))
     heldout = set(folds[0])
     results = {}
+    summaries = {}
     root = Path(config["output_root"]).resolve()
     for variant in config["variants"]:
+        if not variant.get("enabled", True):
+            continue
         checkpoint = Path(variant["checkpoint"]) if variant.get("checkpoint") else None
-        results[variant["name"]] = evaluate_writer(
+        result = evaluate_writer(
             config["writer_id"],
             index_path,
             structures,
@@ -370,12 +377,26 @@ def run_ablation(config: dict[str, Any], *, allow_dirty: bool = False) -> dict[s
             component_conditioning=variant.get("component_mode", "adaptive"),
             heldout_characters=heldout,
         )
+        if variant.get("generation") == "skeleton":
+            result = _as_skeleton_result(result)
+        results[variant["name"]] = result
+        summaries[variant["name"]] = _stratified_character_summary(
+            result,
+            structures,
+            training_characters={
+                sample.character
+                for sample in iter_index(index_path)
+                if sample.character not in heldout
+            },
+            seed=int(config.get("seed", 1001)),
+        )
     report = {
         "schema_version": "experiment_report_v1",
         "experiment": "ablation",
         "metadata": metadata,
         "heldout_characters": "".join(sorted(heldout, key=ord)),
         "results": results,
+        "summaries": summaries,
         "duration_seconds": time.perf_counter() - started,
     }
     root.mkdir(parents=True, exist_ok=True)
@@ -385,9 +406,121 @@ def run_ablation(config: dict[str, Any], *, allow_dirty: bool = False) -> dict[s
     return report
 
 
+def _as_skeleton_result(result: dict[str, Any]) -> dict[str, Any]:
+    value = {**result}
+    value["generated_distance"] = value["baseline_distance"]
+    value["relative_improvement"] = 0.0
+    value["extended_metrics"] = {**value["baseline_extended_metrics"]}
+    value["character_metrics"] = [
+        {
+            **row,
+            "generated_distance": row["baseline_distance"],
+            "improvement": 0.0,
+            **{
+                key.removeprefix("baseline_"): metric
+                for key, metric in row.items()
+                if key.startswith("baseline_")
+            },
+        }
+        for row in result["character_metrics"]
+    ]
+    value["generation"] = "skeleton"
+    return value
+
+
+def _stratified_character_summary(
+    result: dict[str, Any],
+    structures: StructureRepository,
+    *,
+    training_characters: set[str],
+    seed: int,
+) -> dict[str, Any]:
+    training_features: Counter[str] = Counter()
+    for character in training_characters:
+        training_features.update(_graph_features(structures.get(character)))
+    groups: dict[str, dict[str, list[dict[str, Any]]]] = {
+        "stroke_count": {},
+        "layout": {},
+        "component_coverage": {},
+    }
+    rows = result.get("character_metrics", [])
+    for row in rows:
+        graph = structures.get(row["character"])
+        root = next((item for item in graph.components if item.parent_id is None), None)
+        layout = root.layout if root and root.layout else "single"
+        stroke_group = "1-4" if len(graph.strokes) <= 4 else "5-8" if len(graph.strokes) <= 8 else "9+"
+        features = [
+            feature
+            for feature in _graph_features(graph)
+            if _feature_kind(feature).startswith("component-")
+        ]
+        coverage = (
+            sum(training_features[feature] > 0 for feature in features) / len(features)
+            if features
+            else 1.0
+        )
+        coverage_group = "low" if coverage < 0.34 else "medium" if coverage < 0.67 else "high"
+        for dimension, group in (
+            ("stroke_count", stroke_group),
+            ("layout", layout),
+            ("component_coverage", coverage_group),
+        ):
+            groups[dimension].setdefault(group, []).append(row)
+
+    def summarize(values: list[dict[str, Any]], offset: int) -> dict[str, Any]:
+        metrics = {}
+        for metric in ("generated_distance", "dtw", "sdf_distance", "style_similarity"):
+            observed = [float(row[metric]) for row in values if metric in row]
+            low, high = _bootstrap_ci(observed, seed=seed + offset)
+            metrics[metric] = {
+                "mean": float(np.mean(observed)) if observed else 0.0,
+                "ci95": [low, high],
+            }
+        return {"count": len(values), "metrics": metrics}
+
+    return {
+        "overall": summarize(rows, 0),
+        "strata": {
+            dimension: {
+                name: summarize(values, index + 1)
+                for index, (name, values) in enumerate(sorted(dimension_groups.items()))
+            }
+            for dimension, dimension_groups in groups.items()
+        },
+        "failed_characters": result.get("skipped", []),
+    }
+
+
 def _trajectory_strokes(path: Path) -> list[list[tuple[float, float]]]:
     value = json.loads(path.read_text(encoding="utf-8"))
     return [[(float(point["x"]), float(point["y"])) for point in stroke["points"]] for stroke in value["strokes"]]
+
+
+def _stratified_blind_characters(
+    available: list[str], structures: StructureRepository, *, count: int, seed: int
+) -> list[str]:
+    generator = random.Random(seed)
+    buckets: dict[tuple[str, int], list[str]] = {}
+    for character in available:
+        graph = structures.get(character)
+        root = next((item for item in graph.components if item.parent_id is None), None)
+        layout = root.layout if root and root.layout else "single"
+        buckets.setdefault((layout, min(3, len(graph.strokes) // 4)), []).append(character)
+    for values in buckets.values():
+        generator.shuffle(values)
+    selected: list[str] = []
+    keys = sorted(buckets)
+    while len(selected) < min(count, len(available)):
+        progressed = False
+        for key in keys:
+            if buckets[key]:
+                selected.append(buckets[key].pop())
+                progressed = True
+                if len(selected) >= min(count, len(available)):
+                    break
+        if not progressed:
+            break
+    return selected
 
 
 def run_blind_pack(config: dict[str, Any]) -> dict[str, Any]:
@@ -406,14 +539,18 @@ def run_blind_pack(config: dict[str, Any]) -> dict[str, Any]:
         if (run_a / "trajectories" / f"U+{ord(character):04X}.json").is_file()
         and (run_b / "trajectories" / f"U+{ord(character):04X}.json").is_file()
     )
-    generator.shuffle(available)
-    characters = available[: min(int(config.get("count", 60)), len(available))]
     output = Path(config["output_root"]).resolve()
     items = output / "items"
     items.mkdir(parents=True, exist_ok=True)
     structures = StructureRepository(Path(config["database"]))
+    characters = _stratified_blind_characters(
+        available,
+        structures,
+        count=int(config.get("count", 60)),
+        seed=seed,
+    )
     key = []
-    rating_rows = ["item_id,style_choice,overall_choice,notes\n"]
+    rating_rows = ["rater_id,item_id,style_choice,overall_choice,notes\n"]
     for index, character in enumerate(characters, 1):
         aligned = align_sample(sample_by_character[character], structures.get(character))
         options = [
@@ -435,12 +572,76 @@ def run_blind_pack(config: dict[str, Any]) -> dict[str, Any]:
         item_id = f"item_{index:03d}"
         image.save(items / f"{item_id}.png")
         key.append({"item_id": item_id, "character": character, "left": "A" if order[0] == 0 else "B", "right": "A" if order[1] == 0 else "B"})
-        rating_rows.append(f"{item_id},,,\n")
+        rating_rows.append(f",{item_id},,,\n")
     (output / "blind_key.json").write_text(json.dumps(key, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "ratings.csv").write_text("".join(rating_rows), encoding="utf-8-sig")
-    manifest = {"schema_version": "blind_pack_v1", "seed": seed, "count": len(key), "items": str(items), "key": "blind_key.json", "ratings": "ratings.csv"}
+    manifest = {
+        "schema_version": "blind_pack_v1",
+        "seed": seed,
+        "count": len(key),
+        "stratified": True,
+        "items": str(items),
+        "key": "blind_key.json",
+        "ratings": "ratings.csv",
+        "method_a": config.get("method_a", "v4"),
+        "method_b": config.get("method_b", "v5"),
+    }
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+def score_blind_pack(pack: Path, rating_files: list[Path], *, seed: int = 1001) -> dict[str, Any]:
+    pack = Path(pack).resolve()
+    key = {
+        row["item_id"]: row
+        for row in json.loads((pack / "blind_key.json").read_text(encoding="utf-8"))
+    }
+    observations: dict[str, dict[str, list[float]]] = {
+        "style": {item_id: [] for item_id in key},
+        "overall": {item_id: [] for item_id in key},
+    }
+    raters = set()
+    for path in rating_files:
+        with Path(path).open(encoding="utf-8-sig", newline="") as stream:
+            for row in csv.DictReader(stream):
+                item_id = row.get("item_id", "")
+                rater = row.get("rater_id", "").strip()
+                if item_id not in key or not rater:
+                    continue
+                raters.add(rater)
+                for metric, column in (("style", "style_choice"), ("overall", "overall_choice")):
+                    choice = row.get(column, "").strip().upper()
+                    if choice == "TIE":
+                        observations[metric][item_id].append(0.5)
+                    elif choice in {"L", "R"}:
+                        observations[metric][item_id].append(
+                            1.0 if key[item_id]["left" if choice == "L" else "right"] == "B" else 0.0
+                        )
+    metrics = {}
+    for offset, (metric, items) in enumerate(observations.items()):
+        formal = [value for values in items.values() if len(values) >= 3 for value in values]
+        low, high = _bootstrap_ci(formal, seed=seed + offset)
+        preference = float(np.mean(formal)) if formal else None
+        metrics[metric] = {
+            "method_b_preference": preference,
+            "ci95": [low, high] if formal else None,
+            "formal_item_count": sum(len(values) >= 3 for values in items.values()),
+            "rating_count": len(formal),
+            "production_gate_passed": bool(
+                preference is not None and preference >= 0.60 and low > 0.50
+            ),
+            "ideal_70_percent_reached": bool(preference is not None and preference >= 0.70),
+        }
+    report = {
+        "schema_version": "blind_rating_report_v1",
+        "rater_count": len(raters),
+        "minimum_ratings_per_item": 3,
+        "metrics": metrics,
+    }
+    (pack / "rating_summary.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -451,11 +652,19 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--config", type=Path, required=True)
         if name != "blind-pack":
             command.add_argument("--allow-dirty", action="store_true")
+    blind_score = subparsers.add_parser("blind-score")
+    blind_score.add_argument("--pack", type=Path, required=True)
+    blind_score.add_argument("--ratings", type=Path, nargs="+", required=True)
+    blind_score.add_argument("--seed", type=int, default=1001)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "blind-score":
+        result = score_blind_pack(args.pack, args.ratings, seed=args.seed)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     config = _load_config(args.config)
     if args.command == "budget-sweep":
         result = run_budget_sweep(config, allow_dirty=args.allow_dirty)
@@ -463,5 +672,18 @@ def main(argv: list[str] | None = None) -> int:
         result = run_ablation(config, allow_dirty=args.allow_dirty)
     else:
         result = run_blind_pack(config)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    console_result = (
+        result
+        if args.command in {"blind-pack"}
+        else {
+            "schema_version": result.get("schema_version"),
+            "experiment": result.get("experiment"),
+            "duration_seconds": result.get("duration_seconds"),
+            "sweet_spot": result.get("sweet_spot"),
+            "output_root": config.get("output_root"),
+        }
+    )
+    print(json.dumps(console_result, ensure_ascii=False, indent=2))
     return 0

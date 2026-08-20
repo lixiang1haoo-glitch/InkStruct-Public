@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from inkstruct.experiment import grouped_character_folds, select_reference_characters
+from inkstruct.experiment import (
+    grouped_character_folds,
+    score_blind_pack,
+    select_reference_characters,
+)
 from inkstruct.structures import StructureRepository, build_database
 
 
@@ -76,3 +80,24 @@ def test_information_gain_selection_is_deterministic(tmp_path: Path) -> None:
     )
     assert left == right
     assert len(set(left)) == 3
+
+
+def test_blind_score_requires_three_ratings_per_item(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "blind_key.json").write_text(
+        json.dumps([{"item_id": "item_001", "left": "A", "right": "B"}]),
+        encoding="utf-8",
+    )
+    ratings = pack / "ratings.csv"
+    ratings.write_text(
+        "rater_id,item_id,style_choice,overall_choice,notes\n"
+        "r1,item_001,R,R,\n"
+        "r2,item_001,R,L,\n"
+        "r3,item_001,R,R,\n",
+        encoding="utf-8",
+    )
+    result = score_blind_pack(pack, [ratings], seed=1001)
+    assert result["rater_count"] == 3
+    assert result["metrics"]["style"]["formal_item_count"] == 1
+    assert result["metrics"]["style"]["method_b_preference"] == 1.0

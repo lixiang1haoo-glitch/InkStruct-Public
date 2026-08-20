@@ -1,0 +1,24 @@
+{
+  "schema_version": "experiment_config_v1",
+  "writer_id": "user_001",
+  "index": "artifacts/samples_merged_202608201606/user_001/index.jsonl",
+  "database": "artifacts/structures/characters.sqlite3",
+  "output_root": "artifacts/experiments/v5_ablation_full",
+  "seed": 1001,
+  "variants": [
+    {"name": "skeleton", "generation": "skeleton", "component_mode": "off"},
+    {"name": "v4_component_off", "component_mode": "off"},
+    {"name": "v4_adaptive", "component_mode": "adaptive"},
+    {"name": "old_neural_mse", "checkpoint": "artifacts/models/old_neural_mse.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "curve_auxiliary", "checkpoint": "artifacts/models/v5_curve.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "curve_plus_sdf", "checkpoint": "artifacts/models/v5_curve_sdf.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "bounded_refinement", "checkpoint": "artifacts/models/v5_refined.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "global_writer", "checkpoint": "artifacts/models/v5_global_writer.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "writer_component", "checkpoint": "artifacts/models/v5_writer_component.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "writer_component_role_layout", "checkpoint": "artifacts/models/v5_writer_component_role.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "factorized_local_style", "checkpoint": "artifacts/models/v5_factorized.pt", "component_mode": "adaptive", "enabled": false},
+    {"name": "uncertainty_fusion", "checkpoint": "artifacts/models/v5_uncertainty_fusion.pt", "component_mode": "adaptive", "enabled": false}
+  ],
+  "collection_strategies": ["random", "coverage", "information-gain"],
+  "note": "Enable checkpoint variants only after all named checkpoints have been trained with matched compute and fixed seeds."
+}

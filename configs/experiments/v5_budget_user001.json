@@ -9,6 +9,7 @@
   "budgets": [8, 16, 24, 32, 48, 64, 96, 128, 192, "all_train"],
   "strategies": ["random", "coverage", "information-gain"],
   "random_seeds": [1001, 2002, 3003, 4004, 5005],
+  "final_training_seeds": [1001, 2002, 3003],
   "sweet_spot_strategy": "information-gain",
   "component_mode": "adaptive",
   "component_strength": 1.0
