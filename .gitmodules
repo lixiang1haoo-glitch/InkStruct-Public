@@ -1,0 +1,4 @@
+[submodule "third_party/makemeahanzi"]
+	path = third_party/makemeahanzi
+	url = https://github.com/skishore/makemeahanzi.git
+	branch = master
