@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .factorized import CONTEXT_FEATURES, stroke_context_tokens
 from .geometry import bbox, resample
 from .structures import StructureRepository
 
@@ -186,6 +187,7 @@ class CasiaCorpus:
         return {
             "style": np.stack(style_tokens[:96]),
             "structure": np.stack(structure_tokens),
+            "context": stroke_context_tokens(graph),
             "residual": np.stack(residuals),
             "standard_controls": np.stack(standard_controls),
             "target_controls": np.stack(target_controls),
@@ -204,6 +206,7 @@ def _pad_episodes(episodes: list[dict[str, np.ndarray]], torch) -> dict:
     max_strokes = max(len(item["structure"]) for item in episodes)
     style = torch.zeros(batch, max_style, 40)
     structure = torch.zeros(batch, max_strokes, 40)
+    context = torch.zeros(batch, max_strokes, CONTEXT_FEATURES)
     residual = torch.zeros(batch, max_strokes, 8, 2)
     standard_controls = torch.zeros(batch, max_strokes, 8, 2)
     target_controls = torch.zeros(batch, max_strokes, 8, 2)
@@ -219,6 +222,7 @@ def _pad_episodes(episodes: list[dict[str, np.ndarray]], torch) -> dict:
         style_count, stroke_count = len(item["style"]), len(item["structure"])
         style[row, :style_count] = torch.from_numpy(item["style"])
         structure[row, :stroke_count] = torch.from_numpy(item["structure"])
+        context[row, :stroke_count] = torch.from_numpy(item["context"])
         residual[row, :stroke_count] = torch.from_numpy(item["residual"])
         standard_controls[row, :stroke_count] = torch.from_numpy(item["standard_controls"])
         target_controls[row, :stroke_count] = torch.from_numpy(item["target_controls"])
@@ -233,6 +237,7 @@ def _pad_episodes(episodes: list[dict[str, np.ndarray]], torch) -> dict:
     return {
         "style": style,
         "structure": structure,
+        "context": context,
         "residual": residual,
         "standard_controls": standard_controls,
         "target_controls": target_controls,
@@ -264,6 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--save-every", type=int, default=100)
     parser.add_argument("--refiner", action="store_true")
+    parser.add_argument("--factorized-style", action="store_true")
     parser.add_argument("--curve-loss-weight", type=float, default=0.0)
     parser.add_argument("--sdf-loss-weight", type=float, default=0.0)
     parser.add_argument("--render-sizes", default="32,64")
@@ -329,6 +335,7 @@ def _calibrate_confidence_threshold(
                 batch["structure"],
                 style_padding_mask=batch["style_mask"],
                 structure_padding_mask=batch["structure_mask"],
+                context_tokens=batch["context"],
             )
             valid = (~batch["structure_mask"]).float()
             predicted_error = (
@@ -388,7 +395,10 @@ def main(argv: list[str] | None = None) -> int:
     model_config = (
         ModelConfig(**resume_payload["model_config"])
         if resume_payload is not None
-        else ModelConfig(use_refiner=args.refiner)
+        else ModelConfig(
+            use_refiner=args.refiner,
+            use_factorized_style=args.factorized_style,
+        )
     )
     model = HierarchicalResidualModel(model_config).cuda()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
@@ -400,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         "references": args.references,
         "learning_rate": args.learning_rate,
         "refiner": model_config.use_refiner,
+        "factorized_style": model_config.use_factorized_style,
         "curve_loss_weight": args.curve_loss_weight,
         "sdf_loss_weight": args.sdf_loss_weight,
         "render_sizes": render_sizes,
@@ -424,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
             batch["structure"],
             style_padding_mask=batch["style_mask"],
             structure_padding_mask=batch["structure_mask"],
+            context_tokens=batch["context"],
         )
         valid = (~batch["structure_mask"]).float()
         residual_loss = (
@@ -451,6 +463,23 @@ def main(argv: list[str] | None = None) -> int:
             + 0.2 * density_loss
             + 0.1 * confidence_loss
         )
+        if model_config.use_factorized_style:
+            writer_mean = prediction["writer_mean"]
+            writer_log_variance = prediction["writer_log_variance"]
+            writer_kl = -0.5 * (
+                1 + writer_log_variance - writer_mean.square() - writer_log_variance.exp()
+            ).mean()
+            per_stroke_error = ((prediction["residual"] - batch["residual"]) ** 2).mean(
+                (-1, -2)
+            )
+            uncertainty_loss = (
+                (
+                    per_stroke_error * (-prediction["residual_log_variance"]).exp()
+                    + prediction["residual_log_variance"]
+                )
+                * valid
+            ).sum() / valid.sum()
+            loss = loss + 1e-4 * writer_kl + 1e-4 * uncertainty_loss
         predicted_controls = batch["stroke_origins"].unsqueeze(-2) + (
             batch["standard_controls"] + prediction["residual"]
         ) * batch["stroke_scales"].unsqueeze(-1).unsqueeze(-1)

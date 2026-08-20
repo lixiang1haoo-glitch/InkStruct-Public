@@ -198,6 +198,16 @@ class ComponentTrajectoryPrototype:
 
 
 @dataclass(slots=True)
+class FactorizedStyleProfile:
+    model_version: str
+    checkpoint_sha256: str
+    writer_latent: list[float]
+    writer_log_variance: list[float]
+    observed_structure_keys: list[str]
+    uncertainty_summary: dict[str, float]
+
+
+@dataclass(slots=True)
 class StyleProfile:
     schema_version: str
     profile_version: str
@@ -219,6 +229,7 @@ class StyleProfile:
     )
     excluded_samples: list[dict[str, str]] = field(default_factory=list)
     style_tokens: list[list[float]] = field(default_factory=list)
+    factorized_style: FactorizedStyleProfile | None = None
 
 
 @dataclass(slots=True)
