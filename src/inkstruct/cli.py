@@ -123,6 +123,11 @@ def build_parser() -> argparse.ArgumentParser:
     recommend.add_argument("--common-characters", type=_path)
     recommend.add_argument("--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE)
     recommend.add_argument("--output", type=_path)
+    recommend.add_argument(
+        "--strategy",
+        choices=("coverage", "information-gain"),
+        default="coverage",
+    )
 
     generate = groups.add_parser("generate", help="generate topology-preserving trajectories")
     generate.add_argument("--writer", required=True)
@@ -276,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
             profile_path=profile,
             anchor_count=args.anchors,
             target_repeats=args.target_repeats,
+            strategy=args.strategy,
             **(
                 {"common_characters_path": args.common_characters} if args.common_characters else {}
             ),
