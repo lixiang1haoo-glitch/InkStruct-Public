@@ -6,6 +6,7 @@
   "output_root": "artifacts/experiments/v5_ablation_user001",
   "seed": 1001,
   "variants": [
+    {"name": "skeleton", "generation": "skeleton", "component_mode": "off"},
     {"name": "v4_component_off", "component_mode": "off"},
     {"name": "v4_adaptive", "component_mode": "adaptive"}
   ]

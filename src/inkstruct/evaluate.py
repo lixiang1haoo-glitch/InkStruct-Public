@@ -36,6 +36,10 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
             actual_orders = [int(stroke["order"]) for stroke in strokes]
             if actual_orders != expected_orders:
                 raise ValueError("stroke order is not sequential")
+            expected_ids = [stroke.stroke_id for stroke in graph.strokes]
+            actual_ids = [str(stroke["standard_stroke_id"]) for stroke in strokes]
+            if actual_ids != expected_ids:
+                raise ValueError("standard stroke IDs do not match the character graph")
             for stroke in strokes:
                 if len(stroke["points"]) < 2:
                     raise ValueError(f"stroke {stroke['order']} has fewer than two points")
@@ -61,6 +65,12 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
         "mean_confidence": sum(confidence_values) / max(1, len(confidence_values)),
         "requested_count": manifest.get("requested_count"),
         "generation_failed_count": manifest.get("failed_count"),
+        "structure_coverage_rate": checked / max(1, int(manifest.get("requested_count", 0))),
+        "content_safety_passed": (
+            not failures
+            and not manifest.get("failed_count")
+            and checked == int(manifest.get("requested_count", 0))
+        ),
         "failures": failures,
         "style_metrics": {
             "status": "requires held-out samples not used by the profile",
@@ -109,7 +119,11 @@ def evaluate_writer(
                 json.dumps(asdict(sample), ensure_ascii=False, separators=(",", ":")) + "\n"
             )
     profile, profile_path = build_profile(
-        writer_id, train_index, structures, evaluation_root / "profiles"
+        writer_id,
+        train_index,
+        structures,
+        evaluation_root / "profiles",
+        checkpoint,
     )
     _, run_dir = generate_run(
         writer_id,
@@ -200,6 +214,7 @@ def evaluate_writer(
                 "generated_distance": styled_mean,
                 "improvement": 1.0 - styled_mean / max(baseline_mean, 1e-9),
                 **extended,
+                **{f"baseline_{key}": value for key, value in baseline_extended.items()},
             }
         )
     baseline_mean = float(np.mean(baseline_distances)) if baseline_distances else 0.0

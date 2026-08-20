@@ -6,5 +6,7 @@
   "run_b": "outputs/user_001/v5_comparison",
   "output_root": "artifacts/experiments/v5_blind_pack",
   "count": 60,
-  "seed": 1001
+  "seed": 1001,
+  "method_a": "ComponentTrajectory v4 adaptive",
+  "method_b": "InkStruct v5 candidate"
 }
