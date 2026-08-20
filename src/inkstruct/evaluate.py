@@ -9,6 +9,7 @@ import numpy as np
 from .alignment import align_sample
 from .generate import generate_run
 from .geometry import polyline_distance
+from .metrics import aggregate_stroke_metrics
 from .profile import build_profile
 from .samples import iter_index
 from .structures import StructureRepository
@@ -83,14 +84,21 @@ def evaluate_writer(
     checkpoint: Path | None = None,
     component_conditioning: bool | str = True,
     component_strength: float = 1.0,
+    heldout_characters: set[str] | None = None,
 ) -> dict:
     if not 0.1 <= heldout_ratio <= 0.4:
         raise ValueError("heldout ratio must be between 0.1 and 0.4")
     samples = list(iter_index(index_path))
     characters = sorted({sample.character for sample in samples}, key=ord)
-    heldout_count = max(1, round(len(characters) * heldout_ratio))
-    stride = max(1, len(characters) // heldout_count)
-    heldout = set(characters[::stride][:heldout_count])
+    if heldout_characters is None:
+        heldout_count = max(1, round(len(characters) * heldout_ratio))
+        stride = max(1, len(characters) // heldout_count)
+        heldout = set(characters[::stride][:heldout_count])
+    else:
+        heldout = set(heldout_characters)
+        missing = heldout - set(characters)
+        if missing:
+            raise ValueError(f"held-out characters are absent from the index: {''.join(sorted(missing))}")
     train_samples = [sample for sample in samples if sample.character not in heldout]
     evaluation_root = Path(output_root).resolve() / writer_id
     evaluation_root.mkdir(parents=True, exist_ok=True)
@@ -117,6 +125,11 @@ def evaluate_writer(
     )
     baseline_distances: list[float] = []
     generated_distances: list[float] = []
+    extended_values: dict[str, list[float]] = {}
+    baseline_extended_values: dict[str, list[float]] = {}
+    pressure_errors: list[float] = []
+    duration_errors: list[float] = []
+    density_errors: list[float] = []
     character_metrics: list[dict] = []
     skipped: list[dict[str, str]] = []
     first_by_character = {}
@@ -141,12 +154,41 @@ def evaluate_writer(
         generated = json.loads(generated_path.read_text(encoding="utf-8"))
         baseline = []
         styled = []
+        generated_strokes = []
         for standard, user, output_stroke in zip(
             graph.strokes, aligned.normalized_strokes, generated["strokes"]
         ):
             baseline.append(polyline_distance(standard.median, user))
             output = [(point["x"], point["y"]) for point in output_stroke["points"]]
+            generated_strokes.append(output)
             styled.append(polyline_distance(output, user))
+        extended = aggregate_stroke_metrics(generated_strokes, aligned.normalized_strokes)
+        baseline_extended = aggregate_stroke_metrics(
+            [standard.median for standard in graph.strokes], aligned.normalized_strokes
+        )
+        for key, value in extended.items():
+            extended_values.setdefault(key, []).append(value)
+        for key, value in baseline_extended.items():
+            baseline_extended_values.setdefault(key, []).append(value)
+        for stroke_index, output_stroke in enumerate(generated["strokes"]):
+            output_points = output_stroke["points"]
+            output_pressure = np.asarray(
+                [float(point["pressure"]) for point in output_points], dtype=np.float64
+            )
+            target_pressure = np.asarray(aligned.pressure_strokes[stroke_index], dtype=np.float64)
+            axis = np.linspace(0.0, 1.0, 16)
+            output_pressure = np.interp(
+                axis, np.linspace(0.0, 1.0, len(output_pressure)), output_pressure
+            )
+            target_pressure = np.interp(
+                axis, np.linspace(0.0, 1.0, len(target_pressure)), target_pressure
+            )
+            pressure_errors.append(float(np.mean(np.abs(output_pressure - target_pressure))))
+            output_duration = max(1, int(output_points[-1]["t_ms"]) - int(output_points[0]["t_ms"]))
+            target_times = aligned.time_strokes[stroke_index]
+            target_duration = max(1, int(target_times[-1]) - int(target_times[0]))
+            duration_errors.append(abs(output_duration - target_duration) / target_duration)
+            density_errors.append(abs(len(output_points) - len(target_times)) / max(1, len(target_times)))
         baseline_mean = float(np.mean(baseline))
         styled_mean = float(np.mean(styled))
         baseline_distances.extend(baseline)
@@ -157,6 +199,7 @@ def evaluate_writer(
                 "baseline_distance": baseline_mean,
                 "generated_distance": styled_mean,
                 "improvement": 1.0 - styled_mean / max(baseline_mean, 1e-9),
+                **extended,
             }
         )
     baseline_mean = float(np.mean(baseline_distances)) if baseline_distances else 0.0
@@ -173,6 +216,22 @@ def evaluate_writer(
         "baseline_distance": baseline_mean,
         "generated_distance": generated_mean,
         "relative_improvement": improvement,
+        "extended_metrics": {
+            **{
+                key: float(np.mean(values)) if values else 0.0
+                for key, values in sorted(extended_values.items())
+            },
+            "pressure_mae": float(np.mean(pressure_errors)) if pressure_errors else 0.0,
+            "duration_relative_error": (
+                float(np.mean(duration_errors)) if duration_errors else 0.0
+            ),
+            "density_relative_error": float(np.mean(density_errors)) if density_errors else 0.0,
+            "style_embedding_source": "deterministic_descriptor_v1",
+        },
+        "baseline_extended_metrics": {
+            key: float(np.mean(values)) if values else 0.0
+            for key, values in sorted(baseline_extended_values.items())
+        },
         "style_target": 0.15,
         "style_target_passed": improvement >= 0.15,
         "profile_sample_count": profile.sample_count,

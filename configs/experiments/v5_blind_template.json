@@ -1,0 +1,10 @@
+{
+  "schema_version": "experiment_config_v1",
+  "index": "artifacts/samples_merged_202608201606/user_001/index.jsonl",
+  "database": "artifacts/structures/characters.sqlite3",
+  "run_a": "outputs/user_001/v4_comparison",
+  "run_b": "outputs/user_001/v5_comparison",
+  "output_root": "artifacts/experiments/v5_blind_pack",
+  "count": 60,
+  "seed": 1001
+}

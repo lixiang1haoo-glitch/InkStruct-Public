@@ -166,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     groups.add_parser("train", help="train or smoke-test the hierarchical residual model")
+    groups.add_parser("experiment", help="run reproducible budget, ablation, and blind studies")
 
     groups.add_parser("collector", help="launch the standalone trajectory collector")
     groups.add_parser("generator", help="launch the standalone style generator")
@@ -176,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args, forwarded = parser.parse_known_args(argv)
-    if forwarded and args.group not in {"train", "collector", "generator", "desktop"}:
+    if forwarded and args.group not in {"train", "experiment", "collector", "generator", "desktop"}:
         parser.error("unrecognized arguments: " + " ".join(forwarded))
     if args.group == "structures" and args.command == "build":
         report = build_database(
@@ -340,6 +341,10 @@ def main(argv: list[str] | None = None) -> int:
         from .train import main as train_main
 
         return train_main(forwarded)
+    if args.group == "experiment":
+        from .experiment import main as experiment_main
+
+        return experiment_main(forwarded)
     if args.group == "collector":
         from .collector import main as collector_main
 
