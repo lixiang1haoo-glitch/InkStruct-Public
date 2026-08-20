@@ -1,0 +1,12 @@
+{
+  "schema_version": "experiment_config_v1",
+  "writer_id": "user_001",
+  "index": "artifacts/samples_merged_202608201606/user_001/index.jsonl",
+  "database": "artifacts/structures/characters.sqlite3",
+  "output_root": "artifacts/experiments/v5_ablation_user001",
+  "seed": 1001,
+  "variants": [
+    {"name": "v4_component_off", "component_mode": "off"},
+    {"name": "v4_adaptive", "component_mode": "adaptive"}
+  ]
+}
