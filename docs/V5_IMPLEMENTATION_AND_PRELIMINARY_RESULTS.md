@@ -58,6 +58,11 @@ five random selection seeds and three final training seeds is in
 - A 60-character stratified blind pack was generated successfully. Formal preference confidence
   intervals are intentionally absent until every scored item has at least three independent
   ratings.
+- One reviewer has completed all 60 items. After decoding the randomized sides, v4 adaptive was
+  preferred on 57 items, three were ties and the v5 smoke candidate was preferred on zero items.
+  Counting a tie as 0.5 gives an exploratory v5 preference of 2.5%. This single-reviewer result
+  has no formal confidence interval and cannot pass the production gate, but it is a strong
+  negative signal for the current smoke candidate.
 - Promotion requires at least 60% v5 preference with a 95% CI lower bound above 50%; 70% remains
   the ideal target.
 

@@ -101,3 +101,30 @@ def test_blind_score_requires_three_ratings_per_item(tmp_path: Path) -> None:
     assert result["rater_count"] == 3
     assert result["metrics"]["style"]["formal_item_count"] == 1
     assert result["metrics"]["style"]["method_b_preference"] == 1.0
+
+
+def test_blind_score_reports_single_reviewer_as_exploratory(tmp_path: Path) -> None:
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "blind_key.json").write_text(
+        json.dumps(
+            [
+                {"item_id": "item_001", "left": "A", "right": "B"},
+                {"item_id": "item_002", "left": "B", "right": "A"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    ratings = pack / "ratings.csv"
+    ratings.write_text(
+        "rater_id,item_id,style_choice,overall_choice,notes\n"
+        "r1,item_001,R,R,\n"
+        "r1,item_002,L,TIE,\n",
+        encoding="utf-8",
+    )
+    result = score_blind_pack(pack, [ratings], seed=1001)
+    assert result["status"] == "exploratory_insufficient_independent_raters"
+    assert result["production_decision"] == "insufficient_independent_raters"
+    assert result["metrics"]["style"]["exploratory_method_b_preference"] == 1.0
+    assert result["metrics"]["style"]["method_b_preference"] is None
+    assert result["metrics"]["style"]["ci95"] is None
