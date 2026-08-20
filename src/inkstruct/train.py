@@ -917,3 +917,7 @@ def main(argv: list[str] | None = None) -> int:
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: value for key, value in report.items() if key != "history"}))
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
