@@ -19,6 +19,8 @@ class ModelConfig:
     decoder_layers: int = 4
     control_points: int = 8
     dropout: float = 0.1
+    use_refiner: bool = False
+    refinement_bound: float = 0.03
 
 
 class HierarchicalResidualModel(nn.Module):
@@ -67,6 +69,15 @@ class HierarchicalResidualModel(nn.Module):
         self.duration_head = nn.Linear(cfg.d_model, 1)
         self.density_head = nn.Linear(cfg.d_model, 1)
         self.confidence_head = nn.Linear(cfg.d_model, 1)
+        self.refinement_head = (
+            nn.Sequential(
+                nn.Linear(cfg.d_model * 2, cfg.d_model),
+                nn.GELU(),
+                nn.Linear(cfg.d_model, cfg.control_points * 2),
+            )
+            if cfg.use_refiner
+            else None
+        )
 
     def forward(
         self,
@@ -90,11 +101,26 @@ class HierarchicalResidualModel(nn.Module):
             memory_key_padding_mask=style_padding_mask,
         )
         batch, strokes, _ = decoded.shape
-        return {
-            "residual": torch.tanh(self.residual_head(decoded)).view(
+        initial_residual = torch.tanh(self.residual_head(decoded)).view(
                 batch, strokes, self.config.control_points, 2
+            ) * 0.35
+        if self.refinement_head is not None:
+            valid = (
+                (~structure_padding_mask).to(decoded.dtype).unsqueeze(-1)
+                if structure_padding_mask is not None
+                else torch.ones(batch, strokes, 1, device=decoded.device, dtype=decoded.dtype)
             )
-            * 0.35,
+            context = (decoded * valid).sum(dim=1) / valid.sum(dim=1).clamp_min(1)
+            context = context.unsqueeze(1).expand(-1, strokes, -1)
+            refinement = torch.tanh(self.refinement_head(torch.cat((decoded, context), dim=-1)))
+            refinement = refinement.view(batch, strokes, self.config.control_points, 2)
+            refinement = refinement * self.config.refinement_bound
+        else:
+            refinement = torch.zeros_like(initial_residual)
+        return {
+            "initial_residual": initial_residual,
+            "refinement": refinement,
+            "residual": initial_residual + refinement,
             "pressure": torch.sigmoid(self.pressure_head(decoded)),
             "duration": torch.nn.functional.softplus(self.duration_head(decoded)).squeeze(-1),
             "density": torch.nn.functional.softplus(self.density_head(decoded)).squeeze(-1),

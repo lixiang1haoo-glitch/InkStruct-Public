@@ -749,7 +749,7 @@ class HybridGenerator(DeterministicGenerator):
         profile: StyleProfile,
         structure_version: str,
         checkpoint: Path,
-        confidence_threshold: float = 0.55,
+        confidence_threshold: float | None = None,
         component_conditioning: bool | str = True,
         component_strength: float = 1.0,
     ):
@@ -771,7 +771,14 @@ class HybridGenerator(DeterministicGenerator):
         self.torch = torch
         self.checkpoint = Path(checkpoint)
         self.trained_steps = int(payload.get("steps", 0))
-        self.confidence_threshold = confidence_threshold
+        calibrated_threshold = payload.get("calibrated_confidence_threshold")
+        self.confidence_threshold = float(
+            confidence_threshold
+            if confidence_threshold is not None
+            else calibrated_threshold
+            if calibrated_threshold is not None
+            else 0.55
+        )
 
     def generate(self, graph: CharacterGraph) -> GeneratedGlyph:
         if not self.profile.style_tokens:
@@ -853,7 +860,11 @@ class HybridGenerator(DeterministicGenerator):
             writer_id=self.profile.writer_id,
             structure_version=self.structure_version,
             profile_version=self.profile.profile_version,
-            generator="hierarchical_residual_v1",
+            generator=(
+                "hierarchical_residual_v2_refined"
+                if self.model.config.use_refiner
+                else "hierarchical_residual_v1"
+            ),
             confidence=round(mean_confidence, 6),
             strokes=generated,
         )
@@ -883,7 +894,7 @@ def generate_run(
     run_id: str | None = None,
     png: bool = True,
     checkpoint: Path | None = None,
-    confidence_threshold: float = 0.55,
+    confidence_threshold: float | None = None,
     component_conditioning: bool | str = True,
     component_strength: float = 1.0,
     progress_callback: Callable[[dict], None] | None = None,
@@ -949,6 +960,11 @@ def generate_run(
             "component_mode": generator.component_mode,
             "component_strength": generator.component_strength,
             "checkpoint": str(Path(checkpoint).resolve()) if checkpoint else None,
+            "confidence_threshold": (
+                generator.confidence_threshold
+                if isinstance(generator, HybridGenerator)
+                else None
+            ),
         }
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

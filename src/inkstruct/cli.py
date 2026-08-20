@@ -134,7 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--run-id")
     generate.add_argument("--no-png", action="store_true")
     generate.add_argument("--checkpoint", type=_path)
-    generate.add_argument("--confidence-threshold", type=float, default=0.55)
+    generate.add_argument(
+        "--confidence-threshold",
+        type=float,
+        help="override the writer-disjoint calibrated checkpoint threshold",
+    )
     generate.add_argument("--no-component-conditioning", action="store_true")
     generate.add_argument(
         "--component-mode",
