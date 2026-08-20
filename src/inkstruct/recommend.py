@@ -216,6 +216,36 @@ def _candidate_score(
     return score + common_bonus - effort_penalty - warning_penalty, contributions
 
 
+def _information_gain_score(
+    graph,
+    features: Counter[str],
+    coverage: Counter[str],
+    database_frequency: Counter[str],
+    uncertainty_scale: float,
+) -> tuple[float, list[tuple[float, str]]]:
+    contributions: list[tuple[float, str]] = []
+    relevant = {
+        "component-context",
+        "component-identity",
+        "component-slot",
+        "layout",
+        "stroke-signature",
+    }
+    for feature, instances in features.items():
+        kind = _feature_kind(feature)
+        if kind not in relevant:
+            continue
+        precision = 1.0 + coverage[feature]
+        variance_before = uncertainty_scale / precision
+        variance_after = uncertainty_scale / (precision + instances)
+        prevalence = 1.0 + math.log1p(database_frequency[feature])
+        gain = FEATURE_WEIGHTS[kind] * prevalence * (variance_before - variance_after)
+        contributions.append((gain, feature))
+    stroke_cost = 1.0 + 0.035 * len(graph.strokes) ** 1.15
+    warning_cost = 1.0 + 0.25 * len(graph.component_warnings)
+    return sum(value for value, _ in contributions) / (stroke_cost * warning_cost), contributions
+
+
 def _anchor_recommendations(
     structures: StructureRepository,
     existing: set[str],
@@ -267,14 +297,29 @@ def recommend_characters(
     common_characters_path: Path = DEFAULT_COMMON_CHARACTERS,
     anchor_count: int = 20,
     target_repeats: int = 3,
+    strategy: str = "coverage",
 ) -> dict:
-    del profile_path  # Component coverage comes from immutable sample character IDs.
+    if strategy not in {"coverage", "information-gain"}:
+        raise ValueError(f"unknown recommendation strategy: {strategy}")
     if count < 1:
         raise ValueError("recommendation count must be positive")
     if anchor_count < 0:
         raise ValueError("anchor count cannot be negative")
     if target_repeats < 1:
         raise ValueError("target repeats must be positive")
+
+    uncertainty_scale = 1.0
+    if profile_path and Path(profile_path).is_file():
+        from .profile import load_profile
+
+        profile = load_profile(profile_path)
+        if profile.factorized_style is not None:
+            uncertainty_scale = max(
+                0.05,
+                float(
+                    profile.factorized_style.uncertainty_summary.get("latent_std_mean", 1.0)
+                ),
+            )
 
     samples = list(iter_index(index_path)) if index_path and Path(index_path).is_file() else []
     sample_counts = Counter(sample.character for sample in samples)
@@ -313,15 +358,24 @@ def recommend_characters(
     for _ in range(min(count, len(candidates))):
         ranked: list[tuple[float, int, str, list[tuple[float, str]]]] = []
         for character, (graph, features, rank) in candidates.items():
-            score, contributions = _candidate_score(
-                graph,
-                features,
-                coverage,
-                rank,
-                len(common_characters),
-                database_frequency,
-                maximum_frequency,
-            )
+            if strategy == "information-gain":
+                score, contributions = _information_gain_score(
+                    graph,
+                    features,
+                    coverage,
+                    database_frequency,
+                    uncertainty_scale,
+                )
+            else:
+                score, contributions = _candidate_score(
+                    graph,
+                    features,
+                    coverage,
+                    rank,
+                    len(common_characters),
+                    database_frequency,
+                    maximum_frequency,
+                )
             ranked.append((score, rank, character, contributions))
         ranked.sort(key=lambda value: (-value[0], value[1], ord(value[2])))
         score, _, character, contributions = ranked[0]
@@ -361,9 +415,15 @@ def recommend_characters(
     new_actions = sum(item["repeats"] for item in selected)
     anchor_actions = sum(item["additional_repeats"] for item in anchors)
     return {
-        "schema_version": "component_collection_recommendation_v2",
+        "schema_version": (
+            "component_collection_recommendation_v3"
+            if strategy == "information-gain"
+            else "component_collection_recommendation_v2"
+        ),
         "geometry_only": True,
-        "frequency_weighted": True,
+        "frequency_weighted": strategy == "coverage",
+        "selection_strategy": strategy,
+        "posterior_uncertainty_scale": uncertainty_scale,
         "database_character_count": database_character_count,
         "existing_sample_count": len(samples),
         "existing_character_count": len(existing),

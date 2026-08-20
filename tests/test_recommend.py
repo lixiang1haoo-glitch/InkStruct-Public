@@ -70,6 +70,26 @@ class RecommendTests(unittest.TestCase):
             self.assertTrue(
                 all("database_frequency_score" in item for item in result["recommendations"])
             )
+            information_gain_a = recommend_characters(
+                StructureRepository(database),
+                count=2,
+                common_characters_path=common,
+                anchor_count=0,
+                strategy="information-gain",
+            )
+            information_gain_b = recommend_characters(
+                StructureRepository(database),
+                count=2,
+                common_characters_path=common,
+                anchor_count=0,
+                strategy="information-gain",
+            )
+            self.assertEqual(information_gain_a, information_gain_b)
+            self.assertEqual(
+                information_gain_a["schema_version"],
+                "component_collection_recommendation_v3",
+            )
+            self.assertFalse(information_gain_a["frequency_weighted"])
             saved = save_recommendations(result, root / "recommendations.json")
             self.assertTrue(Path(saved["files"]["collector_csv"]).is_file())
             self.assertTrue(Path(saved["files"]["character_text"]).is_file())
