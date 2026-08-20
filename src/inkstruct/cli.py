@@ -161,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--index", type=_path)
     evaluate.add_argument("--heldout-ratio", type=float, default=0.2)
     evaluate.add_argument("--checkpoint", type=_path)
+    evaluate.add_argument("--style-checkpoint", type=_path)
     evaluate.add_argument("--update-index", type=_path)
     evaluate.add_argument("--reference-profile", type=_path)
     evaluate.add_argument("--heldout-count", type=int, default=12)
@@ -175,8 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-root", type=_path, default=PROJECT_ROOT / "artifacts" / "evaluation"
     )
 
-    groups.add_parser("train", help="train or smoke-test the hierarchical residual model")
-    groups.add_parser("experiment", help="run reproducible budget, ablation, and blind studies")
+    groups.add_parser(
+        "train", help="train or smoke-test the hierarchical residual model", add_help=False
+    )
+    groups.add_parser(
+        "experiment",
+        help="run reproducible budget, ablation, and blind studies",
+        add_help=False,
+    )
 
     groups.add_parser("collector", help="launch the standalone trajectory collector")
     groups.add_parser("generator", help="launch the standalone style generator")
@@ -342,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_root=args.output_root,
                     heldout_ratio=args.heldout_ratio,
                     checkpoint=args.checkpoint,
+                    style_checkpoint=args.style_checkpoint,
                     component_conditioning=(
                         "off" if args.no_component_conditioning else args.component_mode
                     ),

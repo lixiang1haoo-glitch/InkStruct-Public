@@ -309,6 +309,11 @@ def run_budget_sweep(config: dict[str, Any], *, allow_dirty: bool = False) -> di
                         component_conditioning=config.get("component_mode", "adaptive"),
                         component_strength=float(config.get("component_strength", 1.0)),
                         heldout_characters=heldout,
+                        style_checkpoint=(
+                            Path(config["style_checkpoint"])
+                            if config.get("style_checkpoint")
+                            else None
+                        ),
                     )
                     runs.append(
                         {
@@ -376,6 +381,9 @@ def run_ablation(config: dict[str, Any], *, allow_dirty: bool = False) -> dict[s
             checkpoint=checkpoint,
             component_conditioning=variant.get("component_mode", "adaptive"),
             heldout_characters=heldout,
+            style_checkpoint=(
+                Path(config["style_checkpoint"]) if config.get("style_checkpoint") else None
+            ),
         )
         if variant.get("generation") == "skeleton":
             result = _as_skeleton_result(result)

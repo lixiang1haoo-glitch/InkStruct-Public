@@ -8,11 +8,60 @@ import numpy as np
 
 from .alignment import align_sample
 from .generate import generate_run
-from .geometry import polyline_distance
+from .geometry import bbox, polyline_distance, resample
 from .metrics import aggregate_stroke_metrics
 from .profile import build_profile
 from .samples import iter_index
 from .structures import StructureRepository
+
+
+class _WriterStyleEmbedder:
+    def __init__(self, checkpoint: Path):
+        import torch
+
+        from .model import HierarchicalResidualModel, ModelConfig
+
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        config = ModelConfig(**payload["model_config"])
+        if not config.use_factorized_style:
+            raise ValueError("style checkpoint has no writer-disjoint factorized encoder")
+        self.model = HierarchicalResidualModel(config)
+        self.model.load_state_dict(payload["model_state"])
+        self.model.eval()
+        self.torch = torch
+
+    @staticmethod
+    def _token(stroke: list[tuple[float, float]], order: int, count: int) -> list[float]:
+        sampled = np.asarray(resample(stroke, 16), dtype=np.float32).reshape(-1)
+        x0, y0, x1, y1 = bbox(stroke)
+        return [
+            *sampled.tolist(),
+            x0,
+            y0,
+            x1,
+            y1,
+            order / max(count, 1),
+            len(stroke) / 64.0,
+            x1 - x0,
+            y1 - y0,
+        ]
+
+    def embedding(self, strokes: list[list[tuple[float, float]]]) -> np.ndarray:
+        values = [self._token(stroke, index + 1, len(strokes)) for index, stroke in enumerate(strokes)]
+        with self.torch.inference_mode():
+            _, mean, _ = self.model.encode_writer(
+                self.torch.tensor([values], dtype=self.torch.float32)
+            )
+        return mean[0].float().numpy()
+
+    def similarity(
+        self,
+        generated: list[list[tuple[float, float]]],
+        target: list[list[tuple[float, float]]],
+    ) -> float:
+        left, right = self.embedding(generated), self.embedding(target)
+        denominator = max(float(np.linalg.norm(left) * np.linalg.norm(right)), 1e-9)
+        return float(np.dot(left, right) / denominator)
 
 
 def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
@@ -95,6 +144,7 @@ def evaluate_writer(
     component_conditioning: bool | str = True,
     component_strength: float = 1.0,
     heldout_characters: set[str] | None = None,
+    style_checkpoint: Path | None = None,
 ) -> dict:
     if not 0.1 <= heldout_ratio <= 0.4:
         raise ValueError("heldout ratio must be between 0.1 and 0.4")
@@ -144,6 +194,7 @@ def evaluate_writer(
     pressure_errors: list[float] = []
     duration_errors: list[float] = []
     density_errors: list[float] = []
+    style_embedder = _WriterStyleEmbedder(style_checkpoint) if style_checkpoint else None
     character_metrics: list[dict] = []
     skipped: list[dict[str, str]] = []
     first_by_character = {}
@@ -180,6 +231,10 @@ def evaluate_writer(
         baseline_extended = aggregate_stroke_metrics(
             [standard.median for standard in graph.strokes], aligned.normalized_strokes
         )
+        if style_embedder is not None:
+            extended["casia_writer_style_similarity"] = style_embedder.similarity(
+                generated_strokes, aligned.normalized_strokes
+            )
         for key, value in extended.items():
             extended_values.setdefault(key, []).append(value)
         for key, value in baseline_extended.items():
@@ -241,7 +296,11 @@ def evaluate_writer(
                 float(np.mean(duration_errors)) if duration_errors else 0.0
             ),
             "density_relative_error": float(np.mean(density_errors)) if density_errors else 0.0,
-            "style_embedding_source": "deterministic_descriptor_v1",
+            "style_embedding_source": (
+                "casia_writer_disjoint_factorized_v1"
+                if style_embedder is not None
+                else "deterministic_descriptor_v1"
+            ),
         },
         "baseline_extended_metrics": {
             key: float(np.mean(values)) if values else 0.0
