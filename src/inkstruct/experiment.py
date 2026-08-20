@@ -604,9 +604,9 @@ def score_blind_pack(pack: Path, rating_files: list[Path], *, seed: int = 1001) 
         row["item_id"]: row
         for row in json.loads((pack / "blind_key.json").read_text(encoding="utf-8"))
     }
-    observations: dict[str, dict[str, list[float]]] = {
-        "style": {item_id: [] for item_id in key},
-        "overall": {item_id: [] for item_id in key},
+    observations: dict[str, dict[str, dict[str, float]]] = {
+        "style": {item_id: {} for item_id in key},
+        "overall": {item_id: {} for item_id in key},
     }
     raters = set()
     for path in rating_files:
@@ -620,17 +620,32 @@ def score_blind_pack(pack: Path, rating_files: list[Path], *, seed: int = 1001) 
                 for metric, column in (("style", "style_choice"), ("overall", "overall_choice")):
                     choice = row.get(column, "").strip().upper()
                     if choice == "TIE":
-                        observations[metric][item_id].append(0.5)
+                        observations[metric][item_id][rater] = 0.5
                     elif choice in {"L", "R"}:
-                        observations[metric][item_id].append(
+                        observations[metric][item_id][rater] = (
                             1.0 if key[item_id]["left" if choice == "L" else "right"] == "B" else 0.0
                         )
     metrics = {}
     for offset, (metric, items) in enumerate(observations.items()):
-        formal = [value for values in items.values() if len(values) >= 3 for value in values]
+        exploratory = [value for values in items.values() for value in values.values()]
+        formal = [
+            value
+            for values in items.values()
+            if len(values) >= 3
+            for value in values.values()
+        ]
         low, high = _bootstrap_ci(formal, seed=seed + offset)
         preference = float(np.mean(formal)) if formal else None
+        exploratory_preference = float(np.mean(exploratory)) if exploratory else None
         metrics[metric] = {
+            "exploratory_method_b_preference": exploratory_preference,
+            "exploratory_item_count": sum(bool(values) for values in items.values()),
+            "exploratory_rating_count": len(exploratory),
+            "exploratory_choice_counts": {
+                "method_a": sum(value == 0.0 for value in exploratory),
+                "tie": sum(value == 0.5 for value in exploratory),
+                "method_b": sum(value == 1.0 for value in exploratory),
+            },
             "method_b_preference": preference,
             "ci95": [low, high] if formal else None,
             "formal_item_count": sum(len(values) >= 3 for values in items.values()),
@@ -644,6 +659,18 @@ def score_blind_pack(pack: Path, rating_files: list[Path], *, seed: int = 1001) 
         "schema_version": "blind_rating_report_v1",
         "rater_count": len(raters),
         "minimum_ratings_per_item": 3,
+        "status": (
+            "formal"
+            if all(value["formal_item_count"] > 0 for value in metrics.values())
+            else "exploratory_insufficient_independent_raters"
+        ),
+        "production_decision": (
+            "eligible"
+            if all(value["production_gate_passed"] for value in metrics.values())
+            else "insufficient_independent_raters"
+            if any(value["formal_item_count"] == 0 for value in metrics.values())
+            else "keep_v4"
+        ),
         "metrics": metrics,
     }
     (pack / "rating_summary.json").write_text(
