@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 foreach ($TrainingSeed in $Seeds) {
     $Checkpoint = "artifacts/models/v5_formal_seed$TrainingSeed.pt"
-    & $PythonPath -m inkstruct train `
+    & $PythonPath -m inkstruct.train `
         --casia-lmdb data/CASIA_CHINESE/train `
         --test-lmdb data/CASIA_CHINESE/test `
         --database artifacts/structures/characters.sqlite3 `
