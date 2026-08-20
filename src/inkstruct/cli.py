@@ -162,6 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--heldout-ratio", type=float, default=0.2)
     evaluate.add_argument("--checkpoint", type=_path)
     evaluate.add_argument("--style-checkpoint", type=_path)
+    evaluate.add_argument("--model-confidence-threshold", type=float)
     evaluate.add_argument("--update-index", type=_path)
     evaluate.add_argument("--reference-profile", type=_path)
     evaluate.add_argument("--heldout-count", type=int, default=12)
@@ -350,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
                     heldout_ratio=args.heldout_ratio,
                     checkpoint=args.checkpoint,
                     style_checkpoint=args.style_checkpoint,
+                    confidence_threshold=args.model_confidence_threshold,
                     component_conditioning=(
                         "off" if args.no_component_conditioning else args.component_mode
                     ),

@@ -654,8 +654,10 @@ class DeterministicGenerator:
                 if relation_prototype is not None:
                     style_source += "+layout_relation"
             estimated_length = path_length(controls)
-            point_count = max(8, min(64, math.ceil(estimated_length * 55)))
-            trajectory = cubic_bspline(controls, point_count)
+            point_count = max(24, min(128, math.ceil(estimated_length * 120)))
+            trajectory = resample(
+                cubic_bspline(controls, max(64, point_count * 2)), point_count
+            )
             if duration is None:
                 duration = max(
                     80.0,
@@ -772,6 +774,10 @@ class HybridGenerator(DeterministicGenerator):
         self.torch = torch
         self.checkpoint = Path(checkpoint)
         self.trained_steps = int(payload.get("steps", 0))
+        self.training_status = str(payload.get("training_status", "legacy_or_smoke"))
+        self.has_dynamic_supervision = (
+            payload.get("training_config", {}).get("dynamic_supervision") == "observed"
+        )
         calibrated_threshold = payload.get("calibrated_confidence_threshold")
         self.confidence_threshold = float(
             confidence_threshold
@@ -833,12 +839,12 @@ class HybridGenerator(DeterministicGenerator):
             confidences = confidences * np.exp(-0.5 * uncertainties)
         mean_confidence = float(np.mean(confidences))
         if mean_confidence < self.confidence_threshold or (
-            self.trained_steps < 1000 and self.confidence_threshold > 0
+            self.training_status != "formal" and self.confidence_threshold > 0
         ):
             glyph = super().generate(graph)
             glyph.generator = (
                 "deterministic_fallback_untrained_checkpoint"
-                if self.trained_steps < 1000
+                if self.training_status != "formal"
                 else "deterministic_fallback_low_model_confidence"
             )
             glyph.confidence = round(min(glyph.confidence, mean_confidence), 6)
@@ -848,7 +854,9 @@ class HybridGenerator(DeterministicGenerator):
         durations = prediction["duration"][0].float().cpu().numpy()
         densities = prediction["density"][0].float().cpu().numpy()
         deterministic_memory = (
-            super().generate(graph) if self.model.config.use_factorized_style else None
+            super().generate(graph)
+            if self.model.config.use_factorized_style or not self.has_dynamic_supervision
+            else None
         )
         generated: list[GeneratedStroke] = []
         time_cursor = 0
@@ -873,11 +881,36 @@ class HybridGenerator(DeterministicGenerator):
                     neural_weight = 0.0
                 controls = neural_weight * controls + (1.0 - neural_weight) * memory_controls
             controls = [(clamp01(point[0]), clamp01(point[1])) for point in controls]
-            point_count = max(8, min(64, round(float(densities[index]) * 64)))
-            duration = max(80.0, float(durations[index]) * 1000.0)
-            trajectory = cubic_bspline(controls, point_count)
+            point_count = max(
+                24,
+                min(
+                    128,
+                    max(
+                        round(float(densities[index]) * 128),
+                        math.ceil(path_length(controls) * 180),
+                    ),
+                ),
+            )
+            memory_stroke = (
+                deterministic_memory.strokes[index] if deterministic_memory is not None else None
+            )
+            duration = (
+                max(80.0, memory_stroke.points[-1].t_ms - memory_stroke.points[0].t_ms)
+                if memory_stroke is not None and not self.has_dynamic_supervision
+                else max(80.0, float(durations[index]) * 1000.0)
+            )
+            trajectory = resample(
+                cubic_bspline(controls, max(64, point_count * 2)), point_count
+            )
+            pressure_source = (
+                [point.pressure for point in memory_stroke.points]
+                if memory_stroke is not None and not self.has_dynamic_supervision
+                else pressures[index]
+            )
             pressure_curve = np.interp(
-                np.linspace(0, 1, point_count), np.linspace(0, 1, 8), pressures[index]
+                np.linspace(0, 1, point_count),
+                np.linspace(0, 1, len(pressure_source)),
+                pressure_source,
             )
             points = []
             for point_index, ((x, y), pressure) in enumerate(zip(trajectory, pressure_curve)):

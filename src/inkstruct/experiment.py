@@ -306,6 +306,11 @@ def run_budget_sweep(config: dict[str, Any], *, allow_dirty: bool = False) -> di
                         run_index,
                         structures,
                         output_root=run_root,
+                        checkpoint=(
+                            Path(config["checkpoint"])
+                            if config.get("checkpoint")
+                            else None
+                        ),
                         component_conditioning=config.get("component_mode", "adaptive"),
                         component_strength=float(config.get("component_strength", 1.0)),
                         heldout_characters=heldout,
@@ -314,6 +319,7 @@ def run_budget_sweep(config: dict[str, Any], *, allow_dirty: bool = False) -> di
                             if config.get("style_checkpoint")
                             else None
                         ),
+                        confidence_threshold=config.get("confidence_threshold"),
                     )
                     runs.append(
                         {
@@ -384,6 +390,7 @@ def run_ablation(config: dict[str, Any], *, allow_dirty: bool = False) -> dict[s
             style_checkpoint=(
                 Path(config["style_checkpoint"]) if config.get("style_checkpoint") else None
             ),
+            confidence_threshold=variant.get("confidence_threshold"),
         )
         if variant.get("generation") == "skeleton":
             result = _as_skeleton_result(result)

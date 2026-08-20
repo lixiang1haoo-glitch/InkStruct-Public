@@ -15,14 +15,15 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 - 结构库包含 9,574 个有效简繁字符。
 - `user_001` 当前档案版本为 `d270c610fd4ca3c7`，由 385 份样本、294 个唯一字符建立。
 - 已完成 9,574 / 9,574 字全量生成，失败数为 0，结构不变量通过率为 100%。
-- 默认生成采用 `adaptive` 部件模式：优先使用整组 `ComponentTrajectoryPrototype`，证据不足时逐级退回部件布局、条件化笔画和标准中心线。
+- 默认生成采用平滑的 `adaptive` 部件模式：优先使用整组 `ComponentTrajectoryPrototype`，证据不足时逐级退回部件布局、条件化笔画和标准中心线；每笔通过开放 B-Spline 与弧长重采样输出 24–128 个节点。
+- v5 已完成三个固定种子的正式训练和固定折消融；强制 v5 的 DTW/SDF 均弱于 v4，校准安全模式会回退到 v4，因此生产默认保持 `ComponentTrajectory v4 adaptive`。
 - 项目只关注几何字形与在线轨迹；当前不优化连笔，不导出 TTF/OTF。
 
 现成的全量结果位于 `outputs/user_001/all_supported_component_trajectory_v4/`，本轮实现报告位于 `artifacts/component_trajectory_v4/REPORT.md`。
 
 ## 环境
 
-项目要求 Python 3.12 或 3.13。确定性生成、采集、结构检查和测试可在 CPU 上运行；只有实验性的分层残差模型训练需要 NVIDIA GPU。
+项目要求 Python 3.12 或 3.13。确定性生成、采集、结构检查和测试可在 CPU 上运行；只有实验性的分层残差模型训练需要 NVIDIA GPU。正式三种子训练协议见 `scripts/train_v5_formal.ps1` 和 `configs/training/v5_formal.json`。
 
 Windows PowerShell：
 

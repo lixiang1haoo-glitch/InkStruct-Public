@@ -35,10 +35,21 @@ encoder and four-layer cross-attention stroke decoder. Each structure token maps
 to exactly one standard stroke and predicts eight local B-Spline residual control
 points, pressure, duration, density and confidence. CASIA training is episodic:
 references and queries share a writer while validation must be writer-disjoint.
+The available POT coordinates contain geometry and pen-state flags, but no observed
+pressure or timestamps. Formal training therefore supervises geometry, sampling
+density and confidence only; generated pressure and duration continue to come from
+the user's deterministic v4 memory.
 
-Checkpoints below 1,000 training steps are considered smoke artifacts and trigger
-the deterministic fallback unless the confidence threshold is explicitly set to
-zero for pipeline testing.
+Checkpoint eligibility is explicit through `training_status`. Smoke and legacy
+checkpoints always trigger deterministic fallback unless the confidence threshold
+is explicitly set to zero for diagnostic pipeline testing. Formal checkpoints use
+the writer-disjoint calibrated threshold, independent of their early-stopped step.
+
+Both deterministic and learned generation convert the eight predicted/control
+points into an open cubic B-Spline, oversample it, and uniformly resample by arc
+length. Every stroke contains 24--128 output nodes, with additional nodes assigned
+to longer paths. This keeps the online trajectory smooth without changing stroke
+count, order or standard stroke IDs.
 
 ## Component collection
 
