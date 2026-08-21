@@ -10,7 +10,15 @@ from inkstruct.recommend import (
     save_target_coverage_tiers,
 )
 from inkstruct.schemas import StyleProfile
-from inkstruct.structures import StructureRepository, build_database
+from inkstruct.structures import (
+    MAINLAND_SIMPLIFIED_PACKAGE,
+    NON_MAINLAND_SIMPLIFIED_PACKAGE,
+    StructureRepository,
+    build_database,
+    character_package,
+    export_character_packages,
+    package_characters,
+)
 
 
 class RecommendTests(unittest.TestCase):
@@ -135,6 +143,26 @@ class RecommendTests(unittest.TestCase):
             master_csv = Path(tier_saved["files"]["master_csv"])
             self.assertTrue(master_csv.read_bytes().startswith(b"\xef\xbb\xbf"))
             self.assertEqual(len(tier_saved["files"]["incremental_collector_csvs"]), 1)
+
+            packages = export_character_packages(
+                StructureRepository(database), root / "packages"
+            )
+            self.assertEqual(packages["database_character_count"], 2)
+            self.assertEqual(packages["counts"][MAINLAND_SIMPLIFIED_PACKAGE], 2)
+            self.assertEqual(packages["counts"][NON_MAINLAND_SIMPLIFIED_PACKAGE], 0)
+            self.assertEqual(
+                package_characters(
+                    StructureRepository(database), MAINLAND_SIMPLIFIED_PACKAGE
+                ),
+                ["江", "河"],
+            )
+            self.assertEqual(character_package("江"), MAINLAND_SIMPLIFIED_PACKAGE)
+            self.assertEqual(character_package("龍"), NON_MAINLAND_SIMPLIFIED_PACKAGE)
+            self.assertTrue(
+                Path(packages["files"][MAINLAND_SIMPLIFIED_PACKAGE])
+                .read_bytes()
+                .startswith(b"\xef\xbb\xbf")
+            )
 
 
 if __name__ == "__main__":

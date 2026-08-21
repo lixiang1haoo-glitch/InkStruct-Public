@@ -559,6 +559,7 @@ def plan_target_coverage_tiers(
     accepted_characters: set[str],
     sampled_characters: set[str] | None = None,
     target_characters: list[str] | None = None,
+    candidate_characters: set[str] | None = None,
     thresholds: tuple[float, ...] = DEFAULT_TARGET_COVERAGE_THRESHOLDS,
 ) -> dict:
     """Plan nested, target-conditioned collection tiers with few unique characters.
@@ -578,6 +579,13 @@ def plan_target_coverage_tiers(
     unsupported = [character for character in target if character not in all_character_set]
     if unsupported:
         raise ValueError(f"unsupported target characters: {''.join(unsupported[:20])}")
+    if candidate_characters is not None:
+        unsupported_candidates = candidate_characters - all_character_set
+        if unsupported_candidates:
+            raise ValueError(
+                "unsupported candidate characters: "
+                + "".join(sorted(unsupported_candidates)[:20])
+            )
 
     target_set = set(target)
     feature_totals = {kind: Counter() for kind in TARGET_COVERAGE_WEIGHTS}
@@ -649,7 +657,12 @@ def plan_target_coverage_tiers(
     selected_set: set[str] = set()
     tier_assignments: dict[str, int] = {}
     tier_summaries: list[dict] = []
-    candidate_pool = set(candidate_features) - accepted_characters
+    candidate_universe = (
+        set(candidate_features)
+        if candidate_characters is None
+        else set(candidate_characters)
+    )
+    candidate_pool = candidate_universe - accepted_characters
     for tier, threshold in enumerate(thresholds, start=1):
         phase: list[str] = []
         heap = [
@@ -808,8 +821,12 @@ def plan_target_coverage_tiers(
             if not key.endswith("_path")
         },
         "target_character_count": len(target),
+        "candidate_character_count": len(candidate_universe),
         "target_feature_mass": target_mass,
         "existing_valid_character_count": len(accepted_characters),
+        "existing_valid_target_character_count": len(
+            accepted_characters & target_set
+        ),
         "baseline_projected_score": baseline_score,
         "baseline_dimension_scores": {
             kind: (

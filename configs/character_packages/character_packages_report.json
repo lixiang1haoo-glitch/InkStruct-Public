@@ -1,0 +1,21 @@
+{
+  "schema_version": "character_package_partition_v1",
+  "definition": {
+    "mainland_standard_simplified_gb2312": "All Han characters in the structure library encodable as GB2312; exactly matches locale=zh-Hans in this database.",
+    "non_mainland_standard_simplified": "All remaining supported characters, including traditional forms, variants and radicals."
+  },
+  "database_character_count": 9574,
+  "counts": {
+    "mainland_standard_simplified_gb2312": 6763,
+    "non_mainland_standard_simplified": 2811
+  },
+  "character_sha256": {
+    "mainland_standard_simplified_gb2312": "96cbde971dfde8d4650d9516dec2e98bdc7876705243e983a32967d6951ce195",
+    "non_mainland_standard_simplified": "95211bc0134a7eca60f35ec5a61a205f23fad5e652fe50770adeac729a7a9d3a"
+  },
+  "locale_mismatch_count": 0,
+  "files": {
+    "mainland_standard_simplified_gb2312": "configs\\character_packages\\mainland_standard_simplified_gb2312_characters.csv",
+    "non_mainland_standard_simplified": "configs\\character_packages\\non_mainland_standard_simplified_characters.csv"
+  }
+}
