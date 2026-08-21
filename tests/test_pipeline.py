@@ -128,6 +128,43 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report["rerecord_characters"], "十")
             self.assertIn("stroke_count_mismatch", report["rows"][0]["issue"])
 
+    def test_wrong_stroke_order_is_corrected_before_profile_extraction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = make_structure(root / "structure")
+            sample_path = root / "raw" / "sample.json"
+            make_sample(sample_path)
+            value = json.loads(sample_path.read_text(encoding="utf-8"))
+            value["strokes"] = list(reversed(value["strokes"]))
+            for stroke_index, stroke in enumerate(value["strokes"]):
+                stroke["stroke_index"] = stroke_index
+                first_time = stroke["points"][0]["t_ms"]
+                for point in stroke["points"]:
+                    point["t_ms"] = stroke_index * 200 + point["t_ms"] - first_time
+            sample_path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+            imported = import_samples(root / "raw", "writer-1", root / "samples")
+            index_path = Path(imported["index"])
+            sample = next(iter_index(index_path))
+            aligned = align_sample(sample, repository.get("十"))
+            self.assertEqual(aligned.stroke_order_status, "corrected")
+            self.assertEqual(aligned.stroke_permutation, [2, 1])
+            self.assertEqual(
+                [mapping.user_orders for mapping in aligned.mappings], [[2], [1]]
+            )
+            profile, _ = build_profile(
+                "writer-1", index_path, repository, root / "profiles"
+            )
+            self.assertEqual(profile.coverage["corrected_stroke_order_sample_count"], 1)
+            self.assertEqual(profile.excluded_samples, [])
+            audit = audit_samples_for_rerecord(
+                index_path,
+                repository,
+                writer_id="writer-1",
+                output_csv=root / "audit.csv",
+            )
+            self.assertEqual(audit["corrected_stroke_order_sample_count"], 1)
+            self.assertEqual(audit["corrected_stroke_orders"][0]["standard_to_user"], [2, 1])
+
     def test_merge_indexes_preserves_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
