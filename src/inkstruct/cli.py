@@ -18,7 +18,14 @@ from .recommend import (
     save_target_coverage_tiers,
 )
 from .samples import import_samples, iter_index, merge_indexes, replace_index_samples
-from .structures import DEFAULT_DATABASE, StructureRepository, build_database
+from .structures import (
+    CHARACTER_PACKAGES,
+    DEFAULT_DATABASE,
+    StructureRepository,
+    build_database,
+    export_character_packages,
+    package_characters,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -78,6 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     structure_info = structures_commands.add_parser("info")
     structure_info.add_argument("--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE)
+    structure_packages = structures_commands.add_parser(
+        "export-packages", help="export GB2312 and non-GB2312 character manifests"
+    )
+    structure_packages.add_argument(
+        "--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE
+    )
+    structure_packages.add_argument("--output-dir", type=_path, required=True)
 
     samples = groups.add_parser("samples", help="import and validate raw online samples")
     sample_commands = samples.add_subparsers(dest="command", required=True)
@@ -140,7 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
     coverage_tiers.add_argument("--writer", required=True)
     coverage_tiers.add_argument("--index", type=_path, required=True)
     coverage_tiers.add_argument("--profile", type=_path)
-    coverage_tiers.add_argument("--target-characters", type=_path)
+    coverage_target = coverage_tiers.add_mutually_exclusive_group()
+    coverage_target.add_argument("--target-characters", type=_path)
+    coverage_target.add_argument("--target-package", choices=CHARACTER_PACKAGES)
     coverage_tiers.add_argument(
         "--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE
     )
@@ -227,6 +243,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.group == "structures" and args.command == "info":
         repository = StructureRepository(args.database)
         _emit({**repository.metadata(), "character_count": repository.count()})
+        return 0
+    if args.group == "structures" and args.command == "export-packages":
+        result = export_character_packages(
+            StructureRepository(args.database), args.output_dir
+        )
+        report_path = args.output_dir / "character_packages_report.json"
+        report_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        _emit({**result, "report": str(report_path)})
         return 0
     if args.group == "samples" and args.command == "import":
         _emit(import_samples(args.source, args.writer, args.destination))
@@ -322,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         profile_path = args.profile or PROJECT_ROOT / "profiles" / args.writer / "profile.json"
         profile = load_profile(profile_path)
         samples = list(iter_index(args.index))
+        repository = StructureRepository(args.database)
         target_characters = None
         if args.target_characters:
             target_characters = list(
@@ -331,19 +358,26 @@ def main(argv: list[str] | None = None) -> int:
                     if not character.isspace()
                 )
             )
+        elif args.target_package:
+            target_characters = package_characters(repository, args.target_package)
         result = plan_target_coverage_tiers(
-            StructureRepository(args.database),
+            repository,
             profile,
             accepted_characters=accepted_profile_characters(args.index, profile),
             sampled_characters={sample.character for sample in samples},
             target_characters=target_characters,
+            candidate_characters=(
+                set(target_characters) if args.target_package else None
+            ),
         )
+        result["target_package"] = args.target_package
         output = (
             args.output
             or PROJECT_ROOT
             / "artifacts"
             / "collection"
             / args.writer
+            / (args.target_package or "all_supported")
             / "target_coverage_tiers_report.json"
         )
         result = save_target_coverage_tiers(result, output)

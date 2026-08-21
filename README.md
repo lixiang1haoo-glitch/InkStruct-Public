@@ -100,6 +100,16 @@ py -3.12 -m venv .venv
 该命令输出一份带档位的审计 CSV 和五份增量、可直接导入采集器的 CSV。预计分数假设新增
 样本通过对齐与档案抽取，采集后仍需重新建档验证。
 
+将结构库导出为 GB2312 大陆标准简体包与非大陆标准简体包，并只针对简体包规划：
+
+```powershell
+.\.venv\Scripts\inkstruct.exe structures export-packages `
+  --output-dir configs\character_packages
+.\.venv\Scripts\inkstruct.exe collect coverage-tiers --writer user_001 `
+  --index artifacts\samples_merged_202608201606\user_001\index.jsonl `
+  --target-package mainland_standard_simplified_gb2312
+```
+
 检查错误笔画数、低置信对齐和待重录样本，并验证生成结果：
 
 ```powershell

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import hashlib
 import json
 import math
 import pickle
@@ -21,6 +23,9 @@ from .schemas import (
 
 SCHEMA_VERSION = "character_graph_v2"
 DEFAULT_DATABASE = Path("artifacts/structures/characters.sqlite3")
+MAINLAND_SIMPLIFIED_PACKAGE = "mainland_standard_simplified_gb2312"
+NON_MAINLAND_SIMPLIFIED_PACKAGE = "non_mainland_standard_simplified"
+CHARACTER_PACKAGES = (MAINLAND_SIMPLIFIED_PACKAGE, NON_MAINLAND_SIMPLIFIED_PACKAGE)
 
 IDS_ARITY = {
     "⿰": 2,
@@ -580,3 +585,112 @@ class StructureRepository:
             return dict(connection.execute("SELECT key, value FROM metadata"))
         finally:
             connection.close()
+
+
+def _is_gb2312_hanzi(character: str) -> bool:
+    if len(character) != 1 or not "\u3400" <= character <= "\u9fff":
+        return False
+    try:
+        encoded = character.encode("gb2312")
+    except UnicodeEncodeError:
+        return False
+    return len(encoded) == 2
+
+
+def character_package(character: str) -> str:
+    return (
+        MAINLAND_SIMPLIFIED_PACKAGE
+        if _is_gb2312_hanzi(character)
+        else NON_MAINLAND_SIMPLIFIED_PACKAGE
+    )
+
+
+def package_characters(
+    structures: StructureRepository, package: str
+) -> list[str]:
+    if package not in CHARACTER_PACKAGES:
+        raise ValueError(f"unknown character package: {package}")
+    return [
+        graph.character
+        for graph in structures.iter_graphs()
+        if character_package(graph.character) == package
+    ]
+
+
+def export_character_packages(
+    structures: StructureRepository, output_dir: Path
+) -> dict[str, object]:
+    """Export a complete, disjoint GB2312/non-GB2312 partition of the structure library."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rows = {package: [] for package in CHARACTER_PACKAGES}
+    locale_mismatches = []
+    for graph in structures.iter_graphs():
+        package = character_package(graph.character)
+        expected_locale = "zh-Hans" if package == MAINLAND_SIMPLIFIED_PACKAGE else "zh-Hant-generic"
+        if graph.locale != expected_locale:
+            locale_mismatches.append(
+                {
+                    "character": graph.character,
+                    "locale": graph.locale,
+                    "expected_locale": expected_locale,
+                }
+            )
+        rows[package].append(
+            {
+                "character": graph.character,
+                "codepoint": graph.codepoint,
+                "package": package,
+                "locale": graph.locale,
+                "stroke_count": len(graph.strokes),
+                "component_status": (
+                    "fallback" if graph.component_warnings else "complete"
+                ),
+                "decomposition": graph.decomposition,
+            }
+        )
+    if locale_mismatches:
+        raise RuntimeError(
+            f"GB2312 package disagrees with structure locale for {len(locale_mismatches)} characters"
+        )
+
+    fieldnames = [
+        "character",
+        "codepoint",
+        "package",
+        "locale",
+        "stroke_count",
+        "component_status",
+        "decomposition",
+    ]
+    files = {}
+    hashes = {}
+    for package, package_rows in rows.items():
+        path = output_dir / f"{package}_characters.csv"
+        with path.open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(package_rows)
+        files[package] = str(path)
+        hashes[package] = hashlib.sha256(
+            "".join(row["character"] for row in package_rows).encode("utf-8")
+        ).hexdigest()
+
+    return {
+        "schema_version": "character_package_partition_v1",
+        "definition": {
+            MAINLAND_SIMPLIFIED_PACKAGE: (
+                "All Han characters in the structure library encodable as GB2312; "
+                "exactly matches locale=zh-Hans in this database."
+            ),
+            NON_MAINLAND_SIMPLIFIED_PACKAGE: (
+                "All remaining supported characters, including traditional forms, "
+                "variants and radicals."
+            ),
+        },
+        "database_character_count": structures.count(),
+        "counts": {package: len(package_rows) for package, package_rows in rows.items()},
+        "character_sha256": hashes,
+        "locale_mismatch_count": 0,
+        "files": files,
+    }
