@@ -7,7 +7,7 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $CollectorSource = Join-Path (Split-Path -Parent $ProjectRoot) "data_collection"
 $BuildRoot = Join-Path $ProjectRoot "artifacts\portable_collector_build"
-$StrokeCounts = Join-Path $BuildRoot "stroke_counts.json"
+$StrokeReferences = Join-Path $BuildRoot "stroke_references.json.gz"
 $DistRoot = Join-Path $ProjectRoot $OutputRoot
 $PythonBase = (& $Python -c "import sys; print(sys.base_prefix)").Trim()
 $CondaBin = Join-Path $PythonBase "Library\bin"
@@ -17,9 +17,9 @@ if (-not (Test-Path -LiteralPath "$CollectorSource\handwriting_collector\ui.py")
 }
 
 New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
-& $Python "$PSScriptRoot\export_stroke_counts.py" `
-    "$ProjectRoot\artifacts\structures\characters.sqlite3" $StrokeCounts
-if ($LASTEXITCODE -ne 0) { throw "Stroke-count export failed" }
+& $Python "$PSScriptRoot\export_stroke_references.py" `
+    "$ProjectRoot\artifacts\structures\characters.sqlite3" $StrokeReferences
+if ($LASTEXITCODE -ne 0) { throw "Stroke-reference export failed" }
 
 & $Python -m PyInstaller `
     --noconfirm `
@@ -31,7 +31,8 @@ if ($LASTEXITCODE -ne 0) { throw "Stroke-count export failed" }
     --workpath "$BuildRoot\work" `
     --specpath $BuildRoot `
     --paths $CollectorSource `
-    --add-data "$StrokeCounts;." `
+    --paths "$ProjectRoot\src" `
+    --add-data "$StrokeReferences;." `
     --add-binary "$CondaBin\ffi.dll;." `
     --add-binary "$CondaBin\libbz2.dll;." `
     --add-binary "$CondaBin\libcrypto-3-x64.dll;." `
