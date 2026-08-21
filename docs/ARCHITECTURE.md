@@ -19,6 +19,23 @@
 All coordinates after alignment use a normalized, top-left-origin, Y-down unit
 em. Raw logical-pixel coordinates remain in the immutable source samples.
 
+## Stroke-order-aware alignment
+
+Equal user/standard stroke counts do not imply equal stroke order. Alignment builds a full
+standard-to-user cost matrix from local shape, glyph position, endpoints, direction and path
+length, then solves a one-to-one Hungarian assignment with a weak order prior. The identity
+assignment, best permutation and best alternative are compared before accepting a correction:
+
+- a clearly separated permutation is recorded as `corrected`, while the original pressure and
+  timestamps remain attached through explicit `standard_orders -> user_orders` mappings;
+- a weak non-identity hypothesis is `ambiguous`, receives low confidence and is excluded from
+  style-profile extraction instead of being guessed;
+- count mismatches continue through the split/merge dynamic programme.
+
+`sample_quality_audit_v2` reports corrected permutations separately from rerecord candidates.
+Evaluation also resolves targets through the explicit mapping, so corrected samples are never
+silently zipped back into their captured order.
+
 ## Structural invariants
 
 - The standard graph exclusively determines stroke count and order.

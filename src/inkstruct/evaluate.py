@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .alignment import align_sample
+from .alignment import align_sample, standard_order_indices
 from .generate import generate_run
 from .geometry import bbox, polyline_distance, resample
 from .metrics import aggregate_stroke_metrics
@@ -206,36 +206,40 @@ def evaluate_writer(
         sample = first_by_character[character]
         graph = structures.get(character)
         aligned = align_sample(sample, graph)
-        if len(aligned.normalized_strokes) != len(graph.strokes):
+        user_indices = standard_order_indices(aligned, len(graph.strokes))
+        if user_indices is None:
             skipped.append(
                 {
                     "character": character,
                     "reason": (
-                        f"stroke count mismatch: user={len(aligned.normalized_strokes)}, "
-                        f"standard={len(graph.strokes)}"
+                        "stroke topology is not a complete one-to-one mapping: "
+                        f"user={len(aligned.normalized_strokes)}, standard={len(graph.strokes)}"
                     ),
                 }
             )
             continue
+        target_strokes = [aligned.normalized_strokes[index] for index in user_indices]
+        target_pressures = [aligned.pressure_strokes[index] for index in user_indices]
+        target_times_by_stroke = [aligned.time_strokes[index] for index in user_indices]
         generated_path = run_dir / "trajectories" / f"U+{ord(character):04X}.json"
         generated = json.loads(generated_path.read_text(encoding="utf-8"))
         baseline = []
         styled = []
         generated_strokes = []
         for standard, user, output_stroke in zip(
-            graph.strokes, aligned.normalized_strokes, generated["strokes"]
+            graph.strokes, target_strokes, generated["strokes"]
         ):
             baseline.append(polyline_distance(standard.median, user))
             output = [(point["x"], point["y"]) for point in output_stroke["points"]]
             generated_strokes.append(output)
             styled.append(polyline_distance(output, user))
-        extended = aggregate_stroke_metrics(generated_strokes, aligned.normalized_strokes)
+        extended = aggregate_stroke_metrics(generated_strokes, target_strokes)
         baseline_extended = aggregate_stroke_metrics(
-            [standard.median for standard in graph.strokes], aligned.normalized_strokes
+            [standard.median for standard in graph.strokes], target_strokes
         )
         if style_embedder is not None:
             extended["casia_writer_style_similarity"] = style_embedder.similarity(
-                generated_strokes, aligned.normalized_strokes
+                generated_strokes, target_strokes
             )
         for key, value in extended.items():
             extended_values.setdefault(key, []).append(value)
@@ -246,7 +250,7 @@ def evaluate_writer(
             output_pressure = np.asarray(
                 [float(point["pressure"]) for point in output_points], dtype=np.float64
             )
-            target_pressure = np.asarray(aligned.pressure_strokes[stroke_index], dtype=np.float64)
+            target_pressure = np.asarray(target_pressures[stroke_index], dtype=np.float64)
             axis = np.linspace(0.0, 1.0, 16)
             output_pressure = np.interp(
                 axis, np.linspace(0.0, 1.0, len(output_pressure)), output_pressure
@@ -256,7 +260,7 @@ def evaluate_writer(
             )
             pressure_errors.append(float(np.mean(np.abs(output_pressure - target_pressure))))
             output_duration = max(1, int(output_points[-1]["t_ms"]) - int(output_points[0]["t_ms"]))
-            target_times = aligned.time_strokes[stroke_index]
+            target_times = target_times_by_stroke[stroke_index]
             target_duration = max(1, int(target_times[-1]) - int(target_times[0]))
             duration_errors.append(abs(output_duration - target_duration) / target_duration)
             density_errors.append(abs(len(output_points) - len(target_times)) / max(1, len(target_times)))
@@ -452,7 +456,8 @@ def compare_profile_update(
         sample = sample_by_character[character]
         graph = structures.get(character)
         aligned = align_sample(sample, graph)
-        if len(aligned.normalized_strokes) != len(graph.strokes):
+        user_indices = standard_order_indices(aligned, len(graph.strokes))
+        if user_indices is None:
             skipped.append(
                 {
                     "character": character,
@@ -463,7 +468,8 @@ def compare_profile_update(
                 }
             )
             continue
-        user_strokes[character] = aligned.normalized_strokes
+        target_strokes = [aligned.normalized_strokes[index] for index in user_indices]
+        user_strokes[character] = target_strokes
         old_value = json.loads(
             (old_run / "trajectories" / f"U+{ord(character):04X}.json").read_text(encoding="utf-8")
         )
@@ -477,7 +483,7 @@ def compare_profile_update(
         updated_values: list[float] = []
         for standard, user, old_stroke, updated_stroke in zip(
             graph.strokes,
-            aligned.normalized_strokes,
+            target_strokes,
             old_value["strokes"],
             updated_value["strokes"],
         ):
@@ -594,10 +600,12 @@ def compare_profiles_on_samples(
         sample = sample_by_character[character]
         graph = structures.get(character)
         aligned = align_sample(sample, graph)
-        if len(aligned.normalized_strokes) != len(graph.strokes):
+        user_indices = standard_order_indices(aligned, len(graph.strokes))
+        if user_indices is None:
             skipped.append({"character": character, "reason": "stroke count mismatch"})
             continue
-        user_strokes[character] = aligned.normalized_strokes
+        target_strokes = [aligned.normalized_strokes[index] for index in user_indices]
+        user_strokes[character] = target_strokes
         old_value = json.loads(
             (old_run / "trajectories" / f"U+{ord(character):04X}.json").read_text(encoding="utf-8")
         )
@@ -611,7 +619,7 @@ def compare_profiles_on_samples(
         updated_values: list[float] = []
         for standard, user, old_stroke, updated_stroke in zip(
             graph.strokes,
-            aligned.normalized_strokes,
+            target_strokes,
             old_value["strokes"],
             updated_value["strokes"],
         ):

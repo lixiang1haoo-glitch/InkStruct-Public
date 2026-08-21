@@ -115,6 +115,13 @@ class AlignedGlyph:
     time_strokes: list[list[int]]
     confidence: float
     warnings: list[str] = field(default_factory=list)
+    stroke_order_status: Literal["declared", "corrected", "ambiguous", "not_applicable"] = (
+        "declared"
+    )
+    stroke_permutation: list[int] = field(default_factory=list)
+    order_confidence: float = 1.0
+    order_identity_improvement: float = 0.0
+    order_alternative_margin: float = 0.0
 
 
 @dataclass(slots=True)

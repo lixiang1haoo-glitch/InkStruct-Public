@@ -176,6 +176,8 @@ def build_profile(
     characters: set[str] = set()
     signature_hits: dict[str, int] = {}
     sample_count = 0
+    corrected_order_samples: list[str] = []
+    ambiguous_order_samples: list[str] = []
     for sample in iter_index(index_path):
         if sample.writer_id != writer_id:
             excluded.append({"sample_id": sample.sample_id, "reason": "writer mismatch"})
@@ -186,6 +188,17 @@ def build_profile(
         except (KeyError, ValueError) as error:
             excluded.append({"sample_id": sample.sample_id, "reason": str(error)})
             continue
+        if aligned.stroke_order_status == "ambiguous":
+            ambiguous_order_samples.append(sample.sample_id)
+            excluded.append(
+                {
+                    "sample_id": sample.sample_id,
+                    "reason": "ambiguous stroke order; excluded from style profile",
+                }
+            )
+            continue
+        if aligned.stroke_order_status == "corrected":
+            corrected_order_samples.append(sample.sample_id)
         sample_count += 1
         characters.add(sample.character)
         user_glyph_bbox = _glyph_bbox(aligned.normalized_strokes)
@@ -636,6 +649,9 @@ def build_profile(
             "signature_hits": signature_hits,
             "prototype_count": len(prototypes),
             "aligned_character_count": len(characters),
+            "corrected_stroke_order_sample_count": len(corrected_order_samples),
+            "corrected_stroke_order_sample_ids": corrected_order_samples,
+            "ambiguous_stroke_order_sample_count": len(ambiguous_order_samples),
             "residual_space": "component_bbox_plus_stroke_local_unit_extent",
             "component_layout_prototype_count": len(component_layouts),
             "character_layout_prototype_count": len(character_layouts),
