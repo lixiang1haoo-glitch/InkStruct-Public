@@ -10,7 +10,12 @@ from handwriting_collector import ui as collector_ui
 from handwriting_collector.models import Trajectory, TrajectoryPoint
 from handwriting_collector.storage import SampleStorage
 from handwriting_collector.tasks import CollectionTask
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
+
+from inkstruct.stroke_reference import (
+    create_stroke_reference_widget_class,
+    load_reference_bundle,
+)
 
 
 def resource_path(name: str) -> Path:
@@ -26,14 +31,9 @@ class StrokeCountCheck:
     message: str
 
 
-def load_stroke_counts() -> dict[str, int]:
-    value = json.loads(resource_path("stroke_counts.json").read_text(encoding="utf-8"))
-    if value.get("schema_version") != "inkstruct_stroke_counts_v1":
-        raise RuntimeError("标准笔画数数据版本不受支持")
-    return {str(key): int(count) for key, count in value["counts"].items()}
-
-
-STROKE_COUNTS = load_stroke_counts()
+STROKE_REFERENCES = load_reference_bundle(resource_path("stroke_references.json.gz"))
+STROKE_COUNTS = {character: len(strokes) for character, strokes in STROKE_REFERENCES.items()}
+StrokeReferenceWidget = create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets)
 
 
 def check_stroke_count(character: str, actual: int) -> StrokeCountCheck:
@@ -58,11 +58,31 @@ def check_stroke_count(character: str, actual: int) -> StrokeCountCheck:
 class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
     def __init__(self, output_root_provider, parent=None):
         self.stroke_count_label = None
+        self.stroke_reference = None
         super().__init__(output_root_provider, parent)
+        self.stroke_reference = StrokeReferenceWidget(STROKE_REFERENCES.get, self)
+        canvas_index = self.layout().indexOf(self.canvas)
+        self.layout().removeWidget(self.canvas)
+        writing_row = QtWidgets.QHBoxLayout()
+        writing_row.setSpacing(16)
+        writing_row.addWidget(self.stroke_reference)
+        writing_row.addWidget(self.canvas, 1)
+        self.layout().insertLayout(canvas_index, writing_row, 1)
         self.stroke_count_label = QtWidgets.QLabel("笔画数量：等待书写")
         self.stroke_count_label.setObjectName("mutedLabel")
         self.layout().insertWidget(2, self.stroke_count_label)
+        self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
         self.refresh()
+
+    def _sync_stroke_reference(self) -> None:
+        if self.stroke_reference is None:
+            return
+        item = self.task.current_item() if self.task else None
+        self.stroke_reference.set_state(
+            item.character if item else None,
+            len(self.canvas.trajectory.strokes),
+            self.canvas.pen_down,
+        )
 
     def _stroke_check(self) -> StrokeCountCheck | None:
         item = self.task.current_item() if self.task else None
@@ -72,6 +92,7 @@ class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
 
     def refresh(self) -> None:
         super().refresh()
+        self._sync_stroke_reference()
         if self.stroke_count_label is None:
             return
         check = self._stroke_check()
@@ -128,7 +149,9 @@ def run_self_test(output_path: Path) -> int:
     try:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            task = CollectionTask.create("portable-self-test", "builtin", "selftest", [("十", 1, 0)])
+            task = CollectionTask.create(
+                "portable-self-test", "builtin", "selftest", [("十", 1, 0)]
+            )
             item = task.current_item()
             if item is None:
                 raise RuntimeError("self-test task has no current item")
@@ -149,7 +172,9 @@ def run_self_test(output_path: Path) -> int:
             sample = json.loads(sample_path.read_text(encoding="utf-8"))
             checks = {
                 "mapping_character_count": len(STROKE_COUNTS),
+                "reference_character_count": len(STROKE_REFERENCES),
                 "ten_expected_strokes": STROKE_COUNTS.get("十"),
+                "ten_reference_strokes": len(STROKE_REFERENCES.get("十", [])),
                 "chicken_expected_strokes": STROKE_COUNTS.get("鸡"),
                 "sample_schema": sample.get("schema_version"),
                 "sample_stroke_count": len(sample.get("strokes", [])),
@@ -157,7 +182,9 @@ def run_self_test(output_path: Path) -> int:
             }
             passed = checks == {
                 "mapping_character_count": 9574,
+                "reference_character_count": 9574,
                 "ten_expected_strokes": 2,
+                "ten_reference_strokes": 2,
                 "chicken_expected_strokes": 7,
                 "sample_schema": "handwriting_single_v1",
                 "sample_stroke_count": 2,
@@ -187,7 +214,24 @@ def main() -> int:
     window = CollectorWindow()
     window.show()
     if "--smoke-test" in sys.argv:
-        QtCore.QTimer.singleShot(150, application.quit)
+        window.single_widget.stroke_reference.set_state("永", 0, False)
+
+        def finish_smoke_test() -> None:
+            screenshot = next(
+                (
+                    argument.split("=", 1)[1]
+                    for argument in sys.argv
+                    if argument.startswith("--smoke-screenshot=")
+                ),
+                None,
+            )
+            if screenshot:
+                target = Path(screenshot)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                window.grab().save(str(target))
+            application.quit()
+
+        QtCore.QTimer.singleShot(300, finish_smoke_test)
     return application.exec()
 
 

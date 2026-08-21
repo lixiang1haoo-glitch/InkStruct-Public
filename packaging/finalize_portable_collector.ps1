@@ -12,13 +12,16 @@ $Files = Get-ChildItem -LiteralPath $Target -Recurse -File |
     Where-Object { $_.FullName -ne (Join-Path $Target "manifest.json") }
 $ExeHash = (Get-FileHash -LiteralPath "$Target\InkStructCollector.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
 $Manifest = [ordered]@{
-    schema_version = "portable_collector_manifest_v1"
+    schema_version = "portable_collector_manifest_v2"
     application = "InkStructCollector"
     platform = "Windows x64"
     packaging = "PyInstaller onedir"
     payload_file_count = $Files.Count
     payload_total_bytes = ($Files | Measure-Object Length -Sum).Sum
     stroke_count_characters = 9574
+    stroke_reference_characters = 9574
+    stroke_reference_strokes = 112617
+    next_stroke_reference = $true
     contains_generator = $false
     contains_pytorch_or_cuda = $false
     executable_sha256 = $ExeHash

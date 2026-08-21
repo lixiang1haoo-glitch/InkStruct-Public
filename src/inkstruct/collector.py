@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .cli import PROJECT_ROOT
+from .stroke_reference import create_stroke_reference_widget_class
 from .structures import StructureRepository
 
 
@@ -59,23 +60,50 @@ def main(argv: list[str] | None = None) -> int:
         sys.path.insert(0, str(source))
     try:
         from handwriting_collector import ui as collector_ui
-        from PySide6 import QtCore, QtWidgets
+        from PySide6 import QtCore, QtGui, QtWidgets
     except ImportError as error:
         raise RuntimeError("采集器需要安装 inkstruct[desktop] 和 data_collection") from error
 
     repository = StructureRepository(
         PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
     )
+    StrokeReferenceWidget = create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets)
+
+    def reference_for(character: str):
+        try:
+            return [stroke.median for stroke in repository.get(character).strokes]
+        except KeyError:
+            return None
 
     class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
         def __init__(self, output_root_provider, parent=None):
             self.structures = repository
             self.stroke_count_label = None
+            self.stroke_reference = None
             super().__init__(output_root_provider, parent)
+            self.stroke_reference = StrokeReferenceWidget(reference_for, self)
+            canvas_index = self.layout().indexOf(self.canvas)
+            self.layout().removeWidget(self.canvas)
+            writing_row = QtWidgets.QHBoxLayout()
+            writing_row.setSpacing(16)
+            writing_row.addWidget(self.stroke_reference)
+            writing_row.addWidget(self.canvas, 1)
+            self.layout().insertLayout(canvas_index, writing_row, 1)
             self.stroke_count_label = QtWidgets.QLabel("笔画数量：等待书写")
             self.stroke_count_label.setObjectName("mutedLabel")
             self.layout().insertWidget(2, self.stroke_count_label)
+            self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
             self.refresh()
+
+        def _sync_stroke_reference(self) -> None:
+            if self.stroke_reference is None:
+                return
+            item = self.task.current_item() if self.task else None
+            self.stroke_reference.set_state(
+                item.character if item else None,
+                len(self.canvas.trajectory.strokes),
+                self.canvas.pen_down,
+            )
 
         def _stroke_check(self) -> StrokeCountCheck | None:
             item = self.task.current_item() if self.task else None
@@ -87,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def refresh(self) -> None:
             super().refresh()
+            self._sync_stroke_reference()
             if self.stroke_count_label is None:
                 return
             check = self._stroke_check()
@@ -150,7 +179,24 @@ def main(argv: list[str] | None = None) -> int:
     window = CollectorWindow()
     window.show()
     if smoke_test:
-        QtCore.QTimer.singleShot(100, application.quit)
+        window.single_widget.stroke_reference.set_state("永", 0, False)
+
+        def finish_smoke_test() -> None:
+            screenshot = next(
+                (
+                    value.split("=", 1)[1]
+                    for value in arguments
+                    if value.startswith("--smoke-screenshot=")
+                ),
+                None,
+            )
+            if screenshot:
+                target = Path(screenshot)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                window.grab().save(str(target))
+            application.quit()
+
+        QtCore.QTimer.singleShot(300, finish_smoke_test)
     return application.exec()
 
 

@@ -71,7 +71,8 @@ py -3.12 -m venv .venv
 
 两个桌面应用已经分离：
 
-- 双击 `run_inkstruct_collector.cmd` 启动采集器；它负责书写、标准笔画数校验和重录提示。
+- 双击 `run_inkstruct_collector.cmd` 启动采集器；它负责书写、标准笔画数校验、重录提示，
+  并在书写田字格左侧以绿色显示当前笔或下一笔的标准笔顺参考。
 - 双击 `run_inkstruct_generator.cmd` 启动风格生成器；它负责样本导入、建档、文本生成和结果预览。
 - `release/InkStructCollector/` 是不含 PyTorch/CUDA 的轻量 Windows 采集包。
 
