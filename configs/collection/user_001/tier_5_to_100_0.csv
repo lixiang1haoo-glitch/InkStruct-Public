@@ -1,0 +1,279 @@
+﻿character,repeats,purpose,layout,components,reason
+豪,1,target_coverage,⿱,豕 高,component-trajectory:高|高|top|⿱|7（目标集中出现1次）
+銜,1,target_coverage,⿻,行 金,component-trajectory:金|金|overlap-secondary|⿻|8（目标集中出现1次）
+憂,1,target_coverage,⿱,夂 心 頁,component-trajectory:頁|頁|top|⿱|8（目标集中出现1次）
+敻,1,target_coverage,⿱,夂,component-trajectory:夂|夂|bottom|⿱|4（目标集中出现1次）
+暴,1,target_coverage,⿱,共 日 水,component-trajectory:水|水|bottom|⿱|5（目标集中出现1次）
+歔,1,target_coverage,⿰,欠 虚,component-trajectory:虚|虚|left|⿰|12（目标集中出现1次）
+癀,1,target_coverage,⿸,疒 黄,component-trajectory:黄|黄|inside|⿸|11（目标集中出现1次）
+諾,1,target_coverage,⿰,若 言,component-trajectory:若|若|right|⿰|9（目标集中出现1次）
+錚,1,target_coverage,⿰,争 釒,component-trajectory:争|争|right|⿰|8（目标集中出现1次）
+爵,1,target_coverage,⿱,寸 爫 罒 良,component-trajectory:良|良|left|⿰|5（目标集中出现1次）
+謊,1,target_coverage,⿰,荒 言,component-trajectory:荒|荒|right|⿰|10（目标集中出现1次）
+竄,1,target_coverage,⿱,穴 鼠,component-trajectory:鼠|鼠|bottom|⿱|13（目标集中出现1次）
+襖,1,target_coverage,⿰,奥 衤,component-trajectory:奥|奥|right|⿰|13（目标集中出现1次）
+饈,1,target_coverage,⿰,羞 飠,component-trajectory:羞|羞|right|⿰|11（目标集中出现1次）
+蠛,1,target_coverage,⿰,蔑 虫,component-trajectory:蔑|蔑|right|⿰|14（目标集中出现1次）
+闞,1,target_coverage,⿵,敢 門,component-trajectory:敢|敢|inside|⿵|12（目标集中出现1次）
+鶓,1,target_coverage,⿰,苗 鳥,component-trajectory:苗|苗|left|⿰|9（目标集中出现1次）
+驀,1,target_coverage,⿱,莫 馬,component-trajectory:莫|莫|top|⿱|11（目标集中出现1次）
+權,1,target_coverage,⿰,木 雚,component-trajectory:雚|雚|right|⿰|18（目标集中出现1次）
+驚,1,target_coverage,⿱,敬 馬,component-trajectory:敬|敬|top|⿱|13（目标集中出现1次）
+鑽,1,target_coverage,⿰,贊 釒,component-trajectory:贊|贊|right|⿰|18（目标集中出现1次）
+丷,1,target_coverage,⿰,丶,component-context:丶|丶|left|⿰（目标集中出现1次）
+九,1,target_coverage,⿻,丿 乙,component-context:乙|乙|overlap-secondary|⿻（目标集中出现1次）
+了,1,target_coverage,⿱,乛 亅,component-context:亅|亅|bottom|⿱（目标集中出现1次）
+匕,1,target_coverage,⿺,丿 乚,component-context:丿|丿|inside|⿺（目标集中出现1次）
+巳,1,target_coverage,⿻,乚,component-context:乚|乚|overlap-primary|⿻（目标集中出现1次）
+勿,1,target_coverage,⿹,丿 勹,component-context:丿|丿|right|⿰（目标集中出现1次）
+压,1,target_coverage,⿸,丶 厂 土,component-context:丶|丶|right|⿰（目标集中出现1次）
+饗,1,target_coverage,⿱,鄉 食,stroke-signature:↘↙↘→↗|3|tall|n（目标集中出现2次）；stroke-signature:↗→↘↙↘↓←|5|tall|n（目标集中出现2次）；stroke-signature:↘↓→↗→|2|tall|n（目标集中出现1次）
+专,1,target_coverage,⿻,一,stroke-signature:↘↓→↘↙|4|tall|n（目标集中出现4次）
+她,1,target_coverage,⿰,也 女,stroke-signature:→↗→↓↙↖|2|balanced|n（目标集中出现4次）
+饧,1,target_coverage,⿰,昜 饣,stroke-signature:→↙→↘↓↙←|5|balanced|n（目标集中出现3次）；stroke-signature:↘↓→←↓↙↓|3|tall|n（目标集中出现1次）
+侉,1,target_coverage,⿰,亻 夸,stroke-signature:↓→↓↙←↖|4|balanced|n（目标集中出现4次）
+隄,1,target_coverage,⿰,是 阝,stroke-signature:→↗→↓↙↓↘↓←|2|tall|n（目标集中出现3次）；stroke-signature:↑↗→↘|1|wide|n（目标集中出现1次）
+毋,1,target_coverage,single,,stroke-signature:↓→↘|1|balanced|n（目标集中出现3次）
+艺,1,target_coverage,⿱,乙 艹,stroke-signature:→↙↘→↗↑|5|balanced|n（目标集中出现3次）
+吣,1,target_coverage,⿰,口 心,stroke-signature:↓↘→↑↖|2|balanced|n（目标集中出现3次）
+张,1,target_coverage,⿰,弓 长,stroke-signature:↘↓↘→↓↙←↖|5|tall|n（目标集中出现3次）
+紅,1,target_coverage,⿰,工 糹,stroke-signature:↓↙↘→↗→|3|balanced|n（目标集中出现3次）
+殺,1,target_coverage,⿰,杀 殳,stroke-signature:→↘↓↘→|3|balanced|n（目标集中出现3次）
+䴉,1,target_coverage,⿰,睘 鳥,stroke-signature:↗→↓←|3|balanced|n（目标集中出现2次）；stroke-signature:↗→↓↙↓|2|balanced|n（目标集中出现1次）
+饢,1,target_coverage,⿰,囊 飠,stroke-signature:↓→↗|1|tall|n（目标集中出现2次）；stroke-signature:→↗→↘↓↙|4|balanced|n（目标集中出现1次）
+亿,1,target_coverage,⿰,乙 亻,stroke-signature:→↙↓↘→↗↑|3|balanced|n（目标集中出现2次）
+北,1,target_coverage,⿰,匕,stroke-signature:↘↓↘→↑|4|tall|n（目标集中出现2次）
+汲,1,target_coverage,⿰,及 氵,stroke-signature:→↙↓→↓↙←|3|balanced|n（目标集中出现2次）
+访,1,quality_rerecord,⿰,方 讠,stroke-signature:→↗→↓→↗|2|balanced|n（目标集中出现2次）
+阵,1,target_coverage,⿰,车 阝,stroke-signature:→↗→↓↙↓↘↓←|3|tall|n（目标集中出现2次）
+肟,1,target_coverage,⿰,⺼ 亏,stroke-signature:↓→↘↓↙←↖|3|tall|n（目标集中出现2次）
+奋,1,target_coverage,⿱,大 田,stroke-signature:→↘↓↙↖|2|balanced|h（目标集中出现2次）
+帛,1,target_coverage,⿱,巾 白,stroke-signature:→↘↓↙↓↙|2|balanced|n（目标集中出现1次）；stroke-signature:→↓←|3|wide|n（目标集中出现1次）
+弩,1,target_coverage,⿱,奴 弓,stroke-signature:↘↓→↓↙←↖|4|balanced|n（目标集中出现2次）
+沿,1,target_coverage,⿰,几 口 氵,stroke-signature:→↘↓↘→|4|balanced|n（目标集中出现2次）
+驽,1,target_coverage,⿱,奴 马,stroke-signature:↘↓↘→↘|3|tall|n（目标集中出现1次）；stroke-signature:↓→↓←|3|balanced|n（目标集中出现1次）
+後,1,target_coverage,⿰,夂 幺 彳,stroke-signature:↘↙↘→|2|balanced|n（目标集中出现2次）
+挞,1,target_coverage,⿰,扌 达,stroke-signature:→↘↓↘↓↙|3|tall|n（目标集中出现2次）
+狯,1,target_coverage,⿰,会 犭,stroke-signature:↙↓↙↓→|2|balanced|n（目标集中出现2次）
+祕,1,target_coverage,⿰,必 礻,stroke-signature:↘↓↘→↑↖|1|balanced|n（目标集中出现2次）
+笃,1,target_coverage,⿱,⺮ 马,stroke-signature:↓→↓↙←|4|balanced|n（目标集中出现2次）
+袂,1,target_coverage,⿰,夬 衤,stroke-signature:→↗→↙|2|balanced|n（目标集中出现2次）
+绠,1,target_coverage,⿰,更 纟,stroke-signature:↘↙→|3|balanced|n（目标集中出现2次）
+脍,1,target_coverage,⿰,⺼ 会,stroke-signature:↙↓↘→|2|balanced|n（目标集中出现2次）
+埡,1,target_coverage,⿰,亞 土,stroke-signature:↘↓↘→↓↙|4|tall|n（目标集中出现1次）；stroke-signature:↘↓→↘↓↙|5|tall|n（目标集中出现1次）
+袴,1,target_coverage,⿰,夸 衤,stroke-signature:↘↓→↓↙←↖|3|balanced|n（目标集中出现2次）
+酚,1,target_coverage,⿰,分 酉,stroke-signature:↘↓→|3|tall|n（目标集中出现2次）
+幄,1,target_coverage,⿰,屋 巾,stroke-signature:←↙↓→|1|balanced|n（目标集中出现2次）
+朁,1,target_coverage,⿱,日,stroke-signature:↘↙↓→|2|wide|n（目标集中出现2次）
+榔,1,target_coverage,⿰,木 郎,stroke-signature:→↗→↗|2|wide|n（目标集中出现2次）
+猱,1,target_coverage,⿰,柔 犭,stroke-signature:↓↙←↖|1|balanced|n（目标集中出现2次）
+結,1,target_coverage,⿰,吉 糹,stroke-signature:↗→↘↙|3|wide|n（目标集中出现2次）
+翔,1,target_coverage,⿰,羊 羽,stroke-signature:↘→↗|1|balanced|n（目标集中出现2次）
+跶,1,target_coverage,⿰,足 达,stroke-signature:→↗→↓↙↓↙|3|tall|n（目标集中出现2次）
+嘍,1,target_coverage,⿰,口 婁,stroke-signature:↓↙↓↘→↘→|2|balanced|n（目标集中出现2次）
+瑱,1,target_coverage,⿰,王 真,stroke-signature:↓→|2|wide|n（目标集中出现2次）
+銅,1,target_coverage,⿰,同 釒,stroke-signature:→↘↓↖|3|tall|h（目标集中出现2次）
+薛,1,target_coverage,⿱,㠯 丿 艹 辛,stroke-signature:↗→↘↓↙|0|balanced|n（目标集中出现2次）
+螃,1,target_coverage,⿰,旁 虫,stroke-signature:↗→↘↓|1|wide|n（目标集中出现2次）
+駮,1,target_coverage,⿰,交 馬,stroke-signature:↘→↓↙←↖|3|balanced|n（目标集中出现2次）
+轀,1,target_coverage,⿰,囚 皿 車,stroke-signature:↓↘→↘|1|balanced|n（目标集中出现1次）；stroke-signature:←↙↓↙↓|0|balanced|n（目标集中出现1次）
+斷,1,target_coverage,⿰,一 幺 斤,stroke-signature:↘↓↙→|1|tall|n（目标集中出现1次）；stroke-signature:↓↙→|2|tall|n（目标集中出现1次）
+鳖,1,target_coverage,⿱,敝 鱼,stroke-signature:↘↙←↓|2|balanced|n（目标集中出现2次）
+孿,1,target_coverage,⿱,䜌 子,stroke-signature:↘↓↙↘→↗|1|tall|n（目标集中出现1次）；stroke-signature:↓↙↘→↗|3|balanced|n（目标集中出现1次）
+髕,1,target_coverage,⿰,賓 骨,stroke-signature:↙←↙|1|wide|n（目标集中出现1次）；stroke-signature:↗→↘↓←↖|4|tall|n（目标集中出现1次）
+乛,1,target_coverage,single,,stroke-signature:↘→↓↙|2|wide|n（目标集中出现1次）
+丂,1,target_coverage,⿱,一,stroke-signature:↓↙→↓↙←↖|5|tall|n（目标集中出现1次）
+乞,1,target_coverage,⿱,乙,stroke-signature:→↓↙↘→↗↑|6|balanced|n（目标集中出现1次）
+及,1,target_coverage,⿻,又,stroke-signature:→↓↙→↓↙←|3|balanced|n（目标集中出现1次）
+孓,1,target_coverage,single,,stroke-signature:↘→↓↙|3|wide|n（目标集中出现1次）
+仉,1,target_coverage,⿰,亻 几,stroke-signature:↗→↓→↗↑|4|balanced|n（目标集中出现1次）
+兮,1,target_coverage,⿱,丂 八,stroke-signature:↓↙↘→↘↓↙←↖|4|tall|n（目标集中出现1次）
+邓,1,target_coverage,⿰,又 阝,stroke-signature:→↓↙↓↘↓↙↖|5|tall|n（目标集中出现1次）
+阞,1,target_coverage,⿰,力 阝,stroke-signature:→↙↓↘↓←↖|4|tall|n（目标集中出现1次）
+凸,1,target_coverage,⿱,一,stroke-signature:→↓↘→↘↓|5|balanced|n（目标集中出现1次）
+凹,1,target_coverage,⿱,一,stroke-signature:→↘↓→|2|balanced|n（目标集中出现1次）
+扔,1,target_coverage,⿰,乃 扌,stroke-signature:→↓→↘↓↙↖|4|balanced|n（目标集中出现1次）
+艿,1,target_coverage,⿱,乃 艹,stroke-signature:→↓→↓↙↖|5|balanced|n（目标集中出现1次）
+讦,1,target_coverage,⿰,干 讠,stroke-signature:→↗→↓↘↗|4|balanced|n（目标集中出现1次）
+讫,1,target_coverage,⿰,乞 讠,stroke-signature:→↗↘↓↗|3|balanced|n（目标集中出现1次）
+吸,1,target_coverage,⿰,及 口,stroke-signature:→↘↙↓→↓↙←|4|balanced|n（目标集中出现1次）
+旯,1,target_coverage,⿱,九 日,stroke-signature:→↓→↗↑|3|wide|n（目标集中出现1次）
+汤,1,target_coverage,⿰,昜 氵,stroke-signature:→↙→↘↓↙↖|4|balanced|n（目标集中出现1次）
+玑,1,target_coverage,⿰,几 王,stroke-signature:↗↘↓↘→↗↑|6|balanced|n（目标集中出现1次）
+肌,1,target_coverage,⿰,⺼ 几,stroke-signature:↗↘↓↘→↗↑|4|balanced|n（目标集中出现1次）
+设,1,target_coverage,⿰,殳 讠,stroke-signature:→↓↘↗|4|balanced|n（目标集中出现1次）
+坑,1,target_coverage,⿰,亢 土,stroke-signature:↗→↓↘→↑|4|balanced|n（目标集中出现1次）
+杨,1,target_coverage,⿰,昜 木,stroke-signature:→↙↓→↘↓↙←|5|balanced|n（目标集中出现1次）
+沌,1,target_coverage,⿰,屯 氵,stroke-signature:↘↓→↗↑|4|tall|n（目标集中出现1次）
+甹,1,target_coverage,⿱,丂 由,stroke-signature:↘↓→↘↓↙←↖|5|balanced|n（目标集中出现1次）
+矶,1,target_coverage,⿰,几 石,stroke-signature:→↘↓↘→↑|5|balanced|n（目标集中出现1次）
+秀,1,target_coverage,⿱,乃 禾,stroke-signature:→↘↓↘→↓←↖|6|balanced|n（目标集中出现1次）
+究,1,target_coverage,⿱,九 穴,stroke-signature:→↘↓↘→↗↑|6|wide|n（目标集中出现1次）
+肚,1,target_coverage,⿰,⺼ 土,stroke-signature:→↓↙←|4|tall|n（目标集中出现1次）
+肠,1,target_coverage,⿰,⺼ 昜,stroke-signature:→↘↙↓→↘↓↙←|6|balanced|n（目标集中出现1次）
+芯,1,target_coverage,⿱,心 艹,stroke-signature:↓↘→↗↑↖|2|balanced|n（目标集中出现1次）
+词,1,target_coverage,⿰,司 讠,stroke-signature:→↘↓↙↖|3|tall|h（目标集中出现1次）
+违,1,target_coverage,⿺,辶 韦,stroke-signature:→↘↓↙←↖|3|wide|n（目标集中出现1次）
+附,1,target_coverage,⿰,付 阝,stroke-signature:→↓↙↘↓←|3|tall|n（目标集中出现1次）
+帕,1,target_coverage,⿰,巾 白,stroke-signature:→↓←|3|balanced|h（目标集中出现1次）
+沲,1,target_coverage,⿰,也 氵,stroke-signature:→↗→↓↙↖|3|wide|n（目标集中出现1次）
+矻,1,target_coverage,⿰,乞 石,stroke-signature:→↙↓→↗↑|3|balanced|n（目标集中出现1次）
+砀,1,target_coverage,⿰,昜 石,stroke-signature:→↘↙→↘↓↙↖|6|tall|h（目标集中出现1次）
+肢,1,target_coverage,⿰,⺼ 支,stroke-signature:↗→↓↙←|4|tall|n（目标集中出现1次）
+育,1,target_coverage,⿱,⺼ 亠 厶,stroke-signature:↙↓→|2|wide|n（目标集中出现1次）
+衫,1,target_coverage,⿰,彡 衤,stroke-signature:↘↓↙↓←|2|balanced|n（目标集中出现1次）
+诞,1,target_coverage,⿰,延 讠,stroke-signature:→↘↓↙↘↓↙|4|tall|n（目标集中出现1次）
+陏,1,target_coverage,⿰,有 阝,stroke-signature:→↙↓↘↓←↖|2|tall|n（目标集中出现1次）
+咢,1,target_coverage,⿱,亏 口,stroke-signature:↓↘→↓↙←↖|3|balanced|n（目标集中出现1次）
+哙,1,target_coverage,⿰,会 口,stroke-signature:←↙↓↘→|3|balanced|n（目标集中出现1次）
+埏,1,target_coverage,⿰,土 延,stroke-signature:→↙→↘↓↙|3|tall|n（目标集中出现1次）
+契,1,target_coverage,⿱,丰 刀 大,stroke-signature:→↗→↗→↗|0|wide|n（目标集中出现1次）
+姿,1,target_coverage,⿱,女 次,stroke-signature:↓↙↘→↘|1|balanced|n（目标集中出现1次）
+挺,1,target_coverage,⿰,廷 扌,stroke-signature:→↘↓↙↓↘↓↙|4|tall|n（目标集中出现1次）
+涎,1,target_coverage,⿰,延 氵,stroke-signature:→↙↓↘↓↙|4|tall|n（目标集中出现1次）
+砘,1,target_coverage,⿰,屯 石,stroke-signature:↘↓→↗↑|2|tall|n（目标集中出现1次）
+紇,1,target_coverage,⿰,乞 糹,stroke-signature:→↙↓→↗↑|4|balanced|n（目标集中出现1次）
+紈,1,target_coverage,⿰,丸 糹,stroke-signature:→↗↓↘↗↑|2|balanced|n（目标集中出现1次）
+绔,1,target_coverage,⿰,夸 纟,stroke-signature:↙↓→↓↙←↖|4|balanced|n（目标集中出现1次）
+虼,1,target_coverage,⿰,乞 虫,stroke-signature:→↓↙↓↘→↗↑|4|balanced|n（目标集中出现1次）
+诱,1,target_coverage,⿰,秀 讠,stroke-signature:→↘↓↘→↓↙↖|5|balanced|n（目标集中出现1次）
+除,1,target_coverage,⿰,余 阝,stroke-signature:↗↘↓↙↓↘↓←|4|tall|n（目标集中出现1次）
+陧,1,target_coverage,⿰,里 阝,stroke-signature:→↗↘↓↙↓↘↓←|3|tall|n（目标集中出现1次）
+鸥,1,target_coverage,⿰,区 鸟,stroke-signature:↓↘→↘↓↙←|5|tall|n（目标集中出现1次）
+健,1,target_coverage,⿰,亻 建,stroke-signature:↗↘↓→↓↙|4|tall|n（目标集中出现1次）
+啊,1,target_coverage,⿰,口 阿,stroke-signature:→↘↓↘↓↙←|4|tall|n（目标集中出现1次）
+娱,1,target_coverage,⿰,吴 女,stroke-signature:↘→↘↓↙|2|balanced|n（目标集中出现1次）
+栲,1,target_coverage,⿰,木 考,stroke-signature:↙↓→↓↙↖|3|balanced|n（目标集中出现1次）
+海,1,target_coverage,⿰,每 氵,stroke-signature:↓↙↓→↘|1|balanced|n（目标集中出现1次）
+涇,1,target_coverage,⿰,巠 氵,stroke-signature:↘↓↙↓↘↓|4|tall|n（目标集中出现1次）
+祧,1,target_coverage,⿰,兆 礻,stroke-signature:↘↓↘→↗↑|5|tall|n（目标集中出现1次）
+绥,1,target_coverage,⿰,妥 纟,stroke-signature:↓↙↓↘|3|balanced|n（目标集中出现1次）
+胲,1,target_coverage,⿰,⺼ 亥,stroke-signature:←↓↙↘→|3|balanced|n（目标集中出现1次）
+蚓,1,target_coverage,⿰,引 虫,stroke-signature:↘↓→↘↓←↖|6|tall|n（目标集中出现1次）
+馁,1,target_coverage,⿰,妥 饣,stroke-signature:↘↓→↘|3|balanced|n（目标集中出现1次）
+乿,1,target_coverage,⿰,乚 爫 糸,stroke-signature:↓↙↘→↗|1|balanced|n（目标集中出现1次）
+匏,1,target_coverage,⿰,包 夸,stroke-signature:↙↓→↓↙←↖|3|balanced|n（目标集中出现1次）
+悽,1,target_coverage,⿰,妻 忄,stroke-signature:↓↘→↘|2|balanced|n（目标集中出现1次）
+羟,1,target_coverage,⿰,羊,stroke-signature:→↙←|2|balanced|n（目标集中出现1次）
+設,1,target_coverage,⿰,殳 言,stroke-signature:→↗→↓↙←|1|balanced|n（目标集中出现1次）
+隉,1,target_coverage,⿰,工 臼 阝,stroke-signature:→↗→↓↙↓↘↓←↖|3|tall|n（目标集中出现1次）
+隍,1,target_coverage,⿰,皇 阝,stroke-signature:→↓↘↓←|2|tall|n（目标集中出现1次）
+階,1,target_coverage,⿰,皆 阝,stroke-signature:→↗↘↓↘↓←|3|tall|n（目标集中出现1次）
+鳥,1,target_coverage,⿹,灬,stroke-signature:↘→↘↓↙↖|4|balanced|n（目标集中出现1次）
+鸾,1,target_coverage,⿱,亦 鸟,stroke-signature:↓↘→↓↙←|3|balanced|n（目标集中出现1次）
+鹿,1,target_coverage,⿸,广 比,stroke-signature:↘↓↙←↙←↓|2|balanced|n（目标集中出现1次）
+嗖,1,target_coverage,⿰,叟 口,stroke-signature:←↙←↓←|3|balanced|n（目标集中出现1次）
+揪,1,target_coverage,⿰,扌 秋,stroke-signature:→↓↘↓↘→↘→|4|balanced|n（目标集中出现1次）
+痾,1,target_coverage,⿸,疒 阿,stroke-signature:→↓↙↓↘↓←↖|2|tall|n（目标集中出现1次）
+發,1,target_coverage,⿱,弓 殳 癶,stroke-signature:↘↓→↓↙←↖|5|tall|n（目标集中出现1次）
+粢,1,target_coverage,⿱,次 米,stroke-signature:↙←↓|1|balanced|n（目标集中出现1次）
+缎,1,target_coverage,⿰,段 纟,stroke-signature:→↗→↓↘→|2|balanced|n（目标集中出现1次）
+腓,1,target_coverage,⿰,⺼ 非,stroke-signature:↘→↗→↑|1|wide|n（目标集中出现1次）
+腚,1,target_coverage,⿰,⺼ 定,stroke-signature:↗↘↓←|4|tall|n（目标集中出现1次）
+蜓,1,target_coverage,⿰,廷 虫,stroke-signature:→↓→↓↙|4|tall|n（目标集中出现1次）
+觞,1,target_coverage,⿰,昜 角,stroke-signature:→↙↓→↓↙↖|4|balanced|n（目标集中出现1次）
+詞,1,target_coverage,⿰,司 言,stroke-signature:→↘↓↙↖|2|tall|h（目标集中出现1次）
+費,1,target_coverage,⿱,弗 貝,stroke-signature:↓↘→↘↙↖|4|wide|n（目标集中出现1次）
+間,1,target_coverage,⿵,日 門,stroke-signature:→↑→|2|wide|n（目标集中出现1次）
+馭,1,target_coverage,⿰,又 馬,stroke-signature:↘→↓←↖|4|balanced|n（目标集中出现1次）
+骘,1,target_coverage,⿱,陟 马,stroke-signature:↗→↓↙↓↘↓↙←|3|tall|n（目标集中出现1次）
+骛,1,target_coverage,⿱,敄 马,stroke-signature:↓↙←↖|2|balanced|n（目标集中出现1次）
+勢,1,target_coverage,⿱,力 埶,stroke-signature:↘↙←↙|2|balanced|n（目标集中出现1次）
+勦,1,target_coverage,⿰,力 巢,stroke-signature:↘↓↙↘→↘|4|tall|n（目标集中出现1次）
+搋,1,target_coverage,⿰,扌 虒,stroke-signature:↗→↓↘→↗↑|5|balanced|n（目标集中出现1次）
+携,1,target_coverage,⿰,扌 隽,stroke-signature:→↘↓→↓↙↖|4|balanced|n（目标集中出现1次）
+椴,1,target_coverage,⿰,木 段,stroke-signature:↗→↓↘→|4|balanced|n（目标集中出现1次）
+毁,1,target_coverage,⿰,工 殳 臼,stroke-signature:→↗→↓↘→|4|balanced|n（目标集中出现1次）
+煅,1,target_coverage,⿰,段 火,stroke-signature:→↗→↓↘→|3|balanced|n（目标集中出现1次）
+煥,1,target_coverage,⿰,奐 火,stroke-signature:↘↓↘↓|0|balanced|n（目标集中出现1次）
+瑜,1,target_coverage,⿰,俞 王,stroke-signature:↗→↘↓←↖|2|tall|n（目标集中出现1次）
+瑟,1,target_coverage,⿱,必 玨,stroke-signature:↓↘→↗↖|2|wide|n（目标集中出现1次）
+經,1,target_coverage,⿰,巠 糹,stroke-signature:↘↓↙↘|1|tall|n（目标集中出现1次）
+肆,1,target_coverage,⿰,聿 镸,stroke-signature:↙↓→↗→|1|balanced|n（目标集中出现1次）
+誕,1,target_coverage,⿰,延 言,stroke-signature:→↘↓↘↓↙|4|tall|n（目标集中出现1次）
+賄,1,target_coverage,⿰,有 貝,stroke-signature:→↓←↖|4|tall|n（目标集中出现1次）
+魂,1,target_coverage,⿰,云 鬼,stroke-signature:↘↓↙→↗→|3|balanced|n（目标集中出现1次）
+龃,1,target_coverage,⿰,且 齿,stroke-signature:↗→↓↙|1|tall|n（目标集中出现1次）
+嘗,1,target_coverage,⿱,尚 旨,stroke-signature:↖←|1|wide|n（目标集中出现1次）
+斲,1,target_coverage,⿰,斤,stroke-signature:↘↓↘→↘↓↙|5|balanced|n（目标集中出现1次）
+榻,1,target_coverage,⿰,日 木 羽,stroke-signature:→↘↓↘↓|1|balanced|n（目标集中出现1次）
+甍,1,target_coverage,⿱,冖 瓦 罒 艹,stroke-signature:→↘↓↘→↑|3|wide|n（目标集中出现1次）
+綮,1,target_coverage,⿱,户 攵 糸,stroke-signature:↘↓←↖|2|balanced|n（目标集中出现1次）
+緄,1,target_coverage,⿰,昆 糹,stroke-signature:←↙←↙|2|balanced|n（目标集中出现1次）
+誘,1,target_coverage,⿰,秀 言,stroke-signature:→↘↙→↘↓↙↖|6|balanced|n（目标集中出现1次）
+谲,1,target_coverage,⿰,矞 讠,stroke-signature:↘↓↙↖|1|balanced|n（目标集中出现1次）
+赘,1,target_coverage,⿱,敖 贝,stroke-signature:→↘↙←↖|2|balanced|n（目标集中出现1次）
+酶,1,target_coverage,⿰,每 酉,stroke-signature:→↘↓↙←↖|2|tall|n（目标集中出现1次）
+銬,1,target_coverage,⿰,考 釒,stroke-signature:↘↓→↓↙←|4|balanced|n（目标集中出现1次）
+霆,1,target_coverage,⿱,廷 雨,stroke-signature:→↘↙↓→↘↙|5|tall|n（目标集中出现1次）
+颭,1,target_coverage,⿺,占 風,stroke-signature:←↙←↙←↙←|0|wide|n（目标集中出现1次）
+鳳,1,target_coverage,⿵,一 几 鳥,stroke-signature:→↘↓↘→↑|4|balanced|h（目标集中出现1次）
+龈,1,target_coverage,⿰,艮 齿,stroke-signature:↘↓↘↙↗|3|tall|n（目标集中出现1次）
+屦,1,target_coverage,⿸,娄 尸 彳,stroke-signature:↘↓↙↓↘→↘→|2|balanced|n（目标集中出现1次）
+翦,1,target_coverage,⿱,前 羽,stroke-signature:↘↗|1|wide|n（目标集中出现1次）
+膠,1,target_coverage,⿰,⺼ 翏,stroke-signature:→↗→↘↓|2|balanced|n（目标集中出现1次）
+褳,1,target_coverage,⿰,衤 連,stroke-signature:→↗→↘↓↘↓↙|4|tall|n（目标集中出现1次）
+踯,1,target_coverage,⿰,足 郑,stroke-signature:↗→↓↘↓↙←|4|tall|n（目标集中出现1次）
+鋪,1,target_coverage,⿰,甫 釒,stroke-signature:↙←↓|1|tall|n（目标集中出现1次）
+錒,1,target_coverage,⿰,釒 阿,stroke-signature:→↗↘↙↓←|4|tall|n（目标集中出现1次）
+镌,1,target_coverage,⿰,钅 隽,stroke-signature:→↓↙→↓↙←↖|6|balanced|n（目标集中出现1次）
+颚,1,target_coverage,⿰,咢 页,stroke-signature:↙↓→↘↓↙↖|4|tall|n（目标集中出现1次）
+餓,1,target_coverage,⿰,我 飠,stroke-signature:↓↗|1|tall|n（目标集中出现1次）
+餕,1,target_coverage,⿰,夋 飠,stroke-signature:↙↓→↗|1|tall|n（目标集中出现1次）
+駝,1,target_coverage,⿰,它 馬,stroke-signature:→↗→↘↙|1|wide|n（目标集中出现1次）
+鲢,1,target_coverage,⿰,连 鱼,stroke-signature:↗→↓↙↓↘↓↙|2|tall|n（目标集中出现1次）
+壅,1,target_coverage,⿱,土 雍,stroke-signature:↘↓↙→|3|balanced|n（目标集中出现1次）
+彊,1,target_coverage,⿰,弓 畺,stroke-signature:↘↓→↓←↖|4|tall|n（目标集中出现1次）
+暾,1,target_coverage,⿰,敦 日,stroke-signature:→↗→↘↓↙↓|2|balanced|n（目标集中出现1次）
+檃,1,target_coverage,⿱,工 彐 木 爫 阝,stroke-signature:→↙↓↘↙←|3|balanced|n（目标集中出现1次）
+燧,1,target_coverage,⿰,火 遂,stroke-signature:→↘↙↓↘↓|2|tall|n（目标集中出现1次）
+瞞,1,target_coverage,⿰,㒼 目,stroke-signature:↘↓↘↓|2|balanced|n（目标集中出现1次）
+築,1,target_coverage,⿱,⺮ 巩 木,stroke-signature:↗→↘↓↘→↗↑|5|balanced|n（目标集中出现1次）
+蹂,1,target_coverage,⿰,柔 足,stroke-signature:↓↙←↖←|2|tall|n（目标集中出现1次）
+醚,1,target_coverage,⿰,迷 酉,stroke-signature:→↗→↘↓↘↓|2|tall|n（目标集中出现1次）
+鍵,1,target_coverage,⿰,建 釒,stroke-signature:↗→↓↘↓↙|4|tall|n（目标集中出现1次）
+鴨,1,target_coverage,⿰,甲 鳥,stroke-signature:→↗→↘↓←|3|balanced|n（目标集中出现1次）
+壕,1,target_coverage,⿰,土 豪,stroke-signature:↙←↙|0|wide|n（目标集中出现1次）
+擠,1,target_coverage,⿰,扌 齊,stroke-signature:→↘→|1|balanced|n（目标集中出现1次）
+環,1,target_coverage,⿰,王 睘,stroke-signature:↗→↓↙←|2|wide|n（目标集中出现1次）
+罄,1,target_coverage,⿱,殸 缶,stroke-signature:↗→↘↓↘→|3|wide|n（目标集中出现1次）
+膾,1,target_coverage,⿰,⺼ 會,stroke-signature:↗↘↓↙↖|2|tall|n（目标集中出现1次）
+豱,1,target_coverage,⿰,昷 豕,stroke-signature:↗↑↖|0|tall|n（目标集中出现1次）
+鍪,1,target_coverage,⿱,敄 金,stroke-signature:↓↙↖|1|balanced|n（目标集中出现1次）
+镣,1,target_coverage,⿰,尞 钅,stroke-signature:↖↙←|2|wide|n（目标集中出现1次）
+彝,1,target_coverage,⿱,廾 彑 米 糸,stroke-signature:↘↙↘→↗|2|balanced|n（目标集中出现1次）
+檯,1,target_coverage,⿰,木 臺,stroke-signature:←↙→|1|wide|n（目标集中出现1次）
+鏊,1,target_coverage,⿱,敖 金,stroke-signature:→↘↙↖|3|balanced|n（目标集中出现1次）
+鵒,1,target_coverage,⿰,谷 鳥,stroke-signature:↗→↘↓←|4|balanced|n（目标集中出现1次）
+鵝,1,target_coverage,⿰,我 鳥,stroke-signature:↓↘↗↑|2|tall|n（目标集中出现1次）
+鼩,1,target_coverage,⿰,句 鼠,stroke-signature:↓→↘|1|wide|n（目标集中出现1次）
+嚨,1,target_coverage,⿰,口 龍,stroke-signature:↗→↘↓←|4|tall|n（目标集中出现1次）
+缵,1,target_coverage,⿰,纟 赞,stroke-signature:↘↓↘↗→|4|balanced|n（目标集中出现1次）
+臘,1,target_coverage,⿰,⺼ 巤,stroke-signature:↘↓↙↘|3|tall|n（目标集中出现1次）
+躂,1,target_coverage,⿰,足 達,stroke-signature:→↘↓↘↓↙|2|tall|n（目标集中出现1次）
+轎,1,target_coverage,⿰,喬 車,stroke-signature:→↗→↘↓↙|3|wide|n（目标集中出现1次）
+镲,1,target_coverage,⿰,察 钅,stroke-signature:↘↓↙←↖|3|balanced|n（目标集中出现1次）
+颻,1,target_coverage,⿰,䍃 風,stroke-signature:↘↓→↗→|1|wide|n（目标集中出现1次）
+瀾,1,target_coverage,⿰,氵 闌,stroke-signature:↑↗→↓↙|3|balanced|n（目标集中出现1次）
+犧,1,target_coverage,⿰,牛 羲,stroke-signature:↙↘→↘↓↙←|5|balanced|n（目标集中出现1次）
+獾,1,target_coverage,⿰,犭 雚,stroke-signature:↗→↗→↘↓←|3|balanced|n（目标集中出现1次）
+瓒,1,target_coverage,⿰,王 赞,stroke-signature:↘↓↘→↗|4|balanced|n（目标集中出现1次）
+艦,1,target_coverage,⿰,監 舟,stroke-signature:↗→↗→↘↙|2|wide|n（目标集中出现1次）
+譴,1,target_coverage,⿰,言 遣,stroke-signature:→↓↙↓↘↓|2|tall|n（目标集中出现1次）
+騮,1,target_coverage,⿰,留 馬,stroke-signature:↘→↘↓↙←↖|3|balanced|n（目标集中出现1次）
+欄,1,target_coverage,⿰,木 闌,stroke-signature:←↙←↙↓|1|balanced|n（目标集中出现1次）
+韃,1,target_coverage,⿰,達 革,stroke-signature:→↗→↘↓↘↓|4|tall|n（目标集中出现1次）
+騾,1,target_coverage,⿰,累 馬,stroke-signature:↘→↘↓↙←↖|4|balanced|n（目标集中出现1次）
+髓,1,target_coverage,⿰,骨,stroke-signature:→↗→↘↓↙↓↘↓|2|tall|n（目标集中出现1次）
+聾,1,target_coverage,⿱,耳 龍,stroke-signature:↓→↗↑|1|balanced|n（目标集中出现1次）
+龔,1,target_coverage,⿱,共 龍,stroke-signature:↘↓↘→↓↙|4|balanced|n（目标集中出现1次）
+龕,1,target_coverage,⿱,合 龍,stroke-signature:↘↓↘→↓↙|6|balanced|n（目标集中出现1次）
+蠨,1,target_coverage,⿰,蕭 虫,stroke-signature:↑↗→↗|0|wide|n（目标集中出现1次）
+躜,1,target_coverage,⿰,赞 足,stroke-signature:↘↓→↗↑→|3|balanced|n（目标集中出现1次）
+鑠,1,target_coverage,⿰,樂 釒,stroke-signature:←↙↓↙|0|balanced|n（目标集中出现1次）
+鑣,1,target_coverage,⿰,釒 麃,stroke-signature:↖←↙↓|0|wide|n（目标集中出现1次）
+饜,1,target_coverage,⿸,厭 食,stroke-signature:↑→↗→|1|wide|n（目标集中出现1次）
+鷺,1,target_coverage,⿱,路 鳥,stroke-signature:↗→↓←|3|wide|n（目标集中出现1次）
+臠,1,target_coverage,⿱,䜌 肉,stroke-signature:↘↓↙↓↘→↗|2|balanced|n（目标集中出现1次）
+鑲,1,target_coverage,⿰,襄 釒,stroke-signature:→↘↓↘|4|balanced|n（目标集中出现1次）
+驥,1,target_coverage,⿰,冀 馬,stroke-signature:↗→↗→↘|1|wide|n（目标集中出现1次）

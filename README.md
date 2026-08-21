@@ -90,6 +90,16 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\inkstruct.exe collect recommend --writer user_001 --count 200
 ```
 
+针对指定生成字符集生成 90/95/99/99.9/100 分五档最少字符采集计划：
+
+```powershell
+.\.venv\Scripts\inkstruct.exe collect coverage-tiers --writer user_001 `
+  --index artifacts\samples_merged_202608201606\user_001\index.jsonl
+```
+
+该命令输出一份带档位的审计 CSV 和五份增量、可直接导入采集器的 CSV。预计分数假设新增
+样本通过对齐与档案抽取，采集后仍需重新建档验证。
+
 检查错误笔画数、低置信对齐和待重录样本，并验证生成结果：
 
 ```powershell

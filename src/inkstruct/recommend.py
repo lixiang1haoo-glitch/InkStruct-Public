@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import csv
+import heapq
 import json
 import math
 from collections import Counter
+from itertools import pairwise
 from pathlib import Path
 
+from .component_style import component_context_key, component_trajectory_key
 from .geometry import signature_key
 from .samples import iter_index
+from .schemas import StyleProfile
 from .structures import StructureRepository
 
 DEFAULT_COMMON_CHARACTERS = (
@@ -67,6 +71,16 @@ CORE_COMPONENTS = {
     "马",
     "鸟",
 }
+
+TARGET_COVERAGE_WEIGHTS = {
+    "stroke-signature": 0.20,
+    "component-identity": 0.15,
+    "component-context": 0.25,
+    "component-trajectory": 0.30,
+    "layout": 0.10,
+}
+
+DEFAULT_TARGET_COVERAGE_THRESHOLDS = (90.0, 95.0, 99.0, 99.9, 100.0)
 
 
 def _load_common_characters(path: Path = DEFAULT_COMMON_CHARACTERS) -> list[str]:
@@ -472,6 +486,418 @@ def recommend_characters(
         },
         "common_character_source": str(Path(common_characters_path).resolve()),
     }
+
+
+def accepted_profile_characters(index_path: Path, profile: StyleProfile) -> set[str]:
+    """Return characters contributing at least one non-excluded sample to a profile."""
+    excluded_ids = {item["sample_id"] for item in profile.excluded_samples}
+    return {
+        sample.character
+        for sample in iter_index(index_path)
+        if sample.sample_id not in excluded_ids
+    }
+
+
+def _target_coverage_features(graph) -> dict[str, set[str]]:
+    features = {kind: set() for kind in TARGET_COVERAGE_WEIGHTS}
+    features["layout"].add(_layout(graph))
+    for stroke in graph.strokes:
+        features["stroke-signature"].add(signature_key(stroke.signature))
+    for component in _leaf_components(graph):
+        features["component-identity"].add(component.canonical)
+        features["component-context"].add(component_context_key(graph, component))
+        if len(component.stroke_ids) >= 2:
+            features["component-trajectory"].add(
+                component_trajectory_key(graph, component)
+            )
+    return features
+
+
+def _profile_target_coverage_features(
+    profile: StyleProfile,
+    structures: StructureRepository,
+    accepted_characters: set[str],
+) -> dict[str, set[str]]:
+    layouts = set()
+    for character in accepted_characters:
+        try:
+            layouts.add(_layout(structures.get(character)))
+        except KeyError:
+            continue
+    return {
+        "stroke-signature": {prototype.signature for prototype in profile.prototypes.values()},
+        "component-identity": {
+            prototype.canonical for prototype in profile.component_layouts.values()
+        },
+        "component-context": set(profile.component_layouts),
+        "component-trajectory": set(profile.component_trajectories),
+        "layout": layouts,
+    }
+
+
+def _target_coverage_score(
+    covered_mass: dict[str, int], target_mass: dict[str, int]
+) -> float:
+    active_weight = sum(
+        TARGET_COVERAGE_WEIGHTS[kind]
+        for kind in TARGET_COVERAGE_WEIGHTS
+        if target_mass[kind] > 0
+    )
+    return 100.0 / max(active_weight, 1e-12) * sum(
+        TARGET_COVERAGE_WEIGHTS[kind]
+        * covered_mass[kind]
+        / target_mass[kind]
+        for kind in TARGET_COVERAGE_WEIGHTS
+        if target_mass[kind] > 0
+    )
+
+
+def plan_target_coverage_tiers(
+    structures: StructureRepository,
+    profile: StyleProfile,
+    *,
+    accepted_characters: set[str],
+    sampled_characters: set[str] | None = None,
+    target_characters: list[str] | None = None,
+    thresholds: tuple[float, ...] = DEFAULT_TARGET_COVERAGE_THRESHOLDS,
+) -> dict:
+    """Plan nested, target-conditioned collection tiers with few unique characters.
+
+    The score is a projected structural coverage score.  It assumes each new
+    sample passes alignment and profile extraction; pressure, timing and model
+    quality must be measured again after collection.
+    """
+    if not thresholds or any(not 0.0 < value <= 100.0 for value in thresholds):
+        raise ValueError("coverage thresholds must be inside (0, 100]")
+    if any(left >= right for left, right in pairwise(thresholds)):
+        raise ValueError("coverage thresholds must be strictly increasing")
+
+    all_characters = structures.characters()
+    all_character_set = set(all_characters)
+    target = list(dict.fromkeys(target_characters or all_characters))
+    unsupported = [character for character in target if character not in all_character_set]
+    if unsupported:
+        raise ValueError(f"unsupported target characters: {''.join(unsupported[:20])}")
+
+    target_set = set(target)
+    feature_totals = {kind: Counter() for kind in TARGET_COVERAGE_WEIGHTS}
+    candidate_features: dict[str, dict[str, set[str]]] = {}
+    candidate_metadata: dict[str, dict] = {}
+    for graph in structures.iter_graphs():
+        features = _target_coverage_features(graph)
+        candidate_features[graph.character] = features
+        candidate_metadata[graph.character] = {
+            "layout": _layout(graph),
+            "components": sorted(
+                {component.glyph_variant for component in _leaf_components(graph)}
+            ),
+            "stroke_count": len(graph.strokes),
+        }
+        if graph.character not in target_set:
+            continue
+        for kind, values in features.items():
+            if kind == "stroke-signature":
+                for stroke in graph.strokes:
+                    feature_totals[kind][signature_key(stroke.signature)] += 1
+            elif kind == "layout":
+                feature_totals[kind][_layout(graph)] += 1
+            else:
+                for component in _leaf_components(graph):
+                    if kind == "component-identity":
+                        feature_totals[kind][component.canonical] += 1
+                    elif kind == "component-context":
+                        feature_totals[kind][component_context_key(graph, component)] += 1
+                    elif kind == "component-trajectory" and len(component.stroke_ids) >= 2:
+                        feature_totals[kind][component_trajectory_key(graph, component)] += 1
+
+    target_mass = {
+        kind: sum(counts.values()) for kind, counts in feature_totals.items()
+    }
+    observed_initial = _profile_target_coverage_features(
+        profile, structures, accepted_characters
+    )
+    observed = {kind: set(values) for kind, values in observed_initial.items()}
+    covered_mass = {
+        kind: sum(
+            count
+            for feature, count in feature_totals[kind].items()
+            if feature in observed[kind]
+        )
+        for kind in TARGET_COVERAGE_WEIGHTS
+    }
+    baseline_covered_mass = dict(covered_mass)
+    baseline_score = _target_coverage_score(covered_mass, target_mass)
+    active_weight = sum(
+        TARGET_COVERAGE_WEIGHTS[kind]
+        for kind in TARGET_COVERAGE_WEIGHTS
+        if target_mass[kind] > 0
+    )
+
+    def candidate_gain(character: str) -> float:
+        return 100.0 / max(active_weight, 1e-12) * sum(
+            TARGET_COVERAGE_WEIGHTS[kind]
+            * sum(
+                feature_totals[kind][feature]
+                for feature in candidate_features[character][kind]
+                if feature not in observed[kind]
+            )
+            / max(1, target_mass[kind])
+            for kind in TARGET_COVERAGE_WEIGHTS
+        )
+
+    selected: list[str] = []
+    selected_set: set[str] = set()
+    tier_assignments: dict[str, int] = {}
+    tier_summaries: list[dict] = []
+    candidate_pool = set(candidate_features) - accepted_characters
+    for tier, threshold in enumerate(thresholds, start=1):
+        phase: list[str] = []
+        heap = [
+            (
+                -candidate_gain(character),
+                candidate_metadata[character]["stroke_count"],
+                ord(character),
+                character,
+            )
+            for character in candidate_pool - selected_set
+        ]
+        heapq.heapify(heap)
+        while _target_coverage_score(covered_mass, target_mass) + 1e-10 < threshold:
+            if not heap:
+                raise RuntimeError(f"target coverage score {threshold} is unreachable")
+            negative_gain, stroke_count, codepoint, character = heapq.heappop(heap)
+            if character in selected_set:
+                continue
+            actual_gain = candidate_gain(character)
+            if abs(actual_gain + negative_gain) > 1e-12:
+                heapq.heappush(
+                    heap, (-actual_gain, stroke_count, codepoint, character)
+                )
+                continue
+            if actual_gain <= 1e-15:
+                raise RuntimeError(f"target coverage score {threshold} is unreachable")
+            selected.append(character)
+            selected_set.add(character)
+            phase.append(character)
+            for kind, values in candidate_features[character].items():
+                for feature in values:
+                    if feature not in observed[kind]:
+                        observed[kind].add(feature)
+                        covered_mass[kind] += feature_totals[kind][feature]
+
+        support = {kind: Counter() for kind in TARGET_COVERAGE_WEIGHTS}
+        for character in selected:
+            for kind, values in candidate_features[character].items():
+                support[kind].update(values)
+        removed = 0
+        for character in reversed(phase):
+            loss = sum(
+                100.0
+                / max(active_weight, 1e-12)
+                * TARGET_COVERAGE_WEIGHTS[kind]
+                * feature_totals[kind][feature]
+                / max(1, target_mass[kind])
+                for kind, values in candidate_features[character].items()
+                for feature in values
+                if feature not in observed_initial[kind] and support[kind][feature] == 1
+            )
+            if (
+                _target_coverage_score(covered_mass, target_mass) - loss + 1e-10
+                < threshold
+            ):
+                continue
+            selected.remove(character)
+            selected_set.remove(character)
+            phase.remove(character)
+            removed += 1
+            for kind, values in candidate_features[character].items():
+                for feature in values:
+                    support[kind][feature] -= 1
+                    if (
+                        feature not in observed_initial[kind]
+                        and support[kind][feature] == 0
+                    ):
+                        observed[kind].remove(feature)
+                        covered_mass[kind] -= feature_totals[kind][feature]
+
+        for character in phase:
+            tier_assignments[character] = tier
+        tier_summaries.append(
+            {
+                "tier": tier,
+                "target_score": threshold,
+                "projected_score": _target_coverage_score(covered_mass, target_mass),
+                "added_character_count": len(phase),
+                "cumulative_character_count": len(selected),
+                "redundant_characters_removed": removed,
+                "dimension_scores": {
+                    kind: (
+                        100.0 * covered_mass[kind] / target_mass[kind]
+                        if target_mass[kind] > 0
+                        else 100.0
+                    )
+                    for kind in TARGET_COVERAGE_WEIGHTS
+                },
+            }
+        )
+
+    replay_observed = {
+        kind: set(values) for kind, values in observed_initial.items()
+    }
+    replay_mass = {
+        kind: sum(
+            count
+            for feature, count in feature_totals[kind].items()
+            if feature in replay_observed[kind]
+        )
+        for kind in TARGET_COVERAGE_WEIGHTS
+    }
+    sampled_characters = sampled_characters or accepted_characters
+    recommendations = []
+    for sequence, character in enumerate(selected, start=1):
+        contributions = []
+        for kind, values in candidate_features[character].items():
+            for feature in values:
+                if feature in replay_observed[kind]:
+                    continue
+                contribution = (
+                    100.0
+                    / max(active_weight, 1e-12)
+                    * TARGET_COVERAGE_WEIGHTS[kind]
+                    * feature_totals[kind][feature]
+                    / max(1, target_mass[kind])
+                )
+                contributions.append((contribution, kind, feature))
+                replay_observed[kind].add(feature)
+                replay_mass[kind] += feature_totals[kind][feature]
+        contributions.sort(reverse=True)
+        metadata = candidate_metadata[character]
+        recommendations.append(
+            {
+                "character": character,
+                "repeats": 1,
+                "purpose": (
+                    "quality_rerecord"
+                    if character in sampled_characters
+                    else "target_coverage"
+                ),
+                "tier": tier_assignments[character],
+                "target_score": thresholds[tier_assignments[character] - 1],
+                "sequence": sequence,
+                "projected_score_after": _target_coverage_score(
+                    replay_mass, target_mass
+                ),
+                "layout": metadata["layout"],
+                "components": metadata["components"],
+                "stroke_count": metadata["stroke_count"],
+                "reasons": [
+                    f"{kind}:{feature}（目标集中出现{feature_totals[kind][feature]}次）"
+                    for _, kind, feature in contributions[:4]
+                ],
+            }
+        )
+
+    return {
+        "schema_version": "target_collection_tiers_v1",
+        "writer_id": profile.writer_id,
+        "profile_version": profile.profile_version,
+        "profile_source_index_sha256": profile.source_index_sha256,
+        "structure_metadata": {
+            key: value
+            for key, value in structures.metadata().items()
+            if not key.endswith("_path")
+        },
+        "target_character_count": len(target),
+        "target_feature_mass": target_mass,
+        "existing_valid_character_count": len(accepted_characters),
+        "baseline_projected_score": baseline_score,
+        "baseline_dimension_scores": {
+            kind: (
+                100.0 * baseline_covered_mass[kind] / target_mass[kind]
+                if target_mass[kind] > 0
+                else 100.0
+            )
+            for kind in TARGET_COVERAGE_WEIGHTS
+        },
+        "score_kind": "projected_structural_target_coverage",
+        "score_weights": TARGET_COVERAGE_WEIGHTS,
+        "score_assumption": (
+            "Each recommended sample passes alignment and profile extraction; actual dynamic "
+            "and uncertainty scores must be recomputed after collection."
+        ),
+        "selection_method": "greedy_weighted_set_cover_with_backward_redundancy_elimination",
+        "global_minimum_guaranteed": False,
+        "locally_irredundant_by_tier": True,
+        "tiers": tier_summaries,
+        "recommended_character_count": len(recommendations),
+        "recommendations": recommendations,
+    }
+
+
+def save_target_coverage_tiers(value: dict, path: Path) -> dict:
+    """Save one audit CSV and five incremental collector-compatible CSV files."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    master_path = path.with_name("target_coverage_tiers.csv")
+    fieldnames = [
+        "character",
+        "repeats",
+        "purpose",
+        "tier",
+        "target_score",
+        "sequence",
+        "projected_score_after",
+        "stroke_count",
+        "layout",
+        "components",
+        "reason",
+    ]
+    with master_path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        for item in value["recommendations"]:
+            writer.writerow(
+                {
+                    **{key: item[key] for key in fieldnames if key in item},
+                    "projected_score_after": f'{item["projected_score_after"]:.6f}',
+                    "components": " ".join(item["components"]),
+                    "reason": "；".join(item["reasons"]),
+                }
+            )
+
+    incremental_paths = []
+    collector_fields = ["character", "repeats", "purpose", "layout", "components", "reason"]
+    for tier in value["tiers"]:
+        target_label = str(tier["target_score"]).replace(".", "_")
+        tier_path = path.with_name(f'tier_{tier["tier"]}_to_{target_label}.csv')
+        with tier_path.open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=collector_fields)
+            writer.writeheader()
+            for item in value["recommendations"]:
+                if item["tier"] != tier["tier"]:
+                    continue
+                writer.writerow(
+                    {
+                        "character": item["character"],
+                        "repeats": item["repeats"],
+                        "purpose": item["purpose"],
+                        "layout": item["layout"],
+                        "components": " ".join(item["components"]),
+                        "reason": "；".join(item["reasons"]),
+                    }
+                )
+        incremental_paths.append(str(tier_path))
+
+    result = {
+        **value,
+        "files": {
+            "report": str(path),
+            "master_csv": str(master_path),
+            "incremental_collector_csvs": incremental_paths,
+        },
+    }
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return result
 
 
 def save_recommendations(value: dict, path: Path) -> dict:

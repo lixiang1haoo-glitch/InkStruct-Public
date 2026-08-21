@@ -8,10 +8,16 @@ from pathlib import Path
 
 from .evaluate import compare_profile_update, evaluate_run, evaluate_writer
 from .generate import generate_run
-from .profile import build_profile
+from .profile import build_profile, load_profile
 from .quality import audit_samples_for_rerecord
-from .recommend import recommend_characters, save_recommendations
-from .samples import import_samples, merge_indexes, replace_index_samples
+from .recommend import (
+    accepted_profile_characters,
+    plan_target_coverage_tiers,
+    recommend_characters,
+    save_recommendations,
+    save_target_coverage_tiers,
+)
+from .samples import import_samples, iter_index, merge_indexes, replace_index_samples
 from .structures import DEFAULT_DATABASE, StructureRepository, build_database
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -128,6 +134,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("coverage", "information-gain"),
         default="coverage",
     )
+    coverage_tiers = collect_commands.add_parser(
+        "coverage-tiers", help="plan five nested target-coverage collection tiers"
+    )
+    coverage_tiers.add_argument("--writer", required=True)
+    coverage_tiers.add_argument("--index", type=_path, required=True)
+    coverage_tiers.add_argument("--profile", type=_path)
+    coverage_tiers.add_argument("--target-characters", type=_path)
+    coverage_tiers.add_argument(
+        "--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE
+    )
+    coverage_tiers.add_argument("--output", type=_path)
 
     generate = groups.add_parser("generate", help="generate topology-preserving trajectories")
     generate.add_argument("--writer", required=True)
@@ -300,6 +317,37 @@ def main(argv: list[str] | None = None) -> int:
         )
         result = save_recommendations(result, output)
         _emit({**result, "output": str(output.resolve())})
+        return 0
+    if args.group == "collect" and args.command == "coverage-tiers":
+        profile_path = args.profile or PROJECT_ROOT / "profiles" / args.writer / "profile.json"
+        profile = load_profile(profile_path)
+        samples = list(iter_index(args.index))
+        target_characters = None
+        if args.target_characters:
+            target_characters = list(
+                dict.fromkeys(
+                    character
+                    for character in args.target_characters.read_text(encoding="utf-8")
+                    if not character.isspace()
+                )
+            )
+        result = plan_target_coverage_tiers(
+            StructureRepository(args.database),
+            profile,
+            accepted_characters=accepted_profile_characters(args.index, profile),
+            sampled_characters={sample.character for sample in samples},
+            target_characters=target_characters,
+        )
+        output = (
+            args.output
+            or PROJECT_ROOT
+            / "artifacts"
+            / "collection"
+            / args.writer
+            / "target_coverage_tiers_report.json"
+        )
+        result = save_target_coverage_tiers(result, output)
+        _emit({**result, "recommendations": [], "output": str(output.resolve())})
         return 0
     if args.group == "generate":
         repository = StructureRepository(args.database)

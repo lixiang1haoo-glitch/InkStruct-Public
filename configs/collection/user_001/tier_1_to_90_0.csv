@@ -1,0 +1,987 @@
+﻿character,repeats,purpose,layout,components,reason
+縕,1,target_coverage,⿰,囚 皿 糹,component-trajectory:糸|糹|left|⿰|6（目标集中出现124次）；component-context:糸|糹|left|⿰（目标集中出现124次）；component-trajectory:皿|皿|bottom|⿱|5（目标集中出现46次）；component-context:皿|皿|bottom|⿱（目标集中出现46次）
+螞,1,target_coverage,⿰,虫 馬,component-trajectory:虫|虫|left|⿰|6（目标集中出现168次）；component-context:虫|虫|left|⿰（目标集中出现168次）；component-identity:馬（目标集中出现55次）；stroke-signature:↘↓↘|1|tall|n（目标集中出现191次）
+鎖,1,target_coverage,⿰,⺌ 貝 釒,component-trajectory:金|釒|left|⿰|8（目标集中出现135次）；component-context:金|釒|left|⿰（目标集中出现135次）；component-identity:貝（目标集中出现74次）；component-trajectory:貝|貝|bottom|⿱|7（目标集中出现33次）
+瘸,1,target_coverage,⿸,加 疒 肉,component-trajectory:疒|疒|surround-top-left|⿸|5（目标集中出现126次）；component-context:疒|疒|surround-top-left|⿸（目标集中出现126次）；component-identity:疒（目标集中出现126次）；component-identity:加（目标集中出现18次）
+席,1,target_coverage,⿸,巾 广 廿,component-trajectory:广|广|surround-top-left|⿸|3（目标集中出现66次）；component-context:广|广|surround-top-left|⿸（目标集中出现66次）；component-identity:广（目标集中出现74次）；component-identity:巾（目标集中出现58次）
+德,1,target_coverage,⿰,一 十 彳 心 罒,component-trajectory:心|心|bottom|⿱|4（目标集中出现86次）；component-context:心|心|bottom|⿱（目标集中出现86次）；component-trajectory:彳|彳|left|⿰|3（目标集中出现40次）；component-context:彳|彳|left|⿰（目标集中出现40次）
+鳎,1,target_coverage,⿰,日 羽 鱼,component-trajectory:鱼|鱼|left|⿰|8（目标集中出现72次）；component-context:鱼|鱼|left|⿰（目标集中出现72次）；component-identity:鱼（目标集中出现80次）；component-identity:羽（目标集中出现35次）
+殿,1,target_coverage,⿰,共 尸 殳,component-trajectory:尸|尸|surround-top-left|⿸|3（目标集中出现41次）；component-context:尸|尸|surround-top-left|⿸（目标集中出现41次）；component-trajectory:殳|殳|right|⿰|4（目标集中出现30次）；component-context:殳|殳|right|⿰（目标集中出现30次）
+鮮,1,target_coverage,⿰,羊 魚,component-trajectory:魚|魚|left|⿰|11（目标集中出现57次）；component-context:魚|魚|left|⿰（目标集中出现57次）；component-identity:魚（目标集中出现66次）；component-identity:羊（目标集中出现48次）
+睛,1,target_coverage,⿰,目 青,component-trajectory:目|目|left|⿰|5（目标集中出现72次）；component-context:目|目|left|⿰（目标集中出现72次）；component-trajectory:青|青|right|⿰|8（目标集中出现17次）；component-context:青|青|right|⿰（目标集中出现17次）
+關,1,target_coverage,⿵,丱 幺 門,component-trajectory:門|門|surround-top|⿵|8（目标集中出现45次）；component-context:門|門|surround-top|⿵（目标集中出现45次）；component-identity:門（目标集中出现47次）；component-identity:幺（目标集中出现29次）
+彞,1,target_coverage,⿱,廾 彐 米 糸,component-trajectory:米|米|left|⿰|6（目标集中出现39次）；component-identity:米（目标集中出现70次）；component-context:米|米|left|⿰（目标集中出现40次）；component-trajectory:廾|廾|bottom|⿱|3（目标集中出现13次）
+峭,1,target_coverage,⿰,山 肖,component-trajectory:山|山|left|⿰|3（目标集中出现55次）；component-context:山|山|left|⿰（目标集中出现55次）；component-trajectory:肖|肖|right|⿰|7（目标集中出现17次）；component-context:肖|肖|right|⿰（目标集中出现17次）
+頤,1,target_coverage,⿰,臣 頁,component-trajectory:頁|頁|right|⿰|9（目标集中出现46次）；component-context:頁|頁|right|⿰（目标集中出现46次）；component-identity:頁（目标集中出现50次）；stroke-signature:↘↓→|1|balanced|n（目标集中出现104次）
+輥,1,target_coverage,⿰,昆 車,component-trajectory:車|車|left|⿰|7（目标集中出现40次）；component-context:車|車|left|⿰（目标集中出现40次）；component-identity:車（目标集中出现55次）；component-trajectory:昆|昆|right|⿰|8（目标集中出现14次）
+骗,1,target_coverage,⿰,扁 马,component-trajectory:马|马|left|⿰|3（目标集中出现45次）；component-context:马|马|left|⿰（目标集中出现45次）；component-trajectory:扁|扁|right|⿰|9（目标集中出现15次）；component-context:扁|扁|right|⿰（目标集中出现15次）
+颖,1,target_coverage,⿰,匕 禾 页,component-trajectory:页|页|right|⿰|6（目标集中出现44次）；component-context:页|页|right|⿰（目标集中出现44次）；component-identity:页（目标集中出现46次）；component-trajectory:匕|匕|top|⿱|2（目标集中出现9次）
+舭,1,target_coverage,⿰,比 舟,component-trajectory:舟|舟|left|⿰|6（目标集中出现34次）；component-context:舟|舟|left|⿰（目标集中出现34次）；component-identity:舟（目标集中出现35次）；component-identity:比（目标集中出现28次）
+勒,1,target_coverage,⿰,力 革,component-trajectory:力|力|right|⿰|2（目标集中出现33次）；component-context:力|力|right|⿰（目标集中出现33次）；component-trajectory:革|革|left|⿰|9（目标集中出现27次）；component-context:革|革|left|⿰（目标集中出现27次）
+饅,1,target_coverage,⿰,曼 飠,component-trajectory:食|飠|left|⿰|8（目标集中出现44次）；component-context:食|飠|left|⿰（目标集中出现44次）；component-trajectory:曼|曼|right|⿰|11（目标集中出现15次）；component-context:曼|曼|right|⿰（目标集中出现15次）
+藒,1,target_coverage,⿱,曷 禾 艹,component-trajectory:艹|艹|top|⿱|4（目标集中出现89次）；component-trajectory:曷|曷|right|⿰|9（目标集中出现13次）；component-context:曷|曷|right|⿰（目标集中出现13次）；component-identity:曷（目标集中出现16次）
+駿,1,target_coverage,⿰,夋 馬,component-trajectory:馬|馬|left|⿰|10（目标集中出现37次）；component-context:馬|馬|left|⿰（目标集中出现37次）；component-trajectory:夋|夋|right|⿰|7（目标集中出现17次）；component-context:夋|夋|right|⿰（目标集中出现17次）
+貼,1,target_coverage,⿰,占 貝,component-trajectory:貝|貝|left|⿰|7（目标集中出现29次）；component-context:貝|貝|left|⿰（目标集中出现29次）；component-trajectory:占|占|right|⿰|5（目标集中出现17次）；component-context:占|占|right|⿰（目标集中出现17次）
+牴,1,target_coverage,⿰,氐 牛,component-trajectory:牛|牛|left|⿰|4（目标集中出现23次）；component-context:牛|牛|left|⿰（目标集中出现23次）；component-identity:牛（目标集中出现38次）；component-trajectory:氐|氐|right|⿰|5（目标集中出现12次）
+殊,1,target_coverage,⿰,朱 歹,component-trajectory:歹|歹|left|⿰|4（目标集中出现29次）；component-context:歹|歹|left|⿰（目标集中出现29次）；component-identity:歹（目标集中出现31次）；component-trajectory:朱|朱|right|⿰|6（目标集中出现12次）
+羔,1,target_coverage,⿱,灬 羊,component-trajectory:火|灬|bottom|⿱|4（目标集中出现31次）；component-context:火|灬|bottom|⿱（目标集中出现31次）；component-trajectory:羊|羊|top|⿱|6（目标集中出现15次）；component-context:羊|羊|top|⿱（目标集中出现15次）
+幃,1,target_coverage,⿰,巾 韋,component-trajectory:巾|巾|left|⿰|3（目标集中出现28次）；component-context:巾|巾|left|⿰（目标集中出现28次）；component-identity:韋（目标集中出现15次）；component-trajectory:韋|韋|right|⿰|9（目标集中出现7次）
+匪,1,target_coverage,⿷,匚 非,component-trajectory:匚|匚|surround-left|⿷|2（目标集中出现18次）；component-context:匚|匚|surround-left|⿷（目标集中出现18次）；layout:⿷（目标集中出现22次）；component-identity:非（目标集中出现29次）
+氫,1,target_coverage,⿹,巠 气,component-trajectory:气|气|surround-top-right|⿹|4（目标集中出现23次）；component-context:气|气|surround-top-right|⿹（目标集中出现23次）；component-identity:气（目标集中出现26次）；component-identity:巠（目标集中出现17次）
+舄,1,target_coverage,⿱,勹 灬 臼,component-trajectory:勹|勹|surround-top-right|⿹|2（目标集中出现18次）；component-context:勹|勹|surround-top-right|⿹（目标集中出现18次）；component-identity:臼（目标集中出现21次）；component-identity:勹（目标集中出现21次）
+耪,1,target_coverage,⿰,旁 耒,component-trajectory:耒|耒|left|⿰|6（目标集中出现17次）；component-trajectory:旁|旁|right|⿰|10（目标集中出现14次）；component-context:耒|耒|left|⿰（目标集中出现17次）；component-context:旁|旁|right|⿰（目标集中出现14次）
+臂,1,target_coverage,⿱,⺼ 辟,component-trajectory:⺼|⺼|bottom|⿱|4（目标集中出现24次）；component-context:⺼|⺼|bottom|⿱（目标集中出现24次）；component-trajectory:辟|辟|top|⿱|13（目标集中出现12次）；component-identity:辟（目标集中出现21次）
+趟,1,target_coverage,⿺,尚 走,component-trajectory:走|走|surround-bottom-left|⿺|7（目标集中出现21次）；component-context:走|走|surround-bottom-left|⿺（目标集中出现21次）；component-identity:走（目标集中出现23次）；component-identity:尚（目标集中出现23次）
+貍,1,target_coverage,⿰,豸 里,component-trajectory:里|里|right|⿰|7（目标集中出现14次）；component-trajectory:豸|豸|left|⿰|7（目标集中出现13次）；component-context:里|里|right|⿰（目标集中出现14次）；component-identity:里（目标集中出现22次）
+龉,1,target_coverage,⿰,吾 齿,component-trajectory:吾|吾|right|⿰|7（目标集中出现15次）；component-context:吾|吾|right|⿰（目标集中出现15次）；component-trajectory:齿|齿|left|⿰|8（目标集中出现11次）；component-context:齿|齿|left|⿰（目标集中出现11次）
+畸,1,target_coverage,⿰,奇 田,component-trajectory:田|田|left|⿰|5（目标集中出现15次）；component-trajectory:奇|奇|right|⿰|8（目标集中出现14次）；component-context:田|田|left|⿰（目标集中出现15次）；component-context:奇|奇|right|⿰（目标集中出现14次）
+辭,1,target_coverage,⿰,冂 厶 又 爫 辛,component-trajectory:又|又|bottom|⿱|2（目标集中出现17次）；component-context:又|又|bottom|⿱（目标集中出现17次）；component-identity:辛（目标集中出现28次）；component-trajectory:厶|厶|top|⿱|2（目标集中出现13次）
+聍,1,target_coverage,⿰,宁 耳,component-trajectory:耳|耳|left|⿰|6（目标集中出现24次）；component-context:耳|耳|left|⿰（目标集中出现24次）；component-trajectory:宁|宁|right|⿰|5（目标集中出现8次）；component-context:宁|宁|right|⿰（目标集中出现8次）
+黠,1,target_coverage,⿰,吉 黑,component-trajectory:黑|黑|left|⿰|12（目标集中出现13次）；component-trajectory:吉|吉|right|⿰|6（目标集中出现13次）；component-context:黑|黑|left|⿰（目标集中出现13次）；component-context:吉|吉|right|⿰（目标集中出现13次）
+鬱,1,target_coverage,⿱,冖 彡 林 缶 鬯,component-identity:彡（目标集中出现28次）；component-trajectory:彡|彡|right|⿰|3（目标集中出现13次）；component-context:彡|彡|right|⿰（目标集中出现13次）；component-identity:林（目标集中出现19次）
+鬟,1,target_coverage,⿱,睘 髟,component-trajectory:髟|髟|top|⿱|10（目标集中出现20次）；component-context:髟|髟|top|⿱（目标集中出现20次）；component-identity:髟（目标集中出现20次）；stroke-signature:↓↘|0|tall|n（目标集中出现62次）
+牖,1,target_coverage,⿰,户 片 甫,component-trajectory:户|户|surround-top-left|⿸|4（目标集中出现15次）；component-context:户|户|surround-top-left|⿸（目标集中出现17次）；component-identity:甫（目标集中出现21次）；component-trajectory:片|片|left|⿰|4（目标集中出现8次）
+劵,1,target_coverage,⿱,力 龹,component-trajectory:力|力|bottom|⿱|2（目标集中出现17次）；component-context:力|力|bottom|⿱（目标集中出现17次）；component-trajectory:龹|龹|top|⿱|6（目标集中出现13次）；component-context:龹|龹|top|⿱（目标集中出现13次）
+覲,1,target_coverage,⿰,堇 見,component-trajectory:見|見|right|⿰|7（目标集中出现15次）；component-context:見|見|right|⿰（目标集中出现15次）；component-identity:見（目标集中出现20次）；component-identity:堇（目标集中出现18次）
+戲,1,target_coverage,⿰,戈 虍 豆,component-trajectory:虍|虍|surround-top-left|⿸|6（目标集中出现19次）；component-context:虍|虍|surround-top-left|⿸（目标集中出现19次）；component-identity:虍（目标集中出现19次）；component-identity:豆（目标集中出现15次）
+鼢,1,target_coverage,⿰,分 鼠,component-identity:分（目标集中出现26次）；component-trajectory:分|分|right|⿰|4（目标集中出现11次）；component-context:分|分|right|⿰（目标集中出现11次）；component-trajectory:鼠|鼠|left|⿰|13（目标集中出现8次）
+災,1,target_coverage,⿱,巛 火,component-trajectory:火|火|bottom|⿱|4（目标集中出现19次）；component-context:火|火|bottom|⿱（目标集中出现19次）；component-trajectory:巛|巛|top|⿱|3（目标集中出现9次）；component-context:巛|巛|top|⿱（目标集中出现9次）
+銮,1,target_coverage,⿱,亦 金,component-trajectory:亦|亦|top|⿱|6（目标集中出现14次）；component-trajectory:金|金|bottom|⿱|8（目标集中出现13次）；component-context:亦|亦|top|⿱（目标集中出现14次）；component-context:金|金|bottom|⿱（目标集中出现13次）
+皅,1,target_coverage,⿰,巴 白,component-trajectory:白|白|left|⿰|5（目标集中出现12次）；component-trajectory:巴|巴|right|⿰|4（目标集中出现12次）；component-identity:巴（目标集中出现23次）；component-context:白|白|left|⿰（目标集中出现12次）
+裳,1,target_coverage,⿱,尚 衣,component-trajectory:衣|衣|bottom|⿱|6（目标集中出现17次）；component-context:衣|衣|bottom|⿱（目标集中出现19次）；component-trajectory:尚|尚|top|⿱|8（目标集中出现11次）；component-context:尚|尚|top|⿱（目标集中出现12次）
+鸞,1,target_coverage,⿱,䜌 鳥,component-identity:鳥（目标集中出现78次）；component-trajectory:䜌|䜌|top|⿱|19（目标集中出现12次）；component-trajectory:鳥|鳥|bottom|⿱|11（目标集中出现11次）；component-context:䜌|䜌|top|⿱（目标集中出现12次）
+翊,1,target_coverage,⿰,立 羽,component-identity:立（目标集中出现30次）；component-trajectory:羽|羽|right|⿰|6（目标集中出现11次）；component-trajectory:立|立|left|⿰|5（目标集中出现10次）；component-context:羽|羽|right|⿰（目标集中出现11次）
+将,1,target_coverage,⿰,丬 夕 寸,component-trajectory:寸|寸|bottom|⿱|3（目标集中出现14次）；component-context:寸|寸|bottom|⿱（目标集中出现14次）；component-trajectory:丬|丬|left|⿰|3（目标集中出现9次）；component-context:丬|丬|left|⿰（目标集中出现9次）
+狀,1,target_coverage,⿰,爿 犬,component-trajectory:犬|犬|right|⿰|4（目标集中出现16次）；component-context:犬|犬|right|⿰（目标集中出现16次）；component-trajectory:爿|爿|left|⿰|4（目标集中出现9次）；component-context:爿|爿|left|⿰（目标集中出现9次）
+齶,1,target_coverage,⿰,咢 齒,component-trajectory:齒|齒|left|⿰|15（目标集中出现13次）；component-context:齒|齒|left|⿰（目标集中出现13次）；component-identity:齒（目标集中出现15次）；component-trajectory:咢|咢|right|⿰|9（目标集中出现7次）
+韶,1,target_coverage,⿰,召 音,component-trajectory:召|召|right|⿰|5（目标集中出现13次）；component-context:召|召|right|⿰（目标集中出现13次）；component-identity:召（目标集中出现20次）；component-identity:音（目标集中出现16次）
+訾,1,target_coverage,⿱,此 言,component-trajectory:言|言|bottom|⿱|7（目标集中出现11次）；component-context:言|言|bottom|⿱（目标集中出现11次）；component-trajectory:此|此|top|⿱|6（目标集中出现9次）；component-identity:此（目标集中出现17次）
+乾,1,target_coverage,⿰,乞 龺,component-trajectory:乞|乞|right|⿰|3（目标集中出现13次）；component-context:乞|乞|right|⿰（目标集中出现13次）；component-trajectory:龺|龺|left|⿰|8（目标集中出现8次）；component-identity:乞（目标集中出现15次）
+軀,1,target_coverage,⿰,區 身,component-trajectory:區|區|right|⿰|11（目标集中出现12次）；component-context:區|區|right|⿰（目标集中出现12次）；component-identity:區（目标集中出现17次）；component-trajectory:身|身|left|⿰|7（目标集中出现7次）
+甜,1,target_coverage,⿰,甘 舌,component-trajectory:甘|甘|right|⿰|5（目标集中出现11次）；component-trajectory:舌|舌|left|⿰|6（目标集中出现10次）；component-identity:甘（目标集中出现19次）；component-context:甘|甘|right|⿰（目标集中出现11次）
+輦,1,target_coverage,⿱,夫 車,component-trajectory:夫|夫|right|⿰|4（目标集中出现11次）；component-identity:夫（目标集中出现19次）；component-context:夫|夫|right|⿰（目标集中出现11次）；component-trajectory:車|車|bottom|⿱|7（目标集中出现5次）
+瓢,1,target_coverage,⿰,瓜 票,component-trajectory:瓜|瓜|right|⿰|5（目标集中出现10次）；component-identity:票（目标集中出现20次）；component-context:瓜|瓜|right|⿰（目标集中出现10次）；component-identity:瓜（目标集中出现13次）
+觯,1,target_coverage,⿰,单 角,component-trajectory:角|角|left|⿰|7（目标集中出现11次）；component-context:角|角|left|⿰（目标集中出现11次）；component-trajectory:单|单|right|⿰|8（目标集中出现9次）；component-identity:单（目标集中出现15次）
+绸,1,target_coverage,⿰,周 纟,component-trajectory:周|周|right|⿰|8（目标集中出现16次）；component-context:周|周|right|⿰（目标集中出现16次）；component-identity:周（目标集中出现19次）；stroke-signature:↘↙↘→|3|tall|n（目标集中出现35次）
+款,1,target_coverage,⿰,士 欠 示,component-identity:士（目标集中出现22次）；component-trajectory:示|示|bottom|⿱|5（目标集中出现10次）；component-trajectory:士|士|top|⿱|3（目标集中出现9次）；component-context:示|示|bottom|⿱（目标集中出现10次）
+衕,1,target_coverage,⿻,同 行,component-trajectory:行|行|overlap-primary|⿻|6（目标集中出现12次）；component-identity:行（目标集中出现21次）；component-context:行|行|overlap-primary|⿻（目标集中出现12次）；component-identity:同（目标集中出现14次）
+湯,1,target_coverage,⿰,昜 氵,component-context:昜|昜|right|⿰（目标集中出现16次）；component-identity:昜（目标集中出现23次）；stroke-signature:↖↑↗|0|tall|n（目标集中出现98次）；component-trajectory:昜|昜|right|⿰|9（目标集中出现8次）
+魔,1,target_coverage,⿸,鬼 麻,component-identity:鬼（目标集中出现25次）；component-trajectory:麻|麻|surround-top-left|⿸|11（目标集中出现10次）；component-context:麻|麻|surround-top-left|⿸（目标集中出现10次）；component-identity:麻（目标集中出现11次）
+褱,1,target_coverage,⿻,氺 罒 衣,component-trajectory:罒|罒|top|⿱|5（目标集中出现37次）；component-context:罒|罒|top|⿱（目标集中出现37次）；component-trajectory:衣|衣|overlap-primary|⿻|6（目标集中出现12次）；component-context:衣|衣|overlap-primary|⿻（目标集中出现13次）
+鸵,1,target_coverage,⿰,它 鸟,component-trajectory:它|它|right|⿰|5（目标集中出现15次）；component-context:它|它|right|⿰（目标集中出现15次）；component-identity:它（目标集中出现15次）；stroke-signature:↗→↘↓←↖|3|balanced|n（目标集中出现40次）
+鹜,1,target_coverage,⿱,敄 鸟,component-trajectory:鸟|鸟|bottom|⿱|5（目标集中出现12次）；component-context:鸟|鸟|bottom|⿱（目标集中出现12次）；component-trajectory:敄|敄|top|⿱|9（目标集中出现8次）；component-context:敄|敄|top|⿱（目标集中出现8次）
+豐,1,target_coverage,⿱,丰 山 豆,component-identity:丰（目标集中出现15次）；component-trajectory:豆|豆|bottom|⿱|7（目标集中出现6次）；component-trajectory:丰|丰|left|⿰|4（目标集中出现6次）；component-context:豆|豆|bottom|⿱（目标集中出现6次）
+麟,1,target_coverage,⿰,粦 鹿,component-trajectory:粦|粦|right|⿰|12（目标集中出现10次）；component-identity:鹿（目标集中出现18次）；component-context:粦|粦|right|⿰（目标集中出现10次）；component-identity:粦（目标集中出现13次）
+聱,1,target_coverage,⿱,敖 耳,component-trajectory:耳|耳|bottom|⿱|6（目标集中出现10次）；component-context:耳|耳|bottom|⿱（目标集中出现10次）；component-context:敖|敖|top|⿱（目标集中出现10次）；component-trajectory:敖|敖|top|⿱|10（目标集中出现8次）
+胙,1,target_coverage,⿰,⺼ 乍,component-trajectory:乍|乍|right|⿰|5（目标集中出现15次）；component-context:乍|乍|right|⿰（目标集中出现15次）；component-identity:乍（目标集中出现21次）；stroke-signature:→↘↓←↖|3|tall|n（目标集中出现34次）
+羥,1,target_coverage,⿰,巠 羊,component-trajectory:巠|巠|right|⿰|7（目标集中出现11次）；component-context:巠|巠|right|⿰（目标集中出现11次）；component-trajectory:羊|羊|left|⿰|6（目标集中出现9次）；component-context:羊|羊|left|⿰（目标集中出现9次）
+蓦,1,target_coverage,⿱,莫 马,component-identity:莫（目标集中出现23次）；component-trajectory:马|马|bottom|⿱|3（目标集中出现8次）；component-trajectory:莫|莫|top|⿱|10（目标集中出现7次）；component-context:马|马|bottom|⿱（目标集中出现8次）
+两,1,target_coverage,⿱,一 从 冂,component-trajectory:冂|冂|overlap-primary|⿻|2（目标集中出现12次）；component-identity:从（目标集中出现20次）；component-context:冂|冂|overlap-primary|⿻（目标集中出现12次）；component-trajectory:从|从|overlap-secondary|⿻|4（目标集中出现5次）
+豉,1,target_coverage,⿰,支 豆,component-trajectory:支|支|right|⿰|4（目标集中出现13次）；component-context:支|支|right|⿰（目标集中出现13次）；component-identity:支（目标集中出现16次）；component-trajectory:豆|豆|left|⿰|7（目标集中出现5次）
+髀,1,target_coverage,⿰,卑 骨,component-context:骨|骨|left|⿰（目标集中出现22次）；component-trajectory:骨|骨|left|⿰|9（目标集中出现17次）；component-trajectory:卑|卑|right|⿰|8（目标集中出现14次）；component-identity:骨（目标集中出现24次）
+瓷,1,target_coverage,⿱,次 瓦,component-trajectory:次|次|top|⿱|6（目标集中出现8次）；component-identity:瓦（目标集中出现14次）；component-context:次|次|top|⿱（目标集中出现8次）；component-identity:次（目标集中出现13次）
+侌,1,target_coverage,⿱,云 今,component-identity:云（目标集中出现16次）；component-identity:今（目标集中出现15次）；component-trajectory:云|云|bottom|⿱|4（目标集中出现7次）；component-trajectory:今|今|top|⿱|4（目标集中出现6次）
+鼾,1,target_coverage,⿰,干 鼻,component-trajectory:干|干|right|⿰|3（目标集中出现14次）；component-context:干|干|right|⿰（目标集中出现14次）；component-trajectory:鼻|鼻|left|⿰|14（目标集中出现4次）；stroke-signature:↗→↘|2|wide|n（目标集中出现31次）
+腧,1,target_coverage,⿰,⺼ 俞,component-trajectory:俞|俞|right|⿰|9（目标集中出现13次）；component-context:俞|俞|right|⿰（目标集中出现13次）；component-identity:俞（目标集中出现20次）；stroke-signature:→↓←↖|2|tall|n（目标集中出现47次）
+舖,1,target_coverage,⿰,甫 舍,component-trajectory:甫|甫|right|⿰|7（目标集中出现13次）；component-context:甫|甫|right|⿰（目标集中出现13次）；stroke-signature:→↓↙←|3|balanced|n（目标集中出现78次）；component-identity:舍（目标集中出现5次）
+蟟,1,target_coverage,⿰,尞 虫,component-trajectory:尞|尞|right|⿰|12（目标集中出现13次）；component-context:尞|尞|right|⿰（目标集中出现13次）；component-identity:尞（目标集中出现18次）；stroke-signature:→↗→|1|wide|n（目标集中出现35次）
+斜,1,target_coverage,⿰,余 斗,component-trajectory:斗|斗|right|⿰|4（目标集中出现10次）；component-context:斗|斗|right|⿰（目标集中出现10次）；component-identity:余（目标集中出现16次）；component-identity:斗（目标集中出现13次）
+彆,1,target_coverage,⿱,弓 敝,component-identity:弓（目标集中出现39次）；component-trajectory:敝|敝|top|⿱|11（目标集中出现9次）；component-trajectory:弓|弓|bottom|⿱|3（目标集中出现8次）；component-context:敝|敝|top|⿱（目标集中出现9次）
+缺,1,target_coverage,⿰,夬 缶,component-trajectory:夬|夬|right|⿰|4（目标集中出现11次）；component-context:夬|夬|right|⿰（目标集中出现11次）；component-trajectory:缶|缶|left|⿰|6（目标集中出现6次）；component-identity:夬（目标集中出现12次）
+衅,1,target_coverage,⿰,半 血,component-trajectory:半|半|right|⿰|5（目标集中出现9次）；component-context:半|半|right|⿰（目标集中出现9次）；component-identity:半（目标集中出现11次）；component-identity:血（目标集中出现9次）
+繇,1,target_coverage,⿰,䍃 系,component-identity:䍃（目标集中出现14次）；stroke-signature:←↙←↙←|0|wide|n（目标集中出现48次）；component-trajectory:系|系|right|⿰|7（目标集中出现5次）；stroke-signature:↓↙↓→|3|balanced|n（目标集中出现38次）
+楚,1,target_coverage,⿱,林 疋,component-trajectory:林|林|top|⿱|8（目标集中出现9次）；component-context:林|林|top|⿱（目标集中出现9次）；component-trajectory:疋|疋|bottom|⿱|5（目标集中出现7次）；component-context:疋|疋|bottom|⿱（目标集中出现7次）
+駑,1,target_coverage,⿱,奴 馬,component-trajectory:馬|馬|bottom|⿱|10（目标集中出现9次）；component-trajectory:奴|奴|top|⿱|5（目标集中出现8次）；component-context:馬|馬|bottom|⿱（目标集中出现9次）；component-context:奴|奴|top|⿱（目标集中出现8次）
+楼,1,target_coverage,⿰,娄 木,component-trajectory:娄|娄|right|⿰|9（目标集中出现12次）；component-context:娄|娄|right|⿰（目标集中出现12次）；component-identity:娄（目标集中出现18次）；stroke-signature:↘↓↘|2|balanced|n（目标集中出现28次）
+韫,1,target_coverage,⿰,昷 韦,component-trajectory:昷|昷|right|⿰|9（目标集中出现9次）；component-identity:韦（目标集中出现16次）；component-context:昷|昷|right|⿰（目标集中出现9次）；component-identity:昷（目标集中出现11次）
+砻,1,target_coverage,⿱,石 龙,component-identity:龙（目标集中出现19次）；component-trajectory:石|石|bottom|⿱|5（目标集中出现9次）；component-context:石|石|bottom|⿱（目标集中出现9次）；component-trajectory:龙|龙|top|⿱|5（目标集中出现5次）
+壤,1,target_coverage,⿰,土 襄,component-trajectory:襄|襄|right|⿰|17（目标集中出现12次）；component-context:襄|襄|right|⿰（目标集中出现12次）；component-identity:襄（目标集中出现16次）；stroke-signature:↗→↘↓←|3|balanced|n（目标集中出现32次）
+岱,1,target_coverage,⿱,代 山,component-trajectory:山|山|bottom|⿱|3（目标集中出现11次）；component-context:山|山|bottom|⿱（目标集中出现11次）；component-trajectory:代|代|top|⿱|5（目标集中出现6次）；component-context:代|代|top|⿱（目标集中出现6次）
+釉,1,target_coverage,⿰,由 釆,component-trajectory:由|由|right|⿰|5（目标集中出现14次）；component-context:由|由|right|⿰（目标集中出现14次）；component-trajectory:釆|釆|left|⿰|7（目标集中出现3次）；component-identity:釆（目标集中出现6次）
+麦,1,target_coverage,⿱,夂 龶,component-trajectory:龶|龶|top|⿱|4（目标集中出现8次）；component-trajectory:夂|夂|bottom|⿱|3（目标集中出现8次）；component-context:夂|夂|bottom|⿱（目标集中出现9次）；component-context:龶|龶|top|⿱（目标集中出现8次）
+肪,1,target_coverage,⿰,⺼ 方,component-trajectory:方|方|right|⿰|4（目标集中出现16次）；component-context:方|方|right|⿰（目标集中出现16次）；stroke-signature:→↘↓↙←|4|tall|n（目标集中出现37次）；stroke-signature:↘→↘↓↙↖|2|balanced|n（目标集中出现4次）
+豹,1,target_coverage,⿰,勺 豸,component-trajectory:勺|勺|right|⿰|3（目标集中出现12次）；component-context:勺|勺|right|⿰（目标集中出现12次）；component-identity:勺（目标集中出现14次）；stroke-signature:→↓↙←↖|2|balanced|n（目标集中出现37次）
+谍,1,target_coverage,⿰,枼 讠,component-trajectory:枼|枼|right|⿰|9（目标集中出现12次）；component-context:枼|枼|right|⿰（目标集中出现12次）；component-identity:枼（目标集中出现13次）；stroke-signature:↘↓↘→|3|balanced|n（目标集中出现36次）
+望,1,target_coverage,⿱,亡 月 王,component-trajectory:王|王|bottom|⿱|4（目标集中出现8次）；component-identity:亡（目标集中出现16次）；component-context:王|王|bottom|⿱（目标集中出现8次）；stroke-signature:→↓←|2|tall|n（目标集中出现43次）
+夥,1,target_coverage,⿰,多 果,component-identity:果（目标集中出现19次）；component-trajectory:多|多|right|⿰|6（目标集中出现7次）；component-context:多|多|right|⿰（目标集中出现7次）；component-identity:多（目标集中出现10次）
+瑩,1,target_coverage,⿳,冖 炏 玉,component-trajectory:炏|炏|top|⿳|8（目标集中出现9次）；component-context:炏|炏|top|⿳（目标集中出现9次）；component-identity:玉（目标集中出现13次）；component-identity:炏（目标集中出现11次）
+骯,1,target_coverage,⿰,亢 骨,component-trajectory:亢|亢|right|⿰|4（目标集中出现11次）；component-context:亢|亢|right|⿰（目标集中出现11次）；component-identity:亢（目标集中出现14次）；component-trajectory:骨|骨|left|⿰|10（目标集中出现5次）
+瞋,1,target_coverage,⿰,目 真,component-trajectory:真|真|right|⿰|10（目标集中出现11次）；component-context:真|真|right|⿰（目标集中出现11次）；component-identity:真（目标集中出现15次）；stroke-signature:↘↓↘→|2|wide|n（目标集中出现41次）
+旁,1,target_coverage,⿱,方 立,component-trajectory:立|立|top|⿱|5（目标集中出现9次）；component-context:立|立|top|⿱（目标集中出现10次）；component-trajectory:方|方|bottom|⿱|4（目标集中出现8次）；component-context:方|方|bottom|⿱（目标集中出现8次）
+辮,1,target_coverage,⿲,糸 辛,component-trajectory:辛|辛|right|⿲|7（目标集中出现7次）；component-trajectory:辛|辛|left|⿲|7（目标集中出现7次）；component-context:辛|辛|right|⿲（目标集中出现7次）；component-context:辛|辛|left|⿲（目标集中出现7次）
+讴,1,target_coverage,⿰,区 讠,component-trajectory:区|区|right|⿰|4（目标集中出现12次）；component-context:区|区|right|⿰（目标集中出现12次）；component-identity:区（目标集中出现17次）；stroke-signature:→↓→↗|3|balanced|n（目标集中出现9次）
+遣,1,target_coverage,⿺,㠯 一 中 辶,component-trajectory:㠯|㠯|bottom|⿱|5（目标集中出现8次）；component-context:㠯|㠯|bottom|⿱（目标集中出现8次）；component-trajectory:中|中|top|⿱|4（目标集中出现6次）；component-identity:㠯（目标集中出现10次）
+诂,1,target_coverage,⿰,古 讠,component-trajectory:古|古|right|⿰|5（目标集中出现17次）；component-context:古|古|right|⿰（目标集中出现17次）；stroke-signature:→↗↘↓↘↗|3|balanced|n（目标集中出现2次）
+晝,1,target_coverage,⿱,旦 聿,component-identity:旦（目标集中出现21次）；component-identity:聿（目标集中出现11次）；component-trajectory:旦|旦|bottom|⿱|5（目标集中出现5次）；component-context:旦|旦|bottom|⿱（目标集中出现5次）
+吨,1,target_coverage,⿰,口 屯,component-trajectory:屯|屯|right|⿰|4（目标集中出现12次）；component-context:屯|屯|right|⿰（目标集中出现12次）；component-identity:屯（目标集中出现17次）；stroke-signature:↘↓↘→↗↑|2|tall|n（目标集中出现7次）
+翟,1,target_coverage,⿱,羽 隹,component-trajectory:隹|隹|bottom|⿱|8（目标集中出现10次）；component-context:隹|隹|bottom|⿱（目标集中出现10次）；component-trajectory:羽|羽|top|⿱|6（目标集中出现7次）；component-context:羽|羽|top|⿱（目标集中出现7次）
+膽,1,target_coverage,⿰,⺼ 詹,component-trajectory:詹|詹|right|⿰|13（目标集中出现11次）；component-context:詹|詹|right|⿰（目标集中出现11次）；component-identity:詹（目标集中出现12次）；stroke-signature:↗↘↓↙↖|4|tall|n（目标集中出现21次）
+燒,1,target_coverage,⿰,堯 火,component-trajectory:堯|堯|right|⿰|12（目标集中出现11次）；component-context:堯|堯|right|⿰（目标集中出现11次）；component-identity:堯（目标集中出现13次）；stroke-signature:←↙↓|2|balanced|n（目标集中出现22次）
+靛,1,target_coverage,⿰,定 青,component-trajectory:定|定|right|⿰|8（目标集中出现9次）；component-context:定|定|right|⿰（目标集中出现9次）；component-trajectory:青|青|left|⿰|8（目标集中出现5次）；component-identity:定（目标集中出现9次）
+氈,1,target_coverage,⿰,亶 毛,component-trajectory:毛|毛|right|⿰|4（目标集中出现9次）；component-context:毛|毛|right|⿰（目标集中出现9次）；component-identity:亶（目标集中出现12次）；component-trajectory:亶|亶|left|⿰|13（目标集中出现3次）
+毓,1,target_coverage,⿰,㐬 每,component-trajectory:㐬|㐬|right|⿰|7（目标集中出现8次）；component-context:㐬|㐬|right|⿰（目标集中出现8次）；component-identity:每（目标集中出现13次）；component-identity:㐬（目标集中出现10次）
+飕,1,target_coverage,⿺,叟 风,component-identity:风（目标集中出现14次）；component-identity:叟（目标集中出现14次）；component-trajectory:风|风|surround-bottom-left|⿺|4（目标集中出现5次）；component-context:风|风|surround-bottom-left|⿺（目标集中出现5次）
+孰,1,target_coverage,⿰,丸 享,component-trajectory:丸|丸|right|⿰|3（目标集中出现6次）；component-identity:享（目标集中出现11次）；component-trajectory:享|享|left|⿰|8（目标集中出现5次）；component-context:丸|丸|right|⿰（目标集中出现6次）
+壽,1,target_coverage,⿳,一 乛 吋 士 工,component-context:一|一|middle|⿳（目标集中出现12次）；component-trajectory:士|士|top|⿳|3（目标集中出现7次）；component-context:士|士|top|⿳（目标集中出现7次）；component-identity:乛（目标集中出现4次）
+弒,1,target_coverage,⿰,式 杀,component-trajectory:式|式|right|⿰|6（目标集中出现7次）；component-context:式|式|right|⿰（目标集中出现7次）；component-trajectory:杀|杀|left|⿰|6（目标集中出现5次）；component-context:杀|杀|left|⿰（目标集中出现5次）
+鼉,1,target_coverage,⿳,一 口 田 黽,component-trajectory:田|田|top|⿱|5（目标集中出现14次）；stroke-signature:↗→↘↙|2|wide|n（目标集中出现64次）；component-identity:黽（目标集中出现7次）；stroke-signature:↙↓↙|1|tall|n（目标集中出现18次）
+缇,1,target_coverage,⿰,是 纟,component-trajectory:是|是|right|⿰|9（目标集中出现9次）；component-context:是|是|right|⿰（目标集中出现9次）；component-identity:是（目标集中出现14次）；stroke-signature:↘↙↓→|3|tall|n（目标集中出现39次）
+尋,1,target_coverage,⿳,口 寸 工 彐,component-trajectory:工|工|left|⿰|3（目标集中出现8次）；component-context:工|工|left|⿰（目标集中出现8次）；component-trajectory:彐|彐|top|⿳|3（目标集中出现6次）；component-context:彐|彐|top|⿳（目标集中出现6次）
+钠,1,target_coverage,⿰,内 钅,component-trajectory:内|内|right|⿰|4（目标集中出现11次）；component-context:内|内|right|⿰（目标集中出现11次）；component-identity:内（目标集中出现14次）；stroke-signature:↘↓↘↗|3|balanced|n（目标集中出现18次）
+縹,1,target_coverage,⿰,票 糹,component-trajectory:票|票|right|⿰|11（目标集中出现15次）；component-context:票|票|right|⿰（目标集中出现15次）；stroke-signature:↓↙↓→↗→|3|tall|n（目标集中出现14次）
+篹,1,target_coverage,⿱,㔾 算,component-trajectory:㔾|㔾|bottom|⿱|2（目标集中出现6次）；component-identity:㔾（目标集中出现12次）；component-context:㔾|㔾|bottom|⿱（目标集中出现6次）；component-trajectory:算|算|top|⿱|14（目标集中出现4次）
+牽,1,target_coverage,⿱,冖 牛 玄,component-trajectory:牛|牛|bottom|⿱|4（目标集中出现11次）；component-context:牛|牛|bottom|⿱（目标集中出现11次）；component-identity:玄（目标集中出现10次）；component-trajectory:玄|玄|overlap-primary|⿻|5（目标集中出现1次）
+博,1,target_coverage,⿰,十 尃,component-trajectory:尃|尃|right|⿰|10（目标集中出现10次）；component-context:尃|尃|right|⿰（目标集中出现10次）；component-identity:尃（目标集中出现10次）；component-trajectory:十|十|left|⿰|2（目标集中出现3次）
+辉,1,target_coverage,⿰,光 军,component-trajectory:军|军|right|⿰|6（目标集中出现7次）；component-identity:军（目标集中出现12次）；component-context:军|军|right|⿰（目标集中出现7次）；component-identity:光（目标集中出现9次）
+鹼,1,target_coverage,⿰,僉 鹵,component-trajectory:僉|僉|right|⿰|13（目标集中出现9次）；component-context:僉|僉|right|⿰（目标集中出现9次）；component-identity:僉（目标集中出现13次）；component-trajectory:鹵|鹵|left|⿰|11（目标集中出现2次）
+酿,1,target_coverage,⿰,良 酉,component-trajectory:酉|酉|left|⿰|7（目标集中出现60次）；component-context:酉|酉|left|⿰（目标集中出现60次）；component-identity:酉（目标集中出现66次）；component-trajectory:良|良|right|⿰|7（目标集中出现10次）
+腌,1,target_coverage,⿰,⺼ 奄,component-trajectory:奄|奄|right|⿰|8（目标集中出现9次）；component-identity:奄（目标集中出现15次）；component-context:奄|奄|right|⿰（目标集中出现9次）；stroke-signature:↙↓|0|tall|n（目标集中出现38次）
+蟑,1,target_coverage,⿰,章 虫,component-trajectory:章|章|right|⿰|11（目标集中出现10次）；component-context:章|章|right|⿰（目标集中出现10次）；component-identity:章（目标集中出现15次）；stroke-signature:→|1|wide|n（目标集中出现21次）
+跫,1,target_coverage,⿱,巩 足,component-trajectory:足|足|bottom|⿱|7（目标集中出现7次）；component-context:足|足|bottom|⿱（目标集中出现8次）；component-trajectory:巩|巩|top|⿱|6（目标集中出现6次）；component-context:巩|巩|top|⿱（目标集中出现6次）
+评,1,target_coverage,⿰,平 讠,component-trajectory:平|平|right|⿰|5（目标集中出现11次）；component-context:平|平|right|⿰（目标集中出现11次）；component-identity:平（目标集中出现12次）；stroke-signature:→↗→↘↓↘↗|4|balanced|n（目标集中出现17次）
+臻,1,target_coverage,⿰,秦 至,component-identity:至（目标集中出现17次）；component-trajectory:秦|秦|right|⿰|10（目标集中出现5次）；component-context:秦|秦|right|⿰（目标集中出现5次）；component-trajectory:至|至|left|⿰|6（目标集中出现4次）
+歲,1,target_coverage,⿱,戊 止,component-trajectory:戊|戊|surround-top|⿵|5（目标集中出现7次）；component-trajectory:止|止|top|⿱|4（目标集中出现6次）；component-context:戊|戊|surround-top|⿵（目标集中出现7次）；component-context:止|止|top|⿱（目标集中出现6次）
+燅,1,target_coverage,⿰,坴 炎,component-trajectory:炎|炎|right|⿰|8（目标集中出现8次）；component-identity:炎（目标集中出现14次）；component-context:炎|炎|right|⿰（目标集中出现8次）；component-identity:坴（目标集中出现5次）
+蠲,1,target_coverage,⿰,益 蜀,component-trajectory:蜀|蜀|right|⿰|13（目标集中出现9次）；component-context:蜀|蜀|right|⿰（目标集中出现9次）；component-identity:蜀（目标集中出现10次）；component-identity:益（目标集中出现9次）
+醉,1,target_coverage,⿰,卒 酉,component-trajectory:卒|卒|right|⿰|8（目标集中出现10次）；component-context:卒|卒|right|⿰（目标集中出现10次）；component-identity:卒（目标集中出现15次）；stroke-signature:↘↓↘→|3|tall|n（目标集中出现17次）
+却,1,target_coverage,⿰,卩 去,component-trajectory:卩|卩|right|⿰|2（目标集中出现10次）；component-context:卩|卩|right|⿰（目标集中出现10次）；component-identity:去（目标集中出现11次）；component-trajectory:去|去|left|⿰|5（目标集中出现2次）
+僬,1,target_coverage,⿰,亻 焦,component-trajectory:焦|焦|right|⿰|12（目标集中出现11次）；component-context:焦|焦|right|⿰（目标集中出现11次）；component-identity:焦（目标集中出现15次）
+歰,1,target_coverage,⿱,刃 止,component-trajectory:刃|刃|right|⿰|3（目标集中出现8次）；component-context:刃|刃|right|⿰（目标集中出现8次）；component-identity:刃（目标集中出现11次）；component-trajectory:止|止|left|⿰|4（目标集中出现3次）
+鄉,1,target_coverage,⿰,乡 郎,component-trajectory:郎|郎|right|⿰|8（目标集中出现5次）；component-context:郎|郎|right|⿰（目标集中出现5次）；stroke-signature:↘↓→↗|3|tall|n（目标集中出现32次）；component-trajectory:乡|乡|left|⿰|3（目标集中出现3次）
+骐,1,target_coverage,⿰,其 马,component-trajectory:其|其|right|⿰|8（目标集中出现9次）；component-identity:其（目标集中出现18次）；component-context:其|其|right|⿰（目标集中出现9次）；stroke-signature:↓→↘↓↙↖|4|tall|n（目标集中出现16次）
+啾,1,target_coverage,⿰,口 秋,component-trajectory:秋|秋|right|⿰|9（目标集中出现10次）；component-context:秋|秋|right|⿰（目标集中出现10次）；component-identity:秋（目标集中出现14次）；stroke-signature:→↘↓↘|3|balanced|n（目标集中出现17次）
+巽,1,target_coverage,⿱,共 巳,component-identity:巳（目标集中出现13次）；component-trajectory:巳|巳|right|⿰|3（目标集中出现5次）；component-trajectory:共|共|bottom|⿱|6（目标集中出现5次）；component-context:巳|巳|right|⿰（目标集中出现5次）
+甭,1,target_coverage,⿱,不 用,component-trajectory:用|用|bottom|⿱|5（目标集中出现6次）；component-trajectory:不|不|top|⿱|4（目标集中出现6次）；component-identity:用（目标集中出现10次）；component-context:用|用|bottom|⿱（目标集中出现6次）
+蓖,1,target_coverage,⿳,囟 比 艹,component-trajectory:艹|艹|top|⿳|3（目标集中出现7次）；component-context:艹|艹|top|⿳（目标集中出现7次）；component-identity:囟（目标集中出现8次）；component-trajectory:比|比|bottom|⿳|4（目标集中出现3次）
+榴,1,target_coverage,⿰,木 留,component-trajectory:留|留|right|⿰|10（目标集中出现10次）；component-context:留|留|right|⿰（目标集中出现10次）；component-identity:留（目标集中出现14次）；stroke-signature:↘↓↘↗|1|balanced|n（目标集中出现7次）
+爸,1,target_coverage,⿱,巴 父,component-trajectory:巴|巴|bottom|⿱|4（目标集中出现8次）；component-context:巴|巴|bottom|⿱（目标集中出现8次）；component-trajectory:父|父|top|⿱|4（目标集中出现5次）；component-context:父|父|top|⿱（目标集中出现5次）
+磴,1,target_coverage,⿰,登 石,component-trajectory:登|登|right|⿰|12（目标集中出现10次）；component-context:登|登|right|⿰（目标集中出现10次）；component-identity:登（目标集中出现13次）；stroke-signature:→↘↓↙|1|tall|n（目标集中出现17次）
+腊,1,target_coverage,⿰,⺼ 昔,component-trajectory:昔|昔|right|⿰|8（目标集中出现10次）；component-context:昔|昔|right|⿰（目标集中出现10次）；component-identity:昔（目标集中出现13次）；stroke-signature:↗↘↓↙←|4|tall|n（目标集中出现8次）
+甤,1,target_coverage,⿰,生 豕,component-identity:生（目标集中出现14次）；component-trajectory:生|生|right|⿰|5（目标集中出现5次）；component-context:生|生|right|⿰（目标集中出现5次）；component-trajectory:豕|豕|left|⿰|7（目标集中出现4次）
+羲,1,target_coverage,⿱,丂 戈 禾 羊,component-trajectory:丂|丂|bottom|⿱|2（目标集中出现6次）；component-context:丂|丂|bottom|⿱（目标集中出现6次）；component-identity:丂（目标集中出现9次）；component-context:戈|戈|overlap-secondary|⿻（目标集中出现4次）
+韱,1,target_coverage,⿱,从 戈 韭,component-trajectory:戈|戈|surround-top-right|⿹|4（目标集中出现6次）；component-trajectory:从|从|top|⿱|4（目标集中出现6次）；component-context:戈|戈|surround-top-right|⿹（目标集中出现6次）；component-context:从|从|top|⿱（目标集中出现6次）
+镔,1,target_coverage,⿰,宾 钅,component-trajectory:宾|宾|right|⿰|10（目标集中出现10次）；component-context:宾|宾|right|⿰（目标集中出现10次）；component-identity:宾（目标集中出现11次）；stroke-signature:↘↓↘→↗|3|tall|n（目标集中出现13次）
+孵,1,target_coverage,⿰,卵 孚,component-trajectory:孚|孚|right|⿰|7（目标集中出现8次）；component-context:孚|孚|right|⿰（目标集中出现8次）；component-identity:孚（目标集中出现11次）；stroke-signature:↘↓↙↓|1|balanced|n（目标集中出现20次）
+玡,1,target_coverage,⿰,牙 王,component-trajectory:牙|牙|right|⿰|4（目标集中出现9次）；component-identity:牙（目标集中出现17次）；component-context:牙|牙|right|⿰（目标集中出现9次）；stroke-signature:↓↘→|3|wide|n（目标集中出现2次）
+籴,1,target_coverage,⿱,入 米,component-trajectory:米|米|bottom|⿱|6（目标集中出现8次）；component-context:米|米|bottom|⿱（目标集中出现8次）；component-identity:入（目标集中出现10次）；component-trajectory:入|入|top|⿱|2（目标集中出现3次）
+谿,1,target_coverage,⿰,奚 谷,component-trajectory:谷|谷|right|⿰|7（目标集中出现6次）；component-context:谷|谷|right|⿰（目标集中出现6次）；component-identity:奚（目标集中出现7次）；component-trajectory:奚|奚|left|⿰|10（目标集中出现3次）
+繒,1,target_coverage,⿰,曾 糹,component-trajectory:曾|曾|right|⿰|12（目标集中出现9次）；component-context:曾|曾|right|⿰（目标集中出现9次）；component-identity:曾（目标集中出现12次）；stroke-signature:↘↙↓→↗|3|tall|n（目标集中出现19次）
+蟬,1,target_coverage,⿰,單 虫,component-trajectory:單|單|right|⿰|12（目标集中出现9次）；component-identity:單（目标集中出现15次）；component-context:單|單|right|⿰（目标集中出现9次）；stroke-signature:↗→↘↓↘|2|balanced|n（目标集中出现5次）
+记,1,target_coverage,⿰,己 讠,component-trajectory:己|己|right|⿰|3（目标集中出现9次）；component-identity:己（目标集中出现16次）；component-context:己|己|right|⿰（目标集中出现9次）
+蕻,1,target_coverage,⿱,共 艹 镸,component-trajectory:共|共|right|⿰|6（目标集中出现8次）；component-context:共|共|right|⿰（目标集中出现8次）；component-trajectory:镸|镸|left|⿰|7（目标集中出现3次）；component-context:镸|镸|left|⿰（目标集中出现3次）
+佚,1,target_coverage,⿰,亻 失,component-trajectory:失|失|right|⿰|5（目标集中出现10次）；component-context:失|失|right|⿰（目标集中出现10次）；component-identity:失（目标集中出现12次）
+跄,1,target_coverage,⿰,仓 足,component-trajectory:仓|仓|right|⿰|4（目标集中出现9次）；component-context:仓|仓|right|⿰（目标集中出现9次）；component-identity:仓（目标集中出现14次）；stroke-signature:↗→↘↓↙|4|balanced|n（目标集中出现7次）
+麈,1,target_coverage,⿸,主 鹿,component-context:鹿|鹿|surround-top-left|⿸（目标集中出现8次）；component-trajectory:鹿|鹿|surround-top-left|⿸|11（目标集中出现6次）；component-identity:主（目标集中出现11次）；stroke-signature:↘→↘|0|wide|n（目标集中出现21次）
+疆,1,target_coverage,⿰,土 弓 畺,component-trajectory:畺|畺|right|⿰|13（目标集中出现7次）；component-context:畺|畺|right|⿰（目标集中出现7次）；component-identity:畺（目标集中出现8次）；component-trajectory:弓|弓|surround-top-right|⿹|3（目标集中出现3次）
+斕,1,target_coverage,⿰,文 闌,component-trajectory:闌|闌|right|⿰|17（目标集中出现7次）；component-context:闌|闌|right|⿰（目标集中出现7次）；component-trajectory:文|文|left|⿰|4（目标集中出现4次）；component-identity:闌（目标集中出现8次）
+诵,1,target_coverage,⿰,甬 讠,component-trajectory:甬|甬|right|⿰|7（目标集中出现9次）；component-context:甬|甬|right|⿰（目标集中出现9次）；component-identity:甬（目标集中出现14次）；stroke-signature:→↗↘↓↘↗|4|balanced|n（目标集中出现5次）
+镐,1,target_coverage,⿰,钅 高,component-identity:高（目标集中出现17次）；component-trajectory:高|高|right|⿰|10（目标集中出现8次）；component-context:高|高|right|⿰（目标集中出现8次）；stroke-signature:↗→↓↙←|2|balanced|n（目标集中出现8次）
+侠,1,target_coverage,⿰,亻 夹,component-trajectory:夹|夹|right|⿰|6（目标集中出现9次）；component-identity:夹（目标集中出现15次）；component-context:夹|夹|right|⿰（目标集中出现9次）
+绘,1,target_coverage,⿰,会 纟,component-trajectory:会|会|right|⿰|6（目标集中出现9次）；component-context:会|会|right|⿰（目标集中出现9次）；component-identity:会（目标集中出现12次）；stroke-signature:↙↓→|2|balanced|n（目标集中出现13次）
+隽,1,target_coverage,⿱,乃 隹,component-trajectory:隹|隹|top|⿱|8（目标集中出现7次）；component-context:隹|隹|top|⿱（目标集中出现7次）；component-identity:乃（目标集中出现11次）；component-trajectory:乃|乃|bottom|⿱|2（目标集中出现3次）
+俳,1,target_coverage,⿰,亻 非,component-trajectory:非|非|right|⿰|8（目标集中出现12次）；component-context:非|非|right|⿰（目标集中出现13次）；stroke-signature:→↗→↑|1|wide|n（目标集中出现9次）
+束,1,target_coverage,⿻,口 木,component-trajectory:木|木|overlap-primary|⿻|4（目标集中出现7次）；component-trajectory:口|口|overlap-secondary|⿻|3（目标集中出现6次）；component-context:木|木|overlap-primary|⿻（目标集中出现7次）；component-context:口|口|overlap-secondary|⿻（目标集中出现6次）
+罂,1,target_coverage,⿱,缶 贝,component-trajectory:贝|贝|right|⿰|4（目标集中出现8次）；component-context:贝|贝|right|⿰（目标集中出现8次）；component-trajectory:缶|缶|bottom|⿱|6（目标集中出现5次）；component-context:缶|缶|bottom|⿱（目标集中出现5次）
+斋,1,target_coverage,⿱,文 而,component-trajectory:文|文|top|⿱|4（目标集中出现7次）；component-context:文|文|top|⿱（目标集中出现7次）；component-identity:而（目标集中出现9次）；component-trajectory:而|而|bottom|⿱|6（目标集中出现3次）
+賓,1,target_coverage,⿳,宀 小 貝,component-trajectory:宀|宀|top|⿳|3（目标集中出现6次）；component-context:宀|宀|top|⿳（目标集中出现6次）；stroke-signature:↓↙↓|1|tall|n（目标集中出现30次）；component-trajectory:貝|貝|bottom|⿳|7（目标集中出现3次）
+讵,1,target_coverage,⿰,巨 讠,component-trajectory:巨|巨|right|⿰|4（目标集中出现9次）；component-context:巨|巨|right|⿰（目标集中出现9次）；component-identity:巨（目标集中出现10次）；stroke-signature:→↗→↘↓→↗|3|balanced|n（目标集中出现18次）
+魑,1,target_coverage,⿺,离 鬼,component-context:鬼|鬼|surround-bottom-left|⿺（目标集中出现10次）；component-trajectory:鬼|鬼|surround-bottom-left|⿺|9（目标集中出现7次）；component-identity:离（目标集中出现12次）；component-trajectory:离|离|inside|⿺|10（目标集中出现1次）
+阡,1,target_coverage,⿰,千 阝,component-trajectory:千|千|right|⿰|3（目标集中出现8次）；component-identity:千（目标集中出现14次）；component-context:千|千|right|⿰（目标集中出现8次）；stroke-signature:→↘↙↓↘↓←|4|tall|n（目标集中出现12次）
+轨,1,target_coverage,⿰,九 车,component-identity:九（目标集中出现20次）；component-trajectory:九|九|right|⿰|2（目标集中出现6次）；component-context:九|九|right|⿰（目标集中出现6次）；stroke-signature:↘↓↙↓→|3|tall|n（目标集中出现18次）
+麵,1,target_coverage,⿰,面 麥,component-trajectory:面|面|right|⿰|9（目标集中出现5次）；component-context:面|面|right|⿰（目标集中出现5次）；component-trajectory:麥|麥|left|⿰|11（目标集中出现4次）；component-identity:面（目标集中出现8次）
+舾,1,target_coverage,⿰,舟 西,component-trajectory:西|西|right|⿰|6（目标集中出现9次）；component-context:西|西|right|⿰（目标集中出现9次）；stroke-signature:↘↓↘→|2|tall|n（目标集中出现55次）；component-identity:西（目标集中出现12次）
+豔,1,target_coverage,⿰,盍 豐,component-trajectory:盍|盍|right|⿰|10（目标集中出现5次）；component-context:盍|盍|right|⿰（目标集中出现5次）；component-identity:盍（目标集中出现8次）；component-trajectory:豐|豐|left|⿰|18（目标集中出现3次）
+曲,1,target_coverage,⿻,丨 曰,component-context:丨|丨|left|⿰（目标集中出现8次）；component-context:丨|丨|right|⿰（目标集中出现6次）；component-trajectory:曰|曰|overlap-primary|⿻|4（目标集中出现4次）；component-identity:曰（目标集中出现8次）
+樛,1,target_coverage,⿰,木 翏,component-trajectory:翏|翏|right|⿰|11（目标集中出现8次）；component-identity:翏（目标集中出现14次）；component-context:翏|翏|right|⿰（目标集中出现8次）；stroke-signature:→↘↙↓|2|balanced|n（目标集中出现10次）
+屨,1,target_coverage,⿸,婁 尸 彳,component-trajectory:婁|婁|right|⿰|11（目标集中出现9次）；component-context:婁|婁|right|⿰（目标集中出现9次）；component-identity:婁（目标集中出现11次）；stroke-signature:↘↙↓↘→↘→|2|balanced|n（目标集中出现6次）
+诰,1,target_coverage,⿰,告 讠,component-trajectory:告|告|right|⿰|7（目标集中出现8次）；component-identity:告（目标集中出现16次）；component-context:告|告|right|⿰（目标集中出现8次）
+谦,1,target_coverage,⿰,兼 讠,component-trajectory:兼|兼|right|⿰|10（目标集中出现8次）；component-context:兼|兼|right|⿰（目标集中出现8次）；component-identity:兼（目标集中出现13次）；stroke-signature:→↗→↓↘↗|3|balanced|n（目标集中出现13次）
+肴,1,target_coverage,⿱,乂 有,component-identity:有（目标集中出现13次）；component-trajectory:乂|乂|top|⿱|2（目标集中出现5次）；component-context:乂|乂|top|⿱（目标集中出现5次）；stroke-signature:→↘↓←↖|4|balanced|n（目标集中出现29次）
+孺,1,target_coverage,⿰,子 需,component-trajectory:需|需|right|⿰|14（目标集中出现8次）；component-context:需|需|right|⿰（目标集中出现8次）；component-identity:需（目标集中出现11次）；stroke-signature:→↗→↘↙|2|balanced|n（目标集中出现13次）
+询,1,target_coverage,⿰,旬 讠,component-trajectory:旬|旬|right|⿰|6（目标集中出现9次）；component-context:旬|旬|right|⿰（目标集中出现9次）；component-identity:旬（目标集中出现12次）
+兟,1,target_coverage,⿰,先,component-trajectory:先|先|right|⿰|6（目标集中出现8次）；component-context:先|先|right|⿰（目标集中出现8次）；component-identity:先（目标集中出现12次）；component-trajectory:先|先|left|⿰|6（目标集中出现1次）
+嗣,1,target_coverage,⿰,冊 口 司,component-trajectory:司|司|right|⿰|5（目标集中出现7次）；component-context:司|司|right|⿰（目标集中出现7次）；component-identity:司（目标集中出现8次）；component-trajectory:冊|冊|bottom|⿱|5（目标集中出现2次）
+黻,1,target_coverage,⿰,犮 黹,component-trajectory:犮|犮|right|⿰|5（目标集中出现7次）；component-context:犮|犮|right|⿰（目标集中出现7次）；component-identity:犮（目标集中出现10次）；component-trajectory:黹|黹|left|⿰|12（目标集中出现2次）
+瀧,1,target_coverage,⿰,氵 龍,component-identity:龍（目标集中出现16次）；component-trajectory:龍|龍|right|⿰|16（目标集中出现7次）；component-context:龍|龍|right|⿰（目标集中出现7次）；stroke-signature:↑↗↑|0|tall|n（目标集中出现10次）
+掊,1,target_coverage,⿰,咅 扌,component-trajectory:咅|咅|right|⿰|8（目标集中出现12次）；component-context:咅|咅|right|⿰（目标集中出现12次）；stroke-signature:↘→↘↓↙|1|wide|n（目标集中出现3次）
+鲨,1,target_coverage,⿱,沙 鱼,component-trajectory:鱼|鱼|bottom|⿱|8（目标集中出现5次）；component-trajectory:沙|沙|top|⿱|7（目标集中出现5次）；component-context:鱼|鱼|bottom|⿱（目标集中出现5次）；component-context:沙|沙|top|⿱（目标集中出现5次）
+颶,1,target_coverage,⿺,具 風,component-identity:風（目标集中出现13次）；component-trajectory:風|風|surround-bottom-left|⿺|9（目标集中出现5次）；component-context:風|風|surround-bottom-left|⿺（目标集中出现5次）；component-identity:具（目标集中出现6次）
+彟,1,target_coverage,⿰,寻 蒦,component-context:蒦|蒦|right|⿰（目标集中出现9次）；component-trajectory:蒦|蒦|right|⿰|14（目标集中出现6次）；component-identity:蒦（目标集中出现10次）；component-identity:寻（目标集中出现4次）
+魏,1,target_coverage,⿰,委 鬼,component-context:鬼|鬼|right|⿰（目标集中出现10次）；component-trajectory:鬼|鬼|right|⿰|9（目标集中出现8次）；component-identity:委（目标集中出现8次）；component-trajectory:委|委|left|⿰|8（目标集中出现1次）
+匿,1,target_coverage,⿷,匸 若,component-trajectory:匸|匸|surround-left|⿷|2（目标集中出现7次）；component-context:匸|匸|surround-left|⿷（目标集中出现7次）；component-identity:若（目标集中出现8次）；component-identity:匸（目标集中出现7次）
+鍊,1,target_coverage,⿰,柬 釒,component-context:柬|柬|right|⿰（目标集中出现10次）；component-trajectory:柬|柬|right|⿰|9（目标集中出现7次）；component-identity:柬（目标集中出现12次）；stroke-signature:→↘↓←|3|wide|n（目标集中出现7次）
+瓯,1,target_coverage,⿰,区 瓦,component-trajectory:瓦|瓦|right|⿰|4（目标集中出现8次）；component-context:瓦|瓦|right|⿰（目标集中出现8次）；component-trajectory:区|区|left|⿰|4（目标集中出现4次）；component-context:区|区|left|⿰（目标集中出现4次）
+倮,1,target_coverage,⿰,亻 果,component-trajectory:果|果|right|⿰|8（目标集中出现12次）；component-context:果|果|right|⿰（目标集中出现12次）
+倬,1,target_coverage,⿰,亻 卓,component-trajectory:卓|卓|right|⿰|8（目标集中出现9次）；component-context:卓|卓|right|⿰（目标集中出现9次）；component-identity:卓（目标集中出现11次）
+胯,1,target_coverage,⿰,⺼ 夸,component-trajectory:夸|夸|right|⿰|6（目标集中出现8次）；component-context:夸|夸|right|⿰（目标集中出现8次）；component-identity:夸（目标集中出现11次）；stroke-signature:↓→↓↙←↖|3|balanced|n（目标集中出现13次）
+幢,1,target_coverage,⿰,巾 童,component-trajectory:童|童|right|⿰|12（目标集中出现9次）；component-context:童|童|right|⿰（目标集中出现9次）；component-identity:童（目标集中出现9次）；stroke-signature:↗→↓↙←|3|balanced|n（目标集中出现7次）
+瑚,1,target_coverage,⿰,王 胡,component-trajectory:胡|胡|right|⿰|9（目标集中出现8次）；component-context:胡|胡|right|⿰（目标集中出现8次）；component-identity:胡（目标集中出现13次）；stroke-signature:↗→↓↙↖|4|tall|n（目标集中出现5次）
+矜,1,target_coverage,⿰,今 矛,component-trajectory:今|今|right|⿰|4（目标集中出现6次）；component-context:今|今|right|⿰（目标集中出现6次）；component-identity:矛（目标集中出现9次）；component-trajectory:矛|矛|left|⿰|5（目标集中出现3次）
+妞,1,target_coverage,⿰,丑 女,component-trajectory:丑|丑|right|⿰|4（目标集中出现9次）；component-context:丑|丑|right|⿰（目标集中出现9次）；component-identity:丑（目标集中出现10次）
+侨,1,target_coverage,⿰,乔 亻,component-trajectory:乔|乔|right|⿰|6（目标集中出现9次）；component-context:乔|乔|right|⿰（目标集中出现9次）；component-identity:乔（目标集中出现10次）
+陲,1,target_coverage,⿰,垂 阝,component-trajectory:垂|垂|right|⿰|8（目标集中出现9次）；component-context:垂|垂|right|⿰（目标集中出现9次）；component-identity:垂（目标集中出现10次）
+喧,1,target_coverage,⿰,口 宣,component-trajectory:宣|宣|right|⿰|9（目标集中出现9次）；component-context:宣|宣|right|⿰（目标集中出现9次）；component-identity:宣（目标集中出现10次）
+噘,1,target_coverage,⿰,厥 口,component-trajectory:厥|厥|right|⿰|12（目标集中出现8次）；component-context:厥|厥|right|⿰（目标集中出现8次）；component-identity:厥（目标集中出现11次）；stroke-signature:↓↘→↗|2|balanced|n（目标集中出现11次）
+训,1,target_coverage,⿰,川 讠,component-identity:川（目标集中出现16次）；component-trajectory:川|川|right|⿰|3（目标集中出现7次）；component-context:川|川|right|⿰（目标集中出现7次）；stroke-signature:→↗↘↓→↗|4|balanced|n（目标集中出现5次）
+辈,1,target_coverage,⿱,车 非,component-trajectory:非|非|top|⿱|8（目标集中出现8次）；component-context:非|非|top|⿱（目标集中出现8次）；component-trajectory:车|车|bottom|⿱|4（目标集中出现3次）；component-context:车|车|bottom|⿱（目标集中出现3次）
+子,1,target_coverage,⿻,一 了,component-context:一|一|overlap-secondary|⿻（目标集中出现12次）；component-trajectory:了|了|overlap-primary|⿻|2（目标集中出现4次）；component-identity:了（目标集中出现8次）；component-context:了|了|overlap-primary|⿻（目标集中出现4次）
+癸,1,target_coverage,⿱,天 癶,component-trajectory:天|天|bottom|⿱|4（目标集中出现5次）；component-identity:天（目标集中出现10次）；component-context:天|天|bottom|⿱（目标集中出现5次）；component-trajectory:癶|癶|top|⿱|5（目标集中出现3次）
+傖,1,target_coverage,⿰,亻 倉,component-trajectory:倉|倉|right|⿰|10（目标集中出现8次）；component-context:倉|倉|right|⿰（目标集中出现8次）；component-identity:倉（目标集中出现13次）
+便,1,target_coverage,⿰,亻 更,component-trajectory:更|更|right|⿰|7（目标集中出现8次）；component-context:更|更|right|⿰（目标集中出现8次）；component-identity:更（目标集中出现10次）；stroke-signature:→↘↓↙↓|2|balanced|n（目标集中出现13次）
+饔,1,target_coverage,⿱,雍 食,component-trajectory:食|食|bottom|⿱|9（目标集中出现6次）；component-context:食|食|bottom|⿱（目标集中出现7次）；component-trajectory:雍|雍|top|⿱|13（目标集中出现3次）；component-identity:雍（目标集中出现6次）
+僕,1,target_coverage,⿰,亻 菐,component-trajectory:菐|菐|right|⿰|12（目标集中出现9次）；component-context:菐|菐|right|⿰（目标集中出现9次）；component-identity:菐（目标集中出现9次）
+噪,1,target_coverage,⿰,口 喿,component-trajectory:喿|喿|right|⿰|13（目标集中出现9次）；component-context:喿|喿|right|⿰（目标集中出现9次）；component-identity:喿（目标集中出现9次）
+癟,1,target_coverage,⿸,侖 疒 自,component-trajectory:自|自|top|⿱|6（目标集中出现7次）；component-context:自|自|top|⿱（目标集中出现7次）；component-identity:侖（目标集中出现9次）；component-trajectory:侖|侖|bottom|⿱|8（目标集中出现2次）
+桐,1,target_coverage,⿰,同 木,component-trajectory:同|同|right|⿰|6（目标集中出现11次）；component-context:同|同|right|⿰（目标集中出现11次）；stroke-signature:↘↓↘↓|1|balanced|n（目标集中出现6次）
+谟,1,target_coverage,⿰,莫 讠,component-context:莫|莫|right|⿰（目标集中出现13次）；component-trajectory:莫|莫|right|⿰|10（目标集中出现10次）
+彘,1,target_coverage,⿱,彑 比 矢,component-trajectory:彑|彑|top|⿱|3（目标集中出现5次）；component-context:彑|彑|top|⿱（目标集中出现5次）；stroke-signature:↘↙→|2|balanced|n（目标集中出现33次）；component-identity:彑（目标集中出现5次）
+蜗,1,target_coverage,⿰,呙 虫,component-trajectory:呙|呙|right|⿰|7（目标集中出现7次）；component-context:呙|呙|right|⿰（目标集中出现7次）；component-identity:呙（目标集中出现10次）；stroke-signature:↘↓↘|0|balanced|n（目标集中出现21次）
+絷,1,target_coverage,⿱,执 糸,component-trajectory:执|执|top|⿱|6（目标集中出现8次）；component-context:执|执|top|⿱（目标集中出现8次）；component-identity:执（目标集中出现9次）；stroke-signature:↘↓←|2|balanced|n（目标集中出现8次）
+辍,1,target_coverage,⿰,叕 车,component-trajectory:叕|叕|right|⿰|8（目标集中出现8次）；component-context:叕|叕|right|⿰（目标集中出现8次）；component-identity:叕（目标集中出现9次）；stroke-signature:→↗→↘↓↙|2|balanced|n（目标集中出现14次）
+碱,1,target_coverage,⿰,咸 石,component-trajectory:咸|咸|right|⿰|9（目标集中出现8次）；component-context:咸|咸|right|⿰（目标集中出现8次）；component-identity:咸（目标集中出现11次）；stroke-signature:↘↓↘↑|2|tall|n（目标集中出现5次）
+净,1,target_coverage,⿰,争 冫,component-trajectory:争|争|right|⿰|6（目标集中出现8次）；component-context:争|争|right|⿰（目标集中出现9次）；component-identity:争（目标集中出现10次）；stroke-signature:↗→↙|1|balanced|n（目标集中出现2次）
+晦,1,target_coverage,⿰,日 每,component-trajectory:每|每|right|⿰|7（目标集中出现9次）；component-context:每|每|right|⿰（目标集中出现9次）；stroke-signature:↘↓→|2|balanced|n（目标集中出现36次）
+侪,1,target_coverage,⿰,亻 齐,component-trajectory:齐|齐|right|⿰|6（目标集中出现8次）；component-context:齐|齐|right|⿰（目标集中出现8次）；component-identity:齐（目标集中出现12次）
+號,1,target_coverage,⿰,号 虎,component-trajectory:虎|虎|right|⿰|8（目标集中出现5次）；component-context:虎|虎|right|⿰（目标集中出现5次）；component-identity:虎（目标集中出现7次）；component-trajectory:号|号|left|⿰|5（目标集中出现3次）
+馊,1,target_coverage,⿰,叟 饣,component-trajectory:叟|叟|right|⿰|9（目标集中出现10次）；component-context:叟|叟|right|⿰（目标集中出现10次）；stroke-signature:→↘↓↙↓|2|tall|n（目标集中出现19次）
+妮,1,target_coverage,⿰,女 尼,component-trajectory:尼|尼|right|⿰|5（目标集中出现8次）；component-context:尼|尼|right|⿰（目标集中出现8次）；component-identity:尼（目标集中出现9次）；stroke-signature:↘↓→↑|3|balanced|n（目标集中出现12次）
+應,1,target_coverage,⿸,倠 广 心,component-trajectory:心|心|inside|⿸|4（目标集中出现4次）；component-trajectory:倠|倠|inside|⿸|10（目标集中出现4次）；stroke-signature:↘→↗↖|2|wide|n（目标集中出现33次）；component-context:心|心|inside|⿸（目标集中出现4次）
+谐,1,target_coverage,⿰,皆 讠,component-trajectory:皆|皆|right|⿰|9（目标集中出现8次）；component-context:皆|皆|right|⿰（目标集中出现8次）；component-identity:皆（目标集中出现9次）；stroke-signature:↓↙←↙|2|balanced|n（目标集中出现11次）
+惋,1,target_coverage,⿰,宛 忄,component-trajectory:宛|宛|right|⿰|8（目标集中出现8次）；component-context:宛|宛|right|⿰（目标集中出现8次）；component-identity:宛（目标集中出现11次）；stroke-signature:→↘→↘|1|balanced|n（目标集中出现2次）
+徨,1,target_coverage,⿰,彳 皇,component-trajectory:皇|皇|right|⿰|9（目标集中出现8次）；component-context:皇|皇|right|⿰（目标集中出现8次）；component-identity:皇（目标集中出现11次）；stroke-signature:↗→↘↙↓|2|balanced|n（目标集中出现2次）
+糞,1,target_coverage,⿱,異 米,component-trajectory:米|米|top|⿱|6（目标集中出现6次）；component-context:米|米|top|⿱（目标集中出现6次）；component-trajectory:異|異|bottom|⿱|11（目标集中出现4次）；component-context:異|異|bottom|⿱（目标集中出现4次）
+嫘,1,target_coverage,⿰,女 累,component-trajectory:累|累|right|⿰|11（目标集中出现8次）；component-context:累|累|right|⿰（目标集中出现8次）；component-identity:累（目标集中出现9次）；stroke-signature:↘↓↙↓↘→|3|balanced|n（目标集中出现10次）
+豫,1,target_coverage,⿰,予 象,component-identity:予（目标集中出现11次）；component-trajectory:象|象|right|⿰|11（目标集中出现4次）；component-context:象|象|right|⿰（目标集中出现4次）；component-trajectory:予|予|left|⿰|4（目标集中出现3次）
+亘,1,target_coverage,⿻,二 日,component-trajectory:二|二|overlap-primary|⿻|2（目标集中出现6次）；component-trajectory:日|日|overlap-secondary|⿻|4（目标集中出现5次）；component-context:二|二|overlap-primary|⿻（目标集中出现6次）；component-context:日|日|overlap-secondary|⿻（目标集中出现5次）
+陵,1,target_coverage,⿰,夌 阝,component-trajectory:夌|夌|right|⿰|8（目标集中出现8次）；component-context:夌|夌|right|⿰（目标集中出现8次）；component-identity:夌（目标集中出现9次）；stroke-signature:→↙↓↘↓←|3|tall|n（目标集中出现9次）
+就,1,target_coverage,⿰,京 尤,component-trajectory:尤|尤|right|⿰|4（目标集中出现7次）；component-context:尤|尤|right|⿰（目标集中出现7次）；component-identity:尤（目标集中出现11次）；component-trajectory:京|京|left|⿰|8（目标集中出现1次）
+兗,1,target_coverage,⿱,兄 六,component-identity:兄（目标集中出现9次）；component-trajectory:兄|兄|bottom|⿱|5（目标集中出现4次）；component-context:兄|兄|bottom|⿱（目标集中出现4次）；component-trajectory:六|六|top|⿱|4（目标集中出现3次）
+碴,1,target_coverage,⿰,查 石,component-trajectory:查|查|right|⿰|9（目标集中出现8次）；component-context:查|查|right|⿰（目标集中出现8次）；component-identity:查（目标集中出现8次）；stroke-signature:↗→↘↓↘|3|balanced|n（目标集中出现11次）
+繹,1,target_coverage,⿰,睪 糹,component-trajectory:睪|睪|right|⿰|13（目标集中出现7次）；component-context:睪|睪|right|⿰（目标集中出现7次）；component-identity:睪（目标集中出现7次）；stroke-signature:↘↙↓→↗→|2|tall|n（目标集中出现18次）
+毖,1,target_coverage,⿱,必 比,component-trajectory:比|比|top|⿱|4（目标集中出现5次）；component-identity:必（目标集中出现9次）；component-context:比|比|top|⿱（目标集中出现5次）；component-trajectory:必|必|bottom|⿱|5（目标集中出现3次）
+勰,1,target_coverage,⿰,劦 思,component-trajectory:思|思|right|⿰|9（目标集中出现6次）；component-identity:思（目标集中出现10次）；component-context:思|思|right|⿰（目标集中出现6次）；component-identity:劦（目标集中出现4次）
+拙,1,target_coverage,⿰,出 扌,component-trajectory:出|出|right|⿰|5（目标集中出现7次）；component-context:出|出|right|⿰（目标集中出现7次）；component-identity:出（目标集中出现11次）；stroke-signature:↘↓↘→↗|2|wide|n（目标集中出现13次）
+煆,1,target_coverage,⿰,叚 火,component-trajectory:叚|叚|right|⿰|9（目标集中出现7次）；component-context:叚|叚|right|⿰（目标集中出现7次）；component-identity:叚（目标集中出现11次）；stroke-signature:→↘↓↙|4|balanced|n（目标集中出现12次）
+浅,1,target_coverage,⿰,戋 氵,component-trajectory:戋|戋|right|⿰|5（目标集中出现8次）；component-context:戋|戋|right|⿰（目标集中出现8次）；component-identity:戋（目标集中出现10次）
+俦,1,target_coverage,⿰,亻 寿,component-trajectory:寿|寿|right|⿰|7（目标集中出现8次）；component-context:寿|寿|right|⿰（目标集中出现8次）；component-identity:寿（目标集中出现10次）
+读,1,target_coverage,⿰,卖 讠,component-trajectory:卖|卖|right|⿰|8（目标集中出现8次）；component-context:卖|卖|right|⿰（目标集中出现8次）；component-identity:卖（目标集中出现10次）
+淙,1,target_coverage,⿰,宗 氵,component-trajectory:宗|宗|right|⿰|8（目标集中出现8次）；component-context:宗|宗|right|⿰（目标集中出现8次）；component-identity:宗（目标集中出现10次）；stroke-signature:↓|1|tall|n（目标集中出现12次）
+鹾,1,target_coverage,⿰,卤 差,component-trajectory:差|差|right|⿰|9（目标集中出现7次）；component-context:差|差|right|⿰（目标集中出现7次）；component-identity:差（目标集中出现8次）；component-trajectory:卤|卤|left|⿰|7（目标集中出现1次）
+绩,1,target_coverage,⿰,纟 责,component-trajectory:责|责|right|⿰|8（目标集中出现7次）；component-context:责|责|right|⿰（目标集中出现7次）；component-identity:责（目标集中出现8次）；stroke-signature:↘→|1|balanced|n（目标集中出现24次）
+尷,1,target_coverage,⿺,尢 監,component-trajectory:尢|尢|surround-bottom-left|⿺|3（目标集中出现5次）；component-identity:監（目标集中出现10次）；component-context:尢|尢|surround-bottom-left|⿺（目标集中出现5次）；component-identity:尢（目标集中出现7次）
+忒,1,target_coverage,⿹,弋 心,component-trajectory:弋|弋|surround-top-right|⿹|3（目标集中出现6次）；component-context:弋|弋|surround-top-right|⿹（目标集中出现6次）；component-identity:弋（目标集中出现9次）；stroke-signature:↘↓↘↗↑|1|balanced|n（目标集中出现10次）
+鬩,1,target_coverage,⿵,兒 鬥,component-trajectory:鬥|鬥|surround-top|⿵|10（目标集中出现5次）；component-context:鬥|鬥|surround-top|⿵（目标集中出现5次）；component-identity:兒（目标集中出现8次）；component-identity:鬥（目标集中出现5次）
+寧,1,target_coverage,⿱,丁 宀 心 皿,component-trajectory:丁|丁|bottom|⿱|2（目标集中出现5次）；component-context:丁|丁|bottom|⿱（目标集中出现5次）；component-trajectory:心|心|top|⿱|4（目标集中出现3次）；component-context:心|心|top|⿱（目标集中出现3次）
+识,1,target_coverage,⿰,只 讠,component-trajectory:只|只|right|⿰|5（目标集中出现8次）；component-context:只|只|right|⿰（目标集中出现8次）；component-identity:只（目标集中出现9次）
+倨,1,target_coverage,⿰,亻 居,component-trajectory:居|居|right|⿰|8（目标集中出现8次）；component-context:居|居|right|⿰（目标集中出现8次）；component-identity:居（目标集中出现9次）
+馥,1,target_coverage,⿰,复 香,component-trajectory:复|复|right|⿰|9（目标集中出现7次）；component-context:复|复|right|⿰（目标集中出现7次）；component-identity:复（目标集中出现7次）；component-trajectory:香|香|left|⿰|9（目标集中出现1次）
+幡,1,target_coverage,⿰,巾 番,component-trajectory:番|番|right|⿰|12（目标集中出现7次）；component-context:番|番|right|⿰（目标集中出现7次）；component-identity:番（目标集中出现11次）；stroke-signature:↗→↓←↖|2|balanced|n（目标集中出现7次）
+嗇,1,target_coverage,⿱,回 坐,component-identity:回（目标集中出现11次）；component-identity:坐（目标集中出现9次）；component-trajectory:回|回|bottom|⿱|6（目标集中出现4次）；component-context:回|回|bottom|⿱（目标集中出现4次）
+醬,1,target_coverage,⿱,將 酉,component-trajectory:酉|酉|bottom|⿱|7（目标集中出现4次）；component-trajectory:將|將|top|⿱|11（目标集中出现4次）；component-context:酉|酉|bottom|⿱（目标集中出现4次）；component-context:將|將|top|⿱（目标集中出现4次）
+讼,1,target_coverage,⿰,公 讠,component-trajectory:公|公|right|⿰|4（目标集中出现7次）；component-identity:公（目标集中出现12次）；component-context:公|公|right|⿰（目标集中出现7次）
+谖,1,target_coverage,⿰,爰 讠,component-trajectory:爰|爰|right|⿰|9（目标集中出现8次）；component-context:爰|爰|right|⿰（目标集中出现8次）；component-identity:爰（目标集中出现8次）
+駙,1,target_coverage,⿰,付 馬,component-trajectory:付|付|right|⿰|5（目标集中出现7次）；component-context:付|付|right|⿰（目标集中出现7次）；component-identity:付（目标集中出现11次）；stroke-signature:↘→↓←↖|3|balanced|n（目标集中出现3次）
+鼋,1,target_coverage,⿱,元 黾,component-identity:元（目标集中出现15次）；component-identity:黾（目标集中出现5次）；component-trajectory:黾|黾|bottom|⿱|8（目标集中出现2次）；component-trajectory:元|元|top|⿱|4（目标集中出现2次）
+繪,1,target_coverage,⿰,會 糹,component-trajectory:會|會|right|⿰|13（目标集中出现7次）；component-context:會|會|right|⿰（目标集中出现7次）；component-identity:會（目标集中出现10次）；stroke-signature:↓↙↓→↗→|2|tall|n（目标集中出现5次）
+琵,1,target_coverage,⿱,比 玨,component-trajectory:比|比|bottom|⿱|4（目标集中出现5次）；component-context:比|比|bottom|⿱（目标集中出现5次）；component-trajectory:玨|玨|top|⿱|8（目标集中出现4次）；component-context:玨|玨|top|⿱（目标集中出现4次）
+湍,1,target_coverage,⿰,氵 耑,component-trajectory:耑|耑|right|⿰|9（目标集中出现7次）；component-context:耑|耑|right|⿰（目标集中出现7次）；component-identity:耑（目标集中出现10次）；stroke-signature:↘↓↘→↗|1|wide|n（目标集中出现6次）
+聶,1,target_coverage,⿱,耳,component-trajectory:耳|耳|right|⿰|6（目标集中出现8次）；component-context:耳|耳|right|⿰（目标集中出现8次）；component-trajectory:耳|耳|top|⿱|6（目标集中出现2次）；component-context:耳|耳|top|⿱（目标集中出现2次）
+舻,1,target_coverage,⿰,卢 舟,component-trajectory:卢|卢|right|⿰|5（目标集中出现7次）；component-context:卢|卢|right|⿰（目标集中出现7次）；component-identity:卢（目标集中出现9次）；stroke-signature:↗→↓←|2|tall|n（目标集中出现9次）
+艨,1,target_coverage,⿰,舟 蒙,component-context:蒙|蒙|right|⿰（目标集中出现9次）；component-trajectory:蒙|蒙|right|⿰|13（目标集中出现5次）；component-identity:蒙（目标集中出现9次）；stroke-signature:←↙←↙|0|balanced|n（目标集中出现8次）
+俠,1,target_coverage,⿰,亻 夾,component-trajectory:夾|夾|right|⿰|7（目标集中出现7次）；component-context:夾|夾|right|⿰（目标集中出现7次）；component-identity:夾（目标集中出现11次）
+谄,1,target_coverage,⿰,臽 讠,component-trajectory:臽|臽|right|⿰|8（目标集中出现7次）；component-context:臽|臽|right|⿰（目标集中出现7次）；component-identity:臽（目标集中出现11次）
+瀘,1,target_coverage,⿰,氵 盧,component-trajectory:盧|盧|right|⿰|16（目标集中出现7次）；component-context:盧|盧|right|⿰（目标集中出现7次）；component-identity:盧（目标集中出现11次）
+圾,1,target_coverage,⿰,及 土,component-trajectory:及|及|right|⿰|3（目标集中出现7次）；component-context:及|及|right|⿰（目标集中出现7次）；component-identity:及（目标集中出现10次）；stroke-signature:→↘↙↓→↓↙←|4|tall|n（目标集中出现4次）
+購,1,target_coverage,⿰,冓 貝,component-trajectory:冓|冓|right|⿰|10（目标集中出现7次）；component-context:冓|冓|right|⿰（目标集中出现7次）；component-identity:冓（目标集中出现10次）；stroke-signature:→↘↓←|4|balanced|n（目标集中出现3次）
+淺,1,target_coverage,⿰,戔 氵,component-trajectory:戔|戔|right|⿰|8（目标集中出现7次）；component-context:戔|戔|right|⿰（目标集中出现7次）；component-identity:戔（目标集中出现9次）；stroke-signature:↘→↑|1|balanced|n（目标集中出现6次）
+冁,1,target_coverage,⿰,单 展,component-trajectory:展|展|right|⿰|10（目标集中出现5次）；component-context:展|展|right|⿰（目标集中出现5次）；component-trajectory:单|单|left|⿰|8（目标集中出现3次）；component-identity:展（目标集中出现5次）
+飙,1,target_coverage,⿰,猋 风,component-trajectory:风|风|right|⿰|4（目标集中出现7次）；component-context:风|风|right|⿰（目标集中出现7次）；component-trajectory:猋|猋|left|⿰|12（目标集中出现2次）；component-context:猋|猋|left|⿰（目标集中出现2次）
+诠,1,target_coverage,⿰,全 讠,component-trajectory:全|全|right|⿰|6（目标集中出现7次）；component-context:全|全|right|⿰（目标集中出现7次）；component-identity:全（目标集中出现10次）；stroke-signature:→↗→↘↓→↗|2|balanced|n（目标集中出现1次）
+绻,1,target_coverage,⿰,卷 纟,component-trajectory:卷|卷|right|⿰|8（目标集中出现7次）；component-context:卷|卷|right|⿰（目标集中出现7次）；component-identity:卷（目标集中出现9次）；stroke-signature:↗→↘↓↙↖|2|balanced|n（目标集中出现5次）
+离,1,target_coverage,⿱,亠 凶 禸,component-trajectory:凶|凶|bottom|⿱|4（目标集中出现4次）；component-identity:凶（目标集中出现8次）；component-context:凶|凶|bottom|⿱（目标集中出现4次）；component-context:禸|禸|bottom|⿱（目标集中出现3次）
+靈,1,target_coverage,⿳,口 巫 雨,component-identity:巫（目标集中出现6次）；component-trajectory:口|口|right|⿲|3（目标集中出现2次）；component-trajectory:口|口|middle|⿲|3（目标集中出现2次）；component-trajectory:口|口|left|⿲|3（目标集中出现2次）
+驕,1,target_coverage,⿰,喬 馬,component-trajectory:喬|喬|right|⿰|12（目标集中出现7次）；component-context:喬|喬|right|⿰（目标集中出现7次）；component-identity:喬（目标集中出现8次）；stroke-signature:→↘↓↙|4|wide|n（目标集中出现8次）
+酴,1,target_coverage,⿰,余 酉,component-trajectory:余|余|right|⿰|7（目标集中出现9次）；component-context:余|余|right|⿰（目标集中出现9次）；stroke-signature:→↓↖|2|balanced|h（目标集中出现10次）
+卡,1,target_coverage,⿱,上 卜,component-trajectory:卜|卜|bottom|⿱|2（目标集中出现4次）；component-trajectory:上|上|top|⿱|3（目标集中出现4次）；component-context:卜|卜|bottom|⿱（目标集中出现4次）；component-context:上|上|top|⿱（目标集中出现4次）
+殄,1,target_coverage,⿰,㐱 歹,component-trajectory:㐱|㐱|right|⿰|5（目标集中出现7次）；component-context:㐱|㐱|right|⿰（目标集中出现7次）；component-identity:㐱（目标集中出现9次）；stroke-signature:←↓↙|1|balanced|n（目标集中出现3次）
+締,1,target_coverage,⿰,帝 糹,component-trajectory:帝|帝|right|⿰|9（目标集中出现7次）；component-context:帝|帝|right|⿰（目标集中出现7次）；component-identity:帝（目标集中出现9次）；stroke-signature:↓↙↓→↗→|3|balanced|n（目标集中出现3次）
+玺,1,target_coverage,⿱,尔 玉,component-trajectory:玉|玉|bottom|⿱|5（目标集中出现6次）；component-context:玉|玉|bottom|⿱（目标集中出现7次）；component-identity:尔（目标集中出现8次）；component-trajectory:尔|尔|top|⿱|5（目标集中出现1次）
+账,1,target_coverage,⿰,贝 长,component-trajectory:长|长|right|⿰|4（目标集中出现7次）；component-context:长|长|right|⿰（目标集中出现7次）；component-identity:长（目标集中出现8次）；stroke-signature:↘↓↘↗|1|tall|n（目标集中出现7次）
+谂,1,target_coverage,⿰,念 讠,component-trajectory:念|念|right|⿰|8（目标集中出现7次）；component-context:念|念|right|⿰（目标集中出现7次）；component-identity:念（目标集中出现7次）；stroke-signature:→↗→↓↙|2|balanced|n（目标集中出现7次）
+臲,1,target_coverage,⿰,危 臬,component-trajectory:危|危|right|⿰|6（目标集中出现6次）；component-context:危|危|right|⿰（目标集中出现6次）；component-identity:危（目标集中出现6次）；component-identity:臬（目标集中出现3次）
+犍,1,target_coverage,⿰,建 牛,component-trajectory:建|建|right|⿰|8（目标集中出现7次）；component-context:建|建|right|⿰（目标集中出现7次）；component-identity:建（目标集中出现8次）；stroke-signature:→↓↙↓↘↓↙|3|tall|n（目标集中出现6次）
+漕,1,target_coverage,⿰,曹 氵,component-trajectory:曹|曹|right|⿰|11（目标集中出现7次）；component-context:曹|曹|right|⿰（目标集中出现7次）；component-identity:曹（目标集中出现8次）；stroke-signature:→↓↙↓|2|wide|n（目标集中出现6次）
+裎,1,target_coverage,⿰,呈 衤,component-trajectory:呈|呈|right|⿰|7（目标集中出现6次）；component-context:呈|呈|right|⿰（目标集中出现6次）；component-identity:呈（目标集中出现9次）；stroke-signature:←↙←|2|wide|n（目标集中出现17次）
+垅,1,target_coverage,⿰,土 龙,component-trajectory:龙|龙|right|⿰|5（目标集中出现9次）；component-context:龙|龙|right|⿰（目标集中出现9次）；stroke-signature:↘↓↘→↑|4|balanced|n（目标集中出现7次）
+娟,1,target_coverage,⿰,女 肙,component-trajectory:肙|肙|right|⿰|7（目标集中出现7次）；component-context:肙|肙|right|⿰（目标集中出现7次）；component-identity:肙（目标集中出现9次）
+谪,1,target_coverage,⿰,啇 讠,component-trajectory:啇|啇|right|⿰|11（目标集中出现7次）；component-context:啇|啇|right|⿰（目标集中出现7次）；component-identity:啇（目标集中出现9次）
+幬,1,target_coverage,⿰,壽 巾,component-trajectory:壽|壽|right|⿰|14（目标集中出现7次）；component-context:壽|壽|right|⿰（目标集中出现7次）；component-identity:壽（目标集中出现9次）
+猙,1,target_coverage,⿰,爭 犭,component-trajectory:爭|爭|right|⿰|8（目标集中出现7次）；component-context:爭|爭|right|⿰（目标集中出现7次）；component-identity:爭（目标集中出现8次）；stroke-signature:↘↙↓↙|1|tall|n（目标集中出现4次）
+續,1,target_coverage,⿰,糹 賣,component-trajectory:賣|賣|right|⿰|15（目标集中出现7次）；component-context:賣|賣|right|⿰（目标集中出现7次）；component-identity:賣（目标集中出现8次）；stroke-signature:↓↙↓→↗|2|tall|n（目标集中出现4次）
+羸,1,target_coverage,⿱,凡 吂 月 羊,component-trajectory:吂|吂|top|⿱|6（目标集中出现3次）；component-context:吂|吂|top|⿱（目标集中出现3次）；component-trajectory:月|月|left|⿲|4（目标集中出现2次）；component-trajectory:凡|凡|right|⿲|3（目标集中出现2次）
+剪,1,target_coverage,⿱,刀 前,component-trajectory:刀|刀|bottom|⿱|2（目标集中出现5次）；component-context:刀|刀|bottom|⿱（目标集中出现5次）；component-trajectory:前|前|top|⿱|9（目标集中出现3次）；component-identity:前（目标集中出现5次）
+繽,1,target_coverage,⿰,糹 賓,component-trajectory:賓|賓|right|⿰|14（目标集中出现7次）；component-context:賓|賓|right|⿰（目标集中出现7次）；component-identity:賓（目标集中出现8次）；stroke-signature:↓↙↓→↗|3|tall|n（目标集中出现3次）
+咽,1,target_coverage,⿰,口 因,component-trajectory:因|因|right|⿰|6（目标集中出现6次）；component-context:因|因|right|⿰（目标集中出现6次）；component-identity:因（目标集中出现9次）；stroke-signature:→↓←|2|balanced|h（目标集中出现14次）
+拶,1,target_coverage,⿰,夕 巛 扌,component-trajectory:夕|夕|bottom|⿱|3（目标集中出现9次）；component-context:夕|夕|bottom|⿱（目标集中出现9次）；stroke-signature:↘↓↙↓↘↓|1|tall|n（目标集中出现4次）
+吁,1,target_coverage,⿰,于 口,component-trajectory:于|于|right|⿰|3（目标集中出现6次）；component-identity:于（目标集中出现12次）；component-context:于|于|right|⿰（目标集中出现6次）
+棺,1,target_coverage,⿰,官 木,component-trajectory:官|官|right|⿰|8（目标集中出现6次）；component-context:官|官|right|⿰（目标集中出现6次）；component-identity:官（目标集中出现9次）；stroke-signature:↗→↘↙|1|wide|n（目标集中出现13次）
+俟,1,target_coverage,⿰,亻 矣,component-trajectory:矣|矣|right|⿰|7（目标集中出现7次）；component-context:矣|矣|right|⿰（目标集中出现7次）；component-identity:矣（目标集中出现8次）
+惨,1,target_coverage,⿰,参 忄,component-trajectory:参|参|right|⿰|8（目标集中出现7次）；component-context:参|参|right|⿰（目标集中出现7次）；component-identity:参（目标集中出现8次）
+鱀,1,target_coverage,⿱,既 魚,component-trajectory:魚|魚|bottom|⿱|11（目标集中出现5次）；component-context:魚|魚|bottom|⿱（目标集中出现5次）；component-identity:既（目标集中出现8次）；component-trajectory:既|既|top|⿱|9（目标集中出现2次）
+詣,1,target_coverage,⿰,旨 言,component-trajectory:言|言|left|⿰|7（目标集中出现140次）；component-context:言|言|left|⿰（目标集中出现140次）；component-trajectory:旨|旨|right|⿰|6（目标集中出现6次）；component-context:旨|旨|right|⿰（目标集中出现6次）
+修,1,target_coverage,⿱,彡 攸,component-trajectory:彡|彡|bottom|⿱|3（目标集中出现6次）；component-context:彡|彡|bottom|⿱（目标集中出现6次）；component-identity:攸（目标集中出现6次）；component-context:攸|攸|top|⿱（目标集中出现2次）
+桤,1,target_coverage,⿰,岂 木,component-trajectory:岂|岂|right|⿰|6（目标集中出现6次）；component-context:岂|岂|right|⿰（目标集中出现6次）；component-identity:岂（目标集中出现9次）；stroke-signature:↘↓↘→↗|3|wide|n（目标集中出现10次）
+但,1,target_coverage,⿰,亻 旦,component-trajectory:旦|旦|right|⿰|5（目标集中出现9次）；component-context:旦|旦|right|⿰（目标集中出现9次）
+住,1,target_coverage,⿰,主 亻,component-trajectory:主|主|right|⿰|5（目标集中出现9次）；component-context:主|主|right|⿰（目标集中出现9次）
+侍,1,target_coverage,⿰,亻 寺,component-trajectory:寺|寺|right|⿰|6（目标集中出现9次）；component-context:寺|寺|right|⿰（目标集中出现9次）
+毡,1,target_coverage,⿺,占 毛,component-trajectory:毛|毛|surround-bottom-left|⿺|4（目标集中出现6次）；component-context:毛|毛|surround-bottom-left|⿺（目标集中出现6次）；component-trajectory:占|占|inside|⿺|5（目标集中出现3次）；component-context:占|占|inside|⿺（目标集中出现3次）
+僅,1,target_coverage,⿰,亻 堇,component-trajectory:堇|堇|right|⿰|11（目标集中出现9次）；component-context:堇|堇|right|⿰（目标集中出现9次）
+壇,1,target_coverage,⿰,亶 土,component-trajectory:亶|亶|right|⿰|13（目标集中出现9次）；component-context:亶|亶|right|⿰（目标集中出现9次）
+辣,1,target_coverage,⿰,束 辛,component-identity:束（目标集中出现11次）；component-trajectory:束|束|right|⿰|7（目标集中出现5次）；component-context:束|束|right|⿰（目标集中出现5次）；component-trajectory:辛|辛|left|⿰|7（目标集中出现1次）
+鑿,1,target_coverage,⿱,丵 殳 臼 金,component-trajectory:臼|臼|bottom|⿱|6（目标集中出现5次）；component-context:臼|臼|bottom|⿱（目标集中出现5次）；stroke-signature:→↓↘→|2|balanced|n（目标集中出现18次）；component-trajectory:丵|丵|top|⿱|10（目标集中出现2次）
+蟣,1,target_coverage,⿰,幾 虫,component-trajectory:幾|幾|right|⿰|12（目标集中出现6次）；component-context:幾|幾|right|⿰（目标集中出现6次）；component-identity:幾（目标集中出现6次）；stroke-signature:↘↓↙↓→|1|tall|n（目标集中出现10次）
+泺,1,target_coverage,⿰,乐 氵,component-trajectory:乐|乐|right|⿰|5（目标集中出现7次）；component-context:乐|乐|right|⿰（目标集中出现7次）；component-identity:乐（目标集中出现7次）
+淄,1,target_coverage,⿰,氵 甾,component-trajectory:甾|甾|right|⿰|8（目标集中出现7次）；component-context:甾|甾|right|⿰（目标集中出现7次）；component-identity:甾（目标集中出现7次）
+塘,1,target_coverage,⿰,唐 土,component-trajectory:唐|唐|right|⿰|10（目标集中出现7次）；component-context:唐|唐|right|⿰（目标集中出现7次）；component-identity:唐（目标集中出现7次）
+赫,1,target_coverage,⿰,赤,component-trajectory:赤|赤|left|⿰|7（目标集中出现5次）；component-context:赤|赤|left|⿰（目标集中出现5次）；component-identity:赤（目标集中出现7次）；component-trajectory:赤|赤|right|⿰|7（目标集中出现2次）
+吒,1,target_coverage,⿰,乇 口,component-trajectory:乇|乇|right|⿰|3（目标集中出现6次）；component-context:乇|乇|right|⿰（目标集中出现6次）；component-identity:乇（目标集中出现9次）；stroke-signature:→↘↓↘|2|balanced|n（目标集中出现7次）
+餑,1,target_coverage,⿰,孛 飠,component-trajectory:孛|孛|right|⿰|7（目标集中出现6次）；component-identity:孛（目标集中出现10次）；component-context:孛|孛|right|⿰（目标集中出现6次）；stroke-signature:→↗→↘↓↙|2|wide|n（目标集中出现2次）
+艇,1,target_coverage,⿰,廷 舟,component-trajectory:廷|廷|right|⿰|6（目标集中出现6次）；component-context:廷|廷|right|⿰（目标集中出现6次）；component-identity:廷（目标集中出现9次）；stroke-signature:→↓↘↓↙|4|tall|n（目标集中出现3次）
+灑,1,target_coverage,⿰,氵 麗,component-trajectory:麗|麗|right|⿰|19（目标集中出现5次）；component-context:麗|麗|right|⿰（目标集中出现5次）；component-identity:麗（目标集中出现6次）；stroke-signature:↖↑|0|tall|n（目标集中出现17次）
+俐,1,target_coverage,⿰,亻 利,component-trajectory:利|利|right|⿰|7（目标集中出现6次）；component-identity:利（目标集中出现10次）；component-context:利|利|right|⿰（目标集中出现6次）
+對,1,target_coverage,⿰,业 寸 羊,component-trajectory:寸|寸|right|⿰|3（目标集中出现21次）；component-context:寸|寸|right|⿰（目标集中出现22次）；component-identity:业（目标集中出现10次）；component-trajectory:业|业|top|⿱|5（目标集中出现4次）
+缴,1,target_coverage,⿰,敫 纟,component-trajectory:敫|敫|right|⿰|13（目标集中出现6次）；component-context:敫|敫|right|⿰（目标集中出现6次）；component-identity:敫（目标集中出现9次）；stroke-signature:↘↙↓↘→|3|tall|n（目标集中出现3次）
+镴,1,target_coverage,⿰,巤 钅,component-trajectory:巤|巤|right|⿰|15（目标集中出现6次）；component-context:巤|巤|right|⿰（目标集中出现6次）；component-identity:巤（目标集中出现8次）；stroke-signature:↘↓↙↓↘|1|tall|n（目标集中出现7次）
+矞,1,target_coverage,⿱,冏 矛,component-trajectory:冏|冏|bottom|⿱|7（目标集中出现4次）；component-context:冏|冏|bottom|⿱（目标集中出现4次）；component-trajectory:矛|矛|top|⿱|5（目标集中出现3次）；component-context:矛|矛|top|⿱（目标集中出现3次）
+妍,1,target_coverage,⿰,女 开,component-identity:开（目标集中出现13次）；component-trajectory:开|开|right|⿰|4（目标集中出现5次）；component-context:开|开|right|⿰（目标集中出现5次）
+讪,1,target_coverage,⿰,山 讠,component-trajectory:山|山|right|⿰|3（目标集中出现8次）；component-context:山|山|right|⿰（目标集中出现8次）；stroke-signature:→↘↓↗|3|balanced|n（目标集中出现8次）
+桉,1,target_coverage,⿰,安 木,component-trajectory:安|安|right|⿰|6（目标集中出现6次）；component-context:安|安|right|⿰（目标集中出现6次）；component-identity:安（目标集中出现9次）；stroke-signature:↘↓↙↓→↘|3|balanced|n（目标集中出现1次）
+怨,1,target_coverage,⿱,夗 心,stroke-signature:↘→↑↖|2|wide|n（目标集中出现46次）；component-trajectory:夗|夗|top|⿱|5（目标集中出现4次）；component-context:夗|夗|top|⿱（目标集中出现4次）；component-identity:夗（目标集中出现6次）
+岷,1,target_coverage,⿰,山 民,component-trajectory:民|民|right|⿰|5（目标集中出现6次）；component-context:民|民|right|⿰（目标集中出现6次）；component-identity:民（目标集中出现9次）
+倡,1,target_coverage,⿰,亻 昌,component-trajectory:昌|昌|right|⿰|8（目标集中出现6次）；component-context:昌|昌|right|⿰（目标集中出现6次）；component-identity:昌（目标集中出现9次）
+緞,1,target_coverage,⿰,段 糹,component-trajectory:段|段|right|⿰|9（目标集中出现6次）；component-context:段|段|right|⿰（目标集中出现6次）；component-identity:段（目标集中出现6次）；stroke-signature:↗→↓↘→|2|balanced|n（目标集中出现13次）
+沈,1,target_coverage,⿰,冘 氵,component-trajectory:冘|冘|right|⿰|4（目标集中出现6次）；component-context:冘|冘|right|⿰（目标集中出现6次）；component-identity:冘（目标集中出现8次）；stroke-signature:↘↓→↗↑|4|balanced|n（目标集中出现4次）
+耋,1,target_coverage,⿱,老 至,component-identity:老（目标集中出现8次）；component-trajectory:至|至|bottom|⿱|6（目标集中出现3次）；component-trajectory:老|老|top|⿱|6（目标集中出现3次）；component-context:至|至|bottom|⿱（目标集中出现3次）
+濟,1,target_coverage,⿰,氵 齊,component-identity:齊（目标集中出现11次）；component-trajectory:齊|齊|right|⿰|14（目标集中出现5次）；component-context:齊|齊|right|⿰（目标集中出现5次）；stroke-signature:←↙↓↙|1|balanced|n（目标集中出现7次）
+帏,1,target_coverage,⿰,巾 韦,component-trajectory:韦|韦|right|⿰|4（目标集中出现8次）；component-context:韦|韦|right|⿰（目标集中出现8次）；stroke-signature:→↓←↖|3|wide|n（目标集中出现6次）
+贿,1,target_coverage,⿰,有 贝,component-trajectory:有|有|right|⿰|6（目标集中出现8次）；component-context:有|有|right|⿰（目标集中出现8次）；stroke-signature:↗→↘↓←|3|tall|n（目标集中出现6次）
+韜,1,target_coverage,⿰,舀 韋,component-trajectory:舀|舀|right|⿰|10（目标集中出现5次）；component-context:舀|舀|right|⿰（目标集中出现5次）；component-identity:舀（目标集中出现5次）；component-trajectory:韋|韋|left|⿰|9（目标集中出现2次）
+鼙,1,target_coverage,⿱,卑 鼓,component-trajectory:卑|卑|bottom|⿱|8（目标集中出现4次）；component-context:卑|卑|bottom|⿱（目标集中出现4次）；component-trajectory:鼓|鼓|top|⿱|13（目标集中出现3次）；component-identity:鼓（目标集中出现5次）
+喵,1,target_coverage,⿰,口 苗,component-context:苗|苗|right|⿰（目标集中出现7次）；component-trajectory:苗|苗|right|⿰|8（目标集中出现5次）；component-identity:苗（目标集中出现9次）
+梿,1,target_coverage,⿰,木 连,component-trajectory:连|连|right|⿰|7（目标集中出现6次）；component-context:连|连|right|⿰（目标集中出现6次）；component-identity:连（目标集中出现7次）；stroke-signature:→↘↓↙↓↘↓|3|tall|n（目标集中出现7次）
+録,1,target_coverage,⿰,录 釒,component-trajectory:录|录|right|⿰|8（目标集中出现5次）；component-identity:录（目标集中出现9次）；component-context:录|录|right|⿰（目标集中出现5次）；stroke-signature:↘↓↙↓→↗|2|balanced|n（目标集中出现14次）
+说,1,target_coverage,⿰,兑 讠,component-trajectory:兑|兑|right|⿰|7（目标集中出现6次）；component-context:兑|兑|right|⿰（目标集中出现6次）；component-identity:兑（目标集中出现7次）；stroke-signature:→↘↓→↗|3|balanced|n（目标集中出现5次）
+悅,1,target_coverage,⿰,兌 忄,component-trajectory:兌|兌|right|⿰|7（目标集中出现6次）；component-context:兌|兌|right|⿰（目标集中出现6次）；component-identity:兌（目标集中出现7次）；stroke-signature:↘→↘↓|0|balanced|n（目标集中出现5次）
+桿,1,target_coverage,⿰,旱 木,component-trajectory:旱|旱|right|⿰|7（目标集中出现6次）；component-context:旱|旱|right|⿰（目标集中出现6次）；component-identity:旱（目标集中出现7次）；stroke-signature:→↓↙|3|balanced|n（目标集中出现5次）
+骢,1,target_coverage,⿰,悤 马,component-trajectory:悤|悤|right|⿰|11（目标集中出现6次）；component-context:悤|悤|right|⿰（目标集中出现6次）；component-identity:悤（目标集中出现7次）；stroke-signature:↓↘→↑↖|1|wide|n（目标集中出现5次）
+鳝,1,target_coverage,⿰,善 鱼,component-trajectory:善|善|right|⿰|12（目标集中出现6次）；component-context:善|善|right|⿰（目标集中出现6次）；component-identity:善（目标集中出现7次）；stroke-signature:←↙←↙|1|balanced|n（目标集中出现5次）
+拖,1,target_coverage,⿰,也 亻 扌,component-trajectory:人|亻|top|⿱|2（目标集中出现4次）；component-trajectory:也|也|bottom|⿱|3（目标集中出现4次）；component-context:人|亻|top|⿱（目标集中出现4次）；component-context:也|也|bottom|⿱（目标集中出现4次）
+帳,1,target_coverage,⿰,巾 長,component-trajectory:長|長|right|⿰|8（目标集中出现6次）；component-context:長|長|right|⿰（目标集中出现6次）；component-identity:長（目标集中出现6次）；stroke-signature:↗→↘↓←↖|2|balanced|n（目标集中出现9次）
+任,1,target_coverage,⿰,亻 壬,component-trajectory:壬|壬|right|⿰|4（目标集中出现6次）；component-context:壬|壬|right|⿰（目标集中出现6次）；component-identity:壬（目标集中出现8次）
+崃,1,target_coverage,⿰,山 来,component-trajectory:来|来|right|⿰|7（目标集中出现6次）；component-context:来|来|right|⿰（目标集中出现6次）；component-identity:来（目标集中出现8次）
+揖,1,target_coverage,⿰,咠 扌,component-trajectory:咠|咠|right|⿰|9（目标集中出现6次）；component-context:咠|咠|right|⿰（目标集中出现6次）；component-identity:咠（目标集中出现8次）
+蝟,1,target_coverage,⿰,胃 虫,component-trajectory:胃|胃|right|⿰|9（目标集中出现6次）；component-context:胃|胃|right|⿰（目标集中出现6次）；component-identity:胃（目标集中出现7次）；stroke-signature:↗→↗→↘↓↙|2|wide|n（目标集中出现4次）
+隘,1,target_coverage,⿰,益 阝,component-trajectory:益|益|right|⿰|10（目标集中出现8次）；component-context:益|益|right|⿰（目标集中出现8次）；stroke-signature:↙↘↓↘|1|tall|n（目标集中出现2次）
+喔,1,target_coverage,⿰,口 屋,component-trajectory:屋|屋|right|⿰|9（目标集中出现6次）；component-context:屋|屋|right|⿰（目标集中出现6次）；component-identity:屋（目标集中出现6次）；stroke-signature:←↙↘→|3|balanced|n（目标集中出现8次）
+锋,1,target_coverage,⿰,夆 钅,component-trajectory:夆|夆|right|⿰|7（目标集中出现6次）；component-context:夆|夆|right|⿰（目标集中出现6次）；component-identity:夆（目标集中出现7次）；stroke-signature:↘↓↘↙↓|3|tall|n（目标集中出现3次）
+侄,1,target_coverage,⿰,亻 至,component-trajectory:至|至|right|⿰|6（目标集中出现8次）；component-context:至|至|right|⿰（目标集中出现8次）
+兩,1,target_coverage,⿱,一 入 巾,component-trajectory:入|入|right|⿰|2（目标集中出现3次）；component-trajectory:入|入|left|⿰|2（目标集中出现3次）；component-context:入|入|right|⿰（目标集中出现3次）；component-context:入|入|left|⿰（目标集中出现3次）
+呷,1,target_coverage,⿰,口 甲,component-trajectory:甲|甲|right|⿰|5（目标集中出现8次）；component-context:甲|甲|right|⿰（目标集中出现8次）
+倘,1,target_coverage,⿰,亻 尚,component-trajectory:尚|尚|right|⿰|8（目标集中出现8次）；component-context:尚|尚|right|⿰（目标集中出现8次）
+恭,1,target_coverage,⿱,⺗ 共,component-trajectory:心|⺗|bottom|⿱|4（目标集中出现4次）；component-trajectory:共|共|top|⿱|6（目标集中出现4次）；component-context:心|⺗|bottom|⿱（目标集中出现4次）；component-context:共|共|top|⿱（目标集中出现4次）
+脣,1,target_coverage,⿸,⺼ 辰,component-trajectory:辰|辰|surround-top-left|⿸|7（目标集中出现4次）；component-trajectory:⺼|⺼|inside|⿸|4（目标集中出现4次）；component-context:辰|辰|surround-top-left|⿸（目标集中出现4次）；component-context:⺼|⺼|inside|⿸（目标集中出现4次）
+野,1,target_coverage,⿰,予 里,component-trajectory:予|予|right|⿰|4（目标集中出现7次）；component-context:予|予|right|⿰（目标集中出现7次）；component-trajectory:里|里|left|⿰|7（目标集中出现1次）；component-context:里|里|left|⿰（目标集中出现1次）
+谣,1,target_coverage,⿰,䍃 讠,component-trajectory:䍃|䍃|right|⿰|10（目标集中出现8次）；component-context:䍃|䍃|right|⿰（目标集中出现8次）
+肄,1,target_coverage,⿰,匕 矢 聿,component-trajectory:聿|聿|right|⿰|6（目标集中出现4次）；component-trajectory:矢|矢|bottom|⿱|5（目标集中出现4次）；component-context:聿|聿|right|⿰（目标集中出现4次）；component-context:矢|矢|bottom|⿱（目标集中出现4次）
+磊,1,target_coverage,⿱,石,component-trajectory:石|石|right|⿰|5（目标集中出现5次）；component-context:石|石|right|⿰（目标集中出现5次）；component-trajectory:石|石|top|⿱|5（目标集中出现3次）；component-context:石|石|top|⿱（目标集中出现3次）
+鼂,1,target_coverage,⿱,旦 黽,component-trajectory:旦|旦|top|⿱|5（目标集中出现5次）；component-context:旦|旦|top|⿱（目标集中出现5次）；component-trajectory:黽|黽|bottom|⿱|13（目标集中出现3次）；component-context:黽|黽|bottom|⿱（目标集中出现3次）
+镅,1,target_coverage,⿰,眉 钅,component-trajectory:眉|眉|right|⿰|9（目标集中出现6次）；component-context:眉|眉|right|⿰（目标集中出现6次）；component-identity:眉（目标集中出现7次）；stroke-signature:↗→↘↓←|3|tall|h（目标集中出现1次）
+體,1,target_coverage,⿰,豊 骨,component-trajectory:豊|豊|right|⿰|13（目标集中出现6次）；component-context:豊|豊|right|⿰（目标集中出现6次）；component-identity:豊（目标集中出现6次）；stroke-signature:↗→↘↓←|2|tall|n（目标集中出现5次）
+隔,1,target_coverage,⿰,阝 鬲,component-trajectory:鬲|鬲|right|⿰|10（目标集中出现5次）；component-identity:鬲（目标集中出现9次）；component-context:鬲|鬲|right|⿰（目标集中出现5次）；stroke-signature:↘↓↙↓|2|balanced|n（目标集中出现8次）
+呔,1,target_coverage,⿰,口 太,component-trajectory:太|太|right|⿰|4（目标集中出现6次）；component-context:太|太|right|⿰（目标集中出现6次）；component-identity:太（目标集中出现7次）
+垣,1,target_coverage,⿰,亘 土,component-trajectory:亘|亘|right|⿰|6（目标集中出现6次）；component-context:亘|亘|right|⿰（目标集中出现6次）；component-identity:亘（目标集中出现7次）
+唠,1,target_coverage,⿰,劳 口,component-trajectory:劳|劳|right|⿰|7（目标集中出现6次）；component-context:劳|劳|right|⿰（目标集中出现6次）；component-identity:劳（目标集中出现7次）
+爽,1,target_coverage,⿻,大 爻,component-trajectory:爻|爻|right|⿰|4（目标集中出现4次）；component-identity:爻（目标集中出现7次）；component-context:爻|爻|right|⿰（目标集中出现4次）；component-trajectory:爻|爻|left|⿰|4（目标集中出现2次）
+嗫,1,target_coverage,⿰,口 聂,component-trajectory:聂|聂|right|⿰|10（目标集中出现6次）；component-context:聂|聂|right|⿰（目标集中出现6次）；component-identity:聂（目标集中出现7次）
+媷,1,target_coverage,⿰,女 辱,component-trajectory:辱|辱|right|⿰|10（目标集中出现6次）；component-context:辱|辱|right|⿰（目标集中出现6次）；component-identity:辱（目标集中出现7次）
+儅,1,target_coverage,⿰,亻 當,component-trajectory:當|當|right|⿰|13（目标集中出现6次）；component-context:當|當|right|⿰（目标集中出现6次）；component-identity:當（目标集中出现7次）
+擐,1,target_coverage,⿰,扌 睘,component-trajectory:睘|睘|right|⿰|13（目标集中出现7次）；component-context:睘|睘|right|⿰（目标集中出现7次）；stroke-signature:→↘↓↙←|2|wide|n（目标集中出现8次）；stroke-signature:↙↓↘|1|tall|n（目标集中出现6次）
+陬,1,target_coverage,⿰,取 阝,component-trajectory:取|取|right|⿰|8（目标集中出现5次）；component-identity:取（目标集中出现10次）；component-context:取|取|right|⿰（目标集中出现5次）；stroke-signature:↗→↘↙↓↘↓←|3|tall|n（目标集中出现2次）
+佟,1,target_coverage,⿰,亻 冬,component-trajectory:冬|冬|right|⿰|5（目标集中出现5次）；component-identity:冬（目标集中出现10次）；component-context:冬|冬|right|⿰（目标集中出现5次）
+潢,1,target_coverage,⿰,氵 黄,component-trajectory:黄|黄|right|⿰|11（目标集中出现5次）；component-identity:黄（目标集中出现10次）；component-context:黄|黄|right|⿰（目标集中出现5次）
+艴,1,target_coverage,⿰,弗 色,component-trajectory:色|色|right|⿰|6（目标集中出现5次）；component-context:色|色|right|⿰（目标集中出现5次）；component-identity:色（目标集中出现5次）；component-trajectory:弗|弗|left|⿰|5（目标集中出现1次）
+喙,1,target_coverage,⿰,口 彖,component-trajectory:彖|彖|right|⿰|9（目标集中出现5次）；component-context:彖|彖|right|⿰（目标集中出现5次）；component-identity:彖（目标集中出现7次）；stroke-signature:→↘↓↙↖|1|tall|n（目标集中出现12次）
+哗,1,target_coverage,⿰,华 口,component-trajectory:华|华|right|⿰|6（目标集中出现6次）；component-context:华|华|right|⿰（目标集中出现6次）；component-identity:华（目标集中出现6次）
+偎,1,target_coverage,⿰,亻 畏,component-trajectory:畏|畏|right|⿰|9（目标集中出现6次）；component-context:畏|畏|right|⿰（目标集中出现6次）；component-identity:畏（目标集中出现6次）
+凑,1,target_coverage,⿰,冫 奏,component-trajectory:奏|奏|right|⿰|9（目标集中出现6次）；component-context:奏|奏|right|⿰（目标集中出现6次）；component-identity:奏（目标集中出现6次）
+傭,1,target_coverage,⿰,亻 庸,component-trajectory:庸|庸|right|⿰|11（目标集中出现6次）；component-context:庸|庸|right|⿰（目标集中出现6次）；component-identity:庸（目标集中出现6次）
+債,1,target_coverage,⿰,亻 責,component-trajectory:責|責|right|⿰|11（目标集中出现6次）；component-context:責|責|right|⿰（目标集中出现6次）；component-identity:責（目标集中出现6次）
+樘,1,target_coverage,⿰,堂 木,component-trajectory:堂|堂|right|⿰|11（目标集中出现6次）；component-context:堂|堂|right|⿰（目标集中出现6次）；component-identity:堂（目标集中出现6次）
+隅,1,target_coverage,⿰,禺 阝,component-trajectory:禺|禺|right|⿰|9（目标集中出现5次）；component-identity:禺（目标集中出现9次）；component-context:禺|禺|right|⿰（目标集中出现5次）；stroke-signature:↗→↘↙↓↘↓←|4|tall|n（目标集中出现3次）
+勸,1,target_coverage,⿰,力 雚,component-identity:雚（目标集中出现10次）；component-context:雚|雚|left|⿰（目标集中出现6次）；component-trajectory:雚|雚|left|⿰|18（目标集中出现4次）
+砝,1,target_coverage,⿰,去 石,component-trajectory:去|去|right|⿰|5（目标集中出现7次）；component-context:去|去|right|⿰（目标集中出现7次）；stroke-signature:↙↓→|1|balanced|n（目标集中出现9次）
+馨,1,target_coverage,⿱,殸 香,component-trajectory:殸|殸|top|⿱|11（目标集中出现5次）；component-context:殸|殸|top|⿱（目标集中出现5次）；component-identity:殸（目标集中出现5次）；component-trajectory:香|香|bottom|⿱|9（目标集中出现1次）
+巹,1,target_coverage,⿱,丞 己,component-trajectory:己|己|bottom|⿱|3（目标集中出现3次）；component-trajectory:丞|丞|top|⿱|6（目标集中出现3次）；component-context:己|己|bottom|⿱（目标集中出现3次）；component-context:丞|丞|top|⿱（目标集中出现3次）
+䜌,1,target_coverage,⿲,糹 言,component-trajectory:言|言|middle|⿲|7（目标集中出现3次）；component-context:言|言|middle|⿲（目标集中出现3次）；component-trajectory:糸|糹|right|⿲|6（目标集中出现2次）；component-trajectory:糸|糹|left|⿲|6（目标集中出现2次）
+谌,1,target_coverage,⿰,甚 讠,component-trajectory:甚|甚|right|⿰|9（目标集中出现5次）；component-identity:甚（目标集中出现9次）；component-context:甚|甚|right|⿰（目标集中出现5次）
+幅,1,target_coverage,⿰,巾 畐,component-trajectory:畐|畐|right|⿰|9（目标集中出现5次）；component-identity:畐（目标集中出现9次）；component-context:畐|畐|right|⿰（目标集中出现5次）；stroke-signature:↗→↓←|2|balanced|n（目标集中出现13次）
+愦,1,target_coverage,⿰,忄 贵,component-trajectory:贵|贵|right|⿰|9（目标集中出现5次）；component-identity:贵（目标集中出现9次）；component-context:贵|贵|right|⿰（目标集中出现5次）
+揮,1,target_coverage,⿰,扌 軍,component-trajectory:軍|軍|right|⿰|9（目标集中出现5次）；component-identity:軍（目标集中出现9次）；component-context:軍|軍|right|⿰（目标集中出现5次）
+嚮,1,target_coverage,⿱,向 鄉,component-trajectory:鄉|鄉|top|⿱|11（目标集中出现3次）；component-identity:向（目标集中出现6次）；component-context:鄉|鄉|top|⿱（目标集中出现3次）；component-identity:鄉（目标集中出现4次）
+虧,1,target_coverage,⿰,亏 雐,component-trajectory:亏|亏|right|⿰|3（目标集中出现4次）；component-identity:亏（目标集中出现7次）；component-context:亏|亏|right|⿰（目标集中出现4次）；component-trajectory:雐|雐|left|⿰|14（目标集中出现1次）
+蝸,1,target_coverage,⿰,咼 虫,component-trajectory:咼|咼|right|⿰|9（目标集中出现5次）；component-context:咼|咼|right|⿰（目标集中出现5次）；component-identity:咼（目标集中出现8次）；stroke-signature:↑→↗|1|wide|n（目标集中出现2次）
+會,1,target_coverage,⿱,亼 日,component-trajectory:亼|亼|top|⿱|3（目标集中出现5次）；component-context:亼|亼|top|⿱（目标集中出现5次）；component-identity:亼（目标集中出现7次）；stroke-signature:→↓←|2|wide|n（目标集中出现6次）
+嘤,1,target_coverage,⿰,口 婴,component-trajectory:婴|婴|right|⿰|11（目标集中出现5次）；component-context:婴|婴|right|⿰（目标集中出现5次）；component-identity:婴（目标集中出现7次）；stroke-signature:↘↙↓↘|2|balanced|n（目标集中出现6次）
+整,1,target_coverage,⿱,敕 正,component-identity:正（目标集中出现10次）；component-trajectory:正|正|bottom|⿱|5（目标集中出现3次）；component-context:正|正|bottom|⿱（目标集中出现3次）；component-trajectory:敕|敕|top|⿱|11（目标集中出现1次）
+馘,1,target_coverage,⿰,或 首,component-identity:或（目标集中出现8次）；component-trajectory:或|或|right|⿰|8（目标集中出现3次）；component-context:或|或|right|⿰（目标集中出现3次）；component-identity:首（目标集中出现4次）
+悌,1,target_coverage,⿰,弟 忄,component-trajectory:弟|弟|right|⿰|7（目标集中出现7次）；component-context:弟|弟|right|⿰（目标集中出现7次）；stroke-signature:↓→↘↓↙↖|4|wide|n（目标集中出现3次）
+陶,1,target_coverage,⿰,匋 阝,component-trajectory:匋|匋|right|⿰|8（目标集中出现5次）；component-context:匋|匋|right|⿰（目标集中出现5次）；component-identity:匋（目标集中出现6次）；stroke-signature:→↓↙←↖|3|tall|n（目标集中出现7次）
+誤,1,target_coverage,⿰,吴 言,component-trajectory:吴|吴|right|⿰|7（目标集中出现5次）；component-context:吴|吴|right|⿰（目标集中出现5次）；component-identity:吴（目标集中出现6次）；stroke-signature:↘↓→↘↓↙|4|balanced|n（目标集中出现9次）
+呣,1,target_coverage,⿰,口 母,component-trajectory:母|母|right|⿰|5（目标集中出现5次）；component-context:母|母|right|⿰（目标集中出现5次）；component-identity:母（目标集中出现8次）
+腫,1,target_coverage,⿰,⺼ 重,component-trajectory:重|重|right|⿰|9（目标集中出现5次）；component-context:重|重|right|⿰（目标集中出现5次）；component-identity:重（目标集中出现8次）
+緊,1,target_coverage,⿱,糸 臤,component-trajectory:臤|臤|top|⿱|8（目标集中出现5次）；component-context:臤|臤|top|⿱（目标集中出现5次）；component-identity:臤（目标集中出现5次）；stroke-signature:→↘↓↙←|1|balanced|n（目标集中出现9次）
+銹,1,target_coverage,⿰,秀 釒,component-trajectory:秀|秀|right|⿰|7（目标集中出现5次）；component-context:秀|秀|right|⿰（目标集中出现5次）；component-identity:秀（目标集中出现7次）；stroke-signature:→↓→↘↓↙↖|5|balanced|n（目标集中出现4次）
+縭,1,target_coverage,⿰,离 糹,component-trajectory:离|离|right|⿰|10（目标集中出现7次）；component-context:离|离|right|⿰（目标集中出现7次）；stroke-signature:↘↙↘→↗→|3|tall|n（目标集中出现2次）
+讖,1,target_coverage,⿰,言 韱,component-trajectory:韱|韱|right|⿰|17（目标集中出现5次）；component-context:韱|韱|right|⿰（目标集中出现5次）；component-identity:韱（目标集中出现6次）；stroke-signature:↗→↘|1|balanced|n（目标集中出现8次）
+老,1,target_coverage,⿱,匕 耂,component-trajectory:匕|匕|bottom|⿱|2（目标集中出现5次）；component-context:匕|匕|bottom|⿱（目标集中出现5次）；component-identity:耂（目标集中出现4次）；component-trajectory:耂|耂|top|⿱|4（目标集中出现1次）
+谭,1,target_coverage,⿰,覃 讠,component-trajectory:覃|覃|right|⿰|12（目标集中出现5次）；component-context:覃|覃|right|⿰（目标集中出现5次）；component-identity:覃（目标集中出现7次）；stroke-signature:→↓↙↓|1|wide|n（目标集中出现3次）
+噫,1,target_coverage,⿰,口 意,component-trajectory:意|意|right|⿰|13（目标集中出现5次）；component-context:意|意|right|⿰（目标集中出现5次）；component-identity:意（目标集中出现7次）；stroke-signature:↓↘→↑↖|2|wide|n（目标集中出现3次）
+乖,1,target_coverage,⿻,北 千,component-trajectory:北|北|overlap-secondary|⿻|5（目标集中出现3次）；component-identity:北（目标集中出现6次）；component-context:千|千|overlap-primary|⿻（目标集中出现3次）；component-context:北|北|overlap-secondary|⿻（目标集中出现3次）
+弦,1,target_coverage,⿰,弓 玄,component-trajectory:弓|弓|left|⿰|3（目标集中出现18次）；component-context:弓|弓|left|⿰（目标集中出现18次）；component-trajectory:玄|玄|right|⿰|5（目标集中出现7次）；component-context:玄|玄|right|⿰（目标集中出现7次）
+皕,1,target_coverage,⿰,百,component-trajectory:百|百|right|⿰|6（目标集中出现4次）；component-context:百|百|right|⿰（目标集中出现4次）；component-identity:百（目标集中出现6次）；component-trajectory:百|百|left|⿰|6（目标集中出现1次）
+暡,1,target_coverage,⿰,日 翁,component-trajectory:翁|翁|right|⿰|10（目标集中出现5次）；component-context:翁|翁|right|⿰（目标集中出现5次）；component-identity:翁（目标集中出现6次）；stroke-signature:↗→↘↓|1|tall|n（目标集中出现7次）
+鏈,1,target_coverage,⿰,連 釒,component-trajectory:連|連|right|⿰|10（目标集中出现5次）；component-context:連|連|right|⿰（目标集中出现5次）；component-identity:連（目标集中出现6次）；stroke-signature:→↘↓↙↓↘↓↙|3|tall|n（目标集中出现7次）
+夂,1,target_coverage,⿻,丿 又,component-context:丿|丿|overlap-primary|⿻（目标集中出现9次）；component-trajectory:又|又|overlap-secondary|⿻|2（目标集中出现3次）；component-context:又|又|overlap-secondary|⿻（目标集中出现3次）
+蟄,1,target_coverage,⿱,執 虫,component-trajectory:虫|虫|bottom|⿱|6（目标集中出现22次）；component-context:虫|虫|bottom|⿱（目标集中出现22次）；component-trajectory:執|執|top|⿱|11（目标集中出现5次）；component-context:執|執|top|⿱（目标集中出现5次）
+厽,1,target_coverage,⿱,厶,component-trajectory:厶|厶|right|⿰|2（目标集中出现5次）；component-context:厶|厶|right|⿰（目标集中出现5次）；component-trajectory:厶|厶|left|⿰|2（目标集中出现2次）；component-context:厶|厶|left|⿰（目标集中出现2次）
+坌,1,target_coverage,⿱,分 土,component-trajectory:分|分|top|⿱|4（目标集中出现7次）；component-context:分|分|top|⿱（目标集中出现7次）
+坟,1,target_coverage,⿰,土 文,component-trajectory:文|文|right|⿰|4（目标集中出现7次）；component-context:文|文|right|⿰（目标集中出现7次）
+竖,1,target_coverage,⿱,刂 又 立,component-trajectory:又|又|right|⿰|2（目标集中出现24次）；component-context:又|又|right|⿰（目标集中出现24次）；component-trajectory:立|立|bottom|⿱|5（目标集中出现4次）；component-context:立|立|bottom|⿱（目标集中出现4次）
+胤,1,target_coverage,⿻,⺼ 儿 幺,component-trajectory:幺|幺|top|⿱|3（目标集中出现5次）；component-context:幺|幺|top|⿱（目标集中出现5次）；component-trajectory:儿|儿|overlap-primary|⿻|2（目标集中出现2次）；component-context:儿|儿|overlap-primary|⿻（目标集中出现2次）
+喪,1,target_coverage,⿱,亡 口 土,component-trajectory:亡|亡|bottom|⿱|3（目标集中出现4次）；component-context:亡|亡|bottom|⿱（目标集中出现4次）；component-trajectory:土|土|overlap-primary|⿻|3（目标集中出现3次）；component-context:土|土|overlap-primary|⿻（目标集中出现3次）
+韪,1,target_coverage,⿺,是 韦,component-trajectory:是|是|surround-bottom-left|⿺|9（目标集中出现5次）；component-context:是|是|surround-bottom-left|⿺（目标集中出现5次）；component-trajectory:韦|韦|inside|⿺|4（目标集中出现2次）；component-context:韦|韦|inside|⿺（目标集中出现2次）
+睿,1,target_coverage,⿱,⺊ 一 人 八 冖 目,component-trajectory:八|八|top|⿳|2（目标集中出现3次）；component-context:八|八|top|⿳（目标集中出现3次）；component-trajectory:人|人|middle|⿳|2（目标集中出现2次）；component-context:人|人|middle|⿳（目标集中出现2次）
+矗,1,target_coverage,⿱,直,component-trajectory:直|直|right|⿰|8（目标集中出现6次）；component-context:直|直|right|⿰（目标集中出现6次）；component-trajectory:直|直|left|⿰|8（目标集中出现1次）；component-context:直|直|left|⿰（目标集中出现1次）
+侣,1,target_coverage,⿰,亻 吕,component-identity:吕（目标集中出现11次）；component-trajectory:吕|吕|right|⿰|6（目标集中出现4次）；component-context:吕|吕|right|⿰（目标集中出现4次）
+哑,1,target_coverage,⿰,亚 口,component-identity:亚（目标集中出现11次）；component-trajectory:亚|亚|right|⿰|6（目标集中出现4次）；component-context:亚|亚|right|⿰（目标集中出现4次）
+舞,1,target_coverage,⿱,無 舛,component-identity:無（目标集中出现7次）；component-trajectory:舛|舛|bottom|⿱|6（目标集中出现3次）；component-context:舛|舛|bottom|⿱（目标集中出现3次）；component-identity:舛（目标集中出现4次）
+擢,1,target_coverage,⿰,扌 翟,component-trajectory:翟|翟|right|⿰|14（目标集中出现5次）；component-context:翟|翟|right|⿰（目标集中出现5次）；component-identity:翟（目标集中出现7次）；stroke-signature:→↗→↘↓|1|balanced|n（目标集中出现1次）
+轍,1,target_coverage,⿲,攵 育 車,component-trajectory:育|育|middle|⿲|8（目标集中出现4次）；component-identity:育（目标集中出现7次）；component-context:育|育|middle|⿲（目标集中出现4次）；component-trajectory:車|車|left|⿲|7（目标集中出现1次）
+嬉,1,target_coverage,⿰,喜 女,component-trajectory:喜|喜|right|⿰|12（目标集中出现5次）；component-context:喜|喜|right|⿰（目标集中出现5次）；component-identity:喜（目标集中出现6次）；stroke-signature:↘→↘↓↙|3|wide|n（目标集中出现5次）
+俜,1,target_coverage,⿰,亻 甹,component-trajectory:甹|甹|right|⿰|7（目标集中出现5次）；component-context:甹|甹|right|⿰（目标集中出现5次）；component-identity:甹（目标集中出现5次）；stroke-signature:↓→↘↓↙←|4|balanced|n（目标集中出现9次）
+鬥,1,target_coverage,⿻,丨 亅 王,component-trajectory:王|王|right|⿰|4（目标集中出现6次）；component-context:王|王|right|⿰（目标集中出现6次）；component-context:亅|亅|right|⿰（目标集中出现2次）
+曠,1,target_coverage,⿰,廣 日,component-trajectory:廣|廣|right|⿰|15（目标集中出现5次）；component-context:廣|廣|right|⿰（目标集中出现5次）；component-identity:廣（目标集中出现5次）；component-trajectory:日|日|left|⿰|3（目标集中出现1次）
+车,1,target_coverage,⿻,七 十,component-identity:七（目标集中出现7次）；component-trajectory:十|十|overlap-secondary|⿻|2（目标集中出现3次）；component-context:十|十|overlap-secondary|⿻（目标集中出现3次）；component-trajectory:七|七|overlap-primary|⿻|2（目标集中出现2次）
+仵,1,target_coverage,⿰,亻 午,component-trajectory:午|午|right|⿰|4（目标集中出现5次）；component-context:午|午|right|⿰（目标集中出现5次）；component-identity:午（目标集中出现7次）
+伾,1,target_coverage,⿰,丕 亻,component-trajectory:丕|丕|right|⿰|5（目标集中出现5次）；component-context:丕|丕|right|⿰（目标集中出现5次）；component-identity:丕（目标集中出现7次）
+泛,1,target_coverage,⿰,乏 氵,component-trajectory:乏|乏|right|⿰|4（目标集中出现5次）；component-context:乏|乏|right|⿰（目标集中出现5次）；component-identity:乏（目标集中出现7次）
+個,1,target_coverage,⿰,亻 固,component-trajectory:固|固|right|⿰|8（目标集中出现5次）；component-context:固|固|right|⿰（目标集中出现5次）；component-identity:固（目标集中出现7次）
+喉,1,target_coverage,⿰,侯 口,component-trajectory:侯|侯|right|⿰|9（目标集中出现5次）；component-context:侯|侯|right|⿰（目标集中出现5次）；component-identity:侯（目标集中出现7次）
+傳,1,target_coverage,⿰,亻 專,component-trajectory:專|專|right|⿰|11（目标集中出现5次）；component-context:專|專|right|⿰（目标集中出现5次）；component-identity:專（目标集中出现7次）
+礅,1,target_coverage,⿰,敦 石,component-trajectory:敦|敦|right|⿰|12（目标集中出现5次）；component-context:敦|敦|right|⿰（目标集中出现5次）；component-identity:敦（目标集中出现6次）；stroke-signature:→↗→↓↙|2|wide|n（目标集中出现4次）
+鶚,1,target_coverage,⿰,咢 鳥,component-trajectory:鳥|鳥|right|⿰|11（目标集中出现60次）；component-context:鳥|鳥|right|⿰（目标集中出现60次）；component-trajectory:咢|咢|left|⿰|9（目标集中出现5次）；component-context:咢|咢|left|⿰（目标集中出现5次）
+垯,1,target_coverage,⿰,土 达,component-trajectory:达|达|right|⿰|6（目标集中出现5次）；component-context:达|达|right|⿰（目标集中出现5次）；component-identity:达（目标集中出现6次）；stroke-signature:→↘↓↘↓↙|3|balanced|n（目标集中出现3次）
+蜒,1,target_coverage,⿰,延 虫,component-trajectory:延|延|right|⿰|6（目标集中出现5次）；component-context:延|延|right|⿰（目标集中出现5次）；component-identity:延（目标集中出现6次）；stroke-signature:→↓↘↓↙|3|tall|n（目标集中出现3次）
+攒,1,target_coverage,⿰,扌 赞,component-trajectory:赞|赞|right|⿰|16（目标集中出现5次）；component-context:赞|赞|right|⿰（目标集中出现5次）；component-identity:赞（目标集中出现6次）；stroke-signature:↘↓↘→↗↑|0|balanced|n（目标集中出现3次）
+邹,1,target_coverage,⿰,刍 阝,component-identity:刍（目标集中出现9次）；component-trajectory:刍|刍|left|⿰|5（目标集中出现4次）；component-context:刍|刍|left|⿰（目标集中出现4次）；stroke-signature:↗→↓↙↓↘↓←|5|tall|n（目标集中出现6次）
+喬,1,target_coverage,⿱,夭 高,component-context:高|高|bottom|⿱（目标集中出现5次）；component-trajectory:夭|夭|top|⿱|4（目标集中出现4次）；component-context:夭|夭|top|⿱（目标集中出现4次）；component-trajectory:高|高|bottom|⿱|8（目标集中出现1次）
+购,1,target_coverage,⿰,勾 贝,component-trajectory:勾|勾|right|⿰|4（目标集中出现5次）；component-context:勾|勾|right|⿰（目标集中出现5次）；component-identity:勾（目标集中出现5次）；stroke-signature:→↓↙←↖|2|tall|n（目标集中出现7次）
+蚴,1,target_coverage,⿰,幼 虫,component-trajectory:幼|幼|right|⿰|5（目标集中出现5次）；component-context:幼|幼|right|⿰（目标集中出现5次）；component-identity:幼（目标集中出现6次）；stroke-signature:→↓↙↖|4|balanced|n（目标集中出现2次）
+浽,1,target_coverage,⿰,妥 氵,component-trajectory:妥|妥|right|⿰|7（目标集中出现5次）；component-context:妥|妥|right|⿰（目标集中出现5次）；component-identity:妥（目标集中出现6次）；stroke-signature:↓↙↓→↘|3|balanced|n（目标集中出现1次）
+汊,1,target_coverage,⿰,叉 氵,component-trajectory:叉|叉|right|⿰|3（目标集中出现5次）；component-context:叉|叉|right|⿰（目标集中出现5次）；component-identity:叉（目标集中出现6次）
+侔,1,target_coverage,⿰,亻 牟,component-trajectory:牟|牟|right|⿰|6（目标集中出现5次）；component-context:牟|牟|right|⿰（目标集中出现5次）；component-identity:牟（目标集中出现6次）
+侧,1,target_coverage,⿰,亻 则,component-trajectory:则|则|right|⿰|6（目标集中出现5次）；component-context:则|则|right|⿰（目标集中出现5次）；component-identity:则（目标集中出现6次）
+诓,1,target_coverage,⿰,匡 讠,component-trajectory:匡|匡|right|⿰|6（目标集中出现5次）；component-context:匡|匡|right|⿰（目标集中出现5次）；component-identity:匡（目标集中出现6次）
+倥,1,target_coverage,⿰,亻 空,component-trajectory:空|空|right|⿰|8（目标集中出现5次）；component-context:空|空|right|⿰（目标集中出现5次）；component-identity:空（目标集中出现6次）
+猛,1,target_coverage,⿰,孟 犭,component-trajectory:孟|孟|right|⿰|8（目标集中出现5次）；component-context:孟|孟|right|⿰（目标集中出现5次）；component-identity:孟（目标集中出现6次）
+绵,1,target_coverage,⿰,帛 纟,component-trajectory:帛|帛|right|⿰|8（目标集中出现5次）；component-context:帛|帛|right|⿰（目标集中出现5次）；component-identity:帛（目标集中出现6次）
+溶,1,target_coverage,⿰,容 氵,component-trajectory:容|容|right|⿰|10（目标集中出现5次）；component-context:容|容|right|⿰（目标集中出现5次）；component-identity:容（目标集中出现6次）
+撙,1,target_coverage,⿰,尊 扌,component-trajectory:尊|尊|right|⿰|12（目标集中出现5次）；component-context:尊|尊|right|⿰（目标集中出现5次）；component-identity:尊（目标集中出现6次）
+濂,1,target_coverage,⿰,廉 氵,component-trajectory:廉|廉|right|⿰|13（目标集中出现5次）；component-context:廉|廉|right|⿰（目标集中出现5次）；component-identity:廉（目标集中出现6次）
+鷈,1,target_coverage,⿰,虒 鳥,component-trajectory:虒|虒|right|⿰|10（目标集中出现3次）；component-identity:虒（目标集中出现6次）；component-context:虒|虒|right|⿰（目标集中出现3次）；component-trajectory:鳥|鳥|left|⿰|11（目标集中出现2次）
+疊,1,target_coverage,⿱,冝 畾,component-trajectory:畾|畾|top|⿱|15（目标集中出现3次）；component-context:畾|畾|top|⿱（目标集中出现3次）；component-trajectory:冝|冝|bottom|⿱|7（目标集中出现2次）；component-identity:畾（目标集中出现4次）
+乓,1,target_coverage,⿱,丘 丶,component-trajectory:丘|丘|top|⿱|5（目标集中出现4次）；component-context:丘|丘|top|⿱（目标集中出现4次）；component-identity:丘（目标集中出现6次）；component-context:丶|丶|bottom|⿱（目标集中出现2次）
+铅,1,target_coverage,⿰,几 口 钅,component-trajectory:几|几|top|⿱|2（目标集中出现6次）；component-context:几|几|top|⿱（目标集中出现6次）；stroke-signature:→↓↘→|3|balanced|n（目标集中出现8次）
+臨,1,target_coverage,⿰,品 臣,component-trajectory:臣|臣|left|⿰|6（目标集中出现6次）；component-identity:品（目标集中出现6次）；component-trajectory:品|品|bottom|⿱|9（目标集中出现1次）；stroke-signature:↘↓→|1|tall|n（目标集中出现8次）
+祯,1,target_coverage,⿰,礻 贞,component-trajectory:贞|贞|right|⿰|6（目标集中出现5次）；component-context:贞|贞|right|⿰（目标集中出现5次）；component-identity:贞（目标集中出现5次）；stroke-signature:→↗→↙|1|balanced|n（目标集中出现2次）
+揉,1,target_coverage,⿰,扌 柔,component-trajectory:柔|柔|right|⿰|9（目标集中出现5次）；component-context:柔|柔|right|⿰（目标集中出现5次）；component-identity:柔（目标集中出现5次）；stroke-signature:↓←|1|balanced|n（目标集中出现2次）
+嚓,1,target_coverage,⿰,口 察,component-trajectory:察|察|right|⿰|14（目标集中出现5次）；component-context:察|察|right|⿰（目标集中出现5次）；component-identity:察（目标集中出现5次）；stroke-signature:↘↓←↖|3|balanced|n（目标集中出现2次）
+畅,1,target_coverage,⿰,昜 申,component-trajectory:昜|昜|right|⿰|3（目标集中出现8次）；component-trajectory:申|申|left|⿰|5（目标集中出现2次）；component-context:申|申|left|⿰（目标集中出现2次）；stroke-signature:→↙→↘↓↙↖|5|balanced|n（目标集中出现1次）
+拷,1,target_coverage,⿰,扌 考,component-trajectory:考|考|right|⿰|6（目标集中出现5次）；component-context:考|考|right|⿰（目标集中出现5次）；component-identity:考（目标集中出现5次）；stroke-signature:↙↓→↓↙↖|3|tall|n（目标集中出现1次）
+跃,1,target_coverage,⿰,夭 足,component-trajectory:夭|夭|right|⿰|4（目标集中出现6次）；component-context:夭|夭|right|⿰（目标集中出现6次）；stroke-signature:↗→↗→↘↓↙|2|balanced|n（目标集中出现6次）
+怃,1,target_coverage,⿰,忄 无,component-trajectory:无|无|right|⿰|4（目标集中出现4次）；component-context:无|无|right|⿰（目标集中出现4次）；component-identity:无（目标集中出现6次）；stroke-signature:↘↓→↗↑|3|balanced|n（目标集中出现12次）
+均,1,target_coverage,⿰,匀 土,component-trajectory:匀|匀|right|⿰|4（目标集中出现5次）；component-context:匀|匀|right|⿰（目标集中出现5次）；component-identity:匀（目标集中出现5次）
+诉,1,target_coverage,⿰,斥 讠,component-trajectory:斥|斥|right|⿰|5（目标集中出现5次）；component-context:斥|斥|right|⿰（目标集中出现5次）；component-identity:斥（目标集中出现5次）
+狨,1,target_coverage,⿰,戎 犭,component-trajectory:戎|戎|right|⿰|6（目标集中出现5次）；component-context:戎|戎|right|⿰（目标集中出现5次）；component-identity:戎（目标集中出现5次）
+俸,1,target_coverage,⿰,亻 奉,component-trajectory:奉|奉|right|⿰|8（目标集中出现5次）；component-context:奉|奉|right|⿰（目标集中出现5次）；component-identity:奉（目标集中出现5次）
+偵,1,target_coverage,⿰,亻 貞,component-trajectory:貞|貞|right|⿰|9（目标集中出现5次）；component-context:貞|貞|right|⿰（目标集中出现5次）；component-identity:貞（目标集中出现5次）
+皙,1,target_coverage,⿱,析 白,component-trajectory:白|白|bottom|⿱|5（目标集中出现4次）；component-context:白|白|bottom|⿱（目标集中出现4次）；component-identity:析（目标集中出现5次）；component-trajectory:析|析|top|⿱|8（目标集中出现1次）
+嘉,1,target_coverage,⿱,加 壴,component-trajectory:加|加|bottom|⿱|5（目标集中出现3次）；component-identity:壴（目标集中出现5次）；component-context:加|加|bottom|⿱（目标集中出现3次）；component-trajectory:壴|壴|top|⿱|9（目标集中出现2次）
+儂,1,target_coverage,⿰,亻 農,component-trajectory:農|農|right|⿰|13（目标集中出现5次）；component-context:農|農|right|⿰（目标集中出现5次）；component-identity:農（目标集中出现5次）
+幟,1,target_coverage,⿰,巾 戠,component-trajectory:戠|戠|right|⿰|12（目标集中出现5次）；component-context:戠|戠|right|⿰（目标集中出现5次）；component-identity:戠（目标集中出现5次）
+酾,1,target_coverage,⿰,丽 酉,component-trajectory:丽|丽|right|⿰|7（目标集中出现4次）；component-identity:丽（目标集中出现8次）；component-context:丽|丽|right|⿰（目标集中出现4次）；stroke-signature:→↓↘↓|1|balanced|n（目标集中出现3次）
+咏,1,target_coverage,⿰,口 永,component-context:永|永|right|⿰（目标集中出现5次）；component-trajectory:永|永|right|⿰|5（目标集中出现4次）；component-identity:永（目标集中出现7次）
+陨,1,target_coverage,⿰,员 阝,component-trajectory:员|员|right|⿰|7（目标集中出现4次）；component-identity:员（目标集中出现8次）；component-context:员|员|right|⿰（目标集中出现4次）；stroke-signature:→↗→↓↙↓↘↓←|5|tall|n（目标集中出现2次）
+毚,1,target_coverage,⿱,㲋 兔,component-trajectory:兔|兔|bottom|⿱|8（目标集中出现3次）；component-identity:兔（目标集中出现6次）；component-context:兔|兔|bottom|⿱（目标集中出现3次）；component-trajectory:㲋|㲋|top|⿱|9（目标集中出现1次）
+着,1,target_coverage,⿸,目 羊,component-trajectory:羊|羊|surround-top-left|⿸|6（目标集中出现4次）；component-context:羊|羊|surround-top-left|⿸（目标集中出现4次）；component-trajectory:目|目|inside|⿸|5（目标集中出现2次）；component-context:目|目|inside|⿸（目标集中出现2次）
+璚,1,target_coverage,⿰,王 矞,component-trajectory:矞|矞|right|⿰|12（目标集中出现4次）；component-context:矞|矞|right|⿰（目标集中出现4次）；component-identity:矞（目标集中出现6次）；stroke-signature:↘↓↘→↘|2|balanced|n（目标集中出现10次）
+淥,1,target_coverage,⿰,彔 氵,component-trajectory:彔|彔|right|⿰|8（目标集中出现4次）；component-context:彔|彔|right|⿰（目标集中出现4次）；component-identity:彔（目标集中出现5次）；stroke-signature:↑↗|0|balanced|n（目标集中出现14次）
+价,1,target_coverage,⿰,亻 介,component-trajectory:介|介|right|⿰|4（目标集中出现4次）；component-identity:介（目标集中出现8次）；component-context:介|介|right|⿰（目标集中出现4次）
+尽,1,target_coverage,⿵,⺀ 尺,component-identity:尺（目标集中出现8次）；component-trajectory:尺|尺|surround-top|⿵|4（目标集中出现3次）；component-context:尺|尺|surround-top|⿵（目标集中出现3次）；component-trajectory:⺀|⺀|inside|⿵|2（目标集中出现1次）
+堋,1,target_coverage,⿰,土 朋,component-trajectory:朋|朋|right|⿰|8（目标集中出现4次）；component-identity:朋（目标集中出现8次）；component-context:朋|朋|right|⿰（目标集中出现4次）
+嵫,1,target_coverage,⿰,兹 山,component-trajectory:兹|兹|right|⿰|9（目标集中出现4次）；component-identity:兹（目标集中出现8次）；component-context:兹|兹|right|⿰（目标集中出现4次）
+隕,1,target_coverage,⿰,員 阝,component-trajectory:員|員|right|⿰|10（目标集中出现4次）；component-identity:員（目标集中出现8次）；component-context:員|員|right|⿰（目标集中出现4次）
+撖,1,target_coverage,⿰,扌 敢,component-trajectory:敢|敢|right|⿰|11（目标集中出现4次）；component-identity:敢（目标集中出现8次）；component-context:敢|敢|right|⿰（目标集中出现4次）
+嘯,1,target_coverage,⿰,口 肅,component-trajectory:肅|肅|right|⿰|13（目标集中出现4次）；component-identity:肅（目标集中出现7次）；component-context:肅|肅|right|⿰（目标集中出现4次）；stroke-signature:↓↘|1|tall|n（目标集中出现4次）
+弥,1,target_coverage,⿰,尔 弓,component-trajectory:尔|尔|right|⿰|5（目标集中出现6次）；component-context:尔|尔|right|⿰（目标集中出现6次）；stroke-signature:↘↓↘→↓↙←↖|4|tall|n（目标集中出现2次）
+酦,1,target_coverage,⿰,发 酉,component-trajectory:发|发|right|⿰|5（目标集中出现4次）；component-context:发|发|right|⿰（目标集中出现4次）；component-identity:发（目标集中出现5次）；stroke-signature:↗→↘↓↙←|2|balanced|n（目标集中出现12次）
+餍,1,target_coverage,⿸,厌 食,component-trajectory:厌|厌|surround-top-left|⿸|6（目标集中出现3次）；component-context:厌|厌|surround-top-left|⿸（目标集中出现3次）；component-trajectory:食|食|inside|⿸|9（目标集中出现2次）；component-identity:厌（目标集中出现4次）
+齧,1,target_coverage,⿱,㓞 齒,component-trajectory:㓞|㓞|top|⿱|6（目标集中出现4次）；component-context:㓞|㓞|top|⿱（目标集中出现4次）；component-identity:㓞（目标集中出现4次）；component-trajectory:齒|齒|bottom|⿱|15（目标集中出现1次）
+颯,1,target_coverage,⿰,立 風,component-trajectory:風|風|right|⿰|9（目标集中出现6次）；component-context:風|風|right|⿰（目标集中出现6次）；stroke-signature:↙|0|wide|n（目标集中出现1次）
+广,1,target_coverage,⿱,丶 厂,component-context:丶|丶|top|⿱（目标集中出现9次）；component-trajectory:厂|厂|bottom|⿱|2（目标集中出现2次）；component-context:厂|厂|bottom|⿱（目标集中出现2次）
+睞,1,target_coverage,⿰,來 目,component-trajectory:來|來|right|⿰|8（目标集中出现4次）；component-identity:來（目标集中出现7次）；component-context:來|來|right|⿰（目标集中出现4次）；stroke-signature:↗→↘|0|balanced|n（目标集中出现2次）
+头,1,target_coverage,⿻,⺀ 大,component-trajectory:大|大|overlap-secondary|⿻|3（目标集中出现5次）；component-context:大|大|overlap-secondary|⿻（目标集中出现5次）；component-trajectory:⺀|⺀|overlap-primary|⿻|2（目标集中出现1次）；component-context:⺀|⺀|overlap-primary|⿻（目标集中出现1次）
+圹,1,target_coverage,⿰,土 广,component-trajectory:广|广|right|⿰|3（目标集中出现6次）；component-context:广|广|right|⿰（目标集中出现6次）
+位,1,target_coverage,⿰,亻 立,component-trajectory:立|立|right|⿰|5（目标集中出现6次）；component-context:立|立|right|⿰（目标集中出现6次）
+孝,1,target_coverage,⿸,子 耂,component-trajectory:耂|耂|surround-top-left|⿸|4（目标集中出现3次）；component-trajectory:子|子|inside|⿸|3（目标集中出现3次）；component-context:耂|耂|surround-top-left|⿸（目标集中出现3次）；component-context:子|子|inside|⿸（目标集中出现3次）
+受,1,target_coverage,⿳,冖 又 爫,component-trajectory:又|又|bottom|⿳|2（目标集中出现6次）；component-context:又|又|bottom|⿳（目标集中出现6次）
+姦,1,target_coverage,⿱,女,component-trajectory:女|女|right|⿰|3（目标集中出现5次）；component-context:女|女|right|⿰（目标集中出现5次）；component-trajectory:女|女|top|⿱|3（目标集中出现1次）；component-context:女|女|top|⿱（目标集中出现1次）
+倫,1,target_coverage,⿰,亻 侖,component-trajectory:侖|侖|right|⿰|8（目标集中出现6次）；component-context:侖|侖|right|⿰（目标集中出现6次）
+唑,1,target_coverage,⿰,口 坐,component-trajectory:坐|坐|right|⿰|7（目标集中出现6次）；component-context:坐|坐|right|⿰（目标集中出现6次）
+班,1,quality_rerecord,⿲,刂 王,component-trajectory:王|王|right|⿲|4（目标集中出现2次）；component-trajectory:王|王|left|⿲|4（目标集中出现2次）；component-trajectory:刀|刂|middle|⿲|2（目标集中出现2次）；component-context:王|王|right|⿲（目标集中出现2次）
+谆,1,target_coverage,⿰,享 讠,component-trajectory:享|享|right|⿰|8（目标集中出现6次）；component-context:享|享|right|⿰（目标集中出现6次）
+谙,1,target_coverage,⿰,讠 音,component-trajectory:音|音|right|⿰|9（目标集中出现6次）；component-context:音|音|right|⿰（目标集中出现6次）
+毂,1,target_coverage,⿰,军 士 车,component-trajectory:车|车|right|⿰|4（目标集中出现3次）；component-trajectory:军|军|bottom|⿱|6（目标集中出现3次）；component-context:车|车|right|⿰（目标集中出现3次）；component-context:军|军|bottom|⿱（目标集中出现3次）
+肇,1,target_coverage,⿱,户 攵 聿,component-trajectory:户|户|left|⿰|4（目标集中出现4次）；component-context:户|户|left|⿰（目标集中出现4次）；component-trajectory:聿|聿|bottom|⿱|6（目标集中出现2次）；component-context:聿|聿|bottom|⿱（目标集中出现2次）
+奮,1,target_coverage,⿳,大 田 隹,component-trajectory:隹|隹|middle|⿳|8（目标集中出现2次）；component-trajectory:田|田|bottom|⿳|5（目标集中出现2次）；component-trajectory:大|大|top|⿳|3（目标集中出现2次）；component-context:隹|隹|middle|⿳（目标集中出现2次）
+覽,1,target_coverage,⿱,監 見,component-trajectory:見|見|bottom|⿱|7（目标集中出现4次）；component-context:見|見|bottom|⿱（目标集中出现4次）；component-trajectory:監|監|top|⿱|14（目标集中出现2次）；component-context:監|監|top|⿱（目标集中出现2次）
+贔,1,target_coverage,⿱,貝,component-trajectory:貝|貝|right|⿰|7（目标集中出现5次）；component-context:貝|貝|right|⿰（目标集中出现5次）；component-trajectory:貝|貝|top|⿱|7（目标集中出现1次）；component-context:貝|貝|top|⿱（目标集中出现1次）
+诼,1,target_coverage,⿰,讠 豖,component-trajectory:豖|豖|right|⿰|8（目标集中出现4次）；component-context:豖|豖|right|⿰（目标集中出现4次）；component-identity:豖（目标集中出现6次）；stroke-signature:→↘↓↙←↖|1|tall|n（目标集中出现6次）
+懊,1,target_coverage,⿰,奥 忄,component-context:奥|奥|right|⿰（目标集中出现5次）；component-trajectory:奥|奥|right|⿰|12（目标集中出现4次）；component-identity:奥（目标集中出现5次）；stroke-signature:↘↓↙←↓|2|balanced|n（目标集中出现3次）
+鑷,1,target_coverage,⿰,聶 釒,component-trajectory:聶|聶|right|⿰|18（目标集中出现4次）；component-context:聶|聶|right|⿰（目标集中出现4次）；component-identity:聶（目标集中出现5次）；stroke-signature:↓↙|1|tall|n（目标集中出现10次）
+燻,1,target_coverage,⿰,火 熏,component-trajectory:熏|熏|right|⿰|14（目标集中出现4次）；component-context:熏|熏|right|⿰（目标集中出现4次）；component-identity:熏（目标集中出现6次）；stroke-signature:→↘↓↙↓|1|balanced|n（目标集中出现5次）
+櫟,1,target_coverage,⿰,木 樂,component-trajectory:樂|樂|right|⿰|15（目标集中出现4次）；component-context:樂|樂|right|⿰（目标集中出现4次）；component-identity:樂（目标集中出现5次）；stroke-signature:↘↓↙↓→↗|1|tall|n（目标集中出现9次）
+讲,1,target_coverage,⿰,井 讠,component-trajectory:井|井|right|⿰|4（目标集中出现4次）；component-identity:井（目标集中出现7次）；component-context:井|井|right|⿰（目标集中出现4次）
+呖,1,target_coverage,⿰,历 口,component-trajectory:历|历|right|⿰|4（目标集中出现4次）；component-identity:历（目标集中出现7次）；component-context:历|历|right|⿰（目标集中出现4次）
+例,1,target_coverage,⿰,亻 列,component-trajectory:列|列|right|⿰|6（目标集中出现4次）；component-identity:列（目标集中出现7次）；component-context:列|列|right|⿰（目标集中出现4次）
+哲,1,target_coverage,⿱,口 折,component-trajectory:折|折|top|⿱|7（目标集中出现4次）；component-identity:折（目标集中出现7次）；component-context:折|折|top|⿱（目标集中出现4次）
+啰,1,target_coverage,⿰,口 罗,component-trajectory:罗|罗|right|⿰|8（目标集中出现4次）；component-identity:罗（目标集中出现7次）；component-context:罗|罗|right|⿰（目标集中出现4次）
+堑,1,target_coverage,⿱,土 斩,component-trajectory:斩|斩|top|⿱|8（目标集中出现4次）；component-identity:斩（目标集中出现7次）；component-context:斩|斩|top|⿱（目标集中出现4次）
+棗,1,target_coverage,⿱,朿,component-identity:朿（目标集中出现7次）；component-trajectory:朿|朿|top|⿱|6（目标集中出现2次）；component-trajectory:朿|朿|bottom|⿱|6（目标集中出现2次）；component-context:朿|朿|top|⿱（目标集中出现2次）
+愷,1,target_coverage,⿰,忄 豈,component-trajectory:豈|豈|right|⿰|10（目标集中出现4次）；component-identity:豈（目标集中出现7次）；component-context:豈|豈|right|⿰（目标集中出现4次）
+睾,1,target_coverage,⿱,幸 血,component-identity:幸（目标集中出现7次）；component-trajectory:血|血|top|⿱|6（目标集中出现2次）；component-trajectory:幸|幸|bottom|⿱|8（目标集中出现2次）；component-context:血|血|top|⿱（目标集中出现2次）
+馕,1,target_coverage,⿰,囊 饣,component-trajectory:囊|囊|right|⿰|22（目标集中出现4次）；component-context:囊|囊|right|⿰（目标集中出现4次）；component-identity:囊（目标集中出现4次）；stroke-signature:↓↘→↗|1|balanced|n（目标集中出现12次）
+擰,1,target_coverage,⿰,寧 扌,component-trajectory:寧|寧|right|⿰|14（目标集中出现4次）；component-context:寧|寧|right|⿰（目标集中出现4次）；component-identity:寧（目标集中出现4次）；stroke-signature:↘→↗↖|1|wide|n（目标集中出现7次）
+媵,1,target_coverage,⿸,女 朕,component-trajectory:朕|朕|surround-top-left|⿸|10（目标集中出现3次）；component-context:朕|朕|surround-top-left|⿸（目标集中出现3次）；component-trajectory:女|女|inside|⿸|3（目标集中出现2次）；component-context:女|女|inside|⿸（目标集中出现2次）
+贛,1,target_coverage,⿰,夂 章 貢,component-trajectory:章|章|left|⿰|11（目标集中出现4次）；component-context:章|章|left|⿰（目标集中出现4次）；component-identity:貢（目标集中出现3次）；component-trajectory:貢|貢|bottom|⿱|10（目标集中出现1次）
+锕,1,target_coverage,⿰,钅 阿,component-trajectory:阿|阿|right|⿰|7（目标集中出现4次）；component-context:阿|阿|right|⿰（目标集中出现4次）；component-identity:阿（目标集中出现6次）；stroke-signature:→↘↓↙↓↘↓←|4|tall|n（目标集中出现3次）
+島,1,target_coverage,⿹,山 烏,component-trajectory:山|山|inside|⿹|3（目标集中出现3次）；component-identity:烏（目标集中出现5次）；component-context:山|山|inside|⿹（目标集中出现3次）；component-trajectory:烏|烏|surround-top-right|⿹|7（目标集中出现1次）
+嘮,1,target_coverage,⿰,勞 口,component-trajectory:勞|勞|right|⿰|12（目标集中出现4次）；component-context:勞|勞|right|⿰（目标集中出现4次）；component-identity:勞（目标集中出现5次）；stroke-signature:→↓←|3|balanced|n（目标集中出现7次）
+饞,1,target_coverage,⿰,毚 飠,component-trajectory:毚|毚|right|⿰|17（目标集中出现4次）；component-context:毚|毚|right|⿰（目标集中出现4次）；component-identity:毚（目标集中出现4次）；stroke-signature:↘↓↙←↙|1|balanced|n（目标集中出现6次）
+噠,1,target_coverage,⿰,口 達,component-trajectory:達|達|right|⿰|12（目标集中出现4次）；component-context:達|達|right|⿰（目标集中出现4次）；component-identity:達（目标集中出现4次）；stroke-signature:→↓↙↓↘↓|2|balanced|n（目标集中出现10次）
+嚎,1,target_coverage,⿰,口 豪,component-trajectory:豪|豪|right|⿰|14（目标集中出现4次）；component-context:豪|豪|right|⿰（目标集中出现4次）；component-identity:豪（目标集中出现4次）；stroke-signature:→↘↓↙←|1|tall|n（目标集中出现10次）
+蟎,1,target_coverage,⿰,㒼 虫,component-trajectory:㒼|㒼|right|⿰|11（目标集中出现4次）；component-context:㒼|㒼|right|⿰（目标集中出现4次）；component-identity:㒼（目标集中出现4次）；stroke-signature:↗→↓↙↖|3|balanced|n（目标集中出现10次）
+旭,1,target_coverage,⿺,九 日,component-trajectory:九|九|surround-bottom-left|⿺|2（目标集中出现3次）；component-context:九|九|surround-bottom-left|⿺（目标集中出现3次）；component-trajectory:日|日|inside|⿺|4（目标集中出现2次）；component-context:日|日|inside|⿺（目标集中出现2次）
+髯,1,target_coverage,⿱,冉 髟,component-trajectory:冉|冉|bottom|⿱|5（目标集中出现4次）；component-context:冉|冉|bottom|⿱（目标集中出现4次）；component-identity:冉（目标集中出现6次）；stroke-signature:←↙↓→↗→|1|wide|n（目标集中出现1次）
+統,1,target_coverage,⿰,充 糹,component-trajectory:充|充|right|⿰|6（目标集中出现4次）；component-context:充|充|right|⿰（目标集中出现4次）；component-identity:充（目标集中出现5次）；stroke-signature:↓↙↓→|2|tall|n（目标集中出现5次）
+冻,1,target_coverage,⿰,东 冫,component-trajectory:东|东|right|⿰|5（目标集中出现4次）；component-context:东|东|right|⿰（目标集中出现4次）；component-identity:东（目标集中出现6次）
+呃,1,target_coverage,⿰,厄 口,component-trajectory:厄|厄|right|⿰|4（目标集中出现4次）；component-context:厄|厄|right|⿰（目标集中出现4次）；component-identity:厄（目标集中出现6次）
+诙,1,target_coverage,⿰,灰 讠,component-trajectory:灰|灰|right|⿰|6（目标集中出现4次）；component-context:灰|灰|right|⿰（目标集中出现4次）；component-identity:灰（目标集中出现6次）
+唏,1,target_coverage,⿰,口 希,component-trajectory:希|希|right|⿰|7（目标集中出现4次）；component-context:希|希|right|⿰（目标集中出现4次）；component-identity:希（目标集中出现6次）
+採,1,target_coverage,⿰,扌 采,component-trajectory:采|采|right|⿰|8（目标集中出现4次）；component-context:采|采|right|⿰（目标集中出现4次）；component-identity:采（目标集中出现6次）
+喃,1,target_coverage,⿰,南 口,component-trajectory:南|南|right|⿰|9（目标集中出现4次）；component-context:南|南|right|⿰（目标集中出现4次）；component-identity:南（目标集中出现6次）
+嗒,1,target_coverage,⿰,口 荅,component-trajectory:荅|荅|right|⿰|9（目标集中出现4次）；component-context:荅|荅|right|⿰（目标集中出现4次）；component-identity:荅（目标集中出现6次）
+嗐,1,target_coverage,⿰,口 害,component-trajectory:害|害|right|⿰|10（目标集中出现4次）；component-context:害|害|right|⿰（目标集中出现4次）；component-identity:害（目标集中出现6次）
+噱,1,target_coverage,⿰,口 豦,component-trajectory:豦|豦|right|⿰|13（目标集中出现4次）；component-context:豦|豦|right|⿰（目标集中出现4次）；component-identity:豦（目标集中出现6次）
+隸,1,target_coverage,⿰,柰 隶,component-trajectory:隶|隶|right|⿰|8（目标集中出现3次）；component-identity:隶（目标集中出现5次）；component-context:隶|隶|right|⿰（目标集中出现3次）；component-trajectory:柰|柰|left|⿰|9（目标集中出现1次）
+挪,1,target_coverage,⿰,扌 那,stroke-signature:→↓↙←|2|tall|n（目标集中出现29次）；component-trajectory:那|那|right|⿰|6（目标集中出现3次）；component-context:那|那|right|⿰（目标集中出现3次）；component-identity:那（目标集中出现3次）
+曆,1,target_coverage,⿸,厤 日,component-trajectory:日|日|inside|⿸|4（目标集中出现3次）；component-context:日|日|inside|⿸（目标集中出现3次）；component-trajectory:厤|厤|surround-top-left|⿸|12（目标集中出现2次）；component-context:厤|厤|surround-top-left|⿸（目标集中出现2次）
+舋,1,target_coverage,⿱,且 興,component-trajectory:且|且|bottom|⿱|5（目标集中出现4次）；component-context:且|且|bottom|⿱（目标集中出现4次）；component-trajectory:興|興|top|⿱|14（目标集中出现1次）；component-identity:興（目标集中出现2次）
+凄,1,target_coverage,⿰,冫 妻,component-trajectory:妻|妻|right|⿰|8（目标集中出现4次）；component-context:妻|妻|right|⿰（目标集中出现4次）；component-identity:妻（目标集中出现5次）；stroke-signature:↘↙↘→↘→|3|balanced|n（目标集中出现3次）
+钸,1,target_coverage,⿰,布 钅,component-trajectory:布|布|right|⿰|5（目标集中出现4次）；component-context:布|布|right|⿰（目标集中出现4次）；component-identity:布（目标集中出现5次）；stroke-signature:↘↓↘↙↓|2|tall|n（目标集中出现3次）
+喚,1,target_coverage,⿰,口 奐,component-trajectory:奐|奐|right|⿰|9（目标集中出现4次）；component-context:奐|奐|right|⿰（目标集中出现4次）；component-identity:奐（目标集中出现5次）；stroke-signature:↘↓↘→↘|3|balanced|n（目标集中出现3次）
+賴,1,target_coverage,⿰,束 負,component-trajectory:束|束|left|⿰|7（目标集中出现4次）；component-context:束|束|left|⿰（目标集中出现4次）；component-trajectory:負|負|right|⿰|9（目标集中出现1次）；component-context:負|負|right|⿰（目标集中出现1次）
+谮,1,target_coverage,⿰,朁 讠,component-trajectory:朁|朁|right|⿰|12（目标集中出现4次）；component-context:朁|朁|right|⿰（目标集中出现4次）；component-identity:朁（目标集中出现5次）；stroke-signature:↘↓→↘|2|wide|n（目标集中出现2次）
+淼,1,target_coverage,⿱,水,component-context:水|水|top|⿱（目标集中出现3次）；component-trajectory:水|水|top|⿱|4（目标集中出现2次）；component-trajectory:水|水|right|⿰|4（目标集中出现2次）；component-context:水|水|right|⿰（目标集中出现2次）
+條,1,target_coverage,⿲,丨 亻 条,component-context:丨|丨|middle|⿲（目标集中出现3次）；component-trajectory:人|亻|left|⿲|2（目标集中出现2次）；component-identity:条（目标集中出现4次）；component-context:人|亻|left|⿲（目标集中出现2次）
+際,1,target_coverage,⿰,祭 阝,component-trajectory:祭|祭|right|⿰|11（目标集中出现3次）；component-identity:祭（目标集中出现6次）；component-context:祭|祭|right|⿰（目标集中出现3次）；stroke-signature:→↓↙↓↘↓←|4|tall|n（目标集中出现13次）
+姗,1,target_coverage,⿰,册 女,component-trajectory:册|册|right|⿰|5（目标集中出现4次）；component-context:册|册|right|⿰（目标集中出现4次）；component-identity:册（目标集中出现5次）；stroke-signature:↗↓↙↖|3|tall|n（目标集中出现1次）
+降,1,target_coverage,⿰,夅 阝,component-trajectory:夅|夅|right|⿰|6（目标集中出现4次）；component-context:夅|夅|right|⿰（目标集中出现4次）；component-identity:夅（目标集中出现5次）；stroke-signature:→↓↘↓←|3|tall|n（目标集中出现1次）
+陳,1,target_coverage,⿰,東 阝,component-trajectory:東|東|right|⿰|8（目标集中出现4次）；component-context:東|東|right|⿰（目标集中出现4次）；component-identity:東（目标集中出现5次）；stroke-signature:→↙↓↘↓←↖|3|tall|n（目标集中出现1次）
+鼴,1,target_coverage,⿰,匽 鼠,component-trajectory:匽|匽|right|⿰|9（目标集中出现4次）；component-context:匽|匽|right|⿰（目标集中出现4次）；component-identity:匽（目标集中出现5次）；stroke-signature:↓↙↓→↘|2|balanced|n（目标集中出现1次）
+箱,1,target_coverage,⿱,⺮ 相,component-identity:相（目标集中出现8次）；component-trajectory:相|相|bottom|⿱|9（目标集中出现3次）；component-context:相|相|bottom|⿱（目标集中出现3次）；stroke-signature:→↘↓←|2|tall|h（目标集中出现4次）
+煤,1,target_coverage,⿰,某 火,component-trajectory:某|某|right|⿰|9（目标集中出现4次）；component-context:某|某|right|⿰（目标集中出现4次）；component-identity:某（目标集中出现4次）；stroke-signature:↘↙↓|2|balanced|n（目标集中出现5次）
+粥,1,target_coverage,⿲,弓 米,component-trajectory:弓|弓|right|⿲|3（目标集中出现2次）；component-trajectory:弓|弓|left|⿲|3（目标集中出现2次）；component-context:弓|弓|right|⿲（目标集中出现2次）；component-context:弓|弓|left|⿲（目标集中出现2次）
+齪,1,target_coverage,⿰,足 齒,component-trajectory:足|足|right|⿰|7（目标集中出现5次）；component-context:足|足|right|⿰（目标集中出现5次）；stroke-signature:↓↘↓|1|balanced|n（目标集中出现6次）
+凭,1,target_coverage,⿱,任 几,component-trajectory:任|任|top|⿱|6（目标集中出现4次）；component-context:任|任|top|⿱（目标集中出现4次）；component-identity:任（目标集中出现5次）
+抹,1,target_coverage,⿰,扌 末,component-trajectory:末|末|right|⿰|5（目标集中出现4次）；component-context:末|末|right|⿰（目标集中出现4次）；component-identity:末（目标集中出现5次）
+诟,1,target_coverage,⿰,后 讠,component-trajectory:后|后|right|⿰|6（目标集中出现4次）；component-context:后|后|right|⿰（目标集中出现4次）；component-identity:后（目标集中出现5次）
+哚,1,target_coverage,⿰,口 朵,component-trajectory:朵|朵|right|⿰|6（目标集中出现4次）；component-context:朵|朵|right|⿰（目标集中出现4次）；component-identity:朵（目标集中出现5次）
+挡,1,target_coverage,⿰,当 扌,component-trajectory:当|当|right|⿰|6（目标集中出现4次）；component-context:当|当|right|⿰（目标集中出现4次）；component-identity:当（目标集中出现5次）
+倔,1,target_coverage,⿰,亻 屈,component-trajectory:屈|屈|right|⿰|8（目标集中出现4次）；component-context:屈|屈|right|⿰（目标集中出现4次）；component-identity:屈（目标集中出现5次）
+埒,1,target_coverage,⿰,土 寽,component-trajectory:寽|寽|right|⿰|7（目标集中出现4次）；component-context:寽|寽|right|⿰（目标集中出现4次）；component-identity:寽（目标集中出现5次）
+側,1,target_coverage,⿰,亻 則,component-trajectory:則|則|right|⿰|9（目标集中出现4次）；component-context:則|則|right|⿰（目标集中出现4次）；component-identity:則（目标集中出现5次）
+掬,1,target_coverage,⿰,匊 扌,component-trajectory:匊|匊|right|⿰|8（目标集中出现4次）；component-context:匊|匊|right|⿰（目标集中出现4次）；component-identity:匊（目标集中出现5次）
+眳,1,target_coverage,⿰,名 目,component-trajectory:名|名|right|⿰|6（目标集中出现4次）；component-context:名|名|right|⿰（目标集中出现4次）；component-identity:名（目标集中出现5次）
+惺,1,target_coverage,⿰,忄 星,component-trajectory:星|星|right|⿰|9（目标集中出现4次）；component-context:星|星|right|⿰（目标集中出现4次）；component-identity:星（目标集中出现5次）
+搔,1,target_coverage,⿰,扌 蚤,component-trajectory:蚤|蚤|right|⿰|9（目标集中出现4次）；component-context:蚤|蚤|right|⿰（目标集中出现4次）；component-identity:蚤（目标集中出现5次）
+催,1,target_coverage,⿰,亻 崔,component-trajectory:崔|崔|right|⿰|11（目标集中出现4次）；component-context:崔|崔|right|⿰（目标集中出现4次）；component-identity:崔（目标集中出现5次）
+楔,1,target_coverage,⿰,契 木,component-trajectory:契|契|right|⿰|9（目标集中出现4次）；component-context:契|契|right|⿰（目标集中出现4次）；component-identity:契（目标集中出现5次）
+溟,1,target_coverage,⿰,冥 氵,component-trajectory:冥|冥|right|⿰|10（目标集中出现4次）；component-context:冥|冥|right|⿰（目标集中出现4次）；component-identity:冥（目标集中出现5次）
+墙,1,target_coverage,⿰,啬 土,component-trajectory:啬|啬|right|⿰|11（目标集中出现4次）；component-context:啬|啬|right|⿰（目标集中出现4次）；component-identity:啬（目标集中出现5次）
+谱,1,target_coverage,⿰,普 讠,component-trajectory:普|普|right|⿰|12（目标集中出现4次）；component-context:普|普|right|⿰（目标集中出现4次）；component-identity:普（目标集中出现5次）
+嘭,1,target_coverage,⿰,口 彭,component-trajectory:彭|彭|right|⿰|12（目标集中出现4次）；component-context:彭|彭|right|⿰（目标集中出现4次）；component-identity:彭（目标集中出现5次）
+噜,1,target_coverage,⿰,口 鲁,component-trajectory:鲁|鲁|right|⿰|12（目标集中出现4次）；component-context:鲁|鲁|right|⿰（目标集中出现4次）；component-identity:鲁（目标集中出现5次）
+嬲,1,target_coverage,⿲,女 男,component-identity:男（目标集中出现5次）；component-trajectory:女|女|middle|⿲|3（目标集中出现2次）；component-context:女|女|middle|⿲（目标集中出现2次）；component-trajectory:男|男|right|⿲|7（目标集中出现1次）
+舣,1,target_coverage,⿰,义 舟,component-trajectory:义|义|right|⿰|3（目标集中出现4次）；component-context:义|义|right|⿰（目标集中出现4次）；component-identity:义（目标集中出现4次）；stroke-signature:↗→↓↙←|3|tall|n（目标集中出现4次）
+觥,1,target_coverage,⿰,光 角,component-trajectory:光|光|right|⿰|6（目标集中出现5次）；component-context:光|光|right|⿰（目标集中出现5次）；stroke-signature:↗→↘↙|2|balanced|n（目标集中出现5次）
+贏,1,target_coverage,⿵,⺼ 吂 貝,component-trajectory:⺼|⺼|left|⿲|4（目标集中出现3次）；component-context:⺼|⺼|left|⿲（目标集中出现3次）；component-trajectory:貝|貝|middle|⿲|7（目标集中出现1次）；component-trajectory:吂|吂|surround-top|⿵|6（目标集中出现1次）
+舉,1,target_coverage,⿱,扌 與,component-trajectory:與|與|top|⿱|13（目标集中出现2次）；component-trajectory:手|扌|bottom|⿱|3（目标集中出现2次）；component-identity:與（目标集中出现4次）；component-context:與|與|top|⿱（目标集中出现2次）
+争,1,target_coverage,⿱,⺈ 亅 彐,component-context:亅|亅|overlap-secondary|⿻（目标集中出现5次）；component-trajectory:彐|彐|overlap-primary|⿻|3（目标集中出现3次）；component-context:彐|彐|overlap-primary|⿻（目标集中出现3次）
+靠,1,target_coverage,⿱,告 非,component-trajectory:非|非|bottom|⿱|8（目标集中出现4次）；component-context:非|非|bottom|⿱（目标集中出现4次）；component-trajectory:告|告|top|⿱|7（目标集中出现1次）；component-context:告|告|top|⿱（目标集中出现1次）
+浓,1,target_coverage,⿰,农 氵,component-trajectory:农|农|right|⿰|6（目标集中出现4次）；component-context:农|农|right|⿰（目标集中出现4次）；component-identity:农（目标集中出现4次）；stroke-signature:↓↘→↗|1|tall|n（目标集中出现2次）
+荒,1,target_coverage,⿱,川 芒,component-trajectory:川|川|bottom|⿱|3（目标集中出现3次）；component-context:川|川|bottom|⿱（目标集中出现3次）；component-identity:芒（目标集中出现4次）；component-trajectory:芒|芒|top|⿱|6（目标集中出现1次）
+繾,1,target_coverage,⿰,糹 遣,component-trajectory:遣|遣|right|⿰|13（目标集中出现4次）；component-context:遣|遣|right|⿰（目标集中出现4次）；component-identity:遣（目标集中出现4次）；stroke-signature:→↘↙↓↘↓↙|4|tall|n（目标集中出现2次）
+妄,1,target_coverage,⿱,亡 女,component-trajectory:亡|亡|top|⿱|3（目标集中出现5次）；component-context:亡|亡|top|⿱（目标集中出现5次）；stroke-signature:↘↙↘→↘|3|balanced|n（目标集中出现3次）
+巩,1,target_coverage,⿰,凡 工,component-trajectory:凡|凡|right|⿰|3（目标集中出现5次）；component-context:凡|凡|right|⿰（目标集中出现5次）；stroke-signature:↗→↓↘↗↑|3|balanced|n（目标集中出现3次）
+潰,1,target_coverage,⿰,氵 貴,component-identity:貴（目标集中出现8次）；component-trajectory:貴|貴|right|⿰|12（目标集中出现3次）；component-context:貴|貴|right|⿰（目标集中出现3次）
+瞇,1,target_coverage,⿰,目 迷,component-trajectory:迷|迷|right|⿰|9（目标集中出现4次）；component-context:迷|迷|right|⿰（目标集中出现4次）；component-identity:迷（目标集中出现4次）；stroke-signature:→↗↘↓↙↓↘↓|3|tall|n（目标集中出现1次）
+耘,1,target_coverage,⿰,云 耒,component-trajectory:云|云|right|⿰|4（目标集中出现5次）；component-context:云|云|right|⿰（目标集中出现5次）；stroke-signature:↙↓↙↘→|2|balanced|n（目标集中出现2次）
+棄,1,target_coverage,⿳,亠 厶 廾 木,component-trajectory:木|木|bottom|⿳|4（目标集中出现4次）；component-context:木|木|bottom|⿳（目标集中出现4次）；component-trajectory:廾|廾|middle|⿳|4（目标集中出现1次）；component-context:廾|廾|middle|⿳（目标集中出现1次）
+檻,1,target_coverage,⿰,木 監,component-trajectory:監|監|right|⿰|14（目标集中出现5次）；component-context:監|監|right|⿰（目标集中出现5次）；stroke-signature:↓↘↓↘|1|tall|n（目标集中出现2次）
+龟,1,target_coverage,⿱,⺈ 电,component-trajectory:电|电|bottom|⿱|5（目标集中出现4次）；component-context:电|电|bottom|⿱（目标集中出现4次）；component-identity:电（目标集中出现4次）
+垂,1,target_coverage,⿻,卄 士,component-trajectory:士|士|bottom|⿱|3（目标集中出现2次）；component-trajectory:卄|卄|overlap-secondary|⿻|3（目标集中出现2次）；component-identity:卄（目标集中出现4次）；component-context:士|士|bottom|⿱（目标集中出现2次）
+诧,1,target_coverage,⿰,宅 讠,component-trajectory:宅|宅|right|⿰|6（目标集中出现4次）；component-context:宅|宅|right|⿰（目标集中出现4次）；component-identity:宅（目标集中出现4次）
+侷,1,target_coverage,⿰,亻 局,component-trajectory:局|局|right|⿰|7（目标集中出现4次）；component-context:局|局|right|⿰（目标集中出现4次）；component-identity:局（目标集中出现4次）
+偾,1,target_coverage,⿰,亻 贲,component-trajectory:贲|贲|right|⿰|9（目标集中出现4次）；component-context:贲|贲|right|⿰（目标集中出现4次）；component-identity:贲（目标集中出现4次）
+埽,1,target_coverage,⿰,土 帚,component-trajectory:帚|帚|right|⿰|8（目标集中出现4次）；component-context:帚|帚|right|⿰（目标集中出现4次）；component-identity:帚（目标集中出现4次）
+傢,1,target_coverage,⿰,亻 家,component-trajectory:家|家|right|⿰|10（目标集中出现4次）；component-context:家|家|right|⿰（目标集中出现4次）；component-identity:家（目标集中出现4次）
+嗳,1,target_coverage,⿰,口 爱,component-trajectory:爱|爱|right|⿰|10（目标集中出现4次）；component-context:爱|爱|right|⿰（目标集中出现4次）；component-identity:爱（目标集中出现4次）
+嘣,1,target_coverage,⿰,口 崩,component-trajectory:崩|崩|right|⿰|11（目标集中出现4次）；component-context:崩|崩|right|⿰（目标集中出现4次）；component-identity:崩（目标集中出现4次）
+嘩,1,target_coverage,⿰,口 華,component-trajectory:華|華|right|⿰|11（目标集中出现4次）；component-context:華|華|right|⿰（目标集中出现4次）；component-identity:華（目标集中出现4次）
+境,1,target_coverage,⿰,土 竟,component-trajectory:竟|竟|right|⿰|11（目标集中出现4次）；component-context:竟|竟|right|⿰（目标集中出现4次）；component-identity:竟（目标集中出现4次）
+幗,1,target_coverage,⿰,國 巾,component-trajectory:國|國|right|⿰|11（目标集中出现4次）；component-context:國|國|right|⿰（目标集中出现4次）；component-identity:國（目标集中出现4次）
+慴,1,target_coverage,⿰,忄 習,component-trajectory:習|習|right|⿰|11（目标集中出现4次）；component-context:習|習|right|⿰（目标集中出现4次）；component-identity:習（目标集中出现4次）
+谰,1,target_coverage,⿰,讠 阑,component-trajectory:阑|阑|right|⿰|12（目标集中出现4次）；component-context:阑|阑|right|⿰（目标集中出现4次）；component-identity:阑（目标集中出现4次）
+噦,1,target_coverage,⿰,口 歲,component-trajectory:歲|歲|right|⿰|13（目标集中出现4次）；component-context:歲|歲|right|⿰（目标集中出现4次）；component-identity:歲（目标集中出现4次）
+鄒,1,target_coverage,⿰,芻 阝,component-identity:芻（目标集中出现7次）；component-trajectory:芻|芻|left|⿰|10（目标集中出现3次）；component-context:芻|芻|left|⿰（目标集中出现3次）；stroke-signature:↘↓↘↙↘→|5|balanced|n（目标集中出现1次）
+郤,1,target_coverage,⿰,谷 阝,component-trajectory:谷|谷|left|⿰|7（目标集中出现5次）；component-context:谷|谷|left|⿰（目标集中出现5次）；stroke-signature:↗→↓↙↘↓←↖|5|tall|n（目标集中出现1次）
+惢,1,target_coverage,⿱,心,component-trajectory:心|心|right|⿰|4（目标集中出现4次）；component-context:心|心|right|⿰（目标集中出现4次）；component-trajectory:心|心|left|⿰|4（目标集中出现1次）；component-context:心|心|left|⿰（目标集中出现1次）
+楙,1,target_coverage,⿲,木 矛,component-trajectory:木|木|right|⿲|4（目标集中出现2次）；component-trajectory:木|木|left|⿲|4（目标集中出现2次）；component-context:木|木|right|⿲（目标集中出现2次）；component-context:木|木|left|⿲（目标集中出现2次）
+匀,1,target_coverage,⿻,冫 勹,component-trajectory:勹|勹|overlap-primary|⿻|2（目标集中出现3次）；component-context:勹|勹|overlap-primary|⿻（目标集中出现3次）；component-trajectory:冫|冫|overlap-secondary|⿻|2（目标集中出现2次）；component-context:冫|冫|overlap-secondary|⿻（目标集中出现2次）
+出,1,target_coverage,⿱,凵 屮,component-trajectory:屮|屮|top|⿱|3（目标集中出现3次）；component-context:屮|屮|top|⿱（目标集中出现3次）；component-trajectory:凵|凵|bottom|⿱|2（目标集中出现2次）；component-context:凵|凵|bottom|⿱（目标集中出现2次）
+阮,1,target_coverage,⿰,元 阝,component-trajectory:元|元|right|⿰|4（目标集中出现5次）；component-context:元|元|right|⿰（目标集中出现5次）
+伽,1,target_coverage,⿰,亻 加,component-trajectory:加|加|right|⿰|5（目标集中出现5次）；component-context:加|加|right|⿰（目标集中出现5次）
+見,1,target_coverage,⿱,儿 目,component-trajectory:目|目|top|⿱|5（目标集中出现5次）；component-context:目|目|top|⿱（目标集中出现5次）
+佬,1,target_coverage,⿰,亻 老,component-trajectory:老|老|right|⿰|6（目标集中出现5次）；component-context:老|老|right|⿰（目标集中出现5次）
+命,1,target_coverage,⿹,令 口,component-trajectory:口|口|inside|⿹|3（目标集中出现4次）；component-context:口|口|inside|⿹（目标集中出现4次）；component-trajectory:令|令|surround-top-right|⿹|5（目标集中出现1次）；component-context:令|令|surround-top-right|⿹（目标集中出现1次）
+响,1,target_coverage,⿰,口 向,component-trajectory:向|向|right|⿰|6（目标集中出现5次）；component-context:向|向|right|⿰（目标集中出现5次）
+尜,1,target_coverage,⿳,大 小,component-trajectory:小|小|bottom|⿳|3（目标集中出现2次）；component-trajectory:大|大|middle|⿳|3（目标集中出现2次）；component-context:小|小|bottom|⿳（目标集中出现2次）；component-context:大|大|middle|⿳（目标集中出现2次）
+倪,1,target_coverage,⿰,亻 兒,component-trajectory:兒|兒|right|⿰|8（目标集中出现5次）；component-context:兒|兒|right|⿰（目标集中出现5次）
+奢,1,target_coverage,⿱,大 者,component-trajectory:者|者|bottom|⿱|8（目标集中出现5次）；component-context:者|者|bottom|⿱（目标集中出现5次）
+掰,1,target_coverage,⿲,分 手,component-trajectory:手|手|right|⿲|4（目标集中出现2次）；component-trajectory:手|手|left|⿲|4（目标集中出现2次）；component-context:手|手|right|⿲（目标集中出现2次）；component-context:手|手|left|⿲（目标集中出现2次）
+氂,1,target_coverage,⿱,厂 攵 未 毛,component-trajectory:毛|毛|inside|⿸|4（目标集中出现3次）；component-context:毛|毛|inside|⿸（目标集中出现3次）；component-trajectory:未|未|left|⿰|5（目标集中出现2次）；component-context:未|未|left|⿰（目标集中出现2次）
+畿,1,target_coverage,⿹,戈 田,component-trajectory:戈|戈|bottom|⿱|4（目标集中出现3次）；component-context:戈|戈|bottom|⿱（目标集中出现3次）；component-trajectory:田|田|inside|⿹|5（目标集中出现2次）；component-context:田|田|inside|⿹（目标集中出现2次）
+瞢,1,target_coverage,⿱,冖 目 罒 艹,component-trajectory:冖|冖|bottom|⿳|2（目标集中出现3次）；component-context:冖|冖|bottom|⿳（目标集中出现3次）；component-trajectory:罒|罒|middle|⿳|5（目标集中出现2次）；component-context:罒|罒|middle|⿳（目标集中出现2次）
+觱,1,target_coverage,⿱,咸 角,component-trajectory:角|角|bottom|⿱|7（目标集中出现3次）；component-context:角|角|bottom|⿱（目标集中出现3次）；component-trajectory:咸|咸|top|⿱|9（目标集中出现2次）；component-context:咸|咸|top|⿱（目标集中出现2次）
+鑫,1,target_coverage,⿱,金,component-trajectory:金|金|right|⿰|8（目标集中出现3次）；component-context:金|金|right|⿰（目标集中出现3次）；component-trajectory:金|金|top|⿱|8（目标集中出现1次）；component-trajectory:金|金|left|⿰|8（目标集中出现1次）
+㢟,1,target_coverage,⿺,廴 止,component-trajectory:廴|廴|surround-bottom-left|⿺|2（目标集中出现3次）；component-context:廴|廴|surround-bottom-left|⿺（目标集中出现3次）；component-identity:廴（目标集中出现3次）；component-trajectory:止|止|inside|⿺|3（目标集中出现1次）
+縱,1,target_coverage,⿰,從 糹,component-trajectory:從|從|right|⿰|11（目标集中出现3次）；component-identity:從（目标集中出现6次）；component-context:從|從|right|⿰（目标集中出现3次）；stroke-signature:↗↘|1|balanced|n（目标集中出现5次）
+傷,1,target_coverage,⿰,亻 昜,component-context:昜|昜|bottom|⿱（目标集中出现6次）；component-trajectory:昜|昜|bottom|⿱|9（目标集中出现4次）
+讯,1,target_coverage,⿰,卂 讠,component-identity:卂（目标集中出现7次）；component-trajectory:卂|卂|right|⿰|3（目标集中出现3次）；component-context:卂|卂|right|⿰（目标集中出现3次）
+搠,1,target_coverage,⿰,扌 朔,component-trajectory:朔|朔|right|⿰|10（目标集中出现3次）；component-identity:朔（目标集中出现6次）；component-context:朔|朔|right|⿰（目标集中出现3次）；stroke-signature:↗→↓↙↖|3|tall|n（目标集中出现4次）
+乶,1,target_coverage,⿱,乙 甫,component-context:乙|乙|bottom|⿱（目标集中出现4次）；component-trajectory:甫|甫|top|⿱|7（目标集中出现3次）；component-context:甫|甫|top|⿱（目标集中出现3次）；stroke-signature:→↙↘→↑|4|wide|n（目标集中出现1次）
+擎,1,target_coverage,⿱,手 敬,component-context:敬|敬|top|⿱（目标集中出现4次）；component-trajectory:敬|敬|top|⿱|12（目标集中出现3次）；component-identity:敬（目标集中出现5次）；stroke-signature:←↙←↓|3|balanced|n（目标集中出现1次）
+魆,1,target_coverage,⿺,戉 鬼,component-trajectory:鬼|鬼|surround-bottom-left|⿺|10（目标集中出现3次）；component-trajectory:戉|戉|inside|⿺|5（目标集中出现2次）；component-identity:戉（目标集中出现4次）；component-context:戉|戉|inside|⿺（目标集中出现2次）
+赓,1,target_coverage,⿸,庚 贝,component-trajectory:贝|贝|inside|⿸|4（目标集中出现3次）；component-context:贝|贝|inside|⿸（目标集中出现3次）；component-identity:庚（目标集中出现3次）；component-trajectory:庚|庚|surround-top-left|⿸|8（目标集中出现1次）
+韰,1,target_coverage,⿱,又 歺 韭,component-trajectory:歺|歺|left|⿰|5（目标集中出现3次）；component-context:歺|歺|left|⿰（目标集中出现3次）；component-identity:歺（目标集中出现3次）；component-trajectory:韭|韭|bottom|⿱|9（目标集中出现1次）
+婭,1,target_coverage,⿰,亞 女,component-trajectory:亞|亞|right|⿰|8（目标集中出现3次）；component-identity:亞（目标集中出现6次）；component-context:亞|亞|right|⿰（目标集中出现3次）；stroke-signature:↘↓↘→↘↓↙|4|tall|n（目标集中出现2次）
+臢,1,target_coverage,⿰,⺼ 贊,component-context:贊|贊|right|⿰（目标集中出现4次）；component-trajectory:贊|贊|right|⿰|19（目标集中出现3次）；component-identity:贊（目标集中出现4次）；stroke-signature:↓→↗|2|balanced|n（目标集中出现4次）
+儸,1,target_coverage,⿰,亻 羅,component-trajectory:羅|羅|right|⿰|19（目标集中出现3次）；component-identity:羅（目标集中出现6次）；component-context:羅|羅|right|⿰（目标集中出现3次）；stroke-signature:↘↓↙↘→|1|tall|n（目标集中出现2次）
+斃,1,target_coverage,⿱,敝 死,component-trajectory:死|死|bottom|⿱|6（目标集中出现3次）；component-identity:死（目标集中出现5次）；component-context:死|死|bottom|⿱（目标集中出现3次）；stroke-signature:↘↓↙↓↙|2|tall|n（目标集中出现6次）
+轅,1,target_coverage,⿰,袁 車,component-trajectory:袁|袁|right|⿰|10（目标集中出现3次）；component-identity:袁（目标集中出现5次）；component-context:袁|袁|right|⿰（目标集中出现3次）；stroke-signature:↓↗|1|balanced|n（目标集中出现6次）
+几,1,target_coverage,⿰,丿 乙,component-context:丿|丿|left|⿰（目标集中出现6次）；component-context:乙|乙|right|⿰（目标集中出现4次）；stroke-signature:→↓→↗↑|4|balanced|n（目标集中出现2次）
+齎,1,target_coverage,⿵,貝 齊,component-trajectory:齊|齊|surround-top|⿵|14（目标集中出现3次）；component-context:齊|齊|surround-top|⿵（目标集中出现3次）；stroke-signature:↘↓↙↓|2|tall|n（目标集中出现10次）；component-trajectory:貝|貝|inside|⿵|7（目标集中出现1次）
+泄,1,target_coverage,⿰,世 氵,component-trajectory:世|世|right|⿰|5（目标集中出现3次）；component-identity:世（目标集中出现6次）；component-context:世|世|right|⿰（目标集中出现3次）
+俅,1,target_coverage,⿰,亻 求,component-trajectory:求|求|right|⿰|7（目标集中出现3次）；component-identity:求（目标集中出现6次）；component-context:求|求|right|⿰（目标集中出现3次）
+畝,1,target_coverage,⿰,久 亩,component-identity:久（目标集中出现5次）；component-trajectory:久|久|right|⿰|3（目标集中出现2次）；component-context:久|久|right|⿰（目标集中出现2次）；component-trajectory:亩|亩|left|⿰|7（目标集中出现1次）
+谀,1,target_coverage,⿰,臾 讠,component-trajectory:臾|臾|right|⿰|8（目标集中出现3次）；component-identity:臾（目标集中出现6次）；component-context:臾|臾|right|⿰（目标集中出现3次）
+堙,1,target_coverage,⿰,土 垔,component-trajectory:垔|垔|right|⿰|9（目标集中出现3次）；component-identity:垔（目标集中出现6次）；component-context:垔|垔|right|⿰（目标集中出现3次）
+滥,1,target_coverage,⿰,氵 监,component-trajectory:监|监|right|⿰|10（目标集中出现3次）；component-identity:监（目标集中出现6次）；component-context:监|监|right|⿰（目标集中出现3次）
+懈,1,target_coverage,⿰,忄 解,component-trajectory:解|解|right|⿰|13（目标集中出现3次）；component-identity:解（目标集中出现6次）；component-context:解|解|right|⿰（目标集中出现3次）
+櫪,1,target_coverage,⿰,木 歷,component-trajectory:歷|歷|right|⿰|16（目标集中出现3次）；component-identity:歷（目标集中出现5次）；component-context:歷|歷|right|⿰（目标集中出现3次）；stroke-signature:←↙←↙|2|wide|n（目标集中出现4次）
+襁,1,target_coverage,⿰,强 衤,component-trajectory:强|强|right|⿰|12（目标集中出现3次）；component-context:强|强|right|⿰（目标集中出现3次）；component-identity:强（目标集中出现4次）；stroke-signature:↘↓↘→↘↓↙←↖|5|tall|n（目标集中出现6次）
+聚,1,target_coverage,⿱,乑 取,component-trajectory:取|取|top|⿱|8（目标集中出现2次）；component-trajectory:乑|乑|bottom|⿱|6（目标集中出现2次）；component-context:取|取|top|⿱（目标集中出现2次）；component-context:乑|乑|bottom|⿱（目标集中出现2次）
+磐,1,target_coverage,⿱,石 般,component-trajectory:般|般|top|⿱|10（目标集中出现3次）；component-identity:般（目标集中出现5次）；component-context:般|般|top|⿱（目标集中出现3次）；stroke-signature:→↓→|2|balanced|n（目标集中出现3次）
+覷,1,target_coverage,⿰,虚 見,component-identity:虚（目标集中出现6次）；component-context:虚|虚|left|⿰（目标集中出现3次）；component-trajectory:虚|虚|left|⿰|11（目标集中出现2次）；stroke-signature:↖←↙|1|wide|n（目标集中出现6次）
+鸦,1,target_coverage,⿰,牙 鸟,component-trajectory:牙|牙|left|⿰|4（目标集中出现4次）；component-context:牙|牙|left|⿰（目标集中出现4次）；stroke-signature:↓↘→↘↓↙↖|4|balanced|n（目标集中出现8次）
+翹,1,target_coverage,⿺,堯 羽,component-trajectory:羽|羽|inside|⿺|6（目标集中出现3次）；component-context:羽|羽|inside|⿺（目标集中出现3次）；component-trajectory:堯|堯|surround-bottom-left|⿺|12（目标集中出现1次）；component-context:堯|堯|surround-bottom-left|⿺（目标集中出现1次）
+鳍,1,target_coverage,⿰,耆 鱼,component-trajectory:耆|耆|right|⿰|10（目标集中出现3次）；component-context:耆|耆|right|⿰（目标集中出现3次）；component-identity:耆（目标集中出现4次）；stroke-signature:↗→↘↙|1|balanced|n（目标集中出现5次）
+倏,1,target_coverage,⿸,攸 犬,component-trajectory:犬|犬|inside|⿸|4（目标集中出现3次）；component-context:犬|犬|inside|⿸（目标集中出现3次）；component-context:攸|攸|surround-top-left|⿸（目标集中出现2次）；component-trajectory:攸|攸|surround-top-left|⿸|6（目标集中出现1次）
+偌,1,target_coverage,⿰,亻 若,component-context:若|若|right|⿰（目标集中出现5次）；component-trajectory:若|若|right|⿰|8（目标集中出现4次）
+秝,1,target_coverage,⿰,禾,component-context:禾|禾|right|⿰（目标集中出现5次）；component-trajectory:禾|禾|right|⿰|5（目标集中出现4次）
+铋,1,target_coverage,⿰,必 钅,component-trajectory:必|必|right|⿰|5（目标集中出现4次）；component-context:必|必|right|⿰（目标集中出现4次）；stroke-signature:↓↘→↑|1|balanced|n（目标集中出现7次）
+萨,1,target_coverage,⿱,产 艹 阝,component-trajectory:产|产|right|⿰|6（目标集中出现3次）；component-identity:产（目标集中出现5次）；component-context:产|产|right|⿰（目标集中出现3次）；stroke-signature:→↓↙↓↘↓←|3|balanced|n（目标集中出现1次）
+鬆,1,target_coverage,⿱,松 髟,component-trajectory:松|松|bottom|⿱|8（目标集中出现3次）；component-identity:松（目标集中出现5次）；component-context:松|松|bottom|⿱（目标集中出现3次）；stroke-signature:←↙↓→|1|wide|n（目标集中出现1次）
+鼐,1,target_coverage,⿱,乃 鼎,component-trajectory:乃|乃|top|⿱|2（目标集中出现3次）；component-context:乃|乃|top|⿱（目标集中出现3次）；component-trajectory:鼎|鼎|bottom|⿱|12（目标集中出现1次）；component-context:鼎|鼎|bottom|⿱（目标集中出现1次）
+潑,1,target_coverage,⿰,氵 發,component-trajectory:發|發|right|⿰|12（目标集中出现3次）；component-context:發|發|right|⿰（目标集中出现3次）；component-identity:發（目标集中出现4次）；stroke-signature:↗→↓→|2|balanced|n（目标集中出现3次）
+藝,1,target_coverage,⿱,云 埶 艹,component-trajectory:埶|埶|top|⿱|11（目标集中出现3次）；component-context:埶|埶|top|⿱（目标集中出现3次）；component-identity:埶（目标集中出现4次）；stroke-signature:→↘↓↘→↗↑|3|balanced|n（目标集中出现5次）
+娠,1,target_coverage,⿰,女 辰,component-trajectory:辰|辰|right|⿰|7（目标集中出现4次）；component-context:辰|辰|right|⿰（目标集中出现4次）；stroke-signature:↓↙↓|1|balanced|n（目标集中出现6次）
+体,1,target_coverage,⿰,亻 本,component-trajectory:本|本|right|⿰|5（目标集中出现3次）；component-identity:本（目标集中出现5次）；component-context:本|本|right|⿰（目标集中出现3次）
+吮,1,target_coverage,⿰,允 口,component-trajectory:允|允|right|⿰|4（目标集中出现3次）；component-identity:允（目标集中出现5次）；component-context:允|允|right|⿰（目标集中出现3次）
+典,1,target_coverage,⿱,八 曲,component-trajectory:曲|曲|top|⿱|6（目标集中出现3次）；component-identity:曲（目标集中出现5次）；component-context:曲|曲|top|⿱（目标集中出现3次）
+怵,1,target_coverage,⿰,忄 术,component-trajectory:术|术|right|⿰|5（目标集中出现3次）；component-identity:术（目标集中出现5次）；component-context:术|术|right|⿰（目标集中出现3次）
+咦,1,target_coverage,⿰,口 夷,component-trajectory:夷|夷|right|⿰|6（目标集中出现3次）；component-identity:夷（目标集中出现5次）；component-context:夷|夷|right|⿰（目标集中出现3次）
+陟,1,target_coverage,⿰,步 阝,component-trajectory:步|步|right|⿰|7（目标集中出现3次）；component-identity:步（目标集中出现5次）；component-context:步|步|right|⿰（目标集中出现3次）
+唅,1,target_coverage,⿰,口 含,component-trajectory:含|含|right|⿰|7（目标集中出现3次）；component-identity:含（目标集中出现5次）；component-context:含|含|right|⿰（目标集中出现3次）
+悃,1,target_coverage,⿰,困 忄,component-trajectory:困|困|right|⿰|7（目标集中出现3次）；component-identity:困（目标集中出现5次）；component-context:困|困|right|⿰（目标集中出现3次）
+傕,1,target_coverage,⿰,亻 隺,component-trajectory:隺|隺|right|⿰|10（目标集中出现3次）；component-identity:隺（目标集中出现5次）；component-context:隺|隺|right|⿰（目标集中出现3次）
+揆,1,target_coverage,⿰,扌 癸,component-trajectory:癸|癸|right|⿰|9（目标集中出现3次）；component-identity:癸（目标集中出现5次）；component-context:癸|癸|right|⿰（目标集中出现3次）
+斌,1,target_coverage,⿰,文 武,component-trajectory:武|武|right|⿰|8（目标集中出现3次）；component-identity:武（目标集中出现5次）；component-context:武|武|right|⿰（目标集中出现3次）
+椥,1,target_coverage,⿰,木 知,component-trajectory:知|知|right|⿰|8（目标集中出现3次）；component-identity:知（目标集中出现5次）；component-context:知|知|right|⿰（目标集中出现3次）
+嗓,1,target_coverage,⿰,口 桑,component-trajectory:桑|桑|right|⿰|10（目标集中出现3次）；component-identity:桑（目标集中出现5次）；component-context:桑|桑|right|⿰（目标集中出现3次）
+塬,1,target_coverage,⿰,原 土,component-trajectory:原|原|right|⿰|10（目标集中出现3次）；component-identity:原（目标集中出现5次）；component-context:原|原|right|⿰（目标集中出现3次）
+嘶,1,target_coverage,⿰,口 斯,component-trajectory:斯|斯|right|⿰|12（目标集中出现3次）；component-identity:斯（目标集中出现5次）；component-context:斯|斯|right|⿰（目标集中出现3次）
+凝,1,target_coverage,⿰,冫 疑,component-trajectory:疑|疑|right|⿰|14（目标集中出现3次）；component-identity:疑（目标集中出现5次）；component-context:疑|疑|right|⿰（目标集中出现3次）
+懒,1,target_coverage,⿰,忄 赖,component-trajectory:赖|赖|right|⿰|13（目标集中出现3次）；component-identity:赖（目标集中出现5次）；component-context:赖|赖|right|⿰（目标集中出现3次）
+孀,1,target_coverage,⿰,女 霜,component-trajectory:霜|霜|right|⿰|17（目标集中出现3次）；component-identity:霜（目标集中出现5次）；component-context:霜|霜|right|⿰（目标集中出现3次）
+壟,1,target_coverage,⿱,土 龍,component-trajectory:龍|龍|top|⿱|16（目标集中出现4次）；component-context:龍|龍|top|⿱（目标集中出现4次）；stroke-signature:↘↓→↓↙|3|balanced|n（目标集中出现5次）
+鹧,1,target_coverage,⿰,庶 鸟,component-identity:庶（目标集中出现5次）；component-trajectory:庶|庶|left|⿰|11（目标集中出现2次）；stroke-signature:↓↘→↘↓↙↖|5|balanced|n（目标集中出现15次）；component-context:庶|庶|left|⿰（目标集中出现2次）
+甚,1,target_coverage,⿱,匹 甘,component-trajectory:甘|甘|top|⿱|5（目标集中出现3次）；component-context:甘|甘|top|⿱（目标集中出现3次）；component-trajectory:匹|匹|bottom|⿱|4（目标集中出现1次）；component-context:匹|匹|bottom|⿱（目标集中出现1次）
+夔,1,target_coverage,⿳,夊 巳 止 自,component-trajectory:自|自|middle|⿲|6（目标集中出现1次）；component-trajectory:止|止|left|⿲|4（目标集中出现1次）；component-trajectory:巳|巳|right|⿲|3（目标集中出现1次）；component-trajectory:夊|夊|bottom|⿳|3（目标集中出现1次）
+淆,1,target_coverage,⿰,氵 肴,component-trajectory:肴|肴|right|⿰|8（目标集中出现3次）；component-context:肴|肴|right|⿰（目标集中出现3次）；component-identity:肴（目标集中出现4次）；stroke-signature:↗→↓←↖|2|tall|n（目标集中出现3次）
+熄,1,target_coverage,⿰,息 火,component-trajectory:息|息|right|⿰|10（目标集中出现3次）；component-context:息|息|right|⿰（目标集中出现3次）；component-identity:息（目标集中出现4次）；stroke-signature:↘↓↘→↗↖|2|balanced|n（目标集中出现3次）
+凛,1,target_coverage,⿰,冫 禀,component-trajectory:禀|禀|right|⿰|13（目标集中出现3次）；component-context:禀|禀|right|⿰（目标集中出现3次）；component-identity:禀（目标集中出现4次）；stroke-signature:↘↓←↖|1|balanced|n（目标集中出现3次）
+鲫,1,target_coverage,⿰,即 鱼,component-trajectory:即|即|right|⿰|7（目标集中出现3次）；component-context:即|即|right|⿰（目标集中出现3次）；component-identity:即（目标集中出现4次）；stroke-signature:↗→↘↓↙↖|4|tall|n（目标集中出现3次）
+優,1,target_coverage,⿰,亻 憂,component-trajectory:憂|憂|right|⿰|15（目标集中出现3次）；component-context:憂|憂|right|⿰（目标集中出现3次）；component-identity:憂（目标集中出现3次）；stroke-signature:↘→↗↑↖|2|wide|n（目标集中出现7次）
+镩,1,target_coverage,⿰,窜 钅,component-trajectory:窜|窜|right|⿰|12（目标集中出现3次）；component-context:窜|窜|right|⿰（目标集中出现3次）；component-identity:窜（目标集中出现3次）；stroke-signature:↗→↘↓|2|wide|n（目标集中出现7次）
+椰,1,target_coverage,⿰,木 耶,component-trajectory:耶|耶|right|⿰|8（目标集中出现3次）；component-context:耶|耶|right|⿰（目标集中出现3次）；component-identity:耶（目标集中出现4次）；stroke-signature:→↓↘↓←|4|tall|n（目标集中出现2次）
+隡,1,target_coverage,⿰,産 阝,component-trajectory:産|産|right|⿰|11（目标集中出现3次）；component-context:産|産|right|⿰（目标集中出现3次）；component-identity:産（目标集中出现4次）；stroke-signature:→↘↙↓↘↓↙←|5|tall|n（目标集中出现2次）
+㧜,1,target_coverage,⿰,匝 扌,component-trajectory:匝|匝|right|⿰|5（目标集中出现3次）；component-context:匝|匝|right|⿰（目标集中出现3次）；component-identity:匝（目标集中出现3次）；stroke-signature:↓↘→|1|balanced|n（目标集中出现6次）
+羹,1,target_coverage,⿱,美 羔,component-identity:羔（目标集中出现5次）；component-identity:美（目标集中出现3次）；component-trajectory:羔|羔|top|⿱|10（目标集中出现1次）；component-trajectory:美|美|bottom|⿱|9（目标集中出现1次）
+網,1,target_coverage,⿰,糹 罔,component-trajectory:罔|罔|right|⿰|8（目标集中出现3次）；component-context:罔|罔|right|⿰（目标集中出现3次）；component-identity:罔（目标集中出现4次）；stroke-signature:↙↓↘→|1|balanced|n（目标集中出现1次）
+蝽,1,target_coverage,⿰,春 虫,component-trajectory:春|春|right|⿰|9（目标集中出现3次）；component-context:春|春|right|⿰（目标集中出现3次）；component-identity:春（目标集中出现4次）；stroke-signature:→↓↙↖|4|balanced|h（目标集中出现1次）
+宄,1,target_coverage,⿱,九 宀,component-trajectory:九|九|bottom|⿱|2（目标集中出现4次）；component-context:九|九|bottom|⿱（目标集中出现4次）；stroke-signature:→↘↓↘→↗↑|5|balanced|n（目标集中出现2次）
+籠,1,target_coverage,⿱,⺮ 龍,component-trajectory:龍|龍|bottom|⿱|16（目标集中出现4次）；component-context:龍|龍|bottom|⿱（目标集中出现4次）；stroke-signature:↘↓↘→↘↓↙|4|balanced|n（目标集中出现2次）
+鼷,1,target_coverage,⿰,奚 鼠,component-trajectory:奚|奚|right|⿰|10（目标集中出现4次）；component-context:奚|奚|right|⿰（目标集中出现4次）；stroke-signature:↓↙↘→|1|balanced|n（目标集中出现2次）
+鱻,1,target_coverage,⿱,魚,component-trajectory:魚|魚|top|⿱|11（目标集中出现2次）；component-trajectory:魚|魚|right|⿰|11（目标集中出现2次）；component-context:魚|魚|top|⿱（目标集中出现2次）；component-context:魚|魚|right|⿰（目标集中出现2次）
+纜,1,target_coverage,⿰,糹 覽,component-trajectory:覽|覽|right|⿰|21（目标集中出现3次）；component-context:覽|覽|right|⿰（目标集中出现3次）；component-identity:覽（目标集中出现3次）；stroke-signature:→↘↙↓|2|wide|n（目标集中出现5次）
+似,1,target_coverage,⿰,亻 以,component-trajectory:以|以|right|⿰|4（目标集中出现3次）；component-context:以|以|right|⿰（目标集中出现3次）；component-identity:以（目标集中出现4次）
+聿,1,target_coverage,⿱,肀,component-trajectory:肀|肀|top|⿱|4（目标集中出现3次）；component-context:肀|肀|top|⿱（目标集中出现3次）；component-identity:肀（目标集中出现4次）
+呜,1,target_coverage,⿰,乌 口,component-trajectory:乌|乌|right|⿰|4（目标集中出现3次）；component-context:乌|乌|right|⿰（目标集中出现3次）；component-identity:乌（目标集中出现4次）
+彻,1,target_coverage,⿰,切 彳,component-trajectory:切|切|right|⿰|4（目标集中出现3次）；component-context:切|切|right|⿰（目标集中出现3次）；component-identity:切（目标集中出现4次）
+忭,1,target_coverage,⿰,卞 忄,component-trajectory:卞|卞|right|⿰|4（目标集中出现3次）；component-context:卞|卞|right|⿰（目标集中出现3次）；component-identity:卞（目标集中出现4次）
+呼,1,target_coverage,⿰,乎 口,component-trajectory:乎|乎|right|⿰|5（目标集中出现3次）；component-context:乎|乎|right|⿰（目标集中出现3次）；component-identity:乎（目标集中出现4次）
+浉,1,target_coverage,⿰,师 氵,component-trajectory:师|师|right|⿰|6（目标集中出现3次）；component-context:师|师|right|⿰（目标集中出现3次）；component-identity:师（目标集中出现4次）
+绑,1,target_coverage,⿰,纟 邦,component-trajectory:邦|邦|right|⿰|6（目标集中出现3次）；component-context:邦|邦|right|⿰（目标集中出现3次）；component-identity:邦（目标集中出现4次）
+涧,1,target_coverage,⿰,氵 间,component-trajectory:间|间|right|⿰|7（目标集中出现3次）；component-context:间|间|right|⿰（目标集中出现3次）；component-identity:间（目标集中出现4次）
+砺,1,target_coverage,⿰,厉 石,component-trajectory:厉|厉|right|⿰|5（目标集中出现3次）；component-context:厉|厉|right|⿰（目标集中出现3次）；component-identity:厉（目标集中出现4次）
+唼,1,target_coverage,⿰,口 妾,component-trajectory:妾|妾|right|⿰|8（目标集中出现3次）；component-context:妾|妾|right|⿰（目标集中出现3次）；component-identity:妾（目标集中出现4次）
+捱,1,target_coverage,⿰,厓 扌,component-trajectory:厓|厓|right|⿰|8（目标集中出现3次）；component-context:厓|厓|right|⿰（目标集中出现3次）；component-identity:厓（目标集中出现4次）
+授,1,target_coverage,⿰,受 扌,component-trajectory:受|受|right|⿰|8（目标集中出现3次）；component-context:受|受|right|⿰（目标集中出现3次）；component-identity:受（目标集中出现4次）
+湴,1,target_coverage,⿰,並 氵,component-trajectory:並|並|right|⿰|8（目标集中出现3次）；component-context:並|並|right|⿰（目标集中出现3次）；component-identity:並（目标集中出现4次）
+傩,1,target_coverage,⿰,亻 难,component-trajectory:难|难|right|⿰|10（目标集中出现3次）；component-context:难|难|right|⿰（目标集中出现3次）；component-identity:难（目标集中出现4次）
+谢,1,target_coverage,⿰,射 讠,component-trajectory:射|射|right|⿰|10（目标集中出现3次）；component-context:射|射|right|⿰（目标集中出现3次）；component-identity:射（目标集中出现4次）
+兢,1,target_coverage,⿰,克,component-trajectory:克|克|left|⿰|7（目标集中出现2次）；component-identity:克（目标集中出现4次）；component-context:克|克|left|⿰（目标集中出现2次）；component-trajectory:克|克|right|⿰|7（目标集中出现1次）
+影,1,target_coverage,⿰,彡 景,component-trajectory:景|景|left|⿰|12（目标集中出现3次）；component-context:景|景|left|⿰（目标集中出现3次）；component-identity:景（目标集中出现4次）
+撒,1,target_coverage,⿰,扌 散,component-trajectory:散|散|right|⿰|12（目标集中出现3次）；component-context:散|散|right|⿰（目标集中出现3次）；component-identity:散（目标集中出现4次）
+撰,1,target_coverage,⿰,巽 扌,component-trajectory:巽|巽|right|⿰|12（目标集中出现3次）；component-context:巽|巽|right|⿰（目标集中出现3次）；component-identity:巽（目标集中出现4次）
+墻,1,target_coverage,⿰,嗇 土,component-trajectory:嗇|嗇|right|⿰|13（目标集中出现3次）；component-context:嗇|嗇|right|⿰（目标集中出现3次）；component-identity:嗇（目标集中出现4次）
+擂,1,target_coverage,⿰,扌 雷,component-trajectory:雷|雷|right|⿰|13（目标集中出现3次）；component-context:雷|雷|right|⿰（目标集中出现3次）；component-identity:雷（目标集中出现4次）
+踽,1,target_coverage,⿰,禹 足,component-trajectory:禹|禹|right|⿰|9（目标集中出现3次）；component-context:禹|禹|right|⿰（目标集中出现3次）；component-identity:禹（目标集中出现4次）
+儺,1,target_coverage,⿰,亻 難,component-trajectory:難|難|right|⿰|19（目标集中出现3次）；component-context:難|難|right|⿰（目标集中出现3次）；component-identity:難（目标集中出现4次）
+櫻,1,target_coverage,⿰,嬰 木,component-trajectory:嬰|嬰|right|⿰|17（目标集中出现3次）；component-context:嬰|嬰|right|⿰（目标集中出现3次）；component-identity:嬰（目标集中出现4次）
+汞,1,target_coverage,⿱,工 水,component-trajectory:工|工|top|⿱|3（目标集中出现4次）；component-context:工|工|top|⿱（目标集中出现4次）；stroke-signature:↖←↙|1|balanced|n（目标集中出现1次）
+怔,1,target_coverage,⿰,忄 正,component-trajectory:正|正|right|⿰|5（目标集中出现4次）；component-context:正|正|right|⿰（目标集中出现4次）；stroke-signature:↘→↘|2|balanced|n（目标集中出现1次）
+嘅,1,target_coverage,⿰,口 既,component-trajectory:既|既|right|⿰|9（目标集中出现4次）；component-context:既|既|right|⿰（目标集中出现4次）；stroke-signature:↗→↘↓|3|tall|n（目标集中出现1次）
+歐,1,target_coverage,⿰,區 欠,component-trajectory:區|區|left|⿰|11（目标集中出现4次）；component-context:區|區|left|⿰（目标集中出现4次）；stroke-signature:→↗→↘↓↘|3|balanced|n（目标集中出现1次）
+齜,1,target_coverage,⿰,此 齒,component-trajectory:此|此|right|⿰|6（目标集中出现4次）；component-context:此|此|right|⿰（目标集中出现4次）；stroke-signature:↗↘|1|wide|n（目标集中出现1次）
+矧,1,target_coverage,⿰,引 矢,component-trajectory:引|引|right|⿰|4（目标集中出现3次）；component-context:引|引|right|⿰（目标集中出现3次）；component-identity:引（目标集中出现3次）；stroke-signature:↓↘→↘↓↙←↖|5|tall|n（目标集中出现4次）
+隐,1,target_coverage,⿰,急 阝,component-trajectory:急|急|right|⿰|9（目标集中出现3次）；component-context:急|急|right|⿰（目标集中出现3次）；component-identity:急（目标集中出现3次）；stroke-signature:→↓↙↓↘↓←|2|tall|n（目标集中出现4次）
+噴,1,target_coverage,⿰,口 賁,component-trajectory:賁|賁|right|⿰|12（目标集中出现3次）；component-context:賁|賁|right|⿰（目标集中出现3次）；component-identity:賁（目标集中出现3次）；stroke-signature:↗→↗→↘↓↙|3|balanced|n（目标集中出现4次）
+丑,1,target_coverage,⿻,二 刀,component-trajectory:刀|刀|overlap-primary|⿻|2（目标集中出现2次）；component-trajectory:二|二|overlap-secondary|⿻|2（目标集中出现2次）；component-context:刀|刀|overlap-primary|⿻（目标集中出现2次）；component-context:二|二|overlap-secondary|⿻（目标集中出现2次）
+处,1,target_coverage,⿺,卜 夂,component-trajectory:夂|夂|surround-bottom-left|⿺|3（目标集中出现2次）；component-trajectory:卜|卜|inside|⿺|2（目标集中出现2次）；component-context:夂|夂|surround-bottom-left|⿺（目标集中出现2次）；component-context:卜|卜|inside|⿺（目标集中出现2次）
+夗,1,target_coverage,⿰,㔾 夕,component-trajectory:㔾|㔾|right|⿰|2（目标集中出现4次）；component-context:㔾|㔾|right|⿰（目标集中出现4次）
+乩,1,target_coverage,⿰,乚 占,component-trajectory:占|占|left|⿰|5（目标集中出现4次）；component-context:占|占|left|⿰（目标集中出现4次）
+死,1,target_coverage,⿸,匕 歹,component-trajectory:匕|匕|inside|⿸|2（目标集中出现3次）；component-context:匕|匕|inside|⿸（目标集中出现3次）；component-trajectory:歹|歹|surround-top-left|⿸|4（目标集中出现1次）；component-context:歹|歹|surround-top-left|⿸（目标集中出现1次）
+况,1,target_coverage,⿰,兄 冫,component-trajectory:兄|兄|right|⿰|5（目标集中出现4次）；component-context:兄|兄|right|⿰（目标集中出现4次）
+坐,1,target_coverage,⿻,从 土,component-trajectory:土|土|overlap-secondary|⿻|3（目标集中出现3次）；component-context:土|土|overlap-secondary|⿻（目标集中出现3次）；component-trajectory:从|从|overlap-primary|⿻|4（目标集中出现1次）；component-context:从|从|overlap-primary|⿻（目标集中出现1次）
+材,1,target_coverage,⿰,才 木,component-trajectory:才|才|right|⿰|3（目标集中出现4次）；component-context:才|才|right|⿰（目标集中出现4次）
+苋,1,target_coverage,⿱,艹 见,component-trajectory:见|见|bottom|⿱|4（目标集中出现4次）；component-context:见|见|bottom|⿱（目标集中出现4次）
+佾,1,target_coverage,⿰,亻 八 月,component-trajectory:月|月|bottom|⿱|4（目标集中出现4次）；component-context:月|月|bottom|⿱（目标集中出现4次）
+劼,1,target_coverage,⿰,力 吉,component-trajectory:吉|吉|left|⿰|6（目标集中出现4次）；component-context:吉|吉|left|⿰（目标集中出现4次）
+味,1,target_coverage,⿰,口 未,component-trajectory:未|未|right|⿰|5（目标集中出现4次）；component-context:未|未|right|⿰（目标集中出现4次）
+宙,1,target_coverage,⿱,宀 由,component-trajectory:由|由|bottom|⿱|5（目标集中出现4次）；component-context:由|由|bottom|⿱（目标集中出现4次）
+宠,1,target_coverage,⿱,宀 龙,component-trajectory:龙|龙|bottom|⿱|5（目标集中出现4次）；component-context:龙|龙|bottom|⿱（目标集中出现4次）
+泪,1,target_coverage,⿰,氵 目,component-trajectory:目|目|right|⿰|5（目标集中出现4次）；component-context:目|目|right|⿰（目标集中出现4次）
+龺,1,target_coverage,⿳,十 日,component-trajectory:日|日|middle|⿳|4（目标集中出现2次）；component-trajectory:十|十|bottom|⿳|2（目标集中出现2次）；component-context:日|日|middle|⿳（目标集中出现2次）；component-context:十|十|bottom|⿳（目标集中出现2次）
+咪,1,target_coverage,⿰,口 米,component-trajectory:米|米|right|⿰|6（目标集中出现4次）；component-context:米|米|right|⿰（目标集中出现4次）
+绗,1,target_coverage,⿰,纟 行,component-trajectory:行|行|right|⿰|6（目标集中出现4次）；component-context:行|行|right|⿰（目标集中出现4次）
+贸,1,target_coverage,⿱,卯 贝,component-trajectory:贝|贝|bottom|⿱|4（目标集中出现34次）；component-context:贝|贝|bottom|⿱（目标集中出现34次）；component-trajectory:卯|卯|top|⿱|5（目标集中出现4次）；component-context:卯|卯|top|⿱（目标集中出现4次）
+倭,1,target_coverage,⿰,亻 委,component-trajectory:委|委|right|⿰|8（目标集中出现4次）；component-context:委|委|right|⿰（目标集中出现4次）
+祘,1,target_coverage,⿰,示,component-trajectory:示|示|right|⿰|5（目标集中出现3次）；component-context:示|示|right|⿰（目标集中出现3次）；component-trajectory:示|示|left|⿰|5（目标集中出现1次）；component-context:示|示|left|⿰（目标集中出现1次）
+厣,1,target_coverage,⿸,厂 犬 甲,component-trajectory:犬|犬|top|⿱|4（目标集中出现3次）；component-context:犬|犬|top|⿱（目标集中出现3次）；component-trajectory:甲|甲|bottom|⿱|5（目标集中出现1次）；component-context:甲|甲|bottom|⿱（目标集中出现1次）
+崒,1,target_coverage,⿱,卒 山,component-trajectory:卒|卒|bottom|⿱|8（目标集中出现4次）；component-context:卒|卒|bottom|⿱（目标集中出现4次）
+鸽,1,target_coverage,⿰,合 鸟,component-trajectory:合|合|left|⿰|6（目标集中出现4次）；component-context:合|合|left|⿰（目标集中出现4次）
+斯,1,target_coverage,⿰,其 斤,component-trajectory:其|其|left|⿰|8（目标集中出现4次）；component-context:其|其|left|⿰（目标集中出现4次）
+辜,1,target_coverage,⿱,古 辛,component-trajectory:辛|辛|bottom|⿱|7（目标集中出现3次）；component-context:辛|辛|bottom|⿱（目标集中出现3次）；component-trajectory:古|古|top|⿱|5（目标集中出现1次）；component-context:古|古|top|⿱（目标集中出现1次）
+僉,1,target_coverage,⿳,亼 从 口,component-trajectory:从|从|bottom|⿳|4（目标集中出现2次）；component-trajectory:亼|亼|top|⿳|3（目标集中出现2次）；component-context:从|从|bottom|⿳（目标集中出现2次）；component-context:亼|亼|top|⿳（目标集中出现2次）
+嗚,1,target_coverage,⿰,口 烏,component-trajectory:烏|烏|right|⿰|10（目标集中出现4次）；component-context:烏|烏|right|⿰（目标集中出现4次）
+嘼,1,target_coverage,⿱,一 口 田,component-trajectory:田|田|top|⿳|5（目标集中出现2次）；component-trajectory:口|口|bottom|⿳|3（目标集中出现2次）；component-context:田|田|top|⿳（目标集中出现2次）；component-context:口|口|bottom|⿳（目标集中出现2次）
+稽,1,target_coverage,⿰,尤 旨 禾,component-trajectory:旨|旨|bottom|⿱|6（目标集中出现2次）；component-trajectory:尤|尤|top|⿱|4（目标集中出现2次）；component-context:旨|旨|bottom|⿱（目标集中出现2次）；component-context:尤|尤|top|⿱（目标集中出现2次）
+麗,1,target_coverage,⿱,丽 鹿,component-trajectory:鹿|鹿|bottom|⿱|11（目标集中出现3次）；component-context:鹿|鹿|bottom|⿱（目标集中出现3次）；component-trajectory:丽|丽|top|⿱|7（目标集中出现1次）；component-context:丽|丽|top|⿱（目标集中出现1次）
+轟,1,target_coverage,⿱,車,component-trajectory:車|車|top|⿱|7（目标集中出现2次）；component-trajectory:車|車|right|⿰|7（目标集中出现2次）；component-context:車|車|top|⿱（目标集中出现2次）；component-context:車|車|right|⿰（目标集中出现2次）
+槜,1,target_coverage,⿰,木 隽,component-trajectory:隽|隽|right|⿰|10（目标集中出现3次）；component-context:隽|隽|right|⿰（目标集中出现3次）；component-identity:隽（目标集中出现3次）；stroke-signature:→↓→↘↓←↖|6|balanced|n（目标集中出现3次）
+韦,1,target_coverage,⿻,三 丨,component-identity:三（目标集中出现7次）；component-trajectory:三|三|overlap-primary|⿻|3（目标集中出现2次）；component-context:三|三|overlap-primary|⿻（目标集中出现2次）；stroke-signature:→↓↙↖|4|wide|n（目标集中出现1次）
+瀑,1,target_coverage,⿰,暴 氵,component-trajectory:暴|暴|right|⿰|15（目标集中出现3次）；component-context:暴|暴|right|⿰（目标集中出现3次）；component-identity:暴（目标集中出现3次）；stroke-signature:↘→↗|0|balanced|n（目标集中出现2次）
+义,1,target_coverage,⿻,丶 乂,component-trajectory:乂|乂|overlap-secondary|⿻|2（目标集中出现3次）；component-context:乂|乂|overlap-secondary|⿻（目标集中出现3次）；component-context:丶|丶|overlap-primary|⿻（目标集中出现2次）
+买,1,target_coverage,⿱,乛 头,component-context:乛|乛|top|⿱（目标集中出现3次）；component-trajectory:头|头|bottom|⿱|5（目标集中出现2次）；component-context:头|头|bottom|⿱（目标集中出现2次）；component-identity:头（目标集中出现2次）
+魘,1,target_coverage,⿸,厭 鬼,component-trajectory:厭|厭|surround-top-left|⿸|14（目标集中出现2次）；component-identity:厭（目标集中出现4次）；component-context:厭|厭|surround-top-left|⿸（目标集中出现2次）；component-trajectory:鬼|鬼|inside|⿸|10（目标集中出现1次）
+婿,1,target_coverage,⿰,女 胥,component-trajectory:胥|胥|right|⿰|9（目标集中出现3次）；component-context:胥|胥|right|⿰（目标集中出现3次）；component-identity:胥（目标集中出现3次）；stroke-signature:↘→↘→|0|wide|n（目标集中出现1次）
+锪,1,target_coverage,⿰,忽 钅,component-trajectory:忽|忽|right|⿰|8（目标集中出现3次）；component-context:忽|忽|right|⿰（目标集中出现3次）；component-identity:忽（目标集中出现3次）；stroke-signature:↓↘→↑↖↑|2|wide|n（目标集中出现1次）
+慘,1,target_coverage,⿰,參 忄,component-trajectory:參|參|right|⿰|11（目标集中出现3次）；component-context:參|參|right|⿰（目标集中出现3次）；component-identity:參（目标集中出现3次）；stroke-signature:↘↓↙↓↘→↗→|3|balanced|n（目标集中出现1次）
+儀,1,target_coverage,⿰,亻 義,component-trajectory:義|義|right|⿰|13（目标集中出现3次）；component-context:義|義|right|⿰（目标集中出现3次）；component-identity:義（目标集中出现3次）；stroke-signature:↘↓↙↖←|2|tall|n（目标集中出现1次）
+參,1,target_coverage,⿳,人 厽 彡,component-trajectory:彡|彡|bottom|⿳|3（目标集中出现2次）；component-context:彡|彡|bottom|⿳（目标集中出现2次）；component-trajectory:厽|厽|top|⿳|6（目标集中出现1次）；component-identity:厽（目标集中出现2次）
+襪,1,target_coverage,⿰,蔑 衤,component-context:蔑|蔑|right|⿰（目标集中出现3次）；component-trajectory:蔑|蔑|right|⿰|15（目标集中出现2次）；component-identity:蔑（目标集中出现3次）；stroke-signature:→↓↙←|3|wide|n（目标集中出现5次）
+伪,1,target_coverage,⿰,为 亻,component-trajectory:为|为|right|⿰|4（目标集中出现3次）；component-context:为|为|right|⿰（目标集中出现3次）；component-identity:为（目标集中出现3次）
+佧,1,target_coverage,⿰,亻 卡,component-trajectory:卡|卡|right|⿰|5（目标集中出现3次）；component-context:卡|卡|right|⿰（目标集中出现3次）；component-identity:卡（目标集中出现3次）
+兓,1,target_coverage,⿰,旡,component-trajectory:旡|旡|right|⿰|4（目标集中出现2次）；component-context:旡|旡|right|⿰（目标集中出现2次）；component-identity:旡（目标集中出现3次）；component-trajectory:旡|旡|left|⿰|4（目标集中出现1次）
+卓,1,target_coverage,⿱,⺊ 早,component-trajectory:早|早|bottom|⿱|6（目标集中出现3次）；component-context:早|早|bottom|⿱（目标集中出现3次）；component-identity:早（目标集中出现3次）
+怪,1,target_coverage,⿰,圣 忄,component-trajectory:圣|圣|right|⿰|5（目标集中出现3次）；component-context:圣|圣|right|⿰（目标集中出现3次）；component-identity:圣（目标集中出现3次）
+拦,1,target_coverage,⿰,兰 扌,component-trajectory:兰|兰|right|⿰|5（目标集中出现3次）；component-context:兰|兰|right|⿰（目标集中出现3次）；component-identity:兰（目标集中出现3次）
+泗,1,target_coverage,⿰,四 氵,component-trajectory:四|四|right|⿰|5（目标集中出现3次）；component-context:四|四|right|⿰（目标集中出现3次）；component-identity:四（目标集中出现3次）
+诫,1,target_coverage,⿰,戒 讠,component-trajectory:戒|戒|right|⿰|7（目标集中出现3次）；component-context:戒|戒|right|⿰（目标集中出现3次）；component-identity:戒（目标集中出现3次）
+悭,1,target_coverage,⿰,坚 忄,component-trajectory:坚|坚|right|⿰|7（目标集中出现3次）；component-context:坚|坚|right|⿰（目标集中出现3次）；component-identity:坚（目标集中出现3次）
+桩,1,target_coverage,⿰,庄 木,component-trajectory:庄|庄|right|⿰|6（目标集中出现3次）；component-context:庄|庄|right|⿰（目标集中出现3次）；component-identity:庄（目标集中出现3次）
+唳,1,target_coverage,⿰,口 戾,component-trajectory:戾|戾|right|⿰|8（目标集中出现3次）；component-context:戾|戾|right|⿰（目标集中出现3次）；component-identity:戾（目标集中出现3次）
+婊,1,target_coverage,⿰,女 表,component-trajectory:表|表|right|⿰|8（目标集中出现3次）；component-context:表|表|right|⿰（目标集中出现3次）；component-identity:表（目标集中出现3次）
+婕,1,target_coverage,⿰,女 疌,component-trajectory:疌|疌|right|⿰|8（目标集中出现3次）；component-context:疌|疌|right|⿰（目标集中出现3次）；component-identity:疌（目标集中出现3次）
+寇,1,target_coverage,⿱,元 宀 攴,component-trajectory:元|元|surround-bottom-left|⿺|4（目标集中出现2次）；component-context:元|元|surround-bottom-left|⿺（目标集中出现2次）；component-identity:攴（目标集中出现3次）；component-trajectory:攴|攴|inside|⿺|4（目标集中出现1次）
+帼,1,target_coverage,⿰,国 巾,component-trajectory:国|国|right|⿰|8（目标集中出现3次）；component-context:国|国|right|⿰（目标集中出现3次）；component-identity:国（目标集中出现3次）
+惦,1,target_coverage,⿰,店 忄,component-trajectory:店|店|right|⿰|8（目标集中出现3次）；component-context:店|店|right|⿰（目标集中出现3次）；component-identity:店（目标集中出现3次）
+掀,1,target_coverage,⿰,扌 欣,component-trajectory:欣|欣|right|⿰|8（目标集中出现3次）；component-context:欣|欣|right|⿰（目标集中出现3次）；component-identity:欣（目标集中出现3次）
+掖,1,target_coverage,⿰,夜 扌,component-trajectory:夜|夜|right|⿰|8（目标集中出现3次）；component-context:夜|夜|right|⿰（目标集中出现3次）；component-identity:夜（目标集中出现3次）
+掭,1,target_coverage,⿰,忝 扌,component-trajectory:忝|忝|right|⿰|8（目标集中出现3次）；component-context:忝|忝|right|⿰（目标集中出现3次）；component-identity:忝（目标集中出现3次）
+揽,1,target_coverage,⿰,扌 览,component-trajectory:览|览|right|⿰|9（目标集中出现3次）；component-context:览|览|right|⿰（目标集中出现3次）；component-identity:览（目标集中出现3次）
+渡,1,target_coverage,⿰,度 氵,component-trajectory:度|度|right|⿰|9（目标集中出现3次）；component-context:度|度|right|⿰（目标集中出现3次）；component-identity:度（目标集中出现3次）
+渺,1,target_coverage,⿰,氵 眇,component-trajectory:眇|眇|right|⿰|9（目标集中出现3次）；component-context:眇|眇|right|⿰（目标集中出现3次）；component-identity:眇（目标集中出现3次）
+嗅,1,target_coverage,⿰,口 臭,component-trajectory:臭|臭|right|⿰|10（目标集中出现3次）；component-context:臭|臭|right|⿰（目标集中出现3次）；component-identity:臭（目标集中出现3次）
+愾,1,target_coverage,⿰,忄 氣,component-trajectory:氣|氣|right|⿰|10（目标集中出现3次）；component-context:氣|氣|right|⿰（目标集中出现3次）；component-identity:氣（目标集中出现3次）
+慷,1,target_coverage,⿰,康 忄,component-trajectory:康|康|right|⿰|11（目标集中出现3次）；component-context:康|康|right|⿰（目标集中出现3次）；component-identity:康（目标集中出现3次）
+漩,1,target_coverage,⿰,旋 氵,component-trajectory:旋|旋|right|⿰|11（目标集中出现3次）；component-context:旋|旋|right|⿰（目标集中出现3次）；component-identity:旋（目标集中出现3次）
+噙,1,target_coverage,⿰,口 禽,component-trajectory:禽|禽|right|⿰|12（目标集中出现3次）；component-context:禽|禽|right|⿰（目标集中出现3次）；component-identity:禽（目标集中出现3次）
+噯,1,target_coverage,⿰,口 愛,component-trajectory:愛|愛|right|⿰|13（目标集中出现3次）；component-context:愛|愛|right|⿰（目标集中出现3次）；component-identity:愛（目标集中出现3次）
+憾,1,target_coverage,⿰,忄 感,component-trajectory:感|感|right|⿰|13（目标集中出现3次）；component-context:感|感|right|⿰（目标集中出现3次）；component-identity:感（目标集中出现3次）
+幫,1,target_coverage,⿱,封 帛,component-trajectory:封|封|top|⿱|9（目标集中出现2次）；component-context:封|封|top|⿱（目标集中出现2次）；component-identity:封（目标集中出现3次）；component-trajectory:帛|帛|bottom|⿱|8（目标集中出现1次）
+嚕,1,target_coverage,⿰,口 魯,component-trajectory:魯|魯|right|⿰|15（目标集中出现3次）；component-context:魯|魯|right|⿰（目标集中出现3次）；component-identity:魯（目标集中出现3次）
+攫,1,target_coverage,⿰,扌 矍,component-trajectory:矍|矍|right|⿰|20（目标集中出现3次）；component-context:矍|矍|right|⿰（目标集中出现3次）；component-identity:矍（目标集中出现3次）
+鸸,1,target_coverage,⿰,而 鸟,component-trajectory:而|而|left|⿰|6（目标集中出现3次）；component-context:而|而|left|⿰（目标集中出现3次）；stroke-signature:↗→↘↓↙↖|4|balanced|n（目标集中出现9次）；stroke-signature:↓→↘↓↙↖|3|balanced|n（目标集中出现4次）
+郄,1,target_coverage,⿰,乂 厷 阝,component-identity:厷（目标集中出现6次）；component-trajectory:厷|厷|bottom|⿱|4（目标集中出现2次）；component-context:厷|厷|bottom|⿱（目标集中出现2次）；stroke-signature:↗→↘↙↓↘↓←|5|tall|n（目标集中出现3次）
+陋,1,target_coverage,⿰,丙 乚 阝,component-identity:丙（目标集中出现5次）；component-context:乚|乚|surround-bottom-left|⿺（目标集中出现3次）；component-trajectory:丙|丙|inside|⿺|5（目标集中出现1次）；component-context:丙|丙|inside|⿺（目标集中出现1次）
+罐,1,target_coverage,⿰,缶 雚,component-context:雚|雚|right|⿰（目标集中出现4次）；component-trajectory:雚|雚|right|⿰|17（目标集中出现3次）；stroke-signature:↘↓↘→↗→↗|2|balanced|n（目标集中出现4次）
+厉,1,target_coverage,⿸,万 厂,component-identity:万（目标集中出现6次）；component-trajectory:万|万|inside|⿸|3（目标集中出现2次）；component-context:万|万|inside|⿸（目标集中出现2次）
+咻,1,target_coverage,⿰,休 口,component-identity:休（目标集中出现6次）；component-trajectory:休|休|right|⿰|6（目标集中出现2次）；component-context:休|休|right|⿰（目标集中出现2次）
+奠,1,target_coverage,⿱,大 酋,component-identity:酋（目标集中出现6次）；component-trajectory:酋|酋|top|⿱|9（目标集中出现2次）；component-context:酋|酋|top|⿱（目标集中出现2次）
+汽,1,target_coverage,⿰,气 氵,component-trajectory:气|气|right|⿰|4（目标集中出现3次）；component-context:气|气|right|⿰（目标集中出现3次）；stroke-signature:→↘↓↘→↗↑|4|balanced|n（目标集中出现9次）
+轰,1,target_coverage,⿱,双 车,component-trajectory:双|双|bottom|⿱|4（目标集中出现2次）；component-context:双|双|bottom|⿱（目标集中出现2次）；component-trajectory:车|车|top|⿱|4（目标集中出现1次）；component-identity:双（目标集中出现2次）
+矦,1,target_coverage,⿸,厃 矢,component-trajectory:矢|矢|inside|⿸|5（目标集中出现2次）；component-context:矢|矢|inside|⿸（目标集中出现2次）；component-trajectory:厃|厃|surround-top-left|⿸|4（目标集中出现1次）；component-identity:厃（目标集中出现2次）
+载,1,target_coverage,⿹,哉 车,component-trajectory:哉|哉|surround-top-right|⿹|6（目标集中出现2次）；component-context:哉|哉|surround-top-right|⿹（目标集中出现2次）；component-trajectory:车|车|inside|⿹|4（目标集中出现1次）；component-identity:哉（目标集中出现2次）
+斡,1,target_coverage,⿸,倝 斗,component-trajectory:斗|斗|inside|⿸|4（目标集中出现2次）；component-context:斗|斗|inside|⿸（目标集中出现2次）；component-trajectory:倝|倝|surround-top-left|⿸|10（目标集中出现1次）；component-identity:倝（目标集中出现2次）
+舆,1,target_coverage,⿶,舁 车,component-trajectory:舁|舁|surround-bottom|⿶|10（目标集中出现2次）；component-context:舁|舁|surround-bottom|⿶（目标集中出现2次）；component-trajectory:车|车|inside|⿶|4（目标集中出现1次）；component-identity:舁（目标集中出现2次）
+鷹,1,target_coverage,⿸,䧹 鳥,component-trajectory:䧹|䧹|surround-top-left|⿸|13（目标集中出现2次）；component-context:䧹|䧹|surround-top-left|⿸（目标集中出现2次）；component-trajectory:鳥|鳥|inside|⿸|11（目标集中出现1次）；component-identity:䧹（目标集中出现2次）
+樂,1,target_coverage,⿱,幺 木 白,component-trajectory:白|白|middle|⿲|5（目标集中出现1次）；component-trajectory:幺|幺|right|⿲|3（目标集中出现1次）；component-trajectory:幺|幺|left|⿲|3（目标集中出现1次）；stroke-signature:↘↓↙↓↘→↗|2|tall|n（目标集中出现8次）
+郡,1,target_coverage,⿰,君 阝,component-identity:君（目标集中出现5次）；component-trajectory:君|君|left|⿰|7（目标集中出现2次）；component-context:君|君|left|⿰（目标集中出现2次）；stroke-signature:↗→↓↙↓↘↓↙↖|4|tall|n（目标集中出现2次）
+拜,1,target_coverage,⿰,手,component-trajectory:手|手|left|⿰|4（目标集中出现2次）；component-context:手|手|right|⿰（目标集中出现2次）；component-context:手|手|left|⿰（目标集中出现2次）；component-trajectory:手|手|right|⿰|5（目标集中出现1次）
+逍,1,target_coverage,⿺,肖 辶,component-trajectory:肖|肖|inside|⿺|7（目标集中出现3次）；component-context:肖|肖|inside|⿺（目标集中出现3次）；stroke-signature:→↓↙↓↘↓↙|2|balanced|n（目标集中出现7次）
+扉,1,target_coverage,⿸,户 非,component-trajectory:非|非|inside|⿸|8（目标集中出现3次）；component-context:非|非|inside|⿸（目标集中出现3次）；stroke-signature:→↗→↗|1|wide|n（目标集中出现6次）
+洳,1,target_coverage,⿰,如 氵,component-identity:如（目标集中出现5次）；component-trajectory:如|如|right|⿰|6（目标集中出现2次）；component-context:如|如|right|⿰（目标集中出现2次）
+啸,1,target_coverage,⿰,口 肃,component-identity:肃（目标集中出现5次）；component-trajectory:肃|肃|right|⿰|8（目标集中出现2次）；component-context:肃|肃|right|⿰（目标集中出现2次）
+寂,1,target_coverage,⿱,叔 宀,component-identity:叔（目标集中出现5次）；component-trajectory:叔|叔|bottom|⿱|8（目标集中出现2次）；component-context:叔|叔|bottom|⿱（目标集中出现2次）
+阏,1,target_coverage,⿵,於 门,component-identity:於（目标集中出现5次）；component-trajectory:於|於|inside|⿵|8（目标集中出现2次）；component-context:於|於|inside|⿵（目标集中出现2次）
+堡,1,target_coverage,⿱,保 土,component-identity:保（目标集中出现5次）；component-trajectory:保|保|top|⿱|9（目标集中出现2次）；component-context:保|保|top|⿱（目标集中出现2次）
+塹,1,target_coverage,⿱,土 斬,component-identity:斬（目标集中出现5次）；component-trajectory:斬|斬|top|⿱|11（目标集中出现2次）；component-context:斬|斬|top|⿱（目标集中出现2次）
+師,1,target_coverage,⿰,㠯 丿 帀,component-trajectory:帀|帀|right|⿰|4（目标集中出现2次）；component-identity:帀（目标集中出现4次）；component-context:帀|帀|right|⿰（目标集中出现2次）；stroke-signature:→↗→↘↓↙|1|balanced|n（目标集中出现4次）
+癘,1,target_coverage,⿸,疒 萬,component-trajectory:萬|萬|inside|⿸|13（目标集中出现2次）；component-identity:萬（目标集中出现4次）；component-context:萬|萬|inside|⿸（目标集中出现2次）；stroke-signature:↗→↘↓↙←|3|wide|n（目标集中出现4次）
+窭,1,target_coverage,⿱,娄 穴,component-trajectory:娄|娄|bottom|⿱|9（目标集中出现3次）；component-context:娄|娄|bottom|⿱（目标集中出现3次）；stroke-signature:↘↙↘→↘→|2|balanced|n（目标集中出现5次）
+澠,1,target_coverage,⿰,氵 黽,component-trajectory:黽|黽|right|⿰|13（目标集中出现3次）；component-context:黽|黽|right|⿰（目标集中出现3次）；stroke-signature:↗→↓↙|1|wide|n（目标集中出现4次）；stroke-signature:↖↑↗↑↗|0|tall|n（目标集中出现1次）
+蘄,1,target_coverage,⿱,單 斤 艹,component-trajectory:單|單|left|⿰|12（目标集中出现3次）；component-context:單|單|left|⿰（目标集中出现3次）；stroke-signature:↖←↙←|0|wide|n（目标集中出现5次）
+冓,1,target_coverage,⿱,井 再,component-trajectory:井|井|top|⿱|4（目标集中出现2次）；component-context:井|井|top|⿱（目标集中出现2次）；component-trajectory:再|再|bottom|⿱|6（目标集中出现1次）；component-context:再|再|bottom|⿱（目标集中出现1次）
+嵞,1,target_coverage,⿱,余 屾,component-trajectory:余|余|top|⿱|7（目标集中出现2次）；component-context:余|余|top|⿱（目标集中出现2次）；component-trajectory:屾|屾|bottom|⿱|6（目标集中出现1次）；component-context:屾|屾|bottom|⿱（目标集中出现1次）
+谎,1,target_coverage,⿰,荒 讠,component-context:荒|荒|right|⿰（目标集中出现3次）；component-trajectory:荒|荒|right|⿰|9（目标集中出现2次）；component-identity:荒（目标集中出现3次）
+太,1,target_coverage,⿵,丶 大,component-context:丶|丶|inside|⿵（目标集中出现5次）；component-trajectory:大|大|surround-top|⿵|3（目标集中出现1次）；component-context:大|大|surround-top|⿵（目标集中出现1次）
+甩,1,target_coverage,⿻,乚 月,component-context:乚|乚|overlap-secondary|⿻（目标集中出现5次）；component-trajectory:月|月|overlap-primary|⿻|4（目标集中出现1次）；component-context:月|月|overlap-primary|⿻（目标集中出现1次）
+弔,1,target_coverage,⿻,丨 弓,component-trajectory:弓|弓|overlap-primary|⿻|3（目标集中出现3次）；component-context:弓|弓|overlap-primary|⿻（目标集中出现3次）；stroke-signature:↓→↘↓↙↖|4|balanced|h（目标集中出现4次）
+邗,1,target_coverage,⿰,干 阝,component-trajectory:干|干|left|⿰|3（目标集中出现3次）；component-context:干|干|left|⿰（目标集中出现3次）；stroke-signature:→↘↙↓↘↓←|5|balanced|n（目标集中出现4次）
+夸,1,target_coverage,⿱,亏 大,component-trajectory:亏|亏|bottom|⿱|3（目标集中出现3次）；component-context:亏|亏|bottom|⿱（目标集中出现3次）；stroke-signature:↓→↘↓↙←↖|4|balanced|n（目标集中出现4次）
+诌,1,target_coverage,⿰,刍 讠,component-trajectory:刍|刍|right|⿰|5（目标集中出现3次）；component-context:刍|刍|right|⿰（目标集中出现3次）；stroke-signature:→↘↓↘↗|3|balanced|n（目标集中出现4次）
+苕,1,target_coverage,⿱,召 艹,component-trajectory:召|召|bottom|⿱|5（目标集中出现3次）；component-context:召|召|bottom|⿱（目标集中出现3次）；stroke-signature:→↓↙←↖|3|wide|n（目标集中出现4次）
+昴,1,target_coverage,⿱,卯 日,component-trajectory:卯|卯|bottom|⿱|5（目标集中出现3次）；component-context:卯|卯|bottom|⿱（目标集中出现3次）；stroke-signature:↖←↙←|1|wide|n（目标集中出现4次）
+瓠,1,target_coverage,⿰,夸 瓜,component-trajectory:夸|夸|left|⿰|6（目标集中出现3次）；component-context:夸|夸|left|⿰（目标集中出现3次）；stroke-signature:↙↓→↘↓↙←↖|4|tall|n（目标集中出现2次）；stroke-signature:↘↓↘↗→|3|tall|n（目标集中出现2次）
+鴦,1,target_coverage,⿱,央 鳥,component-trajectory:央|央|top|⿱|5（目标集中出现3次）；component-context:央|央|top|⿱（目标集中出现3次）；stroke-signature:↗→↓←|2|wide|n（目标集中出现4次）
+缝,1,target_coverage,⿰,纟 逢,component-trajectory:逢|逢|right|⿰|10（目标集中出现2次）；component-identity:逢（目标集中出现4次）；component-context:逢|逢|right|⿰（目标集中出现2次）；stroke-signature:→↘↙↓↘↓↙|2|tall|n（目标集中出现2次）
+閥,1,target_coverage,⿵,伐 門,component-trajectory:伐|伐|inside|⿵|6（目标集中出现2次）；component-identity:伐（目标集中出现4次）；component-context:伐|伐|inside|⿵（目标集中出现2次）；stroke-signature:↘↓↘↑|1|balanced|n（目标集中出现2次）
+懶,1,target_coverage,⿰,忄 賴,component-trajectory:賴|賴|right|⿰|16（目标集中出现2次）；component-identity:賴（目标集中出现4次）；component-context:賴|賴|right|⿰（目标集中出现2次）；stroke-signature:↗→↓|2|tall|n（目标集中出现2次）
+鷲,1,target_coverage,⿱,就 鳥,component-trajectory:就|就|top|⿱|12（目标集中出现2次）；component-identity:就（目标集中出现4次）；component-context:就|就|top|⿱（目标集中出现2次）；stroke-signature:→↗→↘↓↙|1|wide|n（目标集中出现2次）
+纠,1,target_coverage,⿰,丩 纟,component-trajectory:丩|丩|right|⿰|2（目标集中出现3次）；component-context:丩|丩|right|⿰（目标集中出现3次）；stroke-signature:↓↙→|3|balanced|n（目标集中出现3次）
+岌,1,target_coverage,⿱,及 山,component-trajectory:及|及|bottom|⿱|3（目标集中出现3次）；component-context:及|及|bottom|⿱（目标集中出现3次）；stroke-signature:→↓→↓↙←|3|balanced|n（目标集中出现3次）
+邨,1,target_coverage,⿰,屯 阝,component-trajectory:屯|屯|left|⿰|4（目标集中出现3次）；component-context:屯|屯|left|⿰（目标集中出现3次）；stroke-signature:↗→↓↙↓↘↓←↖|4|tall|n（目标集中出现3次）
+惧,1,target_coverage,⿰,具 忄,component-trajectory:具|具|right|⿰|8（目标集中出现3次）；component-context:具|具|right|⿰（目标集中出现3次）；stroke-signature:↗→↘↓↙|2|tall|n（目标集中出现3次）
+惫,1,target_coverage,⿱,夂 思,component-trajectory:思|思|bottom|⿱|9（目标集中出现3次）；component-context:思|思|bottom|⿱（目标集中出现3次）；stroke-signature:→↘↙←|1|balanced|n（目标集中出现3次）
+馱,1,target_coverage,⿰,大 馬,component-trajectory:大|大|right|⿰|3（目标集中出现3次）；component-context:大|大|right|⿰（目标集中出现3次）；stroke-signature:↘→↘↓←↖|3|balanced|n（目标集中出现3次）
+谘,1,target_coverage,⿰,咨 讠,component-trajectory:咨|咨|right|⿰|9（目标集中出现2次）；component-context:咨|咨|right|⿰（目标集中出现2次）；component-identity:咨（目标集中出现3次）；stroke-signature:↑↗|1|tall|n（目标集中出现6次）
+栴,1,target_coverage,⿰,丹 木,component-trajectory:丹|丹|bottom|⿱|4（目标集中出现2次）；component-identity:丹（目标集中出现4次）；component-context:丹|丹|bottom|⿱（目标集中出现2次）；stroke-signature:↗→↘↓↙←|4|tall|n（目标集中出现1次）
+彌,1,target_coverage,⿰,弓 爾,component-trajectory:爾|爾|right|⿰|14（目标集中出现2次）；component-identity:爾（目标集中出现4次）；component-context:爾|爾|right|⿰（目标集中出现2次）；stroke-signature:↘↓→↓←↖|5|tall|n（目标集中出现1次）
+奶,1,target_coverage,⿰,乃 女,component-trajectory:乃|乃|right|⿰|2（目标集中出现3次）；component-context:乃|乃|right|⿰（目标集中出现3次）；stroke-signature:→↓↙→↘↓↙↖|5|balanced|n（目标集中出现2次）
+劬,1,target_coverage,⿰,力 句,component-trajectory:句|句|left|⿰|5（目标集中出现3次）；component-context:句|句|left|⿰（目标集中出现3次）；stroke-signature:→↘↓↙←↖|4|tall|n（目标集中出现2次）
+穿,1,target_coverage,⿱,牙 穴,component-trajectory:牙|牙|bottom|⿱|4（目标集中出现3次）；component-context:牙|牙|bottom|⿱（目标集中出现3次）；stroke-signature:↓↘→|2|wide|n（目标集中出现2次）
+辔,1,target_coverage,⿱,口 纟 车,component-trajectory:车|车|middle|⿲|4（目标集中出现1次）；component-trajectory:糸|纟|right|⿲|3（目标集中出现1次）；component-trajectory:糸|纟|left|⿲|3（目标集中出现1次）；component-context:车|车|middle|⿲（目标集中出现1次）
+粼,1,target_coverage,⿰,巛 粦,component-trajectory:粦|粦|left|⿰|12（目标集中出现2次）；component-context:粦|粦|left|⿰（目标集中出现2次）；component-trajectory:巛|巛|right|⿰|2（目标集中出现1次）；component-context:巛|巛|right|⿰（目标集中出现1次）
+鵜,1,target_coverage,⿰,弟 鳥,component-trajectory:弟|弟|left|⿰|7（目标集中出现3次）；component-context:弟|弟|left|⿰（目标集中出现3次）；stroke-signature:↓↘→↘↓↙←|5|balanced|n（目标集中出现2次）
+仰,1,target_coverage,⿰,亻 卬,component-trajectory:卬|卬|right|⿰|4（目标集中出现2次）；component-identity:卬（目标集中出现4次）；component-context:卬|卬|right|⿰（目标集中出现2次）
+沛,1,target_coverage,⿰,巿 氵,component-trajectory:巿|巿|right|⿰|4（目标集中出现2次）；component-identity:巿（目标集中出现4次）；component-context:巿|巿|right|⿰（目标集中出现2次）
+纲,1,target_coverage,⿰,冈 纟,component-trajectory:冈|冈|right|⿰|4（目标集中出现2次）；component-identity:冈（目标集中出现4次）；component-context:冈|冈|right|⿰（目标集中出现2次）
+闹,1,target_coverage,⿵,市 门,component-trajectory:市|市|inside|⿵|5（目标集中出现2次）；component-identity:市（目标集中出现4次）；component-context:市|市|inside|⿵（目标集中出现2次）
+哔,1,target_coverage,⿰,口 毕,component-trajectory:毕|毕|right|⿰|6（目标集中出现2次）；component-identity:毕（目标集中出现4次）；component-context:毕|毕|right|⿰（目标集中出现2次）
+悒,1,target_coverage,⿰,忄 邑,component-trajectory:邑|邑|right|⿰|7（目标集中出现2次）；component-identity:邑（目标集中出现4次）；component-context:邑|邑|right|⿰（目标集中出现2次）
+朕,1,target_coverage,⿰,关 月,component-trajectory:关|关|right|⿰|6（目标集中出现2次）；component-identity:关（目标集中出现4次）；component-context:关|关|right|⿰（目标集中出现2次）
+喀,1,target_coverage,⿰,口 客,component-trajectory:客|客|right|⿰|9（目标集中出现2次）；component-identity:客（目标集中出现4次）；component-context:客|客|right|⿰（目标集中出现2次）
+傿,1,target_coverage,⿰,亻 焉,component-trajectory:焉|焉|right|⿰|11（目标集中出现2次）；component-identity:焉（目标集中出现4次）；component-context:焉|焉|right|⿰（目标集中出现2次）
+嗽,1,target_coverage,⿰,口 欶,component-trajectory:欶|欶|right|⿰|11（目标集中出现2次）；component-identity:欶（目标集中出现4次）；component-context:欶|欶|right|⿰（目标集中出现2次）
+嗾,1,target_coverage,⿰,口 族,component-trajectory:族|族|right|⿰|11（目标集中出现2次）；component-identity:族（目标集中出现4次）；component-context:族|族|right|⿰（目标集中出现2次）
+嘁,1,target_coverage,⿰,口 戚,component-trajectory:戚|戚|right|⿰|11（目标集中出现2次）；component-identity:戚（目标集中出现4次）；component-context:戚|戚|right|⿰（目标集中出现2次）
+箅,1,target_coverage,⿱,⺮ 畀,component-trajectory:畀|畀|bottom|⿱|8（目标集中出现2次）；component-identity:畀（目标集中出现4次）；component-context:畀|畀|bottom|⿱（目标集中出现2次）
+綱,1,target_coverage,⿰,岡 糹,component-trajectory:岡|岡|right|⿰|8（目标集中出现2次）；component-identity:岡（目标集中出现4次）；component-context:岡|岡|right|⿰（目标集中出现2次）
+鹡,1,target_coverage,⿰,脊 鸟,component-trajectory:脊|脊|left|⿰|10（目标集中出现2次）；component-identity:脊（目标集中出现4次）；component-context:脊|脊|left|⿰（目标集中出现2次）
+懿,1,target_coverage,⿰,壹 恣,component-identity:壹（目标集中出现3次）；component-trajectory:恣|恣|right|⿰|10（目标集中出现1次）；component-trajectory:壹|壹|left|⿰|12（目标集中出现1次）；component-context:恣|恣|right|⿰（目标集中出现1次）
+纛,1,target_coverage,⿱,毒 縣,component-trajectory:縣|縣|bottom|⿱|16（目标集中出现1次）；component-trajectory:毒|毒|top|⿱|9（目标集中出现1次）；component-identity:縣（目标集中出现2次）；component-identity:毒（目标集中出现2次）
+讹,1,target_coverage,⿰,化 讠,component-trajectory:化|化|right|⿰|4（目标集中出现3次）；component-context:化|化|right|⿰（目标集中出现3次）；stroke-signature:↓↘→↑|2|tall|n（目标集中出现1次）
+邠,1,target_coverage,⿰,分 阝,component-trajectory:分|分|left|⿰|4（目标集中出现3次）；component-context:分|分|left|⿰（目标集中出现3次）；stroke-signature:→↓↙↓↘↓←↖|5|tall|n（目标集中出现1次）
+邢,1,target_coverage,⿰,开 阝,component-trajectory:开|开|left|⿰|4（目标集中出现3次）；component-context:开|开|left|⿰（目标集中出现3次）；stroke-signature:↗→↓↙↘↓←|5|tall|n（目标集中出现1次）
+洄,1,target_coverage,⿰,回 氵,component-trajectory:回|回|right|⿰|6（目标集中出现3次）；component-context:回|回|right|⿰（目标集中出现3次）；stroke-signature:↘→↘|2|wide|n（目标集中出现1次）
+巢,1,target_coverage,⿱,巛 果,component-trajectory:果|果|bottom|⿱|8（目标集中出现3次）；component-context:果|果|bottom|⿱（目标集中出现3次）；stroke-signature:↘↓↙↘→↘|2|tall|n（目标集中出现1次）
+彪,1,target_coverage,⿺,彡 虎,component-trajectory:彡|彡|inside|⿺|3（目标集中出现2次）；component-context:彡|彡|inside|⿺（目标集中出现2次）；component-trajectory:虎|虎|surround-bottom-left|⿺|8（目标集中出现1次）；component-context:虎|虎|surround-bottom-left|⿺（目标集中出现1次）
+凱,1,target_coverage,⿰,几 豈,component-trajectory:豈|豈|left|⿰|10（目标集中出现3次）；component-context:豈|豈|left|⿰（目标集中出现3次）；stroke-signature:→↓↘↗↑|3|tall|n（目标集中出现1次）
+稟,1,target_coverage,⿳,亠 回 禾,component-trajectory:回|回|middle|⿳|6（目标集中出现2次）；component-context:回|回|middle|⿳（目标集中出现2次）；component-trajectory:禾|禾|bottom|⿳|5（目标集中出现1次）；component-context:禾|禾|bottom|⿳（目标集中出现1次）
+篱,1,target_coverage,⿱,⺮ 离,component-trajectory:离|离|bottom|⿱|10（目标集中出现3次）；component-context:离|离|bottom|⿱（目标集中出现3次）；stroke-signature:→↘↓↙←|4|wide|n（目标集中出现1次）
+鷦,1,target_coverage,⿰,焦 鳥,component-trajectory:焦|焦|left|⿰|12（目标集中出现3次）；component-context:焦|焦|left|⿰（目标集中出现3次）；stroke-signature:↘→↘↓←↖|4|balanced|n（目标集中出现1次）
+欮,1,target_coverage,⿰,屰 欠,component-trajectory:屰|屰|left|⿰|6（目标集中出现2次）；component-context:屰|屰|left|⿰（目标集中出现2次）；component-identity:屰（目标集中出现3次）；stroke-signature:←↙|2|balanced|n（目标集中出现4次）
+驟,1,target_coverage,⿰,聚 馬,component-trajectory:聚|聚|right|⿰|14（目标集中出现2次）；component-context:聚|聚|right|⿰（目标集中出现2次）；component-identity:聚（目标集中出现3次）；stroke-signature:↘→↘↓←↖|5|balanced|n（目标集中出现4次）
+三,1,target_coverage,⿱,一 二,component-trajectory:二|二|bottom|⿱|2（目标集中出现3次）；component-context:二|二|bottom|⿱（目标集中出现3次）
+厹,1,target_coverage,⿱,九 厶,component-trajectory:九|九|top|⿱|2（目标集中出现3次）；component-context:九|九|top|⿱（目标集中出现3次）
+夃,1,target_coverage,⿵,乃 又,component-trajectory:又|又|inside|⿵|2（目标集中出现2次）；component-context:又|又|inside|⿵（目标集中出现2次）；component-trajectory:乃|乃|surround-top|⿵|2（目标集中出现1次）；component-context:乃|乃|surround-top|⿵（目标集中出现1次）
+巿,1,target_coverage,⿻,一 巾,component-trajectory:巾|巾|overlap-secondary|⿻|3（目标集中出现3次）；component-context:巾|巾|overlap-secondary|⿻（目标集中出现3次）
+丙,1,target_coverage,⿱,一 内,component-trajectory:内|内|bottom|⿱|4（目标集中出现3次）；component-context:内|内|bottom|⿱（目标集中出现3次）
+仕,1,target_coverage,⿰,亻 士,component-trajectory:士|士|right|⿰|3（目标集中出现3次）；component-context:士|士|right|⿰（目标集中出现3次）
+召,1,target_coverage,⿱,刀 口,component-trajectory:刀|刀|top|⿱|2（目标集中出现3次）；component-context:刀|刀|top|⿱（目标集中出现3次）
+叭,1,target_coverage,⿰,八 口,component-trajectory:八|八|right|⿰|2（目标集中出现3次）；component-context:八|八|right|⿰（目标集中出现3次）
+归,1,target_coverage,⿰,彐,component-trajectory:彐|彐|right|⿰|3（目标集中出现3次）；component-context:彐|彐|right|⿰（目标集中出现3次）
+未,1,target_coverage,⿻,一 木,component-trajectory:木|木|overlap-secondary|⿻|4（目标集中出现3次）；component-context:木|木|overlap-secondary|⿻（目标集中出现3次）
+玉,1,target_coverage,⿻,丶 王,component-trajectory:王|王|overlap-primary|⿻|4（目标集中出现3次）；component-context:王|王|overlap-primary|⿻（目标集中出现3次）
+亚,1,target_coverage,⿱,一 业,component-trajectory:业|业|bottom|⿱|5（目标集中出现3次）；component-context:业|业|bottom|⿱（目标集中出现3次）
+产,1,target_coverage,⿳,丷 亠 厂,component-trajectory:丷|丷|middle|⿳|2（目标集中出现2次）；component-context:丷|丷|middle|⿳（目标集中出现2次）；component-trajectory:厂|厂|bottom|⿳|2（目标集中出现1次）；component-context:厂|厂|bottom|⿳（目标集中出现1次）
+共,1,target_coverage,⿳,一 八 廾,component-trajectory:八|八|bottom|⿳|2（目标集中出现2次）；component-context:八|八|bottom|⿳（目标集中出现2次）；component-trajectory:廾|廾|top|⿳|3（目标集中出现1次）；component-context:廾|廾|top|⿳（目标集中出现1次）
+凫,1,target_coverage,⿱,几 鸟,component-trajectory:鸟|鸟|top|⿱|4（目标集中出现3次）；component-context:鸟|鸟|top|⿱（目标集中出现3次）
+创,1,target_coverage,⿰,仓 刂,component-trajectory:仓|仓|left|⿰|4（目标集中出现3次）；component-context:仓|仓|left|⿰（目标集中出现3次）
+劦,1,target_coverage,⿱,力,component-trajectory:力|力|left|⿰|2（目标集中出现2次）；component-context:力|力|left|⿰（目标集中出现2次）；component-trajectory:力|力|top|⿱|2（目标集中出现1次）；component-context:力|力|top|⿱（目标集中出现1次）
+华,1,target_coverage,⿱,化 十,component-trajectory:化|化|top|⿱|4（目标集中出现3次）；component-context:化|化|top|⿱（目标集中出现3次）
+宇,1,target_coverage,⿱,于 宀,component-trajectory:于|于|bottom|⿱|3（目标集中出现3次）；component-context:于|于|bottom|⿱（目标集中出现3次）

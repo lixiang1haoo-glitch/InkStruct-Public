@@ -1,0 +1,328 @@
+﻿character,repeats,purpose,layout,components,reason
+箦,1,target_coverage,⿱,⺮ 责,component-trajectory:责|责|bottom|⿱|8（目标集中出现1次）；component-context:责|责|bottom|⿱（目标集中出现1次）
+箪,1,target_coverage,⿱,⺮ 单,component-trajectory:单|单|bottom|⿱|8（目标集中出现1次）；component-context:单|单|bottom|⿱（目标集中出现1次）
+箬,1,target_coverage,⿱,⺮ 若,component-trajectory:若|若|bottom|⿱|8（目标集中出现1次）；component-context:若|若|bottom|⿱（目标集中出现1次）
+罱,1,target_coverage,⿱,南 罒,component-trajectory:南|南|bottom|⿱|9（目标集中出现1次）；component-context:南|南|bottom|⿱（目标集中出现1次）
+罴,1,target_coverage,⿱,灬 罢,component-trajectory:罢|罢|top|⿱|10（目标集中出现1次）；component-context:罢|罢|top|⿱（目标集中出现1次）
+腐,1,target_coverage,⿸,付 广 肉,component-trajectory:付|付|top|⿱|5（目标集中出现1次）；component-context:付|付|top|⿱（目标集中出现1次）
+蒭,1,target_coverage,⿱,艹 芻,component-trajectory:芻|芻|bottom|⿱|10（目标集中出现1次）；component-context:芻|芻|bottom|⿱（目标集中出现1次）
+蒼,1,target_coverage,⿱,倉 艹,component-trajectory:倉|倉|bottom|⿱|10（目标集中出现1次）；component-context:倉|倉|bottom|⿱（目标集中出现1次）
+蓂,1,target_coverage,⿱,冥 艹,component-trajectory:冥|冥|bottom|⿱|10（目标集中出现1次）；component-context:冥|冥|bottom|⿱（目标集中出现1次）
+蓋,1,target_coverage,⿱,盍 艹,component-trajectory:盍|盍|bottom|⿱|10（目标集中出现1次）；component-context:盍|盍|bottom|⿱（目标集中出现1次）
+蓰,1,target_coverage,⿱,徙 艹,component-trajectory:徙|徙|bottom|⿱|11（目标集中出现1次）；component-context:徙|徙|bottom|⿱（目标集中出现1次）
+蓿,1,target_coverage,⿱,宿 艹,component-trajectory:宿|宿|bottom|⿱|11（目标集中出现1次）；component-context:宿|宿|bottom|⿱（目标集中出现1次）
+蔓,1,target_coverage,⿱,曼 艹,component-trajectory:曼|曼|bottom|⿱|11（目标集中出现1次）；component-context:曼|曼|bottom|⿱（目标集中出现1次）
+蔗,1,target_coverage,⿱,庶 艹,component-trajectory:庶|庶|bottom|⿱|11（目标集中出现1次）；component-context:庶|庶|bottom|⿱（目标集中出现1次）
+蔚,1,target_coverage,⿱,尉 艹,component-trajectory:尉|尉|bottom|⿱|11（目标集中出现1次）；component-context:尉|尉|bottom|⿱（目标集中出现1次）
+蔫,1,target_coverage,⿱,焉 艹,component-trajectory:焉|焉|bottom|⿱|11（目标集中出现1次）；component-context:焉|焉|bottom|⿱（目标集中出现1次）
+蔷,1,target_coverage,⿱,啬 艹,component-trajectory:啬|啬|bottom|⿱|11（目标集中出现1次）；component-context:啬|啬|bottom|⿱（目标集中出现1次）
+蔹,1,target_coverage,⿱,敛 艹,component-trajectory:敛|敛|bottom|⿱|11（目标集中出现1次）；component-context:敛|敛|bottom|⿱（目标集中出现1次）
+蔽,1,target_coverage,⿱,敝 艹,component-trajectory:敝|敝|bottom|⿱|11（目标集中出现1次）；component-context:敝|敝|bottom|⿱（目标集中出现1次）
+裹,1,target_coverage,⿻,果 衣,component-trajectory:果|果|overlap-secondary|⿻|8（目标集中出现1次）；component-context:果|果|overlap-secondary|⿻（目标集中出现1次）
+褓,1,target_coverage,⿰,保 衤,component-trajectory:保|保|right|⿰|9（目标集中出现1次）；component-context:保|保|right|⿰（目标集中出现1次）
+觏,1,target_coverage,⿰,冓 见,component-trajectory:冓|冓|left|⿰|10（目标集中出现1次）；component-context:冓|冓|left|⿰（目标集中出现1次）
+誌,1,target_coverage,⿰,志 言,component-trajectory:志|志|right|⿰|7（目标集中出现1次）；component-context:志|志|right|⿰（目标集中出现1次）
+趕,1,target_coverage,⿺,旱 走,component-trajectory:旱|旱|inside|⿺|7（目标集中出现1次）；component-context:旱|旱|inside|⿺（目标集中出现1次）
+遭,1,target_coverage,⿺,曹 辶,component-trajectory:曹|曹|inside|⿺|11（目标集中出现1次）；component-context:曹|曹|inside|⿺（目标集中出现1次）
+遮,1,target_coverage,⿺,庶 辶,component-trajectory:庶|庶|inside|⿺|11（目标集中出现1次）；component-context:庶|庶|inside|⿺（目标集中出现1次）
+鄦,1,target_coverage,⿰,無 阝,component-trajectory:無|無|left|⿰|12（目标集中出现1次）；component-context:無|無|left|⿰（目标集中出现1次）
+鄧,1,target_coverage,⿰,登 阝,component-trajectory:登|登|left|⿰|12（目标集中出现1次）；component-context:登|登|left|⿰（目标集中出现1次）
+鄯,1,target_coverage,⿰,善 阝,component-trajectory:善|善|left|⿰|12（目标集中出现1次）；component-context:善|善|left|⿰（目标集中出现1次）
+锵,1,target_coverage,⿰,将 钅,component-trajectory:将|将|right|⿰|9（目标集中出现1次）；component-context:将|将|right|⿰（目标集中出现1次）
+閤,1,target_coverage,⿵,合 門,component-trajectory:合|合|inside|⿵|6（目标集中出现1次）；component-context:合|合|inside|⿵（目标集中出现1次）
+閦,1,target_coverage,⿵,众 門,component-trajectory:众|众|inside|⿵|6（目标集中出现1次）；component-context:众|众|inside|⿵（目标集中出现1次）
+雌,1,target_coverage,⿰,此 隹,component-trajectory:此|此|left|⿰|6（目标集中出现1次）；component-context:此|此|left|⿰（目标集中出现1次）
+雒,1,target_coverage,⿰,各 隹,component-trajectory:各|各|left|⿰|6（目标集中出现1次）；component-context:各|各|left|⿰（目标集中出现1次）
+魃,1,target_coverage,⿺,犮 鬼,component-trajectory:犮|犮|inside|⿺|5（目标集中出现1次）；component-context:犮|犮|inside|⿺（目标集中出现1次）
+魅,1,target_coverage,⿺,未 鬼,component-trajectory:未|未|inside|⿺|5（目标集中出现1次）；component-context:未|未|inside|⿺（目标集中出现1次）
+鲕,1,target_coverage,⿰,而 鱼,component-trajectory:而|而|right|⿰|6（目标集中出现1次）；component-context:而|而|right|⿰（目标集中出现1次）
+鹛,1,target_coverage,⿰,眉 鸟,component-trajectory:眉|眉|left|⿰|9（目标集中出现1次）；component-context:眉|眉|left|⿰（目标集中出现1次）
+麼,1,target_coverage,⿸,幺 麻,component-trajectory:幺|幺|inside|⿸|3（目标集中出现1次）；component-context:幺|幺|inside|⿸（目标集中出现1次）
+麽,1,target_coverage,⿸,么 麻,component-trajectory:么|么|inside|⿸|3（目标集中出现1次）；component-context:么|么|inside|⿸（目标集中出现1次）
+劇,1,target_coverage,⿰,刂 豦,component-trajectory:豦|豦|left|⿰|13（目标集中出现1次）；component-context:豦|豦|left|⿰（目标集中出现1次）
+劊,1,target_coverage,⿰,刂 會,component-trajectory:會|會|left|⿰|13（目标集中出现1次）；component-context:會|會|left|⿰（目标集中出现1次）
+劐,1,target_coverage,⿰,刂 蒦,component-trajectory:蒦|蒦|left|⿰|13（目标集中出现1次）；component-context:蒦|蒦|left|⿰（目标集中出现1次）
+嘿,1,target_coverage,⿰,口 黑,component-trajectory:黑|黑|right|⿰|12（目标集中出现1次）；component-context:黑|黑|right|⿰（目标集中出现1次）
+墨,1,target_coverage,⿱,土 黑,component-trajectory:黑|黑|top|⿱|12（目标集中出现1次）；component-context:黑|黑|top|⿱（目标集中出现1次）
+寫,1,target_coverage,⿱,宀 舄,component-trajectory:舄|舄|bottom|⿱|12（目标集中出现1次）；component-context:舄|舄|bottom|⿱（目标集中出现1次）
+寮,1,target_coverage,⿱,宀 尞,component-trajectory:尞|尞|bottom|⿱|12（目标集中出现1次）；component-context:尞|尞|bottom|⿱（目标集中出现1次）
+層,1,target_coverage,⿸,尸 曾,component-trajectory:曾|曾|inside|⿸|12（目标集中出现1次）；component-context:曾|曾|inside|⿸（目标集中出现1次）
+履,1,target_coverage,⿸,尸 復,component-trajectory:復|復|inside|⿸|12（目标集中出现1次）；component-context:復|復|inside|⿸（目标集中出现1次）
+廚,1,target_coverage,⿸,尌 广,component-trajectory:尌|尌|inside|⿸|12（目标集中出现1次）；component-context:尌|尌|inside|⿸（目标集中出现1次）
+廛,1,target_coverage,⿸,八 土 广 里,component-trajectory:里|里|top|⿱|7（目标集中出现1次）；component-context:里|里|top|⿱（目标集中出现1次）
+廟,1,target_coverage,⿸,广 朝,component-trajectory:朝|朝|inside|⿸|12（目标集中出现1次）；component-context:朝|朝|inside|⿸（目标集中出现1次）
+廡,1,target_coverage,⿸,广 無,component-trajectory:無|無|inside|⿸|12（目标集中出现1次）；component-context:無|無|inside|⿸（目标集中出现1次）
+慮,1,target_coverage,⿸,思 虍,component-trajectory:思|思|inside|⿸|9（目标集中出现1次）；component-context:思|思|inside|⿸（目标集中出现1次）
+憨,1,target_coverage,⿱,心 敢,component-trajectory:敢|敢|top|⿱|11（目标集中出现1次）；component-context:敢|敢|top|⿱（目标集中出现1次）
+憬,1,target_coverage,⿰,忄 景,component-trajectory:景|景|right|⿰|12（目标集中出现1次）；component-context:景|景|right|⿰（目标集中出现1次）
+摩,1,target_coverage,⿸,手 麻,component-trajectory:手|手|inside|⿸|4（目标集中出现1次）；component-context:手|手|inside|⿸（目标集中出现1次）
+撤,1,target_coverage,⿲,扌 攵 育,component-trajectory:手|扌|left|⿲|3（目标集中出现1次）；component-context:手|扌|left|⿲（目标集中出现1次）
+敵,1,target_coverage,⿰,啇 攵,component-trajectory:啇|啇|left|⿰|11（目标集中出现1次）；component-context:啇|啇|left|⿰（目标集中出现1次）
+暱,1,target_coverage,⿰,匿 日,component-trajectory:匿|匿|right|⿰|11（目标集中出现1次）；component-context:匿|匿|right|⿰（目标集中出现1次）
+橢,1,target_coverage,⿰,木 隋,component-trajectory:隋|隋|right|⿰|11（目标集中出现1次）；component-context:隋|隋|right|⿰（目标集中出现1次）
+橥,1,target_coverage,⿱,木 猪,component-trajectory:猪|猪|top|⿱|11（目标集中出现1次）；component-context:猪|猪|top|⿱（目标集中出现1次）
+澈,1,target_coverage,⿰,攵 氵 育,component-trajectory:育|育|left|⿰|8（目标集中出现1次）；component-context:育|育|left|⿰（目标集中出现1次）
+澗,1,target_coverage,⿰,氵 間,component-trajectory:間|間|right|⿰|12（目标集中出现1次）；component-context:間|間|right|⿰（目标集中出现1次）
+瘜,1,target_coverage,⿸,息 疒,component-trajectory:息|息|inside|⿸|10（目标集中出现1次）；component-context:息|息|inside|⿸（目标集中出现1次）
+瘠,1,target_coverage,⿸,疒 脊,component-trajectory:脊|脊|inside|⿸|10（目标集中出现1次）；component-context:脊|脊|inside|⿸（目标集中出现1次）
+瘡,1,target_coverage,⿸,倉 疒,component-trajectory:倉|倉|inside|⿸|10（目标集中出现1次）；component-context:倉|倉|inside|⿸（目标集中出现1次）
+瘢,1,target_coverage,⿸,疒 般,component-trajectory:般|般|inside|⿸|10（目标集中出现1次）；component-context:般|般|inside|⿸（目标集中出现1次）
+瘤,1,target_coverage,⿸,留 疒,component-trajectory:留|留|inside|⿸|10（目标集中出现1次）；component-context:留|留|inside|⿸（目标集中出现1次）
+瘪,1,target_coverage,⿸,仑 疒 自,component-trajectory:仑|仑|bottom|⿱|4（目标集中出现1次）；component-context:仑|仑|bottom|⿱（目标集中出现1次）
+瘫,1,target_coverage,⿸,疒 难,component-trajectory:难|难|inside|⿸|10（目标集中出现1次）；component-context:难|难|inside|⿸（目标集中出现1次）
+瘼,1,target_coverage,⿸,疒 莫,component-trajectory:莫|莫|inside|⿸|10（目标集中出现1次）；component-context:莫|莫|inside|⿸（目标集中出现1次）
+箭,1,target_coverage,⿱,⺮ 前,component-trajectory:前|前|bottom|⿱|9（目标集中出现1次）；component-context:前|前|bottom|⿱（目标集中出现1次）
+箴,1,target_coverage,⿱,⺮ 咸,component-trajectory:咸|咸|bottom|⿱|9（目标集中出现1次）；component-context:咸|咸|bottom|⿱（目标集中出现1次）
+篁,1,target_coverage,⿱,⺮ 皇,component-trajectory:皇|皇|bottom|⿱|9（目标集中出现1次）；component-context:皇|皇|bottom|⿱（目标集中出现1次）
+篆,1,target_coverage,⿱,⺮ 彖,component-trajectory:彖|彖|bottom|⿱|9（目标集中出现1次）；component-context:彖|彖|bottom|⿱（目标集中出现1次）
+篇,1,target_coverage,⿱,⺮ 扁,component-trajectory:扁|扁|bottom|⿱|9（目标集中出现1次）；component-context:扁|扁|bottom|⿱（目标集中出现1次）
+篋,1,target_coverage,⿱,⺮ 匧,component-trajectory:匧|匧|bottom|⿱|9（目标集中出现1次）；component-context:匧|匧|bottom|⿱（目标集中出现1次）
+篌,1,target_coverage,⿱,⺮ 侯,component-trajectory:侯|侯|bottom|⿱|9（目标集中出现1次）；component-context:侯|侯|bottom|⿱（目标集中出现1次）
+翩,1,target_coverage,⿰,扁 羽,component-trajectory:扁|扁|left|⿰|9（目标集中出现1次）；component-context:扁|扁|left|⿰（目标集中出现1次）
+膚,1,target_coverage,⿸,胃 虍,component-trajectory:胃|胃|inside|⿸|9（目标集中出现1次）；component-context:胃|胃|inside|⿸（目标集中出现1次）
+艏,1,target_coverage,⿰,舟 首,component-trajectory:首|首|right|⿰|9（目标集中出现1次）；component-context:首|首|right|⿰（目标集中出现1次）
+蓴,1,target_coverage,⿱,專 艹,component-trajectory:專|專|bottom|⿱|11（目标集中出现1次）；component-context:專|專|bottom|⿱（目标集中出现1次）
+蔣,1,target_coverage,⿱,將 艹,component-trajectory:將|將|bottom|⿱|11（目标集中出现1次）；component-context:將|將|bottom|⿱（目标集中出现1次）
+蔥,1,target_coverage,⿱,悤 艹,component-trajectory:悤|悤|bottom|⿱|11（目标集中出现1次）；component-context:悤|悤|bottom|⿱（目标集中出现1次）
+蕉,1,target_coverage,⿱,焦 艹,component-trajectory:焦|焦|bottom|⿱|12（目标集中出现1次）；component-context:焦|焦|bottom|⿱（目标集中出现1次）
+蕙,1,target_coverage,⿱,惠 艹,component-trajectory:惠|惠|bottom|⿱|12（目标集中出现1次）；component-context:惠|惠|bottom|⿱（目标集中出现1次）
+蕞,1,target_coverage,⿱,最 艹,component-trajectory:最|最|bottom|⿱|12（目标集中出现1次）；component-context:最|最|bottom|⿱（目标集中出现1次）
+虢,1,target_coverage,⿰,寽 虎,component-trajectory:寽|寽|left|⿰|7（目标集中出现1次）；component-context:寽|寽|left|⿰（目标集中出现1次）
+衛,1,target_coverage,⿻,行 韋,component-trajectory:韋|韋|overlap-secondary|⿻|9（目标集中出现1次）；component-context:韋|韋|overlap-secondary|⿻（目标集中出现1次）
+趣,1,target_coverage,⿺,取 走,component-trajectory:取|取|inside|⿺|8（目标集中出现1次）；component-context:取|取|inside|⿺（目标集中出现1次）
+遴,1,target_coverage,⿺,粦 辶,component-trajectory:粦|粦|inside|⿺|12（目标集中出现1次）；component-context:粦|粦|inside|⿺（目标集中出现1次）
+選,1,target_coverage,⿺,巽 辶,component-trajectory:巽|巽|inside|⿺|12（目标集中出现1次）；component-context:巽|巽|inside|⿺（目标集中出现1次）
+遼,1,target_coverage,⿺,尞 辶,component-trajectory:尞|尞|inside|⿺|12（目标集中出现1次）；component-context:尞|尞|inside|⿺（目标集中出现1次）
+閱,1,target_coverage,⿵,兌 門,component-trajectory:兌|兌|inside|⿵|7（目标集中出现1次）；component-context:兌|兌|inside|⿵（目标集中出现1次）
+靥,1,target_coverage,⿸,厌 面,component-trajectory:面|面|inside|⿸|9（目标集中出现1次）；component-context:面|面|inside|⿸（目标集中出现1次）
+题,1,target_coverage,⿺,是 页,component-trajectory:页|页|inside|⿺|6（目标集中出现1次）；component-context:页|页|inside|⿺（目标集中出现1次）
+颜,1,target_coverage,⿰,彦 页,component-trajectory:彦|彦|left|⿰|9（目标集中出现1次）；component-context:彦|彦|left|⿰（目标集中出现1次）
+鴂,1,target_coverage,⿰,夬 鳥,component-trajectory:夬|夬|left|⿰|4（目标集中出现1次）；component-context:夬|夬|left|⿰（目标集中出现1次）
+鴔,1,target_coverage,⿰,乏 鳥,component-trajectory:乏|乏|left|⿰|4（目标集中出现1次）；component-context:乏|乏|left|⿰（目标集中出现1次）
+齒,1,target_coverage,⿱,一 从 凵 止,component-trajectory:从|从|top|⿳|4（目标集中出现1次）；component-context:从|从|top|⿳（目标集中出现1次）
+劑,1,target_coverage,⿰,刂 齊,component-trajectory:齊|齊|left|⿰|14（目标集中出现1次）；component-context:齊|齊|left|⿰（目标集中出现1次）
+勳,1,target_coverage,⿰,力 熏,component-trajectory:熏|熏|left|⿰|14（目标集中出现1次）；component-context:熏|熏|left|⿰（目标集中出现1次）
+器,1,target_coverage,⿳,口 犬,component-trajectory:犬|犬|middle|⿳|4（目标集中出现1次）；component-context:犬|犬|middle|⿳（目标集中出现1次）
+圜,1,target_coverage,⿴,囗 睘,component-trajectory:睘|睘|inside|⿴|13（目标集中出现1次）；component-context:睘|睘|inside|⿴（目标集中出现1次）
+嬴,1,target_coverage,⿳,亡 凡 口 女 月,component-trajectory:亡|亡|top|⿳|3（目标集中出现1次）；component-context:亡|亡|top|⿳（目标集中出现1次）
+嶪,1,target_coverage,⿱,山 業,component-trajectory:業|業|bottom|⿱|13（目标集中出现1次）；component-context:業|業|bottom|⿱（目标集中出现1次）
+廥,1,target_coverage,⿸,广 會,component-trajectory:會|會|inside|⿸|13（目标集中出现1次）；component-context:會|會|inside|⿸（目标集中出现1次）
+廨,1,target_coverage,⿸,广 解,component-trajectory:解|解|inside|⿸|13（目标集中出现1次）；component-context:解|解|inside|⿸（目标集中出现1次）
+廩,1,target_coverage,⿸,广 稟,component-trajectory:稟|稟|inside|⿸|13（目标集中出现1次）；component-context:稟|稟|inside|⿸（目标集中出现1次）
+廪,1,target_coverage,⿸,广 禀,component-trajectory:禀|禀|inside|⿸|13（目标集中出现1次）；component-context:禀|禀|inside|⿸（目标集中出现1次）
+擞,1,target_coverage,⿰,扌 数,component-trajectory:数|数|right|⿰|13（目标集中出现1次）；component-context:数|数|right|⿰（目标集中出现1次）
+氅,1,target_coverage,⿱,敞 毛,component-trajectory:敞|敞|top|⿱|12（目标集中出现1次）；component-context:敞|敞|top|⿱（目标集中出现1次）
+氇,1,target_coverage,⿺,毛 鲁,component-trajectory:鲁|鲁|inside|⿺|12（目标集中出现1次）；component-context:鲁|鲁|inside|⿺（目标集中出现1次）
+熹,1,target_coverage,⿱,喜 灬,component-trajectory:喜|喜|top|⿱|12（目标集中出现1次）；component-context:喜|喜|top|⿱（目标集中出现1次）
+營,1,target_coverage,⿳,冖 吕 炏,component-trajectory:吕|吕|bottom|⿳|6（目标集中出现1次）；component-context:吕|吕|bottom|⿳（目标集中出现1次）
+犟,1,target_coverage,⿱,强 牛,component-trajectory:强|强|top|⿱|12（目标集中出现1次）；component-context:强|强|top|⿱（目标集中出现1次）
+甑,1,target_coverage,⿰,曾 瓦,component-trajectory:曾|曾|left|⿰|12（目标集中出现1次）；component-context:曾|曾|left|⿰（目标集中出现1次）
+瘭,1,target_coverage,⿸,疒 票,component-trajectory:票|票|inside|⿸|11（目标集中出现1次）；component-context:票|票|inside|⿸（目标集中出现1次）
+瘰,1,target_coverage,⿸,疒 累,component-trajectory:累|累|inside|⿸|11（目标集中出现1次）；component-context:累|累|inside|⿸（目标集中出现1次）
+瘲,1,target_coverage,⿸,從 疒,component-trajectory:從|從|inside|⿸|11（目标集中出现1次）；component-context:從|從|inside|⿸（目标集中出现1次）
+瘴,1,target_coverage,⿸,疒 章,component-trajectory:章|章|inside|⿸|11（目标集中出现1次）；component-context:章|章|inside|⿸（目标集中出现1次）
+瘵,1,target_coverage,⿸,疒 祭,component-trajectory:祭|祭|inside|⿸|11（目标集中出现1次）；component-context:祭|祭|inside|⿸（目标集中出现1次）
+磨,1,target_coverage,⿸,石 麻,component-trajectory:石|石|inside|⿸|5（目标集中出现1次）；component-context:石|石|inside|⿸（目标集中出现1次）
+磲,1,target_coverage,⿰,渠 石,component-trajectory:渠|渠|right|⿰|11（目标集中出现1次）；component-context:渠|渠|right|⿰（目标集中出现1次）
+篔,1,target_coverage,⿱,⺮ 員,component-trajectory:員|員|bottom|⿱|10（目标集中出现1次）；component-context:員|員|bottom|⿱（目标集中出现1次）
+篚,1,target_coverage,⿱,⺮ 匪,component-trajectory:匪|匪|bottom|⿱|10（目标集中出现1次）；component-context:匪|匪|bottom|⿱（目标集中出现1次）
+篝,1,target_coverage,⿱,⺮ 冓,component-trajectory:冓|冓|bottom|⿱|10（目标集中出现1次）；component-context:冓|冓|bottom|⿱（目标集中出现1次）
+篥,1,target_coverage,⿱,⺮ 栗,component-trajectory:栗|栗|bottom|⿱|10（目标集中出现1次）；component-context:栗|栗|bottom|⿱（目标集中出现1次）
+篦,1,target_coverage,⿳,⺮ 囟 比,component-trajectory:⺮|⺮|top|⿳|6（目标集中出现1次）；component-context:⺮|⺮|top|⿳（目标集中出现1次）
+篩,1,target_coverage,⿱,⺮ 師,component-trajectory:師|師|bottom|⿱|10（目标集中出现1次）；component-context:師|師|bottom|⿱（目标集中出现1次）
+翰,1,target_coverage,⿰,倝 羽,component-trajectory:倝|倝|left|⿰|10（目标集中出现1次）；component-context:倝|倝|left|⿰（目标集中出现1次）
+翱,1,target_coverage,⿰,皋 羽,component-trajectory:皋|皋|left|⿰|10（目标集中出现1次）；component-context:皋|皋|left|⿰（目标集中出现1次）
+蕎,1,target_coverage,⿱,喬 艹,component-trajectory:喬|喬|bottom|⿱|12（目标集中出现1次）；component-context:喬|喬|bottom|⿱（目标集中出现1次）
+蕑,1,target_coverage,⿱,艹 閒,component-trajectory:閒|閒|bottom|⿱|12（目标集中出现1次）；component-context:閒|閒|bottom|⿱（目标集中出现1次）
+蕘,1,target_coverage,⿱,堯 艹,component-trajectory:堯|堯|bottom|⿱|12（目标集中出现1次）；component-context:堯|堯|bottom|⿱（目标集中出现1次）
+蕩,1,target_coverage,⿱,湯 艹,component-trajectory:湯|湯|bottom|⿱|12（目标集中出现1次）；component-context:湯|湯|bottom|⿱（目标集中出现1次）
+蕪,1,target_coverage,⿱,無 艹,component-trajectory:無|無|bottom|⿱|12（目标集中出现1次）；component-context:無|無|bottom|⿱（目标集中出现1次）
+蕹,1,target_coverage,⿱,艹 雍,component-trajectory:雍|雍|bottom|⿱|13（目标集中出现1次）；component-context:雍|雍|bottom|⿱（目标集中出现1次）
+蕾,1,target_coverage,⿱,艹 雷,component-trajectory:雷|雷|bottom|⿱|13（目标集中出现1次）；component-context:雷|雷|bottom|⿱（目标集中出现1次）
+薏,1,target_coverage,⿱,意 艹,component-trajectory:意|意|bottom|⿱|13（目标集中出现1次）；component-context:意|意|bottom|⿱（目标集中出现1次）
+薯,1,target_coverage,⿱,署 艹,component-trajectory:署|署|bottom|⿱|13（目标集中出现1次）；component-context:署|署|bottom|⿱（目标集中出现1次）
+螢,1,target_coverage,⿳,冖 火 虫,component-trajectory:虫|虫|bottom|⿳|6（目标集中出现1次）；component-context:虫|虫|bottom|⿳（目标集中出现1次）
+衡,1,target_coverage,⿻,大 行 角,component-trajectory:角|角|top|⿱|7（目标集中出现1次）；component-context:角|角|top|⿱（目标集中出现1次）
+趦,1,target_coverage,⿺,咨 走,component-trajectory:咨|咨|inside|⿺|9（目标集中出现1次）；component-context:咨|咨|inside|⿺（目标集中出现1次）
+辙,1,target_coverage,⿲,攵 育 车,component-trajectory:车|车|left|⿲|4（目标集中出现1次）；component-context:车|车|left|⿲（目标集中出现1次）
+辦,1,target_coverage,⿲,力 辛,component-trajectory:力|力|middle|⿲|2（目标集中出现1次）；component-context:力|力|middle|⿲（目标集中出现1次）
+辩,1,target_coverage,⿲,讠 辛,component-trajectory:言|讠|middle|⿲|2（目标集中出现1次）；component-context:言|讠|middle|⿲（目标集中出现1次）
+遽,1,target_coverage,⿺,豦 辶,component-trajectory:豦|豦|inside|⿺|13（目标集中出现1次）；component-context:豦|豦|inside|⿺（目标集中出现1次）
+避,1,target_coverage,⿺,辟 辶,component-trajectory:辟|辟|inside|⿺|13（目标集中出现1次）；component-context:辟|辟|inside|⿺（目标集中出现1次）
+邀,1,target_coverage,⿺,敫 辶,component-trajectory:敫|敫|inside|⿺|13（目标集中出现1次）；component-context:敫|敫|inside|⿺（目标集中出现1次）
+邁,1,target_coverage,⿺,萬 辶,component-trajectory:萬|萬|inside|⿺|13（目标集中出现1次）；component-context:萬|萬|inside|⿺（目标集中出现1次）
+邂,1,target_coverage,⿺,解 辶,component-trajectory:解|解|inside|⿺|13（目标集中出现1次）；component-context:解|解|inside|⿺（目标集中出现1次）
+鄹,1,target_coverage,⿰,聚 阝,component-trajectory:聚|聚|left|⿰|14（目标集中出现1次）；component-context:聚|聚|left|⿰（目标集中出现1次）
+雔,1,target_coverage,⿰,隹,component-trajectory:隹|隹|left|⿰|8（目标集中出现1次）；component-context:隹|隹|left|⿰（目标集中出现1次）
+霓,1,target_coverage,⿱,兒 雨,component-trajectory:兒|兒|bottom|⿱|8（目标集中出现1次）；component-context:兒|兒|bottom|⿱（目标集中出现1次）
+霖,1,target_coverage,⿱,林 雨,component-trajectory:林|林|bottom|⿱|8（目标集中出现1次）；component-context:林|林|bottom|⿱（目标集中出现1次）
+靦,1,target_coverage,⿰,見 面,component-trajectory:面|面|left|⿰|9（目标集中出现1次）；component-context:面|面|left|⿰（目标集中出现1次）
+颞,1,target_coverage,⿰,聂 页,component-trajectory:聂|聂|left|⿰|10（目标集中出现1次）；component-context:聂|聂|left|⿰（目标集中出现1次）
+髻,1,target_coverage,⿱,吉 髟,component-trajectory:吉|吉|bottom|⿱|6（目标集中出现1次）；component-context:吉|吉|bottom|⿱（目标集中出现1次）
+鬨,1,target_coverage,⿵,共 鬥,component-trajectory:共|共|inside|⿵|6（目标集中出现1次）；component-context:共|共|inside|⿵（目标集中出现1次）
+魉,1,target_coverage,⿺,两 鬼,component-trajectory:两|两|inside|⿺|7（目标集中出现1次）；component-context:两|两|inside|⿺（目标集中出现1次）
+麇,1,target_coverage,⿸,禾 鹿,component-trajectory:禾|禾|inside|⿸|5（目标集中出现1次）；component-context:禾|禾|inside|⿸（目标集中出现1次）
+黉,1,target_coverage,⿳,⺍ 冖 黄,component-trajectory:黄|黄|bottom|⿳|11（目标集中出现1次）；component-context:黄|黄|bottom|⿳（目标集中出现1次）
+儡,1,target_coverage,⿰,亻 畾,component-trajectory:畾|畾|right|⿰|15（目标集中出现1次）；component-context:畾|畾|right|⿰（目标集中出现1次）
+勵,1,target_coverage,⿰,力 厲,component-trajectory:厲|厲|left|⿰|15（目标集中出现1次）；component-context:厲|厲|left|⿰（目标集中出现1次）
+壓,1,target_coverage,⿱,厭 土,component-trajectory:厭|厭|top|⿱|14（目标集中出现1次）；component-context:厭|厭|top|⿱（目标集中出现1次）
+嶷,1,target_coverage,⿱,山 疑,component-trajectory:疑|疑|bottom|⿱|14（目标集中出现1次）；component-context:疑|疑|bottom|⿱（目标集中出现1次）
+療,1,target_coverage,⿸,尞 疒,component-trajectory:尞|尞|inside|⿸|12（目标集中出现1次）；component-context:尞|尞|inside|⿸（目标集中出现1次）
+癆,1,target_coverage,⿸,勞 疒,component-trajectory:勞|勞|inside|⿸|12（目标集中出现1次）；component-context:勞|勞|inside|⿸（目标集中出现1次）
+癉,1,target_coverage,⿸,單 疒,component-trajectory:單|單|inside|⿸|12（目标集中出现1次）；component-context:單|單|inside|⿸（目标集中出现1次）
+簧,1,target_coverage,⿱,⺮ 黄,component-trajectory:黄|黄|bottom|⿱|11（目标集中出现1次）；component-context:黄|黄|bottom|⿱（目标集中出现1次）
+縻,1,target_coverage,⿸,糸 麻,component-trajectory:糸|糸|inside|⿸|6（目标集中出现1次）；component-context:糸|糸|inside|⿸（目标集中出现1次）
+罾,1,target_coverage,⿱,曾 罒,component-trajectory:曾|曾|bottom|⿱|12（目标集中出现1次）；component-context:曾|曾|bottom|⿱（目标集中出现1次）
+臀,1,target_coverage,⿱,⺼ 殿,component-trajectory:殿|殿|top|⿱|13（目标集中出现1次）；component-context:殿|殿|top|⿱（目标集中出现1次）
+臌,1,target_coverage,⿰,⺼ 鼓,component-trajectory:鼓|鼓|right|⿰|13（目标集中出现1次）；component-context:鼓|鼓|right|⿰（目标集中出现1次）
+薈,1,target_coverage,⿱,會 艹,component-trajectory:會|會|bottom|⿱|13（目标集中出现1次）；component-context:會|會|bottom|⿱（目标集中出现1次）
+薑,1,target_coverage,⿱,畺 艹,component-trajectory:畺|畺|bottom|⿱|13（目标集中出现1次）；component-context:畺|畺|bottom|⿱（目标集中出现1次）
+薔,1,target_coverage,⿱,嗇 艹,component-trajectory:嗇|嗇|bottom|⿱|13（目标集中出现1次）；component-context:嗇|嗇|bottom|⿱（目标集中出现1次）
+薰,1,target_coverage,⿱,熏 艹,component-trajectory:熏|熏|bottom|⿱|14（目标集中出现1次）；component-context:熏|熏|bottom|⿱（目标集中出现1次）
+薷,1,target_coverage,⿱,艹 需,component-trajectory:需|需|bottom|⿱|14（目标集中出现1次）；component-context:需|需|bottom|⿱（目标集中出现1次）
+薹,1,target_coverage,⿱,臺 艹,component-trajectory:臺|臺|bottom|⿱|14（目标集中出现1次）；component-context:臺|臺|bottom|⿱（目标集中出现1次）
+藇,1,target_coverage,⿱,與 艹,component-trajectory:與|與|bottom|⿱|13（目标集中出现1次）；component-context:與|與|bottom|⿱（目标集中出现1次）
+螽,1,target_coverage,⿱,冬 虫,component-trajectory:冬|冬|top|⿱|5（目标集中出现1次）；component-context:冬|冬|top|⿱（目标集中出现1次）
+蟋,1,target_coverage,⿰,悉 虫,component-trajectory:悉|悉|right|⿰|11（目标集中出现1次）；component-context:悉|悉|right|⿰（目标集中出现1次）
+謇,1,target_coverage,⿳,宀 言,component-trajectory:言|言|bottom|⿳|7（目标集中出现1次）；component-context:言|言|bottom|⿳（目标集中出现1次）
+赢,1,target_coverage,⿱,⺼ 吂 贝,component-trajectory:贝|贝|middle|⿲|4（目标集中出现1次）；component-context:贝|贝|middle|⿲（目标集中出现1次）
+趨,1,target_coverage,⿺,芻 走,component-trajectory:芻|芻|inside|⿺|10（目标集中出现1次）；component-context:芻|芻|inside|⿺（目标集中出现1次）
+輿,1,target_coverage,⿶,舁 車,component-trajectory:車|車|inside|⿶|7（目标集中出现1次）；component-context:車|車|inside|⿶（目标集中出现1次）
+辫,1,target_coverage,⿲,纟 辛,component-trajectory:糸|纟|middle|⿲|3（目标集中出现1次）；component-context:糸|纟|middle|⿲（目标集中出现1次）
+邃,1,target_coverage,⿺,㒸 穴 辶,component-trajectory:㒸|㒸|bottom|⿱|9（目标集中出现1次）；component-context:㒸|㒸|bottom|⿱（目标集中出现1次）
+邇,1,target_coverage,⿺,爾 辶,component-trajectory:爾|爾|inside|⿺|14（目标集中出现1次）；component-context:爾|爾|inside|⿺（目标集中出现1次）
+邈,1,target_coverage,⿺,貌 辶,component-trajectory:貌|貌|inside|⿺|14（目标集中出现1次）；component-context:貌|貌|inside|⿺（目标集中出现1次）
+醢,1,target_coverage,⿰,右 皿 酉,component-trajectory:右|右|top|⿱|5（目标集中出现1次）；component-context:右|右|top|⿱（目标集中出现1次）
+闆,1,target_coverage,⿵,品 門,component-trajectory:品|品|inside|⿵|9（目标集中出现1次）；component-context:品|品|inside|⿵（目标集中出现1次）
+闈,1,target_coverage,⿵,門 韋,component-trajectory:韋|韋|inside|⿵|9（目标集中出现1次）；component-context:韋|韋|inside|⿵（目标集中出现1次）
+闉,1,target_coverage,⿵,垔 門,component-trajectory:垔|垔|inside|⿵|9（目标集中出现1次）；component-context:垔|垔|inside|⿵（目标集中出现1次）
+雖,1,target_coverage,⿰,虽 隹,component-trajectory:虽|虽|left|⿰|9（目标集中出现1次）；component-context:虽|虽|left|⿰（目标集中出现1次）
+雚,1,target_coverage,⿳,艹 隹,component-trajectory:隹|隹|bottom|⿳|8（目标集中出现1次）；component-context:隹|隹|bottom|⿳（目标集中出现1次）
+魍,1,target_coverage,⿺,罔 鬼,component-trajectory:罔|罔|inside|⿺|8（目标集中出现1次）；component-context:罔|罔|inside|⿺（目标集中出现1次）
+麿,1,target_coverage,⿸,吕 麻,component-trajectory:吕|吕|inside|⿸|6（目标集中出现1次）；component-context:吕|吕|inside|⿸（目标集中出现1次）
+齋,1,target_coverage,⿵,小 齊,component-trajectory:小|小|inside|⿵|3（目标集中出现1次）；component-context:小|小|inside|⿵（目标集中出现1次）
+叢,1,target_coverage,⿱,丵 又 耳,component-trajectory:耳|耳|surround-top-left|⿸|6（目标集中出现1次）；component-context:耳|耳|surround-top-left|⿸（目标集中出现1次）
+嚙,1,target_coverage,⿰,口 齒,component-trajectory:齒|齒|right|⿰|15（目标集中出现1次）；component-context:齒|齒|right|⿰（目标集中出现1次）
+嚣,1,target_coverage,⿳,口 页,component-trajectory:页|页|middle|⿳|6（目标集中出现1次）；component-context:页|页|middle|⿳（目标集中出现1次）
+巂,1,target_coverage,⿱,冏 崔,component-trajectory:崔|崔|top|⿱|11（目标集中出现1次）；component-context:崔|崔|top|⿱（目标集中出现1次）
+戳,1,target_coverage,⿰,戈 翟,component-trajectory:翟|翟|left|⿰|14（目标集中出现1次）；component-context:翟|翟|left|⿰（目标集中出现1次）
+擻,1,target_coverage,⿰,扌 數,component-trajectory:數|數|right|⿰|15（目标集中出现1次）；component-context:數|數|right|⿰（目标集中出现1次）
+燹,1,target_coverage,⿱,火 豩,component-trajectory:豩|豩|top|⿱|14（目标集中出现1次）；component-context:豩|豩|top|⿱（目标集中出现1次）
+燾,1,target_coverage,⿱,壽 灬,component-trajectory:壽|壽|top|⿱|14（目标集中出现1次）；component-context:壽|壽|top|⿱（目标集中出现1次）
+癔,1,target_coverage,⿸,意 疒,component-trajectory:意|意|inside|⿸|13（目标集中出现1次）；component-context:意|意|inside|⿸（目标集中出现1次）
+癖,1,target_coverage,⿸,疒 辟,component-trajectory:辟|辟|inside|⿸|13（目标集中出现1次）；component-context:辟|辟|inside|⿸（目标集中出现1次）
+癜,1,target_coverage,⿸,殿 疒,component-trajectory:殿|殿|inside|⿸|13（目标集中出现1次）；component-context:殿|殿|inside|⿸（目标集中出现1次）
+癞,1,target_coverage,⿸,疒 赖,component-trajectory:赖|赖|inside|⿸|13（目标集中出现1次）；component-context:赖|赖|inside|⿸（目标集中出现1次）
+簞,1,target_coverage,⿱,⺮ 單,component-trajectory:單|單|bottom|⿱|12（目标集中出现1次）；component-context:單|單|bottom|⿱（目标集中出现1次）
+簪,1,target_coverage,⿱,⺮ 朁,component-trajectory:朁|朁|bottom|⿱|12（目标集中出现1次）；component-context:朁|朁|bottom|⿱（目标集中出现1次）
+蹡,1,target_coverage,⿰,將 足,component-trajectory:將|將|right|⿰|11（目标集中出现1次）；component-context:將|將|right|⿰（目标集中出现1次）
+邋,1,target_coverage,⿺,巤 辶,component-trajectory:巤|巤|inside|⿺|15（目标集中出现1次）；component-context:巤|巤|inside|⿺（目标集中出现1次）
+釐,1,target_coverage,⿱,厘,component-trajectory:厘|厘|bottom|⿱|9（目标集中出现1次）；component-context:厘|厘|bottom|⿱（目标集中出现1次）
+闖,1,target_coverage,⿵,門 馬,component-trajectory:馬|馬|inside|⿵|10（目标集中出现1次）；component-context:馬|馬|inside|⿵（目标集中出现1次）
+雙,1,target_coverage,⿱,又 雔,component-trajectory:雔|雔|top|⿱|16（目标集中出现1次）；component-context:雔|雔|top|⿱（目标集中出现1次）
+離,1,target_coverage,⿰,离 隹,component-trajectory:离|离|left|⿰|10（目标集中出现1次）；component-context:离|离|left|⿰（目标集中出现1次）
+題,1,target_coverage,⿺,是 頁,component-trajectory:頁|頁|inside|⿺|9（目标集中出现1次）；component-context:頁|頁|inside|⿺（目标集中出现1次）
+魎,1,target_coverage,⿺,兩 鬼,component-trajectory:兩|兩|inside|⿺|8（目标集中出现1次）；component-context:兩|兩|inside|⿺（目标集中出现1次）
+鼕,1,target_coverage,⿱,冬 鼓,component-trajectory:冬|冬|bottom|⿱|5（目标集中出现1次）；component-context:冬|冬|bottom|⿱（目标集中出现1次）
+齌,1,target_coverage,⿵,火 齊,component-trajectory:火|火|inside|⿵|4（目标集中出现1次）；component-context:火|火|inside|⿵（目标集中出现1次）
+廬,1,target_coverage,⿸,广 盧,component-trajectory:盧|盧|inside|⿸|16（目标集中出现1次）；component-context:盧|盧|inside|⿸（目标集中出现1次）
+瀕,1,target_coverage,⿰,氵 頻,component-trajectory:頻|頻|right|⿰|16（目标集中出现1次）；component-context:頻|頻|right|⿰（目标集中出现1次）
+瓣,1,target_coverage,⿲,瓜 辛,component-trajectory:瓜|瓜|middle|⿲|5（目标集中出现1次）；component-context:瓜|瓜|middle|⿲（目标集中出现1次）
+癡,1,target_coverage,⿸,疑 疒,component-trajectory:疑|疑|inside|⿸|14（目标集中出现1次）；component-context:疑|疑|inside|⿸（目标集中出现1次）
+癣,1,target_coverage,⿸,疒 鲜,component-trajectory:鲜|鲜|inside|⿸|14（目标集中出现1次）；component-context:鲜|鲜|inside|⿸（目标集中出现1次）
+簹,1,target_coverage,⿱,⺮ 當,component-trajectory:當|當|bottom|⿱|13（目标集中出现1次）；component-context:當|當|bottom|⿱（目标集中出现1次）
+簽,1,target_coverage,⿱,⺮ 僉,component-trajectory:僉|僉|bottom|⿱|13（目标集中出现1次）；component-context:僉|僉|bottom|⿱（目标集中出现1次）
+簾,1,target_coverage,⿱,⺮ 廉,component-trajectory:廉|廉|bottom|⿱|13（目标集中出现1次）；component-context:廉|廉|bottom|⿱（目标集中出现1次）
+籁,1,target_coverage,⿱,⺮ 赖,component-trajectory:赖|赖|bottom|⿱|13（目标集中出现1次）；component-context:赖|赖|bottom|⿱（目标集中出现1次）
+羅,1,target_coverage,⿱,維 罒,component-trajectory:維|維|bottom|⿱|14（目标集中出现1次）；component-context:維|維|bottom|⿱（目标集中出现1次）
+藥,1,target_coverage,⿱,樂 艹,component-trajectory:樂|樂|bottom|⿱|15（目标集中出现1次）；component-context:樂|樂|bottom|⿱（目标集中出现1次）
+藨,1,target_coverage,⿱,艹 麃,component-trajectory:麃|麃|bottom|⿱|15（目标集中出现1次）；component-context:麃|麃|bottom|⿱（目标集中出现1次）
+藿,1,target_coverage,⿱,艹 霍,component-trajectory:霍|霍|bottom|⿱|16（目标集中出现1次）；component-context:霍|霍|bottom|⿱（目标集中出现1次）
+蟹,1,target_coverage,⿱,虫 解,component-trajectory:解|解|top|⿱|13（目标集中出现1次）；component-context:解|解|top|⿱（目标集中出现1次）
+醯,1,target_coverage,⿰,㐬 皿 酉,component-trajectory:㐬|㐬|top|⿱|7（目标集中出现1次）；component-context:㐬|㐬|top|⿱（目标集中出现1次）
+鏖,1,target_coverage,⿸,金 鹿,component-trajectory:金|金|inside|⿸|8（目标集中出现1次）；component-context:金|金|inside|⿸（目标集中出现1次）
+願,1,target_coverage,⿰,原 頁,component-trajectory:原|原|left|⿰|10（目标集中出现1次）；component-context:原|原|left|⿰（目标集中出现1次）
+鬏,1,target_coverage,⿱,秋 髟,component-trajectory:秋|秋|bottom|⿱|9（目标集中出现1次）；component-context:秋|秋|bottom|⿱（目标集中出现1次）
+鶇,1,target_coverage,⿰,東 鳥,component-trajectory:東|東|left|⿰|8（目标集中出现1次）；component-context:東|東|left|⿰（目标集中出现1次）
+龐,1,target_coverage,⿸,广 龍,component-trajectory:龍|龍|inside|⿸|16（目标集中出现1次）；component-context:龍|龍|inside|⿸（目标集中出现1次）
+嚴,1,target_coverage,⿱,厂 口 敢,component-trajectory:敢|敢|inside|⿸|12（目标集中出现1次）；component-context:敢|敢|inside|⿸（目标集中出现1次）
+懸,1,target_coverage,⿱,心 縣,component-trajectory:縣|縣|top|⿱|16（目标集中出现1次）；component-context:縣|縣|top|⿱（目标集中出现1次）
+竇,1,target_coverage,⿱,穴 賣,component-trajectory:賣|賣|bottom|⿱|15（目标集中出现1次）；component-context:賣|賣|bottom|⿱（目标集中出现1次）
+籌,1,target_coverage,⿱,⺮ 壽,component-trajectory:壽|壽|bottom|⿱|14（目标集中出现1次）；component-context:壽|壽|bottom|⿱（目标集中出现1次）
+蘆,1,target_coverage,⿱,盧 艹,component-trajectory:盧|盧|bottom|⿱|16（目标集中出现1次）；component-context:盧|盧|bottom|⿱（目标集中出现1次）
+蘋,1,target_coverage,⿱,艹 頻,component-trajectory:頻|頻|bottom|⿱|16（目标集中出现1次）；component-context:頻|頻|bottom|⿱（目标集中出现1次）
+躉,1,target_coverage,⿱,萬 足,component-trajectory:萬|萬|top|⿱|13（目标集中出现1次）；component-context:萬|萬|top|⿱（目标集中出现1次）
+闡,1,target_coverage,⿵,單 門,component-trajectory:單|單|inside|⿵|12（目标集中出现1次）；component-context:單|單|inside|⿵（目标集中出现1次）
+霰,1,target_coverage,⿱,散 雨,component-trajectory:散|散|bottom|⿱|12（目标集中出现1次）；component-context:散|散|bottom|⿱（目标集中出现1次）
+鬒,1,target_coverage,⿱,真 髟,component-trajectory:真|真|bottom|⿱|10（目标集中出现1次）；component-context:真|真|bottom|⿱（目标集中出现1次）
+鬓,1,target_coverage,⿱,宾 髟,component-trajectory:宾|宾|bottom|⿱|10（目标集中出现1次）；component-context:宾|宾|bottom|⿱（目标集中出现1次）
+囂,1,target_coverage,⿳,口 頁,component-trajectory:頁|頁|middle|⿳|9（目标集中出现1次）；component-context:頁|頁|middle|⿳（目标集中出现1次）
+懼,1,target_coverage,⿰,忄 瞿,component-trajectory:瞿|瞿|right|⿰|18（目标集中出现1次）；component-context:瞿|瞿|right|⿰（目标集中出现1次）
+癧,1,target_coverage,⿸,歷 疒,component-trajectory:歷|歷|inside|⿸|16（目标集中出现1次）；component-context:歷|歷|inside|⿸（目标集中出现1次）
+癩,1,target_coverage,⿸,疒 賴,component-trajectory:賴|賴|inside|⿸|16（目标集中出现1次）；component-context:賴|賴|inside|⿸（目标集中出现1次）
+癫,1,target_coverage,⿸,疒 颠,component-trajectory:颠|颠|inside|⿸|16（目标集中出现1次）；component-context:颠|颠|inside|⿸（目标集中出现1次）
+蘚,1,target_coverage,⿱,艹 鮮,component-trajectory:鮮|鮮|bottom|⿱|17（目标集中出现1次）；component-context:鮮|鮮|bottom|⿱（目标集中出现1次）
+蘭,1,target_coverage,⿱,艹 闌,component-trajectory:闌|闌|bottom|⿱|17（目标集中出现1次）；component-context:闌|闌|bottom|⿱（目标集中出现1次）
+蠡,1,target_coverage,⿱,彖 虫,component-trajectory:彖|彖|top|⿱|9（目标集中出现1次）；component-context:彖|彖|top|⿱（目标集中出现1次）
+蠢,1,target_coverage,⿱,春 虫,component-trajectory:春|春|top|⿱|9（目标集中出现1次）；component-context:春|春|top|⿱（目标集中出现1次）
+贓,1,target_coverage,⿰,臧 貝,component-trajectory:臧|臧|right|⿰|14（目标集中出现1次）；component-context:臧|臧|right|⿰（目标集中出现1次）
+赣,1,target_coverage,⿰,夂 章 贡,component-trajectory:贡|贡|bottom|⿱|7（目标集中出现1次）；component-context:贡|贡|bottom|⿱（目标集中出现1次）
+闢,1,target_coverage,⿵,辟 門,component-trajectory:辟|辟|inside|⿵|13（目标集中出现1次）；component-context:辟|辟|inside|⿵（目标集中出现1次）
+顧,1,target_coverage,⿰,雇 頁,component-trajectory:雇|雇|left|⿰|12（目标集中出现1次）；component-context:雇|雇|left|⿰（目标集中出现1次）
+颦,1,target_coverage,⿱,卑 频,component-trajectory:频|频|top|⿱|13（目标集中出现1次）；component-context:频|频|top|⿱（目标集中出现1次）
+鰣,1,target_coverage,⿰,時 魚,component-trajectory:時|時|right|⿰|10（目标集中出现1次）；component-context:時|時|right|⿰（目标集中出现1次）
+鶯,1,target_coverage,⿳,冖 炏 鳥,component-trajectory:鳥|鳥|bottom|⿳|11（目标集中出现1次）；component-context:鳥|鳥|bottom|⿳（目标集中出现1次）
+鷉,1,target_coverage,⿰,虒 鳥,component-trajectory:虒|虒|left|⿰|10（目标集中出现1次）；component-context:虒|虒|left|⿰（目标集中出现1次）
+巔,1,target_coverage,⿱,山 顛,component-trajectory:顛|顛|bottom|⿱|19（目标集中出现1次）；component-context:顛|顛|bottom|⿱（目标集中出现1次）
+氍,1,target_coverage,⿰,毛 瞿,component-trajectory:瞿|瞿|left|⿰|18（目标集中出现1次）；component-context:瞿|瞿|left|⿰（目标集中出现1次）
+瓤,1,target_coverage,⿰,瓜 襄,component-trajectory:襄|襄|left|⿰|17（目标集中出现1次）；component-context:襄|襄|left|⿰（目标集中出现1次）
+籟,1,target_coverage,⿱,⺮ 賴,component-trajectory:賴|賴|bottom|⿱|16（目标集中出现1次）；component-context:賴|賴|bottom|⿱（目标集中出现1次）
+耱,1,target_coverage,⿰,磨 耒,component-trajectory:磨|磨|right|⿰|16（目标集中出现1次）；component-context:磨|磨|right|⿰（目标集中出现1次）
+轡,1,target_coverage,⿱,口 糹 車,component-trajectory:車|車|middle|⿲|7（目标集中出现1次）；component-context:車|車|middle|⿲（目标集中出现1次）
+巖,1,target_coverage,⿱,嚴 山,component-trajectory:嚴|嚴|bottom|⿱|20（目标集中出现1次）；component-context:嚴|嚴|bottom|⿱（目标集中出现1次）
+癯,1,target_coverage,⿸,疒 瞿,component-trajectory:瞿|瞿|inside|⿸|18（目标集中出现1次）；component-context:瞿|瞿|inside|⿸（目标集中出现1次）
+籤,1,target_coverage,⿱,⺮ 韱,component-trajectory:韱|韱|bottom|⿱|17（目标集中出现1次）；component-context:韱|韱|bottom|⿱（目标集中出现1次）
+變,1,target_coverage,⿱,䜌 攵,component-trajectory:攵|攵|bottom|⿱|4（目标集中出现1次）；component-context:攵|攵|bottom|⿱（目标集中出现1次）
+趱,1,target_coverage,⿺,赞 走,component-trajectory:赞|赞|inside|⿺|16（目标集中出现1次）；component-context:赞|赞|inside|⿺（目标集中出现1次）
+顯,1,target_coverage,⿰,㬎 頁,component-trajectory:㬎|㬎|left|⿰|14（目标集中出现1次）；component-context:㬎|㬎|left|⿰（目标集中出现1次）
+癱,1,target_coverage,⿸,疒 難,component-trajectory:難|難|inside|⿸|19（目标集中出现1次）；component-context:難|難|inside|⿸（目标集中出现1次）
+衢,1,target_coverage,⿻,瞿 行,component-trajectory:瞿|瞿|overlap-secondary|⿻|18（目标集中出现1次）；component-context:瞿|瞿|overlap-secondary|⿻（目标集中出现1次）
+靂,1,target_coverage,⿱,歷 雨,component-trajectory:歷|歷|bottom|⿱|16（目标集中出现1次）；component-context:歷|歷|bottom|⿱（目标集中出现1次）
+鷫,1,target_coverage,⿰,肅 鳥,component-trajectory:肅|肅|left|⿰|13（目标集中出现1次）；component-context:肅|肅|left|⿰（目标集中出现1次）
+鸊,1,target_coverage,⿰,辟 鳥,component-trajectory:辟|辟|left|⿰|13（目标集中出现1次）；component-context:辟|辟|left|⿰（目标集中出现1次）
+鹽,1,target_coverage,⿱,皿 臣 鹵,component-trajectory:鹵|鹵|bottom|⿱|11（目标集中出现1次）；component-context:鹵|鹵|bottom|⿱（目标集中出现1次）
+龥,1,target_coverage,⿰,頁 龠,component-trajectory:龠|龠|left|⿰|17（目标集中出现1次）；component-context:龠|龠|left|⿰（目标集中出现1次）
+顳,1,target_coverage,⿰,聶 頁,component-trajectory:聶|聶|left|⿰|18（目标集中出现1次）；component-context:聶|聶|left|⿰（目标集中出现1次）
+鸚,1,target_coverage,⿰,嬰 鳥,component-trajectory:嬰|嬰|left|⿰|17（目标集中出现1次）；component-context:嬰|嬰|left|⿰（目标集中出现1次）
+鸝,1,target_coverage,⿰,鳥 麗,component-trajectory:麗|麗|left|⿰|19（目标集中出现1次）；component-context:麗|麗|left|⿰（目标集中出现1次）
+丄,1,target_coverage,⿱,一 丨,component-context:丨|丨|top|⿱（目标集中出现2次）
+卜,1,target_coverage,⿻,丨 丶,component-context:丨|丨|overlap-primary|⿻（目标集中出现2次）
+川,1,target_coverage,⿲,丨 丿,component-context:丿|丿|left|⿲（目标集中出现1次）；component-context:丨|丨|right|⿲（目标集中出现1次）
+己,1,target_coverage,⿱,乚,component-context:乚|乚|bottom|⿱（目标集中出现2次）
+场,1,target_coverage,⿰,勿 土,component-trajectory:勿|勿|right|⿰|3（目标集中出现1次）；stroke-signature:→↙→↘↓↙←|4|balanced|n（目标集中出现1次）
+雋,1,target_coverage,⿱,弓 隹,component-trajectory:弓|弓|bottom|⿱|4（目标集中出现1次）；stroke-signature:→↓↘→|4|wide|n（目标集中出现1次）
+鳧,1,target_coverage,⿱,几 鳥,component-trajectory:鳥|鳥|top|⿱|11（目标集中出现1次）；stroke-signature:↗→↘↓↙↖|4|wide|n（目标集中出现1次）
+薤,1,target_coverage,⿱,歹 艹 非,component-trajectory:非|非|right|⿰|9（目标集中出现1次）；stroke-signature:→↘→|1|wide|n（目标集中出现1次）
+全,1,target_coverage,⿱,入 玉,component-trajectory:玉|玉|bottom|⿱|4（目标集中出现1次）
+尧,1,target_coverage,⿱,兀 戈,component-trajectory:戈|戈|top|⿱|3（目标集中出现1次）
+咼,1,target_coverage,⿵,冎 口,component-trajectory:冎|冎|surround-top|⿵|6（目标集中出现1次）
+尝,1,target_coverage,⿱,云 尚,component-trajectory:尚|尚|top|⿱|5（目标集中出现1次）
+帝,1,target_coverage,⿱,巾 立,component-trajectory:立|立|top|⿱|6（目标集中出现1次）
+禺,1,target_coverage,⿱,日 禸,component-trajectory:禸|禸|bottom|⿱|5（目标集中出现1次）
+風,1,target_coverage,⿵,几 虫,component-trajectory:虫|虫|inside|⿵|7（目标集中出现1次）
+候,1,target_coverage,⿰,亻 矦,component-trajectory:矦|矦|right|⿰|8（目标集中出现1次）
+姬,1,target_coverage,⿰,女 臣,component-trajectory:臣|臣|right|⿰|7（目标集中出现1次）
+益,1,target_coverage,⿱,水 皿,component-trajectory:水|水|top|⿱|5（目标集中出现1次）
+脈,1,target_coverage,⿰,⺼ 永,component-trajectory:永|永|right|⿰|6（目标集中出现1次）
+袁,1,target_coverage,⿻,口 衣,component-trajectory:衣|衣|overlap-primary|⿻|7（目标集中出现1次）
+將,1,target_coverage,⿰,夕 寸 爿,component-trajectory:夕|夕|top|⿱|4（目标集中出现1次）
+從,1,target_coverage,⿰,从 彳 足,component-trajectory:足|足|bottom|⿱|4（目标集中出现1次）
+悠,1,target_coverage,⿱,心 攸,component-trajectory:攸|攸|top|⿱|7（目标集中出现1次）
+祭,1,target_coverage,⿱,⺼ 寸 示,component-trajectory:寸|寸|right|⿰|2（目标集中出现1次）
+脩,1,target_coverage,⿸,⺼ 攸,component-trajectory:攸|攸|surround-top-left|⿸|7（目标集中出现1次）
+掱,1,target_coverage,⿱,手,component-trajectory:手|手|right|⿰|4（目标集中出现1次）
+铓,1,target_coverage,⿰,芒 钅,component-trajectory:芒|芒|right|⿰|7（目标集中出现1次）
+絛,1,target_coverage,⿰,亻 夂 糸,component-trajectory:夂|夂|top|⿱|4（目标集中出现1次）
+飬,1,target_coverage,⿱,食 龹,component-trajectory:食|食|bottom|⿱|7（目标集中出现1次）
+盡,1,target_coverage,⿱,灬 皿 聿,component-trajectory:聿|聿|top|⿱|5（目标集中出现1次）
+蒐,1,target_coverage,⿱,艹 鬼,component-trajectory:鬼|鬼|bottom|⿱|10（目标集中出现1次）
