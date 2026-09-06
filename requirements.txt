@@ -1,0 +1,6 @@
+# Default CPU and desktop dependencies.
+# pyproject.toml is the canonical dependency declaration; this file is kept for
+# tools and users that expect the conventional `pip install -r requirements.txt` flow.
+numpy>=2.1,<3
+Pillow>=11,<13
+PySide6==6.9.2

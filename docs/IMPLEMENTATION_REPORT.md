@@ -41,7 +41,7 @@
 
 ## user_001 导入与建档
 
-- 源目录：`C:\Users\lixia\Downloads\数据保存\samples\user_001`。
+- 源目录：`C:\path\to\samples\user_001`（示例路径）。
 - 接受 68 个 JSON，54 个唯一字符，拒绝 0 个。
 - 导入方式为不可变索引，`source_files_copied=false`；原始文件未复制、未重写。
 - 档案：68 个样本、54 个字符、133 个局部原型、0 个排除项。
@@ -125,7 +125,7 @@
 ```powershell
 .\scripts\setup_windows.ps1
 .\.venv\Scripts\inkstruct.exe structures build
-.\.venv\Scripts\inkstruct.exe samples import "C:\Users\lixia\Downloads\数据保存\samples\user_001" --writer user_001
+.\.venv\Scripts\inkstruct.exe samples import "C:\path\to\samples\user_001" --writer user_001
 .\.venv\Scripts\inkstruct.exe profile build --writer user_001
 .\.venv\Scripts\inkstruct.exe collect recommend --writer user_001 --count 26
 .\.venv\Scripts\inkstruct.exe generate --writer user_001 --all-supported --run-id all_supported_component_trajectory_v4

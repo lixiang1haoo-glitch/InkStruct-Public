@@ -10,17 +10,21 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 
 标准结构库固定目标字的笔数、笔顺和关键拓扑；用户风格档案学习整字比例、部件布局、部件整体轨迹以及条件化笔画形变。当前主实现是确定性的 `ComponentTrajectory v4`，不要求逐用户训练或 GPU。
 
+完整文档请从 [`docs/README.md`](docs/README.md) 开始：
+
+- [`docs/PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md)：项目定位、核心原理、系统组成与适用边界。
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)：安装、桌面应用、完整 CLI、数据协议、训练与故障排查。
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：结构数据库、轨迹生成、笔顺对齐和模型架构。
+
 ## 当前状态
 
 - 结构库包含 9,574 个有效简繁字符。
-- `user_001` 当前档案版本为 `a6306967b1403f30`；原始索引含 385 份样本、294 个唯一字符，其中 344 份（265 字）通过智能笔顺门控进入风格档案，41 份歧义错序样本被安全隔离。
-- 已完成 9,574 / 9,574 字全量生成，失败数为 0，结构不变量通过率为 100%。
+- 风格档案和生成任务按书写者 ID 隔离，运行产物保存在本地且不纳入源码仓库。
+- 全量生成支持结构库中的 9,574 个字符，并通过 manifest 实现断点续跑。
 - 默认生成采用平滑的 `adaptive` 部件模式：优先使用整组 `ComponentTrajectoryPrototype`，证据不足时逐级退回部件布局、条件化笔画和标准中心线；每笔通过开放 B-Spline 与弧长重采样输出 24–128 个节点。
 - v5 已完成三个固定种子的正式训练和固定折消融；强制 v5 的 DTW/SDF 均弱于 v4，校准安全模式会回退到 v4，因此生产默认保持 `ComponentTrajectory v4 adaptive`。
 - 样本对齐支持笔数相同但笔顺错误的全局匹配：高置信错序自动纠正，歧义错序隔离并进入质量审计，不再污染部件轨迹原型。
 - 项目只关注几何字形与在线轨迹；当前不优化连笔，不导出 TTF/OTF。
-
-现成的全量结果位于 `outputs/user_001/all_supported_component_trajectory_v4/`，本轮实现报告位于 `artifacts/component_trajectory_v4/REPORT.md`。
 
 ## 环境
 
@@ -31,6 +35,13 @@ Windows PowerShell：
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -e . --no-deps
+```
+
+如果需要运行测试和代码检查，可改为安装开发依赖：
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[desktop,dev]"
 ```
 
@@ -139,19 +150,16 @@ outputs/<writer-id>/<run-id>/
 InkStruct/
 ├─ src/inkstruct/                   核心包、CLI 与桌面应用
 ├─ tests/                           单元与集成测试
-├─ docs/                            架构和采集说明
+├─ docs/                            项目介绍、完整手册、架构和研究说明
 ├─ scripts/                         环境、评测和批处理脚本
 ├─ packaging/                       轻量采集器打包脚本
 ├─ third_party/makemeahanzi/        标准中心线与拆字数据
-├─ artifacts/
-│  ├─ structures/                   9,574 字结构数据库
-│  ├─ samples_merged_202608201606/  当前 user_001 合并样本索引
-│  ├─ collection/                   推荐与待重录任务
-│  └─ component_trajectory_v4/      当前实验与报告
-├─ profiles/user_001/               当前版本化风格档案
-├─ outputs/user_001/                当前全量生成结果
-├─ data/CASIA_CHINESE/              可选训练数据，不参与确定性生成
-└─ release/InkStructCollector/       轻量采集应用
+├─ configs/                         训练、实验、字符包和采集计划配置
+├─ artifacts/                       本地数据库、样本索引和报告（Git 忽略）
+├─ profiles/                        本地版本化风格档案（Git 忽略）
+├─ outputs/                         本地生成轨迹与预览（Git 忽略）
+├─ data/                            可选训练数据（Git 忽略）
+└─ release/                         本地打包结果（Git 忽略）
 ```
 
 ## 测试与代码检查
@@ -166,5 +174,7 @@ InkStruct/
 ## 数据与许可
 
 项目代码采用 MIT License。汉字结构数据来自 Make Me a Hanzi，具体来源和许可说明见 `THIRD_PARTY_DATA.md`。CASIA 与用户手写样本不是项目代码的一部分，使用、分发和商业化前需分别确认数据授权；项目不会修改外部原始样本。
+
+`.venv/`、`data/`、`artifacts/`、`profiles/`、`outputs/`、`release/`、模型权重、缓存和本地 `.env` 文件均由 `.gitignore` 排除，不应提交到远程仓库。克隆源码时使用 `git clone --recurse-submodules` 获取 Make Me a Hanzi 子模块；子模块只记录上游提交引用，不在本仓库中复制第三方依赖源码。
 
 原 SDT 仅作为项目演进来源和效果对照，不再参与 InkStruct 当前运行路径。
