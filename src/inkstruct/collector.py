@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .capture_boundary import install_capture_boundary_guard
 from .cli import PROJECT_ROOT
 from .stroke_reference import create_stroke_reference_widget_class
 from .structures import StructureRepository
@@ -93,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             self.stroke_count_label.setObjectName("mutedLabel")
             self.layout().insertWidget(2, self.stroke_count_label)
             self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
+            self.boundary_guard = install_capture_boundary_guard(self, QtCore, QtGui, QtWidgets)
             self.refresh()
 
         def _sync_stroke_reference(self) -> None:
@@ -144,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
                     check.message + "\n\n请撤销、补写或重写当前字；本次轨迹尚未保存。",
                 )
                 return
-            super().save_current()
+            if self.boundary_guard.allow_save():
+                super().save_current()
 
     class CollectorWindow(collector_ui.MainWindow):
         def __init__(self):

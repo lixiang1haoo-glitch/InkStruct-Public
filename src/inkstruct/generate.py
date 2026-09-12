@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .canvas_boundary import BOUNDARY_POLICY, fit_glyph_to_canvas
 from .component_style import (
     absolute_bbox,
     component_context_key,
@@ -27,6 +28,7 @@ from .factorized import stroke_context_tokens
 from .geometry import bbox, clamp01, cubic_bspline, path_length, resample, signature_key
 from .profile import load_profile
 from .render import render_png, render_svg
+from .samples import sha256_file
 from .schemas import (
     CharacterGraph,
     ComponentLayoutPrototype,
@@ -94,8 +96,8 @@ class DeterministicGenerator:
         slant = style.get("slant", 0.0)
         return [
             (
-                clamp01(0.5 + (x - 0.5) * scale_x + (y - 0.5) * slant + offset_x),
-                clamp01(0.5 + (y - 0.5) * scale_y + offset_y),
+                0.5 + (x - 0.5) * scale_x + (y - 0.5) * slant + offset_x,
+                0.5 + (y - 0.5) * scale_y + offset_y,
             )
             for x, y in points
         ]
@@ -495,6 +497,10 @@ class DeterministicGenerator:
         return transformed, prototype, exact
 
     def generate(self, graph: CharacterGraph) -> GeneratedGlyph:
+        return fit_glyph_to_canvas(self._generate_raw(graph))
+
+    def _generate_raw(self, graph: CharacterGraph) -> GeneratedGlyph:
+        """Internal unbounded geometry, also used in the neural memory blend."""
         generated: list[GeneratedStroke] = []
         time_cursor = 0
         stroke_confidences: list[float] = []
@@ -617,7 +623,7 @@ class DeterministicGenerator:
                 local_scale = max(float(span[0]), float(span[1]), 1e-6)
                 local = (transformed - minimum) / local_scale
                 styled = minimum + (local + residual * residual_damping) * local_scale
-                controls = [(clamp01(point[0]), clamp01(point[1])) for point in styled]
+                controls = [(float(point[0]), float(point[1])) for point in styled]
                 pressure_curve = pressure_override or prototype.pressure
                 confidence = prototype.confidence * (1.0 if exact else 0.78)
                 if layout_prototype is not None:
@@ -656,7 +662,7 @@ class DeterministicGenerator:
             estimated_length = path_length(controls)
             point_count = max(24, min(128, math.ceil(estimated_length * 120)))
             trajectory = resample(
-                cubic_bspline(controls, max(64, point_count * 2)), point_count
+                cubic_bspline(controls, max(64, point_count * 2), clip=False), point_count
             )
             if duration is None:
                 duration = max(
@@ -676,8 +682,8 @@ class DeterministicGenerator:
                     state = "end" if standard.order == len(graph.strokes) else "up"
                 points.append(
                     GeneratedPoint(
-                        x=round(x, 6),
-                        y=round(y, 6),
+                        x=x,
+                        y=y,
                         t_ms=round(time_cursor + duration * index / max(1, point_count - 1)),
                         pressure=round(clamp01(float(pressure)), 6),
                         pen_state=state,
@@ -697,7 +703,7 @@ class DeterministicGenerator:
                     ),
                 )
             )
-        return GeneratedGlyph(
+        glyph = GeneratedGlyph(
             schema_version="personal_trajectory_v1",
             character=graph.character,
             codepoint=graph.codepoint,
@@ -726,6 +732,7 @@ class DeterministicGenerator:
             confidence=round(float(np.mean(stroke_confidences)), 6),
             strokes=generated,
         )
+        return glyph
 
 
 def _model_token(points: list[Point2D], *, order: int, count: int) -> list[float]:
@@ -854,7 +861,7 @@ class HybridGenerator(DeterministicGenerator):
         durations = prediction["duration"][0].float().cpu().numpy()
         densities = prediction["density"][0].float().cpu().numpy()
         deterministic_memory = (
-            super().generate(graph)
+            super()._generate_raw(graph)
             if self.model.config.use_factorized_style or not self.has_dynamic_supervision
             else None
         )
@@ -871,7 +878,9 @@ class HybridGenerator(DeterministicGenerator):
             if deterministic_memory is not None:
                 memory_stroke = deterministic_memory.strokes[index]
                 memory_controls = np.asarray(
-                    resample([(point.x, point.y) for point in memory_stroke.points], 8),
+                    resample(
+                        [(round(point.x, 6), round(point.y, 6)) for point in memory_stroke.points], 8
+                    ),
                     dtype=np.float64,
                 )
                 neural_weight = float(np.clip(np.exp(-uncertainties[index]), 0.15, 0.85))
@@ -880,7 +889,7 @@ class HybridGenerator(DeterministicGenerator):
                 ):
                     neural_weight = 0.0
                 controls = neural_weight * controls + (1.0 - neural_weight) * memory_controls
-            controls = [(clamp01(point[0]), clamp01(point[1])) for point in controls]
+            controls = [(float(point[0]), float(point[1])) for point in controls]
             point_count = max(
                 24,
                 min(
@@ -900,7 +909,7 @@ class HybridGenerator(DeterministicGenerator):
                 else max(80.0, float(durations[index]) * 1000.0)
             )
             trajectory = resample(
-                cubic_bspline(controls, max(64, point_count * 2)), point_count
+                cubic_bspline(controls, max(64, point_count * 2), clip=False), point_count
             )
             pressure_source = (
                 [point.pressure for point in memory_stroke.points]
@@ -919,8 +928,8 @@ class HybridGenerator(DeterministicGenerator):
                     state = "end" if index == len(graph.strokes) - 1 else "up"
                 points.append(
                     GeneratedPoint(
-                        x=round(x, 6),
-                        y=round(y, 6),
+                        x=x,
+                        y=y,
                         t_ms=round(time_cursor + duration * point_index / max(1, point_count - 1)),
                         pressure=round(clamp01(float(pressure)), 6),
                         pen_state=state,
@@ -935,7 +944,7 @@ class HybridGenerator(DeterministicGenerator):
                     points=points,
                 )
             )
-        return GeneratedGlyph(
+        glyph = GeneratedGlyph(
             schema_version="personal_trajectory_v1",
             character=graph.character,
             codepoint=graph.codepoint,
@@ -955,6 +964,7 @@ class HybridGenerator(DeterministicGenerator):
             confidence=round(mean_confidence, 6),
             strokes=generated,
         )
+        return fit_glyph_to_canvas(glyph)
 
 
 def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool) -> None:
@@ -1013,21 +1023,37 @@ def generate_run(
     unique_characters = list(dict.fromkeys(characters))
     started_at = datetime.now(UTC).isoformat()
     previous_elapsed = 0.0
+    run_identity = {
+        "boundary_policy": BOUNDARY_POLICY,
+        "writer_id": writer_id,
+        "profile_sha256": sha256_file(Path(profile_path)),
+        "structure_sha256": sha256_file(structures.path),
+        "checkpoint_sha256": sha256_file(checkpoint) if checkpoint else None,
+        "component_mode": generator.component_mode,
+        "component_strength": generator.component_strength,
+        "confidence_threshold": (
+            generator.confidence_threshold if isinstance(generator, HybridGenerator) else None
+        ),
+        "png": png,
+    }
     if manifest_path.is_file():
         try:
             previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if previous_manifest.get("writer_id") == writer_id:
-                started_at = previous_manifest.get("started_at", started_at)
-                previous_elapsed = float(previous_manifest.get("elapsed_seconds", 0.0))
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            # A damaged progress file must not prevent recovery from completed glyph files.
-            pass
+            if previous_manifest.get("run_identity") != run_identity:
+                raise ValueError("run identity changed or predates canvas fix; use a new run-id")
+            started_at = previous_manifest.get("started_at", started_at)
+            previous_elapsed = float(previous_manifest.get("elapsed_seconds", 0.0))
+        except (OSError, TypeError, AttributeError, ValueError) as error:
+            raise ValueError(f"cannot safely resume {run_dir}: {error}") from error
+    elif any((run_dir / "trajectories").glob("*.json")):
+        raise ValueError("existing trajectories have no manifest; use a new run-id")
     started_clock = time.perf_counter()
     completed: list[str] = []
     failed: list[dict[str, str]] = []
 
     def write_manifest(status: str) -> dict:
         manifest = {
+            "run_identity": run_identity,
             "schema_version": "generation_manifest_v1",
             "run_id": run_id,
             "writer_id": writer_id,
@@ -1053,9 +1079,11 @@ def generate_run(
                 else None
             ),
         }
-        manifest_path.write_text(
+        temporary_manifest = manifest_path.with_suffix(".json.building")
+        temporary_manifest.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
+        temporary_manifest.replace(manifest_path)
         return manifest
 
     manifest = write_manifest("running")
@@ -1065,6 +1093,18 @@ def generate_run(
             break
         trajectory_path = run_dir / "trajectories" / f"U+{ord(character):04X}.json"
         if trajectory_path.is_file():
+            # Do not let an old/corrupt file copied into a new run bypass the fix.
+            try:
+                cached = json.loads(trajectory_path.read_text(encoding="utf-8"))
+                if (
+                    cached["character"] != character
+                    or cached["writer_id"] != writer_id
+                    or cached["profile_version"] != profile.profile_version
+                    or cached.get("canvas_fit", {}).get("policy") != BOUNDARY_POLICY
+                ):
+                    raise ValueError("cached trajectory identity differs")
+            except (OSError, KeyError, TypeError, AttributeError, ValueError) as error:
+                raise ValueError(f"cannot safely reuse {trajectory_path}; use a new run-id") from error
             completed.append(character)
         else:
             try:

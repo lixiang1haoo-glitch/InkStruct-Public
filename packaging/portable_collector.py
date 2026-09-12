@@ -12,6 +12,7 @@ from handwriting_collector.storage import SampleStorage
 from handwriting_collector.tasks import CollectionTask
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from inkstruct.capture_boundary import install_capture_boundary_guard
 from inkstruct.stroke_reference import (
     create_stroke_reference_widget_class,
     load_reference_bundle,
@@ -72,6 +73,7 @@ class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
         self.stroke_count_label.setObjectName("mutedLabel")
         self.layout().insertWidget(2, self.stroke_count_label)
         self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
+        self.boundary_guard = install_capture_boundary_guard(self, QtCore, QtGui, QtWidgets)
         self.refresh()
 
     def _sync_stroke_reference(self) -> None:
@@ -121,7 +123,8 @@ class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
                 check.message + "\n\n请撤销、补写或重写当前字；本次轨迹尚未保存。",
             )
             return
-        super().save_current()
+        if self.boundary_guard.allow_save():
+            super().save_current()
 
 
 class CollectorWindow(collector_ui.MainWindow):

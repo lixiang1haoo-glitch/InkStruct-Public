@@ -73,6 +73,8 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
     failures: list[dict[str, str]] = []
     confidence_values: list[float] = []
     checked = 0
+    canvas_fitted = 0
+    canvas_review = []
     for path in sorted((run_dir / "trajectories").glob("U+*.json")):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -101,6 +103,13 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
                     if int(point["t_ms"]) < previous_time:
                         raise ValueError("time is not monotonic")
                     previous_time = int(point["t_ms"])
+            fit = value.get("canvas_fit", {})
+            if not isinstance(fit, dict):
+                raise TypeError("canvas fit metadata must be an object")
+            if fit.get("applied"):
+                canvas_fitted += 1
+            if fit.get("review_required"):
+                canvas_review.append(character)
             confidence_values.append(float(value["confidence"]))
             checked += 1
         except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
@@ -110,6 +119,8 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
         "run_id": manifest.get("run_id"),
         "checked_count": checked,
         "structural_failure_count": len(failures),
+        "canvas_fitted_count": canvas_fitted,
+        "canvas_review_characters": canvas_review,
         "structural_pass_rate": checked / max(1, checked + len(failures)),
         "mean_confidence": sum(confidence_values) / max(1, len(confidence_values)),
         "requested_count": manifest.get("requested_count"),

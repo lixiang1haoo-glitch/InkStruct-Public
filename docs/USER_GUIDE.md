@@ -740,7 +740,7 @@ CLI 没有专用取消参数，可使用正常终止信号停止。再次以相�
   --run-id all_supported
 ```
 
-在续跑前检查原 manifest 的 `profile_version`、`structure_database`、`component_mode`、`component_strength` 和 `checkpoint`。如果这些身份已经改变，使用新的 run ID，避免混合不同配置的字符文件。
+生成器会自动比较 `run_identity` 中的档案、结构库和模型 SHA-256，以及部件模式、强度、置信阈值、PNG 选项和边界策略。改变这些身份需要新 run ID；边界修复前的旧 manifest 也不能直接续跑。旧目录应保留用于对照。
 
 #### 使用模型检查点
 
@@ -1645,11 +1645,11 @@ $manifest.failed | Format-Table
   --run-id original_run_id
 ```
 
-如果原目录中的轨迹已存在但 manifest 损坏，生成器仍会根据轨迹文件恢复完成项；恢复后应重新执行 `evaluate --run`。
+如果 manifest 缺失或损坏，当前生成器无法证明已有轨迹的运行身份，会拒绝复用该目录。请保留旧目录，使用新 run ID 重新生成。不要手工给旧文件补上新版策略字段来绕过检查。
 
 ### 更换档案后续跑产生混合结果
 
-续跑跳过已有轨迹，不会重写它们。更换 `profile.json`、结构库、模型、部件模式或强度后必须使用新的 run ID。若已经混合，最安全的方法是保留旧目录用于审计，在新 run ID 下重新生成完整目标集合。
+当前版本会拒绝身份不一致的续跑。更换 `profile.json`、结构库、模型、部件模式或强度后必须使用新的 run ID。若旧版本已经产生混合结果，请保留旧目录用于审计，在新 run ID 下重新生成完整目标集合。
 
 ### 指定检查点后仍显示确定性生成器
 

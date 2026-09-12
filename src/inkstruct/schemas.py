@@ -270,6 +270,7 @@ class GeneratedGlyph:
     generator: str
     confidence: float
     strokes: list[GeneratedStroke]
+    canvas_fit: dict[str, Any] = field(default_factory=dict)
 
 
 def to_dict(value: Any) -> Any:

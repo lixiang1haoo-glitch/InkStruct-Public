@@ -103,7 +103,9 @@ def polyline_distance(left: Sequence[Point2D], right: Sequence[Point2D], count: 
     return min(direct, reverse + 0.08)
 
 
-def cubic_bspline(control_points: Sequence[Point2D], samples: int) -> list[Point2D]:
+def cubic_bspline(
+    control_points: Sequence[Point2D], samples: int, *, clip: bool = True
+) -> list[Point2D]:
     """Evaluate an open cubic uniform B-spline without scipy."""
     if samples < 2:
         raise ValueError("samples must be at least two")
@@ -125,5 +127,7 @@ def cubic_bspline(control_points: Sequence[Point2D], samples: int) -> list[Point
             ]
         )
         point = basis @ padded[index : index + 4]
-        result.append((clamp01(point[0]), clamp01(point[1])))
+        result.append(
+            (clamp01(point[0]), clamp01(point[1])) if clip else (float(point[0]), float(point[1]))
+        )
     return result
