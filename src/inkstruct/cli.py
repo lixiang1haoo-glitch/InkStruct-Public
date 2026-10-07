@@ -189,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="adaptive",
     )
     generate.add_argument("--component-strength", type=float, default=1.0)
+    generate.add_argument("--trajectory-mode", choices=("legacy", "source-raw", "source-simplified"),
+                          default="legacy", help="opt-in complete-source component generation")
+    generate.add_argument("--source-profile", type=_path, help="separate retained-source profile for the same writer")
+    generate.add_argument("--source-nested-views", action="store_true", help="enable validated nested component views")
+    generate.add_argument("--source-characters", type=_path, help="UTF-8 training characters; exclude all other donor characters")
 
     evaluate = groups.add_parser("evaluate", help="validate a generated run")
     evaluation_target = evaluate.add_mutually_exclusive_group(required=True)
@@ -406,6 +411,10 @@ def main(argv: list[str] | None = None) -> int:
                 "off" if args.no_component_conditioning else args.component_mode
             ),
             component_strength=args.component_strength,
+            trajectory_mode=args.trajectory_mode,
+            source_profile_path=args.source_profile,
+            source_nested_views=args.source_nested_views,
+            source_characters_path=args.source_characters,
         )
         _emit({**result, "run_directory": str(run_dir)})
         return 0 if not result["failed_count"] else 2
