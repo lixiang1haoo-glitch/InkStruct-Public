@@ -1,0 +1,61 @@
+{
+  "schema": "raw_transform_protocol_v1",
+  "writer": "scx",
+  "seed": "raw-transform-v1",
+  "split_unit": "character; all duplicates together",
+  "known_diagnostic_chars_forced_dev": [
+    "岛",
+    "尴"
+  ],
+  "same_counts": {
+    "dev": 32,
+    "test": 64
+  },
+  "cross_counts": {
+    "dev": 32,
+    "test": 64
+  },
+  "epsilon_grid": [
+    0.0005,
+    0.001,
+    0.002,
+    0.004
+  ],
+  "simplification_selection": "largest epsilon with dev p95 max-polyline-deviation <= 0.004, p95 absolute length drift <= 0.02 and p95 terminal-angle difference <= 5 degrees versus B; otherwise epsilon 0",
+  "anisotropy_ratio_cap": 1.15,
+  "candidate_hard_filters": [
+    "same writer",
+    "training character only",
+    "exact canonical, variant, role, parent layout, stroke count",
+    "leaf non-root >=2 strokes",
+    "component structure confidence >=0.8",
+    "mean source mapping confidence >=0.55"
+  ],
+  "candidate_ranking": "standard geometry shape + log aspect mismatch + training confidence; deterministic tie break, never target handwriting",
+  "target_layout": "bounding box of selected component in frozen training-only A output; same for B,C and matched compressed control",
+  "main_paths": [
+    "A current v4 adaptive",
+    "B whole raw exemplar similarity transform",
+    "C feature-protected bounded simplification then identical transform"
+  ],
+  "additional_controls": [
+    "M same exemplar 16->8->B-spline under identical B transform",
+    "B_xy C_xy M_xy bounded anisotropic sensitivity separate from similarity"
+  ],
+  "evaluation": "same glyph self-reconstruction separate from cross-character target holdout; per-character paired summaries; no inferential p-values from single writer",
+  "geometry_metrics": [
+    "arclength integral symmetric point-to-segment distance",
+    "dense+all-vertices symmetric maximum distance",
+    "relative length error",
+    "terminal direction over common reference arc window",
+    "feature-defined terminal hook length with detection coverage",
+    "strict transverse intersections separate from endpoint touches",
+    "bounds and degeneration"
+  ],
+  "generation_invariants": [
+    "standard stroke count IDs order",
+    "finite bounded coordinates and pressures",
+    "global monotonic time reassigned in output order"
+  ],
+  "production_default": "unchanged"
+}
