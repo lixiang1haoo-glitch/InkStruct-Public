@@ -240,7 +240,18 @@ def main(argv: list[str] | None = None) -> int:
     window = GeneratorWindow()
     window.show()
     if smoke_test:
-        QtCore.QTimer.singleShot(100, application.quit)
+        def finish_smoke_test():
+            screenshot = next(
+                (value.split("=", 1)[1] for value in arguments
+                 if value.startswith("--smoke-screenshot=")), None,
+            )
+            if screenshot:
+                target = Path(screenshot)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                window.grab().save(str(target))
+            application.quit()
+
+        QtCore.QTimer.singleShot(300, finish_smoke_test)
     return application.exec()
 
 

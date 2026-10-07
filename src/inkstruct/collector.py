@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +43,14 @@ def check_stroke_count(
 
 
 def _collector_source() -> Path:
+    configured = os.environ.get("INKSTRUCT_COLLECTOR_SOURCE")
+    if configured:
+        source = Path(configured).expanduser().resolve()
+        if not (source / "handwriting_collector" / "ui.py").is_file():
+            raise RuntimeError(f"INKSTRUCT_COLLECTOR_SOURCE 中找不到采集器内核：{source}")
+        return source
     candidates = [
+        PROJECT_ROOT / "artifacts" / "external" / "data_collection",
         PROJECT_ROOT / "legacy" / "data_collection",
         PROJECT_ROOT.parent / "data_collection",
     ]

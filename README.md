@@ -28,6 +28,8 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 
 ## 环境
 
+macOS 可执行 `bash scripts/setup_macos.sh` 安装 CPU、桌面和开发环境，然后双击根目录的 `run_inkstruct_generator.command` / `run_inkstruct_collector.command`。旧机器数据恢复、外部采集器路径和验证范围见 [Mac 安装说明](docs/MAC_SETUP.md)。
+
 项目要求 Python 3.12 或 3.13。确定性生成、采集、结构检查和测试可在 CPU 上运行；只有实验性的分层残差模型训练需要 NVIDIA GPU。正式三种子训练协议见 `scripts/train_v5_formal.ps1` 和 `configs/training/v5_formal.json`。
 
 Windows PowerShell：

@@ -2,7 +2,9 @@ import json
 from dataclasses import asdict
 from datetime import UTC, datetime
 
-import torch
+import pytest
+
+torch = pytest.importorskip("torch")
 
 from inkstruct.factorized import observed_structure_keys, stroke_context_tokens
 from inkstruct.model import HierarchicalResidualModel, ModelConfig
