@@ -1,0 +1,13 @@
+{
+  "policy": "grouped_logistic_risk_v1",
+  "question": "Do inference-only geometry features predict safe whole-component moves beyond layout features under source-disjoint training validation?",
+  "data": "Frozen 3088 labels and 46 features; original donors, outputs, labels and source folds unchanged",
+  "validation": "Within each original generation fold, split target characters into three deterministic meta folds shared across writers. Fit on other two meta folds of the SAME generation fold only; the common source profiles exclude the entire original fold. No validation target can occur in either training or validation source profiles. All proposals/components/repeats for a character stay together.",
+  "feature_views": ["layout", "geometry", "combined"],
+  "regularization": [0.001, 0.01, 0.1],
+  "model": "L2 logistic regression; intercept unpenalized. Equal total weight per writer-character; weighted train mean/std floor0.1, z clipped +/-5. No class reweighting. Fixed max100 Newton iterations with backtracking.",
+  "selection": "Lowest character-balanced out-of-fold Brier; ties lower log loss, fewer dimensions, stronger regularization. Report all views, constant training-prevalence control, per-writer and per-generation-fold results. No confidence intervals or independent-generalization claim after selection.",
+  "decision": "Fit selected model to full training pool with query character excluded across writers before fitting and scaling; accept unchanged frozen M iff sigmoid score>=0.8. Fixed threshold, no development retuning; score is not naturalness probability or a calibrated guarantee.",
+  "controls": "D, frozen M, v4 A and previous zero-geometry pooled0.6 gate; frozen choice before reading any development/regression originals",
+  "limits": "Within-fold fits use about two ninths of all training labels, full model sees more data. Correlated trial interventions are not natural repeats. Crossfit-to-full-profile shift, observed regression and user001 unconfirmed physical author remain. No production integration."
+}
