@@ -93,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
             self.source_nested = QtWidgets.QCheckBox("允许识别嵌套部件（敫、多；实验）")
             self.source_observed = QtWidgets.QCheckBox("优先保留已采集原稿（同字重建；实验）")
             self.source_observed.setObjectName("source_observed")
+            self.reviewed_geometry = QtWidgets.QCheckBox("使用已复核的局部几何修正（实验）")
+            self.reviewed_geometry.setObjectName("reviewed_geometry")
+            self.reviewed_geometry.toggled.connect(self.change_trajectory_mode)
             self.trajectory_mode.currentIndexChanged.connect(self.change_trajectory_mode)
             self.change_trajectory_mode()
             sample_row = QtWidgets.QHBoxLayout()
@@ -110,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             form.addRow("高保真副档案", source_row)
             form.addRow("部件范围", self.source_nested)
             form.addRow("已采集字", self.source_observed)
+            form.addRow("几何修正", self.reviewed_geometry)
             layout.addLayout(form)
             actions = QtWidgets.QHBoxLayout()
             for label, function in [
@@ -150,9 +154,10 @@ def main(argv: list[str] | None = None) -> int:
             active = self.trajectory_mode.currentData() != "legacy"
             for widget in (self.source_profile, self.source_browse, self.source_nested, self.source_observed):
                 widget.setEnabled(active)
-            self.component_mode.setEnabled(not active)
-            self.component_strength.setEnabled(not active)
-            if active:
+            locked = active or self.reviewed_geometry.isChecked()
+            self.component_mode.setEnabled(not locked)
+            self.component_strength.setEnabled(not locked)
+            if locked:
                 self.component_mode.setCurrentIndex(0)
                 self.component_strength.setValue(1.)
 
@@ -192,8 +197,15 @@ def main(argv: list[str] | None = None) -> int:
                     self.log.appendPlainText(f"{character}：真实部件 {row['accepted_component_count']}；来源 {donors}；局部复核项 {row['geometry_warning_count']}；原 A 最低分 {row['minimum_A_stroke_confidence']:.3f}，低分笔画 {low}")
                 self.log.appendPlainText("置信度沿用原 A，未校准为新轨迹质量；请结合逐笔来源和几何复核。")
                 self.log.appendPlainText(f"完整轨迹、供体和回退原因：{value['output']}")
-            else:
+            elif "geometry_repairs" not in value:
                 self.log.appendPlainText(json.dumps(value, ensure_ascii=False, indent=2))
+            if "geometry_repairs" in value:
+                changed = "、".join(value["geometry_repairs"]["changed_characters"]) or "无"
+                self.log.appendPlainText(f"已复核几何修正：{changed}；完成 {value['completed_count']} 字，失败 {value['failed_count']}。")
+                for character, record in value["geometry_repairs"]["by_character"].items():
+                    for event in record["events"]:
+                        self.log.appendPlainText(f"{character}：{event['kind']} · {'已修正' if event['applied'] else event.get('reason', '未应用')}")
+                self.log.appendPlainText(f"修正来源、拒绝原因与逐笔结果：{value['output']}")
             self.cancel_button.setEnabled(False)
             for button in self.buttons:
                 button.setEnabled(True)
@@ -290,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
             source_profile = Path(self.source_profile.text().strip()) if source_active and self.source_profile.text().strip() else None
             source_nested = self.source_nested.isChecked() if source_active else False
             source_observed = self.source_observed.isChecked() if source_active else False
+            reviewed_geometry = self.reviewed_geometry.isChecked()
             self.cancel_event.clear()
 
             def work():
@@ -301,11 +314,13 @@ def main(argv: list[str] | None = None) -> int:
                     repository.characters() if all_supported else list(text),
                     repository,
                     PROJECT_ROOT / "profiles" / writer / "profile.json",
-                    output_root=PROJECT_ROOT / "outputs" / "source_experiments" if source_active else PROJECT_ROOT / "outputs",
+                    output_root=(PROJECT_ROOT / "outputs" / "geometry_experiments" if reviewed_geometry else
+                                 PROJECT_ROOT / "outputs" / "source_experiments" if source_active else PROJECT_ROOT / "outputs"),
                     trajectory_mode=trajectory_mode,
                     source_profile_path=source_profile,
                     source_nested_views=source_nested,
                     source_observed=source_observed,
+                    reviewed_geometry=reviewed_geometry,
                     component_conditioning=component_mode,
                     component_strength=component_strength,
                     progress_callback=self.generation_progress.emit,

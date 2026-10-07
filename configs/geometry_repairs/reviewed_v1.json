@@ -1,0 +1,84 @@
+{
+  "policy": "reviewed_local_geometry_v1",
+  "translation_parameters": {
+    "max_shift": 0.06,
+    "step": 0.002,
+    "clearance": 0.002
+  },
+  "outlines": [
+    {
+      "version": "reviewed_source_median_override_v1",
+      "status": "experimental; no upstream edits",
+      "character": "瀝",
+      "stroke_id": "s6",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "outline_sha256": "5eb07833827d406a7b1b05b5f2375fa9482d3011c387446bad5c9abc089bc932",
+      "median_sha256": "feabb0d21c8e47b3032474e34378b36bdf9754c408177b03da59f918e6b7ef18",
+      "algorithm": "single_strip_outline_median_v1",
+      "cross_sections": 40,
+      "license": "Derived from Make Me a Hanzi outlines under Arphic Public License; see third_party/makemeahanzi/COPYING"
+    },
+    {
+      "version": "reviewed_source_median_override_v1",
+      "status": "experimental; no upstream edits",
+      "character": "黧",
+      "stroke_id": "s1",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "outline_sha256": "d592891b69047cec697f68a05431b64a6a5b922263256c863fd8cd4659660e2b",
+      "median_sha256": "fc4267184ed71916df2f3f21e034f8ef569e886fd76404d12591de6b4ba060b8",
+      "algorithm": "single_strip_outline_median_v1",
+      "cross_sections": 40,
+      "license": "Derived from Make Me a Hanzi outlines under Arphic Public License; see third_party/makemeahanzi/COPYING"
+    }
+  ],
+  "crossings": [
+    {
+      "writer_id": "scx",
+      "character": "丢",
+      "pairs": [
+        [
+          "s1",
+          "s2"
+        ]
+      ],
+      "geometry_sha256": "793618f390059e57258e0c7bfd972952e59bbc27173677cae6cb648ed9e7c158",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92"
+    },
+    {
+      "writer_id": "scx",
+      "character": "侈",
+      "pairs": [
+        [
+          "s6",
+          "s7"
+        ]
+      ],
+      "geometry_sha256": "f2685516e4d7599dededb5ec58532f63cee8e9075b48e9ca2f35b3f509e9d246",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92"
+    },
+    {
+      "writer_id": "mjb",
+      "character": "丢",
+      "pairs": [
+        [
+          "s1",
+          "s2"
+        ]
+      ],
+      "geometry_sha256": "dbec7ee2437f8c95ebf014797d3403d48e4a4d8b6e15b1177b45b0c38003d63c",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92"
+    },
+    {
+      "writer_id": "mjb",
+      "character": "侈",
+      "pairs": [
+        [
+          "s6",
+          "s7"
+        ]
+      ],
+      "geometry_sha256": "5d0ec8efb9a77e7de0aadc58ae2546e6255b7b278e1c8b18cc9353f1f440de13",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92"
+    }
+  ]
+}

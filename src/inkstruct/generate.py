@@ -967,7 +967,7 @@ class HybridGenerator(DeterministicGenerator):
         return fit_glyph_to_canvas(glyph)
 
 
-def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool, source_diagnostics=None) -> None:
+def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool, source_diagnostics=None, repair_diagnostics=None) -> None:
     name = glyph.codepoint
     trajectory_path = run_dir / "trajectories" / f"{name}.json"
     trajectory_path.parent.mkdir(parents=True, exist_ok=True)
@@ -975,6 +975,8 @@ def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool, source_diagnos
     payload = asdict(glyph)
     if source_diagnostics is not None:
         payload["source_components"] = source_diagnostics
+    if repair_diagnostics is not None:
+        payload["geometry_repairs"] = repair_diagnostics
     temporary.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -1022,6 +1024,7 @@ def generate_run(
     source_profile_path: Path | None = None,
     source_nested_views: bool = False,
     source_observed: bool = False,
+    reviewed_geometry: bool = False,
     source_characters_path: Path | None = None,
     progress_callback: Callable[[dict], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
@@ -1084,6 +1087,16 @@ def generate_run(
         if source_observed:
             source_identity["observed_reconstruction"] = True
             source_identity["implementation_sha256"]["observed_reconstruction"] = sha256_file(Path(__file__).with_name("observed_reconstruction.py"))
+    repair_processor = None
+    if reviewed_geometry:
+        if checkpoint is not None or generator.component_mode != "adaptive" or generator.component_strength != 1.:
+            raise ValueError("reviewed geometry requires deterministic adaptive generation at strength 1")
+        from .reviewed_geometry import ReviewedGeometryProcessor
+        root = Path(__file__).resolve().parents[2]
+        repair_processor = ReviewedGeometryProcessor(generator, structures,
+            root / "configs/geometry_repairs/reviewed_v1.json",
+            root / "third_party/makemeahanzi/graphics.txt",
+            root / "third_party/makemeahanzi/dictionary.txt")
     run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:8]
     run_dir = Path(output_root).resolve() / writer_id / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -1106,6 +1119,8 @@ def generate_run(
     }
     if source_identity is not None:
         run_identity["source_components"] = source_identity
+    if repair_processor is not None:
+        run_identity["geometry_repairs"] = repair_processor.identity
     if manifest_path.is_file():
         try:
             previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1121,6 +1136,7 @@ def generate_run(
     completed: list[str] = []
     failed: list[dict[str, str]] = []
     source_results: dict[str, dict] = {}
+    repair_results: dict[str, dict] = {}
 
     def write_manifest(status: str) -> dict:
         manifest = {
@@ -1158,6 +1174,9 @@ def generate_run(
                 "by_character": source_results,
                 "confidence_semantics": "A scores inherited; source mapping evidence is reported separately, uncalibrated",
             }
+        if repair_processor is not None:
+            manifest["geometry_repairs"] = {"changed_characters": [c for c, r in repair_results.items() if r["applied"]],
+                                            "by_character": repair_results}
         temporary_manifest = manifest_path.with_suffix(".json.building")
         temporary_manifest.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -1188,6 +1207,10 @@ def generate_run(
                 if cached.get("source_components", {}).get("run_identity") != source_identity:
                     raise ValueError("cached source trajectory identity differs; use a new run-id")
                 source_results[character] = _source_summary(cached["source_components"])
+            if repair_processor is not None:
+                if cached.get("geometry_repairs", {}).get("run_identity") != repair_processor.identity:
+                    raise ValueError("cached reviewed geometry identity differs; use a new run-id")
+                repair_results[character] = cached["geometry_repairs"]
             completed.append(character)
         else:
             try:
@@ -1198,13 +1221,23 @@ def generate_run(
                 else:
                     glyph, source_diagnostics = source_generator.generate(graph)
                     source_diagnostics["run_identity"] = source_identity
+                repair_diagnostics = None
+                if repair_processor is not None:
+                    glyph, repair_diagnostics = repair_processor.apply(glyph, graph)
+                    repair_diagnostics["run_identity"] = repair_processor.identity
+                    if source_diagnostics is not None and repair_diagnostics["geometry_audit"] is not None:
+                        source_diagnostics["geometry_audit"] = repair_diagnostics["geometry_audit"]
                 if len(glyph.strokes) != len(graph.strokes):
                     raise RuntimeError("generator violated stroke-count invariant")
                 if [stroke.order for stroke in glyph.strokes] != list(
                     range(1, len(graph.strokes) + 1)
                 ):
                     raise RuntimeError("generator violated stroke-order invariant")
-                _write_glyph(glyph, run_dir, png, source_diagnostics)
+                if repair_diagnostics is None:
+                    _write_glyph(glyph, run_dir, png, source_diagnostics)
+                else:
+                    _write_glyph(glyph, run_dir, png, source_diagnostics, repair_diagnostics)
+                    repair_results[character] = repair_diagnostics
                 if source_diagnostics is not None:
                     source_results[character] = _source_summary(source_diagnostics)
                 completed.append(character)
