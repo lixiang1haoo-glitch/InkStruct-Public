@@ -987,6 +987,7 @@ def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool, source_diagnos
 def _source_summary(diagnostics):
     audit = diagnostics["geometry_audit"]
     return {
+        **({"observed_reconstruction": diagnostics["observed_reconstruction"]} if "observed_reconstruction" in diagnostics else {}),
         "accepted_component_count": diagnostics["accepted_component_count"],
         "accepted_stroke_ids": diagnostics["accepted_stroke_ids"],
         "fallback_reason": diagnostics["fallback_reason"],
@@ -1020,13 +1021,14 @@ def generate_run(
     trajectory_mode: str = "legacy",
     source_profile_path: Path | None = None,
     source_nested_views: bool = False,
+    source_observed: bool = False,
     source_characters_path: Path | None = None,
     progress_callback: Callable[[dict], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
 ) -> tuple[dict, Path]:
     if trajectory_mode not in {"legacy", "source-raw", "source-simplified"}:
         raise ValueError("unknown trajectory mode")
-    if trajectory_mode == "legacy" and (source_profile_path or source_nested_views or source_characters_path):
+    if trajectory_mode == "legacy" and (source_profile_path or source_nested_views or source_characters_path or source_observed):
         raise ValueError("source options require an explicit source trajectory mode")
     if trajectory_mode != "legacy" and checkpoint is not None:
         raise ValueError("source trajectory mode does not support neural checkpoints")
@@ -1063,7 +1065,11 @@ def generate_run(
         source_profile = load_profile(source_profile_path)
         allowed = ({c for c in Path(source_characters_path).read_text(encoding="utf-8")
                     if not c.isspace()} if source_characters_path is not None else None)
-        source_generator = SourceComponentGenerator(generator, source_profile, structures,
+        source_class = SourceComponentGenerator
+        if source_observed:
+            from .observed_reconstruction import ObservedSourceGenerator
+            source_class = ObservedSourceGenerator
+        source_generator = source_class(generator, source_profile, structures,
             mode=trajectory_mode, nested_views=source_nested_views, allowed_characters=allowed)
         source_identity = {
             "policy": SOURCE_POLICY, "mode": trajectory_mode,
@@ -1075,6 +1081,9 @@ def generate_run(
                 for name in ("exemplar_generation", "exemplar_index", "component_views", "fast_placement",
                              "contextual_trajectory", "trajectory_experiment", "generate", "geometry_audit")},
         }
+        if source_observed:
+            source_identity["observed_reconstruction"] = True
+            source_identity["implementation_sha256"]["observed_reconstruction"] = sha256_file(Path(__file__).with_name("observed_reconstruction.py"))
     run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:8]
     run_dir = Path(output_root).resolve() / writer_id / run_id
     run_dir.mkdir(parents=True, exist_ok=True)

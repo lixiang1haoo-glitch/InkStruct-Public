@@ -91,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
             source_row.addWidget(self.source_profile)
             source_row.addWidget(self.source_browse)
             self.source_nested = QtWidgets.QCheckBox("允许识别嵌套部件（敫、多；实验）")
+            self.source_observed = QtWidgets.QCheckBox("优先保留已采集原稿（同字重建；实验）")
+            self.source_observed.setObjectName("source_observed")
             self.trajectory_mode.currentIndexChanged.connect(self.change_trajectory_mode)
             self.change_trajectory_mode()
             sample_row = QtWidgets.QHBoxLayout()
@@ -107,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
             form.addRow("轨迹路径", self.trajectory_mode)
             form.addRow("高保真副档案", source_row)
             form.addRow("部件范围", self.source_nested)
+            form.addRow("已采集字", self.source_observed)
             layout.addLayout(form)
             actions = QtWidgets.QHBoxLayout()
             for label, function in [
@@ -145,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def change_trajectory_mode(self):
             active = self.trajectory_mode.currentData() != "legacy"
-            for widget in (self.source_profile, self.source_browse, self.source_nested):
+            for widget in (self.source_profile, self.source_browse, self.source_nested, self.source_observed):
                 widget.setEnabled(active)
             self.component_mode.setEnabled(not active)
             self.component_strength.setEnabled(not active)
@@ -183,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
                     self.log.appendPlainText(f"{failure['character']}：生成失败，{failure['reason']}")
                 for character, row in summary["by_character"].items():
                     donors = "、".join(dict.fromkeys(d["source_character"] for d in row["donors"])) or "无，保留原结果"
+                    if row.get("observed_reconstruction", {}).get("used"):
+                        self.log.appendPlainText(f"{character}：保留已采集整字原稿（同字重建，不计作跨字泛化）。")
                     low = "、".join(row["low_A_confidence_stroke_ids"]) or "无"
                     self.log.appendPlainText(f"{character}：真实部件 {row['accepted_component_count']}；来源 {donors}；局部复核项 {row['geometry_warning_count']}；原 A 最低分 {row['minimum_A_stroke_confidence']:.3f}，低分笔画 {low}")
                 self.log.appendPlainText("置信度沿用原 A，未校准为新轨迹质量；请结合逐笔来源和几何复核。")
@@ -284,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
             source_active = trajectory_mode != "legacy"
             source_profile = Path(self.source_profile.text().strip()) if source_active and self.source_profile.text().strip() else None
             source_nested = self.source_nested.isChecked() if source_active else False
+            source_observed = self.source_observed.isChecked() if source_active else False
             self.cancel_event.clear()
 
             def work():
@@ -299,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
                     trajectory_mode=trajectory_mode,
                     source_profile_path=source_profile,
                     source_nested_views=source_nested,
+                    source_observed=source_observed,
                     component_conditioning=component_mode,
                     component_strength=component_strength,
                     progress_callback=self.generation_progress.emit,

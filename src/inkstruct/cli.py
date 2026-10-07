@@ -192,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--trajectory-mode", choices=("legacy", "source-raw", "source-simplified"),
                           default="legacy", help="opt-in complete-source component generation")
     generate.add_argument("--source-profile", type=_path, help="separate retained-source profile for the same writer")
+    generate.add_argument("--source-observed", action="store_true", help="explicitly prioritize captured whole glyphs; reconstruction, not held-out inference")
     generate.add_argument("--source-nested-views", action="store_true", help="enable validated nested component views")
     generate.add_argument("--source-characters", type=_path, help="UTF-8 training characters; exclude all other donor characters")
 
@@ -414,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
             trajectory_mode=args.trajectory_mode,
             source_profile_path=args.source_profile,
             source_nested_views=args.source_nested_views,
+            source_observed=args.source_observed,
             source_characters_path=args.source_characters,
         )
         _emit({**result, "run_directory": str(run_dir)})
