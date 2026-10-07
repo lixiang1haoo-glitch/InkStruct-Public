@@ -1,0 +1,19 @@
+{
+  "policy": "author_context_terminal_v1",
+  "dataset": "user_001 archival batch; physical author identity unconfirmed",
+  "index": "artifacts/component_aspect_20261007/user001_snapshot/index.jsonl",
+  "index_sha256": "bd27ddb04a140bc2f807024f21bc0e6a1450ce9b94fd38636e2062490c352b18",
+  "split": "existing deterministic character hash, train 60%, dev 20%, test 20%; all repeats same group",
+  "profile": "training records only, retain full raw source channel; never build target profiles",
+  "reference_modes": ["author", "public_residual"],
+  "weights": [0.0, 0.005, 0.01, 0.02, 0.04, 0.08],
+  "minimum_reference_characters": 4,
+  "maximum_reference_characters": 8,
+  "reference_selection": "exact component context, exclude target and candidate donor entire character groups; nearest public component descriptor, average repeats within character then equal character weights",
+  "reference_confidence": "at least 4 reference characters per scored stroke, circular resultant length at least 0.5; use common supported strokes across candidates",
+  "geometry": "unchanged D candidates, safety, whole-component isotropic placement and full raw vertices",
+  "development_selection": "lowest terminal angle with geometry at most 1.01 times D, activation unchanged; require strictly lower terminal angle, ties prefer smaller weight then author mode; else D",
+  "confirmation": "run test only after positive dev freeze; no retuning; aggregate each capture, then within character, then across characters",
+  "target_eligibility": "all dev/test characters with a public compatible component; choose slot with most candidates then component path, before inspecting target captures",
+  "default": "experimental only"
+}
