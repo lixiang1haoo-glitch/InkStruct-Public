@@ -62,8 +62,10 @@ def main(argv: list[str] | None = None) -> int:
             layout.addWidget(explanation)
             form = QtWidgets.QFormLayout()
             self.writer = QtWidgets.QLineEdit("user_001")
+            self.writer.setObjectName("writer")
             self.samples = QtWidgets.QLineEdit()
             self.text = QtWidgets.QLineEdit("中国书法")
+            self.text.setObjectName("generation_text")
             self.generate_all = QtWidgets.QCheckBox("生成全部支持字符（可断点续跑）")
             self.component_mode = QtWidgets.QComboBox()
             self.component_mode.addItem("自适应融合（推荐）", "adaptive")
@@ -75,6 +77,22 @@ def main(argv: list[str] | None = None) -> int:
             self.component_strength.setRange(0.0, 1.5)
             self.component_strength.setSingleStep(0.1)
             self.component_strength.setValue(1.0)
+            self.trajectory_mode = QtWidgets.QComboBox()
+            self.trajectory_mode.setObjectName("trajectory_mode")
+            self.trajectory_mode.addItem("现有平滑路径（默认）", "legacy")
+            self.trajectory_mode.addItem("完整原始部件（实验）", "source-raw")
+            self.trajectory_mode.addItem("保护折钩的轻量简化（实验）", "source-simplified")
+            self.source_profile = QtWidgets.QLineEdit()
+            self.source_profile.setObjectName("source_profile")
+            self.source_profile.setPlaceholderText("选择同一作者的高保真副档案")
+            self.source_browse = QtWidgets.QPushButton("选择档案…")
+            self.source_browse.clicked.connect(self.choose_source_profile)
+            source_row = QtWidgets.QHBoxLayout()
+            source_row.addWidget(self.source_profile)
+            source_row.addWidget(self.source_browse)
+            self.source_nested = QtWidgets.QCheckBox("允许识别嵌套部件（敫、多；实验）")
+            self.trajectory_mode.currentIndexChanged.connect(self.change_trajectory_mode)
+            self.change_trajectory_mode()
             sample_row = QtWidgets.QHBoxLayout()
             sample_row.addWidget(self.samples)
             browse = QtWidgets.QPushButton("选择…")
@@ -86,14 +104,20 @@ def main(argv: list[str] | None = None) -> int:
             form.addRow("批量模式", self.generate_all)
             form.addRow("部件生成", self.component_mode)
             form.addRow("部件强度", self.component_strength)
+            form.addRow("轨迹路径", self.trajectory_mode)
+            form.addRow("高保真副档案", source_row)
+            form.addRow("部件范围", self.source_nested)
             layout.addLayout(form)
             actions = QtWidgets.QHBoxLayout()
             for label, function in [
                 ("1. 导入", self.do_import),
                 ("2. 建档", self.do_profile),
+                ("高保真副档案", self.do_source_profile),
                 ("3. 生成", self.do_generate),
             ]:
                 button = QtWidgets.QPushButton(label)
+                if label == "3. 生成":
+                    button.setObjectName("generate_button")
                 button.clicked.connect(function)
                 self.buttons.append(button)
                 actions.addWidget(button)
@@ -119,6 +143,21 @@ def main(argv: list[str] | None = None) -> int:
                 gpu = "PyTorch 未安装；确定性生成可用，训练和神经生成不可用"
             layout.addWidget(QtWidgets.QLabel(f"CUDA：{gpu}"))
 
+        def change_trajectory_mode(self):
+            active = self.trajectory_mode.currentData() != "legacy"
+            for widget in (self.source_profile, self.source_browse, self.source_nested):
+                widget.setEnabled(active)
+            self.component_mode.setEnabled(not active)
+            self.component_strength.setEnabled(not active)
+            if active:
+                self.component_mode.setCurrentIndex(0)
+                self.component_strength.setValue(1.)
+
+        def choose_source_profile(self):
+            selected, _ = QtWidgets.QFileDialog.getOpenFileName(self, "选择高保真副档案", "", "JSON (*.json)")
+            if selected:
+                self.source_profile.setText(selected)
+
         def choose_samples(self):
             selected = QtWidgets.QFileDialog.getExistingDirectory(self, "选择单字 JSON 目录")
             if selected:
@@ -134,7 +173,22 @@ def main(argv: list[str] | None = None) -> int:
             self.pool.start(worker)
 
         def completed(self, value):
-            self.log.appendPlainText(json.dumps(value, ensure_ascii=False, indent=2))
+            if "source_profile" in value:
+                self.source_profile.setText(value["source_profile"])
+            if "source_components" in value:
+                summary = value["source_components"]
+                status = "已取消" if value["status"] == "cancelled" else "生成结束"
+                self.log.appendPlainText(f"实验{status}：{value['completed_count']} 字；失败 {value['failed_count']}；采用真实部件 {summary['characters_with_source_components']} 字。")
+                for failure in value.get("failed", []):
+                    self.log.appendPlainText(f"{failure['character']}：生成失败，{failure['reason']}")
+                for character, row in summary["by_character"].items():
+                    donors = "、".join(dict.fromkeys(d["source_character"] for d in row["donors"])) or "无，保留原结果"
+                    low = "、".join(row["low_A_confidence_stroke_ids"]) or "无"
+                    self.log.appendPlainText(f"{character}：真实部件 {row['accepted_component_count']}；来源 {donors}；局部复核项 {row['geometry_warning_count']}；原 A 最低分 {row['minimum_A_stroke_confidence']:.3f}，低分笔画 {low}")
+                self.log.appendPlainText("置信度沿用原 A，未校准为新轨迹质量；请结合逐笔来源和几何复核。")
+                self.log.appendPlainText(f"完整轨迹、供体和回退原因：{value['output']}")
+            else:
+                self.log.appendPlainText(json.dumps(value, ensure_ascii=False, indent=2))
             self.cancel_button.setEnabled(False)
             for button in self.buttons:
                 button.setEnabled(True)
@@ -197,6 +251,27 @@ def main(argv: list[str] | None = None) -> int:
 
             self.submit(work)
 
+        def do_source_profile(self):
+            from datetime import UTC, datetime
+            from uuid import uuid4
+
+            from .profile import build_profile
+            from .structures import StructureRepository
+
+            writer = self.writer.text().strip()
+            identity = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
+
+            def work():
+                profile, path = build_profile(writer,
+                    PROJECT_ROOT / "artifacts" / "samples" / writer / "index.jsonl",
+                    StructureRepository(PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"),
+                    PROJECT_ROOT / "profiles" / "source_runs" / identity,
+                    retain_source_trajectories=True)
+                return {"source_profile": str(path), "retained_captures": len(profile.source_trajectories),
+                        "note": "独立副档案已保存；原有风格档案保持不变。"}
+
+            self.submit(work)
+
         def do_generate(self):
             from .generate import generate_run
             from .structures import StructureRepository
@@ -205,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
             all_supported = self.generate_all.isChecked()
             component_mode = self.component_mode.currentData()
             component_strength = self.component_strength.value()
+            trajectory_mode = self.trajectory_mode.currentData()
+            source_active = trajectory_mode != "legacy"
+            source_profile = Path(self.source_profile.text().strip()) if source_active and self.source_profile.text().strip() else None
+            source_nested = self.source_nested.isChecked() if source_active else False
             self.cancel_event.clear()
 
             def work():
@@ -216,7 +295,10 @@ def main(argv: list[str] | None = None) -> int:
                     repository.characters() if all_supported else list(text),
                     repository,
                     PROJECT_ROOT / "profiles" / writer / "profile.json",
-                    output_root=PROJECT_ROOT / "outputs",
+                    output_root=PROJECT_ROOT / "outputs" / "source_experiments" if source_active else PROJECT_ROOT / "outputs",
+                    trajectory_mode=trajectory_mode,
+                    source_profile_path=source_profile,
+                    source_nested_views=source_nested,
                     component_conditioning=component_mode,
                     component_strength=component_strength,
                     progress_callback=self.generation_progress.emit,

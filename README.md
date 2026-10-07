@@ -182,3 +182,23 @@ InkStruct/
 `.venv/`、`data/`、`artifacts/`、`profiles/`、`outputs/`、`release/`、模型权重、缓存和本地 `.env` 文件均由 `.gitignore` 排除，不应提交到远程仓库。克隆源码时使用 `git clone --recurse-submodules` 获取 Make Me a Hanzi 子模块；子模块只记录上游提交引用，不在本仓库中复制第三方依赖源码。
 
 原 SDT 仅作为项目演进来源和效果对照，不再参与 InkStruct 当前运行路径。
+
+## 完整源轨迹实验入口（默认关闭）
+
+Mac 生成器的“轨迹路径”可选“完整原始部件”或“保护折钩的轻量简化”，并选择同一作者的高保真副档案。“高保真副档案”按钮将档案保存到独立的 `profiles/source_runs/` 子目录，不覆盖既有风格档案；实验界面输出位于 `outputs/source_experiments/`。默认仍为 v4 adaptive 平滑生成。
+
+CLI 示例（Mac，仓库根目录）：
+
+```bash
+.venv/bin/inkstruct generate --writer scx --text '侈徼劓岛' \
+  --profile profiles/scx/profile.json \
+  --source-profile profiles/source_v1_20261007/scx/profile.json \
+  --trajectory-mode source-raw --source-nested-views \
+  --output-root outputs/source_experiments
+```
+
+将 `source-raw` 换成 `source-simplified` 即使用输出坐标误差上限 0.004 的保护性简化。两条路径先确定同一套完整部件供体和共同等比变换；不逐笔拟合，不在简化后重新选供体。实验入口固定原 A 的 `adaptive`、强度 1，不与神经检查点混用。
+
+评测时用 `--source-characters train_characters.txt` 显式限定允许提供部件的训练字符，文件为 UTF-8 字符列表，忽略空白；同字全部重复样本共同纳入/排除，目标同字始终不能提供跨字候选。A 的 `--profile` 也必须独立由训练集建立。未指定训练字符表的普通生成使用源档案中所有非目标字实例，不能据此宣称留出效果。
+
+每个实验轨迹 JSON 增加 `source_components`，保存候选、共同变换、源点索引、输入哈希、简化/部件回退及逐笔几何审计。原有置信度沿用 A，尚未校准为新轨迹质量；源映射支持分数单独记录。运行身份变化会拒绝续跑，需新建 run-id。[接入验证和限制](docs/SOURCE_GENERATION_ENTRY_20261007.md)。
