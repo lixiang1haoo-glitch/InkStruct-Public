@@ -1,0 +1,24 @@
+{
+  "policy": "bounded_whole_component_aspect_v1",
+  "development": "existing 32 scx development targets; same frozen candidates and A layouts",
+  "caps": [
+    1.0,
+    1.1,
+    1.25,
+    1.5
+  ],
+  "candidate_limit": 16,
+  "arms": {
+    "D": "frozen isotropic complete-source baseline",
+    "E": "D donor fixed; bounded XY placement competes with its isotropic placement",
+    "F": "same candidate pool; bounded XY and isotropic placements compete with unchanged safety gates"
+  },
+  "selection": "choose F cap with lowest character-mean geometry among caps with terminal angle no worse than D and equal or higher activation; require geometry strictly better than D, otherwise choose 1.0; ties prefer smaller cap",
+  "confirmation": "user_001 independent data batch, character-grouped split before profile building; physical author identity not assumed; parameters frozen on scx only",
+  "repeats": "all captures of a character stay together; score each capture then mean within character before across-character summary",
+  "training": "only train-group raw records build A and retained-source profile; eval targets never enter profile construction",
+  "fallbacks": "retain complete D placements when anisotropic options fail; report actual axis-ratio activations separately",
+  "raw_capture_policy": "all source vertices, pressure and relative within-stroke timing retained; globally retime in output stroke order",
+  "default": "experimental runner only; no production switch change",
+  "matching": "8 bounded rematching iterations; accept only decreasing transformed-frame equal-arclength anchor SSE; cap 1 returns frozen isotropic fit exactly"
+}
