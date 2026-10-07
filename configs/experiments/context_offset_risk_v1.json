@@ -1,0 +1,12 @@
+{
+  "policy": "context_offset_risk_v1",
+  "hypothesis": "Author/component context can correct some global risk miscalibration, while shrinkage limits sparse-context overfit",
+  "fixed": "Same 3088 labels, 46 numeric features, numeric combined logistic regularization0.1, source-isolated 9 validation cells, character grouping, threshold0.8, D/M/source trajectories and evaluation cohorts",
+  "context": "Public component canonical|variant|role|parent-layout|stroke-count; use exact same component_key as donor compatibility. No target capture features.",
+  "modes": ["author", "component", "hierarchical"],
+  "regularization": [0.001, 0.01, 0.1],
+  "offset": "Freeze numeric model fit on each training cell. Fit penalized additive logit offsets using author, component, or author+component+author/component indicator blocks. Equal weight per writer-character. No independent unpenalized group intercept. Vocabulary only from training; unseen categories contribute zero. Query character excluded across authors before numeric fitting and vocabulary.",
+  "selection": "Compare 9 offsets plus exact numeric base on pooled character-balanced source-isolated out-of-fold Brier; ties logloss then base then author then component then hierarchical then stronger regularization. Freeze before querying development/regression. No threshold retuning.",
+  "audit": "Before fitting report all numeric-model false accepts and failure flags, exact-context support from their own training cell, relative/local/angle harms. Do not redefine safe labels or remove difficult groups.",
+  "limits": "Repeated model selection on observed training folds is exploratory. Categorical offsets encode context priors, not naturalness or causal correction. Previously observed regression and crossfit/full-profile shift remain. Production unchanged."
+}
