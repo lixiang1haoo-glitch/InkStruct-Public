@@ -27,6 +27,8 @@
 
 ### 训练、评估与模型演进
 
+- [标准结构扩展审计与首批修复](STRUCTURE_AUDIT_REPAIR_20261007.md)：当前优先级，导入裁剪根因、三笔轮廓修复与固定档案 A/B/C 验证；生产默认关闭。
+
 - [Mac 迁移与轨迹保真阶段记录](MAC_QUALITY_PROGRESS_20261007.md)：真实数据恢复、作者回归、高保真扩展和折钩诊断。
 - [本轮改进效果对比报告](EFFECT_COMPARISON_20261007.md)：边界前后对比、高保真保存效果与七类问题的实际进度。
 - [v5 实现与初步结果](V5_IMPLEMENTATION_AND_PRELIMINARY_RESULTS.md)：v5 训练、渲染损失、因子化风格与固定实验结果。
