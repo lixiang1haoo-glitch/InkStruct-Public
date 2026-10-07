@@ -9,6 +9,7 @@ import numpy as np
 from .alignment import align_sample, standard_order_indices
 from .generate import generate_run
 from .geometry import bbox, polyline_distance, resample
+from .geometry_audit import audit_glyph
 from .metrics import aggregate_stroke_metrics
 from .profile import build_profile
 from .samples import iter_index
@@ -75,6 +76,7 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
     checked = 0
     canvas_fitted = 0
     canvas_review = []
+    geometry_audits = {}
     for path in sorted((run_dir / "trajectories").glob("U+*.json")):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -91,10 +93,10 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
             actual_ids = [str(stroke["standard_stroke_id"]) for stroke in strokes]
             if actual_ids != expected_ids:
                 raise ValueError("standard stroke IDs do not match the character graph")
+            previous_time = -1
             for stroke in strokes:
                 if len(stroke["points"]) < 2:
                     raise ValueError(f"stroke {stroke['order']} has fewer than two points")
-                previous_time = -1
                 for point in stroke["points"]:
                     if not 0 <= float(point["x"]) <= 1 or not 0 <= float(point["y"]) <= 1:
                         raise ValueError("coordinate outside [0, 1]")
@@ -106,11 +108,13 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
             fit = value.get("canvas_fit", {})
             if not isinstance(fit, dict):
                 raise TypeError("canvas fit metadata must be an object")
+            geometry_audit = audit_glyph(value, graph)
             if fit.get("applied"):
                 canvas_fitted += 1
             if fit.get("review_required"):
                 canvas_review.append(character)
             confidence_values.append(float(value["confidence"]))
+            geometry_audits[character] = geometry_audit
             checked += 1
         except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
             failures.append({"path": str(path), "reason": str(error)})
@@ -123,6 +127,10 @@ def evaluate_run(run_dir: Path, structures: StructureRepository) -> dict:
         "canvas_review_characters": canvas_review,
         "structural_pass_rate": checked / max(1, checked + len(failures)),
         "mean_confidence": sum(confidence_values) / max(1, len(confidence_values)),
+        "geometry_warning_character_count": sum(
+            bool(audit["geometry_warnings"]) for audit in geometry_audits.values()
+        ),
+        "geometry_audits": geometry_audits,
         "requested_count": manifest.get("requested_count"),
         "generation_failed_count": manifest.get("failed_count"),
         "structure_coverage_rate": checked / max(1, int(manifest.get("requested_count", 0))),
