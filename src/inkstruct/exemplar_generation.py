@@ -47,7 +47,11 @@ class SourceComponentGenerator:
                                    allowed_characters=allowed_characters)
         self.anchor_cache = {}
 
-    def generate(self, graph):
+    def _select_component(self, current, graph, ids, candidates, component, occurrence_id):
+        return choose_component_fast(current, graph, ids, candidates, self.index.sources,
+                                     anchor_cache=self.anchor_cache)
+
+    def generate(self, graph, *, occurrence_id=0):
         base = self.baseline.generate(graph)
         current = base
         view = self.index.graph(graph.character)
@@ -68,8 +72,7 @@ class SourceComponentGenerator:
             if not candidates:
                 record['fallback_reason'] = 'no compatible cross-character source component'
                 continue
-            raw, selection = choose_component_fast(current, graph, ids, candidates,
-                self.index.sources, anchor_cache=self.anchor_cache)
+            raw, selection = self._select_component(current, graph, ids, candidates, component, occurrence_id)
             record['selection'] = selection
             record['fallback_reason'] = selection['fallback_reason']
             if selection['fallback_reason']:
