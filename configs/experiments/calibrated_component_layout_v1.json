@@ -1,0 +1,32 @@
+{
+  "policy": "training_calibrated_layout_band_v1",
+  "scope": "user_001 existing 41-character development and 42-character observed regression; no fresh validation claim",
+  "training": "only existing train-only retained-source profile; grouped by character before any averaging",
+  "features": "public full-glyph normalized bbox component center x/y divided by 0.85, log(width/0.85)/2, log(height/0.85)/2, log(stroke count)/4",
+  "response": "source component center minus public component center and log source/public max-span ratio, using complete source points",
+  "prediction": "exclude target character and every repeat; exact component context first, otherwise role plus parent layout; up to 8 nearest distinct characters within feature distance 0.5; minimum 4; median within character then median across characters",
+  "limits": "abstain if center residual norm >0.15 or span ratio outside [2/3,1.5]; never clip predicted output",
+  "strengths": [
+    0.0,
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "arms": {
+    "B_D": "D donor fixed, training-band adaptation",
+    "B_H": "H donor fixed, training-band adaptation"
+  },
+  "geometry": "one common positive isotropic scale and translation for all donor strokes; no averaging raw trajectories, per-stroke output fitting or source changes",
+  "safety": "existing invariants, no new strict interstroke crossing versus A, each stroke length/A length in [0.4,2.5]; otherwise exact original D/H placement",
+  "development_selection": "choose lowest mean geometry among learned/public arms and strengths with geometry strictly below D, mean terminal angle <=D+0.5 degrees, each character geometry <=1.05*D, each stroke maximum local error averaged across captures <=D+0.005, same source activation; ties smaller strength then M_D,B_D,M_H,B_H; otherwise D",
+  "interpretation": "training data can jointly supply donor and layout model; layout prediction is not independent naturalness evidence; target originals only evaluated after all outputs fixed",
+  "default": "independent experiment only",
+  "controls": {
+    "M_D": "public layout at exactly B_D effective strength",
+    "M_H": "public layout at exactly B_H effective strength"
+  },
+  "calibration": "training-character leave-one-out; standardized center/log-span error using 1.4826 MAD with floors [0.01,0.01,0.05]; median within component repeats, maximum across components per character; empirical 90th quantile with higher interpolation; minimum 12 characters",
+  "placement": "nominal strength times max(0,1-radius/standardized_distance_of_original_layout); original inside band unchanged; band is empirical, not a coverage guarantee",
+  "development_history": "separate extension after unconditional placement improved average but failed local gates; same development data and quality gates; no regression used for calibration or tuning"
+}
