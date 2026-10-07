@@ -130,6 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
     profile_build.add_argument("--database", type=_path, default=PROJECT_ROOT / DEFAULT_DATABASE)
     profile_build.add_argument("--destination", type=_path, default=PROJECT_ROOT / "profiles")
     profile_build.add_argument("--style-checkpoint", type=_path)
+    profile_build.add_argument(
+        "--retain-source-trajectories", action="store_true",
+        help="retain lossless normalized captures for diagnostics; generation stays unchanged",
+    )
 
     collect = groups.add_parser("collect", help="active sample selection")
     collect_commands = collect.add_subparsers(dest="command", required=True)
@@ -301,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
             StructureRepository(args.database),
             args.destination,
             args.style_checkpoint,
+            retain_source_trajectories=args.retain_source_trajectories,
         )
         _emit(
             {

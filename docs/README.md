@@ -27,6 +27,7 @@
 
 ### 训练、评估与模型演进
 
+- [Mac 迁移与轨迹保真阶段记录](MAC_QUALITY_PROGRESS_20261007.md)：真实数据恢复、作者回归、高保真扩展和折钩诊断。
 - [v5 实现与初步结果](V5_IMPLEMENTATION_AND_PRELIMINARY_RESULTS.md)：v5 训练、渲染损失、因子化风格与固定实验结果。
 - [笔顺对齐 v2](STROKE_ORDER_ALIGNMENT_V2.md)：错序检测、全局匹配、歧义隔离和质量审计。
 - [矢量字体研究溯源](VECTOR_FONT_RESEARCH_PROVENANCE.md)：相关矢量字体和结构数据调研来源。

@@ -297,6 +297,7 @@ def align_sample(sample: RawSample, graph: CharacterGraph) -> AlignedGlyph:
             order_confidence=order.confidence,
             order_identity_improvement=order.identity_improvement,
             order_alternative_margin=order.alternative_margin,
+            source_normalized_strokes=user_strokes,
         )
     cells: list[list[_Cell]] = [
         [_Cell(float("inf"), None, None) for _ in range(user_count + 1)]
@@ -378,4 +379,5 @@ def align_sample(sample: RawSample, graph: CharacterGraph) -> AlignedGlyph:
         order_confidence=0.0,
         order_identity_improvement=0.0,
         order_alternative_margin=0.0,
+        source_normalized_strokes=user_strokes,
     )
