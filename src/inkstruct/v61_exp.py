@@ -214,6 +214,14 @@ class V61ExpGenerator:
     def safe(checks):
         return not any(checks.values())
 
+    def ranking_score(self, placement, peer, crowd):
+        """Separate scoring policy from frozen proposals and unchanged safety gates."""
+        return (
+            placement.base_score
+            + PARAMETERS["terminal_peer_weight"] * peer
+            + PARAMETERS["contact_weight"] * crowd
+        )
+
     def select(self, ctx):
         """Rerank fixed proposals; no new source pool, fitting, target capture or warp."""
         plan = dict(ctx.baseline_plan)
@@ -249,11 +257,7 @@ class V61ExpGenerator:
                 trial = {**plan, cid: p}
                 glyph = self.emit(ctx, trial)
                 crowd = self.clearance_cost(ctx, curves(glyph))
-                score = (
-                    p.base_score
-                    + PARAMETERS["terminal_peer_weight"] * peer
-                    + PARAMETERS["contact_weight"] * crowd
-                )
+                score = self.ranking_score(p, peer, crowd)
                 trials.append(
                     (
                         score,
