@@ -1,8 +1,9 @@
 """Bounded v6.1 admission probes; no production/default selector changes.
 
 Root reuse requires an explicit target-context allowlist plus ordered reference
-correspondence. Internal crossings require source-bound review evidence; external
-crossings and new cross-boundary brush contacts remain blocked.
+correspondence. Legacy review probes remain reproducible. The opt-in source-aware
+policy verifies complete mapping and inherited topology instead of treating
+reference differences as damage. New external crossings/brush contacts block.
 """
 from __future__ import annotations
 
@@ -57,6 +58,39 @@ def classify_crossings(before, after, source, indices, reviewed_local_pairs=()):
 
 
 class AdmissionProbeGenerator(V61ExpGenerator):
+    def verify_complete_source(self, ctx, proposal):
+        """Recheck identity/ownership; source topology is evidence, not a waiver."""
+        q=proposal.candidate
+        source=self.source(proposal)  # Hash and character identity checks.
+        sample=self.profile.source_trajectories[q['sample_id']]
+        graph=self.v6.index.graph(sample.character)
+        node=next(n for n in graph.components if n.component_id==q['component_id'])
+        source_ids=[s.standard_stroke_id for s in sample.strokes]
+        if (sample.stroke_order_status not in ('declared','corrected')
+                or source_ids!=[s.stroke_id for s in graph.strokes]
+                or len(source_ids)!=len(set(source_ids))):
+            raise ValueError('complete ordered archive mapping required')
+        if q['stroke_ids']!=ordered_ids(graph,node) or node.confidence<.8:
+            raise ValueError('source component must own all its ordered strokes')
+        if min(s.confidence for s in source)<.30 or np.mean([s.confidence for s in source])<.55:
+            raise ValueError('source mapping below unchanged admission threshold')
+        if tuple(ctx.graph.strokes[i].stroke_id for i in proposal.indices)!=proposal.ids:
+            raise ValueError('target indices differ from ordered standard IDs')
+        if len(source)!=len(proposal.ids) or len(set(proposal.ids))!=len(proposal.ids):
+            raise ValueError('source/target stroke identity is not one-to-one')
+        if 'root_bridge' in q:
+            target=next(n for n in ctx.graph.components if n.component_id==proposal.component_id)
+            evidence=ordered_root_correspondence(graph,ctx.graph,target)
+            if evidence['target_ids']!=list(proposal.ids):
+                raise ValueError('root bridge target ownership differs')
+        elif not any(p.candidate==q and p.ids==proposal.ids and p.indices==proposal.indices
+                     for p in ctx.pools.get(proposal.component_id,())):
+            raise ValueError('candidate absent from frozen reliable role/mapping pool')
+        return {'complete_ordered_mapping':True,'source_component_id':node.component_id,
+                'source_ids':q['stroke_ids'],'target_ids':list(proposal.ids),
+                'minimum_mapping_confidence':min(s.confidence for s in source),
+                'mean_mapping_confidence':float(np.mean([s.confidence for s in source]))}
+
     def root_proposals(self, ctx, allowed_contexts):
         proposals=[];log=[]
         for part in ctx.baseline_meta['components']:
@@ -105,7 +139,9 @@ class AdmissionProbeGenerator(V61ExpGenerator):
                     record['rejected']=str(error)
         return sorted(proposals,key=lambda p:(p.base_score,p.candidate['sample_id'])),log
 
-    def attempt(self, ctx, plan, proposal, review=None):
+    def attempt(self, ctx, plan, proposal, review=None, *, source_aware=False,
+                reference_differences_diagnostic=True):
+        evidence=self.verify_complete_source(ctx,proposal) if source_aware else None
         before=self.emit(ctx,plan)
         proposed={**plan,proposal.component_id:proposal}
         after=self.emit(ctx,proposed)
@@ -121,8 +157,13 @@ class AdmissionProbeGenerator(V61ExpGenerator):
             if set(map(tuple,review['source_internal_pairs']))!=crossing_pairs(source_xy):
                 raise ValueError('reviewed source crossing evidence changed')
             reviewed=review['source_internal_pairs']
+        if source_aware:
+            reviewed=sorted(crossing_pairs(source_xy))
         bx,ax=curves(before),curves(after)
         topology=classify_crossings(bx,ax,source_xy,proposal.indices,reviewed)
+        if source_aware:
+            # This is traceable source evidence, NOT a claim of human approval.
+            topology['source_inherited_pairs']=topology.pop('reviewed_inherited_pairs')
         own=set(proposal.indices)
         cross_boundary=lambda pairs:{(a,b) for a,b in pairs if (a in own)!=(b in own)}
         new_boundary_contacts=cross_boundary(contact_pairs(ax)-contact_pairs(bx))
@@ -130,15 +171,28 @@ class AdmissionProbeGenerator(V61ExpGenerator):
         ratios=[path_length(ax[i])/max(path_length(ctx.graph.strokes[i].median),1e-9) for i in own]
         errors=invariants(after,ctx.graph)
         degenerate=[i+1 for i,s in enumerate(ax) if path_length(s)<.003]
+        reference_warnings=[]
+        if lost_boundary_contacts:reference_warnings.append('reference-supported contact removed')
+        if min(ratios)<.4 or max(ratios)>2.5:reference_warnings.append('length differs from reference')
+        reference_is_diagnostic=source_aware and reference_differences_diagnostic
         accepted=(not errors and not degenerate and topology['internal_topology_preserved']
             and not topology['unexplained_new_pairs'] and not new_boundary_contacts
-            and not lost_boundary_contacts and min(ratios)>=.4 and max(ratios)<=2.5)
+            and (reference_is_diagnostic or not reference_warnings))
+        reasons=[]
+        if errors:reasons.append('protocol or final bounds')
+        if degenerate:reasons.append('degenerate output stroke')
+        if not topology['internal_topology_preserved']:reasons.append('source topology changed')
+        if topology['unexplained_new_pairs']:reasons.append('new unexplained crossing')
+        if new_boundary_contacts:reasons.append('new cross-component brush contact')
+        if not reference_is_diagnostic:reasons.extend(reference_warnings)
         diagnostic={'candidate':q,'transform':asdict(proposal.transform),'accepted':accepted,
             'protocol':errors,'degenerate':degenerate,'topology':topology,
             'new_cross_boundary_contacts':sorted(new_boundary_contacts),
             'lost_reference_supported_boundary_contacts':sorted(lost_boundary_contacts),
             'brush_width':BRUSH_WIDTH,'length_ratios':ratios,
-            'review':review,'fallback_reason':None if accepted else 'bounded admission checks failed'}
+            'review':review,'source_mapping_evidence':evidence,'source_aware':source_aware,
+            'reference_differences_diagnostic_only':reference_warnings if reference_is_diagnostic else [],
+            'fallback_reason':None if accepted else '; '.join(reasons)}
         return (proposed if accepted else plan),diagnostic
 
     def probe(self, ctx, *, root_contexts=(), reviews=()):
@@ -161,4 +215,27 @@ class AdmissionProbeGenerator(V61ExpGenerator):
                 if review is not None:
                     plan,d=self.attempt(ctx,plan,p,review);log.append(d)
                     if d['accepted']:break
+        return self.emit(ctx,plan),plan,{'root_mapping':root_log,'placement':log}
+
+    def expand(self, ctx, initial_plan, *, existing_pool=False, root_contexts=(),
+               reference_differences_diagnostic=True):
+        """Fill reference slots only. Existing accepted sources/layout stay fixed.
+
+        Explicit switches keep production and legacy probes unchanged. The old
+        ranking and per-candidate fit are frozen; source-aware checks decide
+        admission. Whole roots are a separate role-bridge pool experiment.
+        """
+        plan=dict(initial_plan);log=[]
+        if existing_pool:
+            for cid,pool in ctx.pools.items():
+                if cid in plan:continue
+                for p in sorted(pool,key=lambda p:p.base_score):
+                    plan,d=self.attempt(ctx,plan,p,source_aware=True,
+                        reference_differences_diagnostic=reference_differences_diagnostic);log.append(d)
+                    if d['accepted']:break
+        roots,root_log=self.root_proposals(ctx,root_contexts)
+        for p in roots:
+            if p.component_id not in plan:
+                plan,d=self.attempt(ctx,plan,p,source_aware=True,
+                    reference_differences_diagnostic=reference_differences_diagnostic);log.append(d)
         return self.emit(ctx,plan),plan,{'root_mapping':root_log,'placement':log}

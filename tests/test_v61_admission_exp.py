@@ -64,3 +64,72 @@ def test_off_switch_replays_baseline_and_stale_review_is_rejected(tmp_path):
     with pytest.raises(ValueError,match='review identity'):
         engine.attempt(ctx,ctx.baseline_plan,p,review)
     assert asdict(profile)==snapshot
+
+
+def source_fixture(tmp_path, paths):
+    from inkstruct.source_trajectory import arc_parameters
+
+    _,repo,_,profile,_=fixture(tmp_path)
+    sample=profile.source_trajectories['沱']
+    for stroke,xy in zip(sample.strokes[3:],paths,strict=True):
+        stroke.points=xy
+        stroke.pressure=[.5]*len(xy)
+        stroke.t_ms=[12000+10*i for i in range(len(xy))]
+        stroke.arc_parameters=arc_parameters(xy)
+    engine=AdmissionProbeGenerator(profile,repo,repo)
+    ctx=engine.prepare('池')
+    proposal=ctx.pools['c_1'][0]
+    plan={k:p for k,p in ctx.baseline_plan.items() if k!='c_1'}
+    return engine,ctx,proposal,plan
+
+
+def test_source_topology_is_not_defect_but_new_external_contact_still_blocks(tmp_path):
+    from dataclasses import replace
+
+    from inkstruct.trajectory_experiment import SharedTransform
+
+    engine,ctx,p,plan=source_fixture(tmp_path,[[(.5,.3),(.85,.7)],[(.9,.3),(.9,.5)],[(.5,.7),(.85,.3)]])
+    old,old_d=engine.attempt(ctx,plan,p)
+    assert old==plan and not old_d['accepted']
+    new,d=engine.attempt(ctx,plan,p,source_aware=True)
+    assert d['accepted'] and new['c_1']==p
+    assert d['source_mapping_evidence']['complete_ordered_mapping']
+    assert d['topology']['source_inherited_pairs']==[(3,5)]
+    assert not d['topology']['unexplained_new_pairs']
+    # Place a source endpoint exactly on the other component's endpoint;
+    # touching endpoints need not be strict transverse crossings.
+    anchor=engine.emit(ctx,plan).strokes[0].points[0]
+    x,y=engine.source(p)[0].points[0];t=p.transform
+    moved=replace(p,transform=SharedTransform(t.sx,t.sy,anchor.x-t.sx*x,anchor.y-t.sy*y))
+    rejected,rd=engine.attempt(ctx,plan,moved,source_aware=True)
+    assert rd['new_cross_boundary_contacts']
+    assert not rd['accepted'] and rejected==plan
+
+
+def test_reference_length_difference_is_diagnostic_and_source_mapping_is_still_required(tmp_path):
+    engine,ctx,p,plan=source_fixture(tmp_path,[[(.60,.3),(.62,.3)],[(.8,.3),(.8,.8)],[(.55,.8),(.7,.8)]])
+    _,blocked=engine.attempt(ctx,plan,p,source_aware=True,reference_differences_diagnostic=False)
+    new,d=engine.attempt(ctx,plan,p,source_aware=True)
+    assert not blocked['accepted'] and 'length differs' in blocked['fallback_reason']
+    assert d['accepted'] and new['c_1']==p
+    assert 'length differs from reference' in d['reference_differences_diagnostic_only']
+    engine.source(p)[0].confidence=.29
+    with pytest.raises(ValueError,match='mapping below'):
+        engine.attempt(ctx,plan,p,source_aware=True)
+
+
+def test_expansion_switches_off_preserve_given_plan_and_identity(tmp_path):
+    from dataclasses import replace
+
+    _,repo,_,profile,_=fixture(tmp_path)
+    engine=AdmissionProbeGenerator(profile,repo,repo);ctx=engine.prepare('池')
+    g,plan,log=engine.expand(ctx,ctx.baseline_plan)
+    assert plan==ctx.baseline_plan and not log['placement']
+    assert [asdict(s)['points'] for s in g.strokes]==[asdict(s)['points'] for s in ctx.baseline.strokes]
+    p=next(iter(plan.values()))
+    partial=replace(p,ids=p.ids[:-1],indices=p.indices[:-1])
+    with pytest.raises(ValueError,match='one-to-one'):
+        engine.attempt(ctx,plan,partial,source_aware=True)
+    anisotropic=replace(p,transform=replace(p.transform,sy=p.transform.sy*1.01))
+    with pytest.raises(ValueError,match='isotropic'):
+        engine.attempt(ctx,plan,anisotropic,source_aware=True)
