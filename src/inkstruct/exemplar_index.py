@@ -62,21 +62,34 @@ class ExemplarIndex:
         return self.graphs[character]
 
     def candidates(self, graph, component):
-        descriptor = shape_descriptor(graph, component)
-        box = component.bbox
-        aspect = max(box[2] - box[0], 1e-8) / max(box[3] - box[1], 1e-8)
+        target_features = _reference_target_features(graph, component)
         candidates = []
         for entry in self.by_key.get(component_key(graph, component), []):
             if entry['character'] == graph.character:
                 continue
             source = self.graph(entry['character'])
             source_component = next(n for n in source.components if n.component_id == entry['component_id'])
-            shape = float(np.linalg.norm(shape_descriptor(source, source_component) - descriptor, axis=2).mean())
-            box = source_component.bbox
-            source_aspect = max(box[2] - box[0], 1e-8) / max(box[3] - box[1], 1e-8)
-            aspect_error = abs(math.log(source_aspect / aspect))
+            shape, aspect_error = reference_compatibility(
+                graph, component, source, source_component, target_features=target_features)
             if shape > .18 or aspect_error > .7:
                 continue
             candidates.append({**entry, 'score': shape + .1 * aspect_error + .03 * (1 - entry['confidence']),
                                'standard_shape_error': shape, 'standard_log_aspect_error': aspect_error})
         return sorted(candidates, key=lambda c: (c['score'], c['sample_id'], c['component_id']))
+
+
+def _reference_target_features(graph, component):
+    descriptor = shape_descriptor(graph, component)
+    box = component.bbox
+    aspect = max(box[2] - box[0], 1e-8) / max(box[3] - box[1], 1e-8)
+    return descriptor, aspect
+
+
+def reference_compatibility(graph, component, source, source_component, *, target_features=None):
+    """Existing reference-only filter features; not predicted author usability."""
+    descriptor, aspect = (_reference_target_features(graph, component)
+                          if target_features is None else target_features)
+    shape = float(np.linalg.norm(shape_descriptor(source, source_component) - descriptor, axis=2).mean())
+    box = source_component.bbox
+    source_aspect = max(box[2] - box[0], 1e-8) / max(box[3] - box[1], 1e-8)
+    return shape, abs(math.log(source_aspect / aspect))
