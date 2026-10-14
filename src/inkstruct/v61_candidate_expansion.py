@@ -16,6 +16,7 @@ from .contextual_trajectory import anchors, fit_shared_similarity
 from .exemplar_index import component_key, ordered_ids, reference_compatibility
 from .geometry import bbox
 from .positional_variants import check_positional_variants
+from .reuse_rules import ReuseRules
 from .trajectory_experiment import SharedTransform
 from .v61_admission_exp import AdmissionProbeGenerator
 from .v61_exp import Placement
@@ -76,12 +77,87 @@ def correspondence(source, sn, target, tn, *, anisotropic=False):
 
 
 class CandidateExpansionGenerator(AdmissionProbeGenerator):
-    def __init__(self, *args, variant_checks=True, **kwargs):
+    def __init__(self, *args, variant_checks=True, split_rules=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.variant_checks = variant_checks
         self.expanded_graphs = {}
         self.view_log = {}
         self._inventories = {}
+        self.reuse_rules = ReuseRules(split_rules)
+        self.rule_log = []
+        self._rule_graphs = {}
+
+    def rule_graph(self, character, *, side):
+        """Raw validated views for audit, including virtual IDs from old plans."""
+        key = (side, character)
+        if key not in self._rule_graphs:
+            repo = self.v6.mapping_repository if side == 'source' else self.v6.target_repository
+            graph = repo.get(character)
+            for _ in range(3):
+                allowed = tuple({n.canonical for n in graph.components if len(n.canonical) == 1})
+                graph = expand_views(graph, repo, allowed=allowed, max_depth=2).graph
+            self._rule_graphs[key] = graph
+        return self._rule_graphs[key]
+
+    def reuse_evidence(self, ctx, proposal):
+        rules = getattr(self, 'reuse_rules', ReuseRules())
+        if not rules.enabled:
+            return {'accepted': True, 'enabled': False}
+        for side, char, ids in [('source', proposal.candidate['character'], proposal.candidate['stroke_ids']),
+                                ('target', ctx.character, proposal.ids)]:
+            evidence = rules.check(self.rule_graph(char, side=side), ids, side=side)
+            if not evidence['accepted']:
+                return evidence
+        return {'accepted': True, 'enabled': True}
+
+    def filter_plan(self, ctx, plan):
+        if not getattr(self, 'reuse_rules', ReuseRules()).enabled:
+            return plan, []
+        kept, log = {}, []
+        for cid, p in plan.items():
+            evidence = self.reuse_evidence(ctx, p)
+            if evidence['accepted']:
+                kept[cid] = p
+            else:
+                log.append({'removed_inherited_candidate': p.candidate, 'reuse_rule': evidence,
+                            'fallback_reason': 'forbidden author reuse split'})
+        if log:
+            self.rule_log.extend(log)
+        return kept, log
+
+    def prepare(self, character):
+        # Base prepare checks exact legacy reconstruction. Apply restrictions
+        # afterwards so that this check remains meaningful and independent.
+        self._preparing_rule_context = True
+        try:
+            ctx = super().prepare(character)
+        finally:
+            self._preparing_rule_context = False
+        if self.reuse_rules.enabled:
+            ctx.baseline_plan, _ = self.filter_plan(ctx, ctx.baseline_plan)
+            pools = {}
+            for cid, pool in ctx.pools.items():
+                safe, _ = self.filter_plan(ctx, {str(i):p for i,p in enumerate(pool)})
+                pools[cid] = list(safe.values())
+            ctx.pools = pools
+            ctx.graph, log = self.reuse_rules.view(ctx.graph)
+            self.rule_log.extend(log)
+            ctx.baseline = self.emit(ctx, ctx.baseline_plan)
+            from .trajectory_experiment import crossing_pairs
+            from .v61_contacts import contact_pairs
+            from .v61_exp import curves
+            ctx.baseline_contacts = contact_pairs(curves(ctx.baseline))
+            ctx.baseline_crossings = crossing_pairs(curves(ctx.baseline))
+        return ctx
+
+    def emit(self, ctx, plan):
+        if not getattr(self, '_preparing_rule_context', False):
+            for p in plan.values():
+                evidence = self.reuse_evidence(ctx,p)
+                if not evidence['accepted']:
+                    self.rule_log.append({'stage':'emit', 'reuse_rule': evidence})
+                    raise ValueError('forbidden author reuse split in inherited output plan')
+        return super().emit(ctx,plan)
 
     def variant_evidence(self, ctx, proposal):
         graph = self.source_graph(proposal.candidate['character'])
@@ -104,6 +180,14 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
         return check_positional_variants(graph, sn, target, tn, self.source(proposal))
 
     def attempt(self, ctx, plan, proposal, *args, **kwargs):
+        plan, removed = self.filter_plan(ctx, plan)
+        rule = self.reuse_evidence(ctx, proposal)
+        if not rule['accepted']:
+            diagnostic = {'candidate': proposal.candidate, 'accepted': False,
+                          'reuse_rule': rule, 'removed_inherited': removed,
+                          'fallback_reason': 'forbidden author reuse split'}
+            self.rule_log.append(diagnostic)
+            return plan, diagnostic
         evidence = self.variant_evidence(ctx, proposal) if self.variant_checks else None
         if evidence and not evidence['accepted']:
             return plan, {'candidate': proposal.candidate, 'accepted': False,
@@ -117,7 +201,8 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
     def expanded(self, graph, repository):
         allowed = tuple(sorted({n.canonical for n in graph.components if len(n.canonical) == 1}))
         result = expand_views(graph, repository, allowed=allowed, max_depth=2)
-        return result.graph, result.diagnostics
+        view, log = self.reuse_rules.view(result.graph)
+        return view, result.diagnostics + log
 
     def source_graph(self, character):
         return self.expanded_graphs.get(character) or super().source_graph(character)
@@ -128,6 +213,8 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
         inventory = defaultdict(list)
         for sample in self.profile.source_trajectories.values():
             graph = self.v6.index.graph(sample.character)
+            graph, rule_log = self.reuse_rules.view(graph)
+            self.rule_log.extend(rule_log)
             if nested:
                 graph, diagnostics = self.expanded(graph, self.v6.mapping_repository)
                 self.expanded_graphs[sample.character] = graph
@@ -162,8 +249,21 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
 
     def repair(self, ctx, initial_plan, policy):
         """Repair only incompatible saved placements; lock all other geometry."""
-        scope = {sid for p in initial_plan.values() if not self.variant_evidence(ctx, p)['accepted']
-                 for sid in p.ids} if self.variant_checks else set()
+        scope = {sid for p in initial_plan.values()
+                 if not self.reuse_evidence(ctx,p)['accepted'] or
+                 (self.variant_checks and not self.variant_evidence(ctx, p)['accepted'])
+                 for sid in p.ids}
+        if getattr(self, 'reuse_rules', ReuseRules()).enabled:
+            target = self.rule_graph(ctx.character, side='target')
+            for p in initial_plan.values():
+                evidence = self.reuse_rules.check(target,p.ids,side='target')
+                if not evidence['accepted']:
+                    parent_ids = set(evidence['parent_stroke_ids'])
+                    scope.update(parent_ids)
+                    # Try an enclosing complete 君 before falling back to strokes.
+                    for node in target.components:
+                        if node.canonical == '君' and parent_ids <= set(node.stroke_ids):
+                            scope.update(node.stroke_ids)
         if not scope:
             return ctx, self.emit(ctx, initial_plan), dict(initial_plan), []
         return self.extend(ctx, initial_plan, policy, target_scope=scope)
@@ -171,17 +271,20 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
     def extend(self, ctx, initial_plan, policy=None, *, target_scope=None):
         """Independent arms start from frozen baseline. Never overwrite source data."""
         policy = policy or ExpansionPolicy()
+        initial_plan, rule_log = self.filter_plan(ctx, initial_plan)
         if policy.anisotropic and not all((policy.context, policy.hierarchy, policy.nested, policy.whole_target)):
             raise ValueError('axis fallback requires the complete isotropic expansion first')
         if not any(asdict(policy).values()):
-            return ctx, self.emit(ctx, initial_plan), dict(initial_plan), []
-        prefix_log = []
+            return ctx, self.emit(ctx, initial_plan), dict(initial_plan), rule_log
+        prefix_log = rule_log
         if policy.anisotropic:
-            ctx, _, initial_plan, prefix_log = self.extend(ctx, initial_plan, replace(policy, anisotropic=False),
-                                                          target_scope=target_scope)
+            ctx, _, initial_plan, recursive_log = self.extend(ctx, initial_plan, replace(policy, anisotropic=False),
+                                                             target_scope=target_scope)
+            prefix_log += recursive_log
         probe = copy.copy(ctx)
+        probe.graph, view_log = self.reuse_rules.view(ctx.graph)
         probe.pools = {**ctx.pools}
-        log = list(prefix_log)
+        log = list(prefix_log) + view_log
         if policy.nested:
             probe.graph, diagnostics = self.expanded(ctx.graph, self.v6.target_repository)
             log.append({'target_view_validation': diagnostics})
