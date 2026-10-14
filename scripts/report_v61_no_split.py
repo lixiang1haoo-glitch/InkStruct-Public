@@ -49,13 +49,22 @@ def run(root,out):
         assert dict_curves(rr['A']['glyph'])==dict_curves(rr['B']['glyph'])
         protected.append({'writer':w,'target':c,'source':donor,'orders':[int(i)+1 for i in before],
                           'source_and_transform_exact':True})
-    head={k:{'stroke_1_4_strict_crossing':(0,3) in crossing_pairs(x),
-             'clearance':segment_clearance(x[0],x[3])} for k,x in [('A',a),('B',b),('reference',ref)]}
+    head={k:{'stroke_2_4_strict_crossing':(1,3) in crossing_pairs(x),
+             'stroke_3_4_strict_crossing':(2,3) in crossing_pairs(x),
+             'obsolete_stroke_1_4_diagnostic':{'strict_crossing':(0,3) in crossing_pairs(x),
+                                                'clearance':segment_clearance(x[0],x[3])}}
+          for k,x in [('A',a),('B',b),('reference',ref)]}
     dump(out/'summary.json',{'changed':changes,'unchanged_cases':len(records)-len(changes),
                             'approved_paths':protected,'head_diagnostic':head,
-                            'interpretation':'manual visual finding: target long stroke still does not visibly pass above head; no generic classifier'})
+                            'human_review':{'authority':'user clarification in this thread',
+                                'scope':'user_001 群: two horizontal strokes pass through the long falling stroke',
+                                'accepted':True,'criterion_orders':[[2,4],[3,4]],
+                                'retracted':'requiring the long stroke to pass above the top horizontal; inferred reference-start defect',
+                                'supersedes':'report_verified interpretation only; generation unchanged'},
+                            'interpretation':'user confirms the intended crossing relation is correct; no reference-start repair warranted by the previous misinterpretation'})
     lines=['# v6.1 exp：禁止“尹→一＋尸”拆分复用', '',
-        '**结论：错误拆分路径已禁用，但 user_001“群”的长撇仍未明显穿头，字形问题尚未解决。**','',
+        '**人工验收更正：这里的“穿头”指两横穿过长撇。用户确认新结果在这一关系上没有问题；撤回此前“未穿头”和参考起点异常的判断。**','',
+        '本报告替代 report_verified 的相关解释，复用同一份冻结输出，不改生成代码、来源、变换或轨迹。第2/4、第3/4笔的真实线段交叉可作为辅助证据；验收依据为本次用户澄清，不把它扩大为全系统质量认证。','',
         '规则版本 `author_reuse_no_split_v1`；显式开关 `CandidateExpansionGenerator(..., split_rules=True)`。关闭时保持旧路径。原始数据库和作者档案未改。', '',
         '生产设计采用：整字 → 完整部件 → 关键笔替换 → 作者单笔 → 明确缺口。本轮验证排除所有同字供体，避免整字复用掩盖跨字错误；生产默认未切换。','',
         '## 本轮结果','',
@@ -77,8 +86,8 @@ def run(root,out):
         '## 形态与安全验收','',
         '36例均通过笔数、标准ID/笔顺、有限坐标、压力、单调时间、退化/越界检查；来源逐点、压力、笔内时间核对通过。没有新增跨部件交叉或粘连，检查笔宽 .014/.028/.05。',
         'user_001“群”第1/3笔原有严格交叉消失；.014下第1/3、第1/4笔原有接触消失；.028和.05下接触集合不变。这些损失不自动计作收益。',
-        '第1/4笔在旧输出、新输出及当前参考中均没有严格交叉。当前参考两笔的中心线间距约 .01922，长撇起点也在头横下方；新单笔仍按这个布局拟合。因此规则消除了错误迁移单元，但没有建立正确的穿头关系。这里仅作具体案例图像核查，没有开发通用穿头分类器，也没有本轮自动改写参考。',
-        '建议下一轮只核对该字原轮廓/笔顺与参考起点，再对“尹”的穿头放置关系做独立、有人工证据的实验；不能只放宽供体门槛或宣称全作者覆盖即可正确。','',
+        '此前误把“穿头”解释为长撇穿过最上方横画，用第1/4笔关系判断验收，选错了检查对象。这里应关注两横（第2、3笔）穿过长撇（第4笔），用户已确认新结果没有问题。旧输出和参考也有这两对中心线交叉，不能把这个布尔指标单独当作新方案更好的证明，更不能据此推翻人工确认的拆分禁用规则。',
+        '撤回此前“参考起点异常、需要穿头放置修复”的推断和建议。现有参考与作者轨迹均不因该误解改动；禁止尹→一＋尸的规则及正常复用保护结论保留。','',
         '## 已人工认可的保护路径','',
         '|作者|目标|来源|笔顺|结果|','|---|---|---|---|---|']
     for p in protected:
