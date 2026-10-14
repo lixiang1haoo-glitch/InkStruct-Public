@@ -101,7 +101,7 @@ def run(out, writers, chars):
     summary = []
     for writer in writers:
         profile = load_profile(SOURCES[writer])
-        engine = CandidateExpansionGenerator(profile, base, target)
+        engine = CandidateExpansionGenerator(profile, base, target, variant_checks=False)
         folder = out / writer
         folder.mkdir()
         for char in chars:

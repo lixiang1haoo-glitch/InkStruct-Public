@@ -15,6 +15,7 @@ from .component_views import expand_views
 from .contextual_trajectory import anchors, fit_shared_similarity
 from .exemplar_index import component_key, ordered_ids, reference_compatibility
 from .geometry import bbox
+from .positional_variants import check_positional_variants
 from .trajectory_experiment import SharedTransform
 from .v61_admission_exp import AdmissionProbeGenerator
 from .v61_exp import Placement
@@ -75,11 +76,43 @@ def correspondence(source, sn, target, tn, *, anisotropic=False):
 
 
 class CandidateExpansionGenerator(AdmissionProbeGenerator):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, variant_checks=True, **kwargs):
         super().__init__(*args, **kwargs)
+        self.variant_checks = variant_checks
         self.expanded_graphs = {}
         self.view_log = {}
         self._inventories = {}
+
+    def variant_evidence(self, ctx, proposal):
+        graph = self.source_graph(proposal.candidate['character'])
+        target = ctx.graph
+        sn = next((n for n in graph.components if n.component_id == proposal.candidate['component_id']), None)
+        tn = next((n for n in target.components if n.component_id == proposal.component_id), None)
+        # Legacy plans may name validated virtual nodes absent from ctx.graph.
+        # Reconstruct only the existing validated view; never guess ownership.
+        for _ in range(3):
+            if sn is None:
+                graph, _ = self.expanded(graph, self.v6.mapping_repository)
+                sn = next((n for n in graph.components if n.component_id == proposal.candidate['component_id']), None)
+            if tn is None:
+                target, _ = self.expanded(target, self.v6.target_repository)
+                tn = next((n for n in target.components if n.component_id == proposal.component_id), None)
+            if sn is not None and tn is not None:
+                break
+        if sn is None or tn is None:
+            return {'accepted': False, 'checks': [], 'reason': 'positional variant view unresolved'}
+        return check_positional_variants(graph, sn, target, tn, self.source(proposal))
+
+    def attempt(self, ctx, plan, proposal, *args, **kwargs):
+        evidence = self.variant_evidence(ctx, proposal) if self.variant_checks else None
+        if evidence and not evidence['accepted']:
+            return plan, {'candidate': proposal.candidate, 'accepted': False,
+                          'variant_compatibility': evidence,
+                          'fallback_reason': 'positional key-stroke mismatch: ' + evidence['reason']}
+        result, diagnostic = super().attempt(ctx, plan, proposal, *args, **kwargs)
+        if evidence:
+            diagnostic['variant_compatibility'] = evidence
+        return result, diagnostic
 
     def expanded(self, graph, repository):
         allowed = tuple(sorted({n.canonical for n in graph.components if len(n.canonical) == 1}))
@@ -127,18 +160,28 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
         if not np.isfinite([t.sx, t.sy, t.tx, t.ty]).all() or min(t.sx, t.sy) <= 0 or max(t.sx, t.sy) / min(t.sx, t.sy) > MAX_AXIS_RATIO:
             raise ValueError('invalid bounded axis experiment transform')
 
-    def extend(self, ctx, initial_plan, policy=None):
+    def repair(self, ctx, initial_plan, policy):
+        """Repair only incompatible saved placements; lock all other geometry."""
+        scope = {sid for p in initial_plan.values() if not self.variant_evidence(ctx, p)['accepted']
+                 for sid in p.ids} if self.variant_checks else set()
+        if not scope:
+            return ctx, self.emit(ctx, initial_plan), dict(initial_plan), []
+        return self.extend(ctx, initial_plan, policy, target_scope=scope)
+
+    def extend(self, ctx, initial_plan, policy=None, *, target_scope=None):
         """Independent arms start from frozen baseline. Never overwrite source data."""
         policy = policy or ExpansionPolicy()
         if policy.anisotropic and not all((policy.context, policy.hierarchy, policy.nested, policy.whole_target)):
             raise ValueError('axis fallback requires the complete isotropic expansion first')
         if not any(asdict(policy).values()):
             return ctx, self.emit(ctx, initial_plan), dict(initial_plan), []
+        prefix_log = []
         if policy.anisotropic:
-            ctx, _, initial_plan, _ = self.extend(ctx, initial_plan, replace(policy, anisotropic=False))
+            ctx, _, initial_plan, prefix_log = self.extend(ctx, initial_plan, replace(policy, anisotropic=False),
+                                                          target_scope=target_scope)
         probe = copy.copy(ctx)
         probe.pools = {**ctx.pools}
-        log = []
+        log = list(prefix_log)
         if policy.nested:
             probe.graph, diagnostics = self.expanded(ctx.graph, self.v6.target_repository)
             log.append({'target_view_validation': diagnostics})
@@ -148,10 +191,22 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
                   (n.path != 'root' and (policy.hierarchy or not n.children_ids)))]
         nodes.sort(key=lambda n: (-len(n.stroke_ids), n.path))
         plan = dict(initial_plan)
+        repair_ids = set()
+        if self.variant_checks:
+            for cid, p in list(plan.items()):
+                evidence = self.variant_evidence(probe, p)
+                if not evidence['accepted']:
+                    del plan[cid]
+                    repair_ids.update(p.ids)
+                    log.append({'removed_inherited_candidate': p.candidate,
+                                'variant_compatibility': evidence,
+                                'fallback_reason': 'inherited positional key-stroke mismatch'})
         # Axis arm starts with exactly the isotropic output; never replaces a
         # successful isotropic placement merely to fit the reference more tightly.
         for node in nodes:
             ids = tuple(ordered_ids(probe.graph, node))
+            if target_scope is not None and not set(ids) <= set(target_scope):
+                continue
             overlap = {cid for cid, p in plan.items() if set(p.ids) & set(ids)}
             covered = set().union(*(set(plan[cid].ids) for cid in overlap)) if overlap else set()
             if set(ids) <= covered or covered - set(ids):
@@ -181,6 +236,8 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
                     reasons.append('whole target')
                 if policy.anisotropic:
                     reasons.append('bounded axis fallback')
+                if set(ids) & repair_ids:
+                    reasons.append('replace incompatible inherited source')
                 if not reasons:
                     continue  # Do not mix ordinary-pool retries/top-16 changes into ablations.
                 record = {'target_component': node.component_id, 'candidate': entry,
@@ -189,11 +246,21 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
                     log.append({**record, 'rejected': errors})
                     continue
                 try:
+                    source = self.profile.source_trajectories[entry['sample_id']]
+                    mapping = {s.standard_stroke_id: s for s in source.strokes}
+                    evidence = None
+                    if self.variant_checks:
+                        evidence = check_positional_variants(sg, sn, probe.graph, node,
+                            [mapping[k] for k in entry['stroke_ids']])
+                        if not evidence['accepted']:
+                            log.append({**record, 'rejected': 'positional key-stroke mismatch',
+                                        'variant_compatibility': evidence})
+                            continue
                     proof = correspondence(sg, sn, probe.graph, node, anisotropic=policy.anisotropic)
                     q = {**entry, 'expansion_correspondence': proof,
                          'bounded_axis_experiment': policy.anisotropic, 'expansion_reasons': reasons}
-                    source = self.profile.source_trajectories[q['sample_id']]
-                    mapping = {s.standard_stroke_id: s for s in source.strokes}
+                    if evidence:
+                        q['variant_compatibility'] = evidence
                     x = [mapping[k].points for k in q['stroke_ids']]
                     y = [s.median for s in probe.graph.strokes if s.stroke_id in ids]
                     indices = tuple(i for i, s in enumerate(probe.graph.strokes) if s.stroke_id in ids)
