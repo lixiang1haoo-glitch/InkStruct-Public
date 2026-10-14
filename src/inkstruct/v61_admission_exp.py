@@ -58,12 +58,15 @@ def classify_crossings(before, after, source, indices, reviewed_local_pairs=()):
 
 
 class AdmissionProbeGenerator(V61ExpGenerator):
+    def source_graph(self, character):
+        return self.v6.index.graph(character)
+
     def verify_complete_source(self, ctx, proposal):
         """Recheck identity/ownership; source topology is evidence, not a waiver."""
         q=proposal.candidate
         source=self.source(proposal)  # Hash and character identity checks.
         sample=self.profile.source_trajectories[q['sample_id']]
-        graph=self.v6.index.graph(sample.character)
+        graph=self.source_graph(sample.character)
         node=next(n for n in graph.components if n.component_id==q['component_id'])
         source_ids=[s.standard_stroke_id for s in sample.strokes]
         if (sample.stroke_order_status not in ('declared','corrected')

@@ -163,6 +163,10 @@ class V61ExpGenerator:
     def placed(self, placement):
         return [placement.transform.apply(s.points) for s in self.source(placement)]
 
+    def validate_transform(self, placement):
+        if placement.transform.sx <= 0 or placement.transform.sx != placement.transform.sy:
+            raise ValueError("positive isotropic component transform required")
+
     def emit(self, ctx, plan):
         """One final transform per source component; assembler owns output time."""
         replacements = {}
@@ -170,8 +174,7 @@ class V61ExpGenerator:
         for p in plan.values():
             if p.candidate["character"] == ctx.character or owned.intersection(p.indices):
                 raise ValueError("target donor or overlapping component ownership")
-            if p.transform.sx <= 0 or p.transform.sx != p.transform.sy:
-                raise ValueError("positive isotropic component transform required")
+            self.validate_transform(p)
             owned.update(p.indices)
             for i, src, xy in zip(p.indices, self.source(p), self.placed(p), strict=True):
                 replacements[i] = {"points": xy, "pressure": src.pressure, "time": src.t_ms}
