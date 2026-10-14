@@ -56,3 +56,27 @@ def test_preserved_source_internal_contact_is_not_boundary_alarm():
     assert result['new_external_crossings']==[(2,3)]
     assert result['inherited_source_crossings']==[(1,2)]
     assert result['contacts']['0.028']['new_external']==[(2,3)]
+
+
+def test_readback_verifier_detects_output_tampering(tmp_path):
+    import gzip
+
+    from generate_v61_library import digest, dump, encoded
+    from verify_v61_corrected_library import verify
+
+    dump(tmp_path/'protocol.json',{'split_rules':True,'author_stroke_fallback':True,
+        'inputs':{},'code':{},'writers':['test'],'characters':['靶']})
+    folder=tmp_path/'test';folder.mkdir();stem=folder/f'{ord("靶"):04X}'
+    glyph={'strokes':[{'standard_stroke_id':'s1','order':1,'points':[
+        {'x':.1,'y':.1,'pressure':.5,'t_ms':0},{'x':.3,'y':.3,'pressure':.5,'t_ms':10}]}]}
+    payload={'glyph':glyph,'provenance':{},'author_only_ready':False,
+             'checks':{'protocol':[],'source_integrity':[]}}
+    raw=stem.with_suffix('.json.gz');raw.write_bytes(gzip.compress(encoded(payload)))
+    dump(stem.with_suffix('.json'),{'writer':'test','character':'靶','status':'warning',
+        'files':{str(raw.relative_to(tmp_path)):digest(raw)},'strokes':1,
+        'stroke_sources':[{'standard_id':'s1','kind':'explicit_gap'}],
+        'missing':[{'order':1}],'source_strokes':0,'reference_strokes':1,'author_only_ready':False})
+    dump(tmp_path/'summary.json',{'expected_outputs':1,'source_strokes':0,'reference_strokes':1})
+    assert verify(tmp_path)['counts']['missing_strokes']==1
+    raw.write_bytes(gzip.compress(encoded({**payload,'tampered':True})))
+    with pytest.raises(ValueError,match='output hash mismatch'):verify(tmp_path)
