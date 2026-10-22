@@ -7,3 +7,6 @@
 *.cmd text eol=crlf
 *.png binary
 *.zip binary
+
+# Runtime charset identities hash exact bytes, including pinned source notices.
+configs/character_sets/** -text
