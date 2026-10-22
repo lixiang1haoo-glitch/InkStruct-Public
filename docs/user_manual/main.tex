@@ -1,0 +1,86 @@
+% !TEX program = xelatex
+\documentclass[UTF8,a4paper,zihao=-4,oneside,openany,fontset=fandol]{ctexbook}
+\usepackage[margin=23mm,top=23mm,bottom=24mm,headheight=16pt]{geometry}
+\usepackage{fontspec,graphicx,booktabs,longtable,tabularx,array,enumitem,fancyhdr,xcolor,fvextra,needspace,float}
+\definecolor{InkBlue}{HTML}{234B69}
+\definecolor{InkPale}{HTML}{F0F5F8}
+\definecolor{InkGray}{HTML}{53606D}
+\usepackage[unicode,bookmarksnumbered,colorlinks,linkcolor=InkBlue,urlcolor=InkBlue]{hyperref}
+\setmainfont{texgyrepagella-regular.otf}[BoldFont=texgyrepagella-bold.otf,ItalicFont=texgyrepagella-italic.otf,BoldItalicFont=texgyrepagella-bolditalic.otf]
+\setsansfont{texgyreheros-regular.otf}[BoldFont=texgyreheros-bold.otf]
+\setmonofont{lmmono10-regular.otf}[Scale=MatchLowercase]
+\ctexset{chapter={format=\Huge\sffamily\bfseries\color{InkBlue},beforeskip=8pt,afterskip=22pt},section={format=\Large\sffamily\bfseries\color{InkBlue}},subsection={format=\large\sffamily\bfseries}}
+\setlength{\parskip}{4pt}
+\setlength{\emergencystretch}{2em}
+\linespread{1.15}
+\setlist{nosep,topsep=6pt,leftmargin=2em,itemsep=3pt}
+\setcounter{tocdepth}{1}
+\setcounter{secnumdepth}{1}
+\raggedbottom
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily InkStruct 用户手册}
+\fancyhead[R]{\small\nouppercase{\leftmark}}
+\fancyfoot[L]{\footnotesize\color{InkGray}采集、生成与排版篇 · 2026-10-14}
+\fancyfoot[R]{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[L]{\footnotesize InkStruct 用户手册}\fancyfoot[R]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\newcommand{\ui}[1]{\textbf{「#1」}}
+\newcommand{\code}[1]{\allowbreak{\small\ttfamily\detokenize{#1}}\allowbreak}
+\newcommand{\entry}[1]{\noindent\textcolor{InkBlue}{\textbf{操作入口：}}#1\par}
+\newcommand{\note}[1]{\par\noindent\colorbox{InkPale}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small #1}}\par}
+\newcommand{\shot}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{assets/#1}\caption{#3}\end{figure}}
+\DefineVerbatimEnvironment{Source}{Verbatim}{fontsize=\small,samepage=true,breaklines=true,breakanywhere=true,frame=single,rulecolor=\color{InkBlue},framesep=3mm,xleftmargin=0pt}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\hypersetup{pdftitle={InkStruct 用户手册：采集、生成与排版篇},pdfauthor={InkStruct},pdfsubject={项目、Markdown 混排、模板设计与写字机导出}}
+\begin{document}
+\begin{titlepage}
+\thispagestyle{empty}
+\vspace*{18mm}
+{\sffamily\color{InkBlue}\fontsize{42}{48}\selectfont InkStruct\par}
+\vspace{8mm}
+{\Huge\bfseries 用户手册\par}
+\vspace{5mm}
+{\Large 采集、生成与排版篇\par}
+\vspace{10mm}
+\noindent\textcolor{InkBlue}{\rule{\textwidth}{1.2pt}}
+\vspace{8mm}
+{\large 从 Markdown 源码到手写页面与写字机 SVG\par}
+\vspace{7mm}
+\noindent 本册介绍统一应用的采集、字形生成、字体发布和编辑排版流程。\par
+\vfill
+\noindent\begin{tabular}{@{}ll@{}}
+手册版本 & 0.1.40\\
+适用界面 & 2026-10-15 · 统一应用（含 Windows 初始化）\\
+阅读对象 & 文档编写者、模板设计者与协作 Agent\\
+当前详述 & 采集、生成、字体、编辑排版与导出\\
+后续扩展 & 设备验收、局部重生成与字体校准\\
+\end{tabular}
+\vspace{14mm}
+\end{titlepage}
+\frontmatter
+\input{chapters/00-reading}
+\tableofcontents
+\mainmatter
+\part{认识与开始使用}
+\input{chapters/01-basics}
+\input{chapters/02-quickstart}
+\part{编辑排版}
+\input{chapters/03-workspace}
+\input{chapters/04-markdown}
+\input{chapters/05-tables}
+\input{chapters/06-math}
+\input{chapters/07-templates}
+\input{chapters/08-assets-review}
+\input{chapters/09-export-recovery}
+\part{字形生成}
+\input{chapters/10-generation}
+\part{书写采集}
+\input{chapters/11-capture}
+\appendix
+\part*{附录}
+\addcontentsline{toc}{part}{附录}
+\input{chapters/12-troubleshooting}
+\input{chapters/13-agent}
+\end{document}

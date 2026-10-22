@@ -1,0 +1,23 @@
+{
+  "filename": "InkStruct-collector-kernel-source-20261022.zip",
+  "sha256": "0636fba39658631d40b6e9dd222942df9221ea0b4894b278fc1a018496a23fa6",
+  "schema_version": "inkstruct-collector-source-pack-v1",
+  "source": "local data_collection snapshot",
+  "captured_on": "2026-10-22",
+  "files": {
+    "__init__.py": "eaa42c8817807821f1ca475f5acec10cecfeb2200ca4ac5b2728b87190d690ef",
+    "__main__.py": "5d813c310329bd55fa1e743f986f6f88dc13ba9be07671cd69e05595a4f1c4b2",
+    "assets/builtin_diffink_220.json": "d9634713d389798d36bd916def70a9d0c538e537cb6b462190206df84f3f81ea",
+    "canvas.py": "57b4eb883436fd3f83e6a1f7de50b0a93a28df009333a7c0a59c5ad7f3204f91",
+    "config.py": "96ce31541174241408eac00e94295a87619e0bcf64c5ffe44de9efdf58534eb0",
+    "exporter.py": "24fb45cfe6a0bc199590b0a64d571d04a1eda5655ec82cc491deb644dad72e23",
+    "line_tasks.py": "5f2f9c4566ebe4aac6b426135f6e4fbcc53fcab1f2f8691b8afc998d7426df75",
+    "models.py": "95abb27deca4b25a23134ca1c84ec367280559cfb18457533e6fb103d86deae2",
+    "paths.py": "42a1e143261a5ea961f9a909012e2b1ebe27a71587fb42b82e3f45d54b081865",
+    "storage.py": "88bd74b6e81d038d6596c990db13d06269a285094396d450ae7debc215295690",
+    "tasks.py": "7e0c47415f1e5929281e27307bd1d1be11db7ea6f22df88d934540caca369f93",
+    "ui.py": "a815aff2c8366c8f30d4939302089ca82e232654c5b6f54e1eba60e5fae26bf6"
+  },
+  "contains_author_samples": false,
+  "license_note": "Preserves existing source; does not add or change upstream license declarations."
+}

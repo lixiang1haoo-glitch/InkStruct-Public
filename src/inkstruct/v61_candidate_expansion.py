@@ -77,6 +77,7 @@ def correspondence(source, sn, target, tn, *, anisotropic=False):
 
 
 class CandidateExpansionGenerator(AdmissionProbeGenerator):
+    check_variants = staticmethod(check_positional_variants)
     def __init__(self, *args, variant_checks=True, split_rules=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.variant_checks = variant_checks
@@ -177,7 +178,7 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
                 break
         if sn is None or tn is None:
             return {'accepted': False, 'checks': [], 'reason': 'positional variant view unresolved'}
-        return check_positional_variants(graph, sn, target, tn, self.source(proposal))
+        return self.check_variants(graph, sn, target, tn, self.source(proposal))
 
     def attempt(self, ctx, plan, proposal, *args, **kwargs):
         plan, removed = self.filter_plan(ctx, plan)
@@ -353,7 +354,7 @@ class CandidateExpansionGenerator(AdmissionProbeGenerator):
                     mapping = {s.standard_stroke_id: s for s in source.strokes}
                     evidence = None
                     if self.variant_checks:
-                        evidence = check_positional_variants(sg, sn, probe.graph, node,
+                        evidence = self.check_variants(sg, sn, probe.graph, node,
                             [mapping[k] for k in entry['stroke_ids']])
                         if not evidence['accepted']:
                             log.append({**record, 'rejected': 'positional key-stroke mismatch',

@@ -1,5 +1,7 @@
 __pycache__
 .venv/
+.venv-gpu-experiment/
+workspaces/
 .env
 .env.*
 !.env.example
@@ -25,3 +27,15 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Local migration snapshots, author reviews and delivery artifacts
+handoff/
+检查项目/
+*.inkreview
+*.inkfont
+*.inkdoc
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties

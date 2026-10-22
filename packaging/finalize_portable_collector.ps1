@@ -26,7 +26,11 @@ $Manifest = [ordered]@{
     contains_pytorch_or_cuda = $false
     executable_sha256 = $ExeHash
     entrypoint = "InkStructCollector.exe"
-    bundled_task = "user_001_rerecord.csv"
+    symbol_capture = $true
+    symbol_sample_schema = "inkstruct_symbol_sample_v1"
+    symbol_default_repeats = 5
+    symbol_variable_strokes = $true
+    bundled_task = "symbols_5.csv"
 }
 $Manifest | ConvertTo-Json | Set-Content -LiteralPath "$Target\manifest.json" -Encoding utf8
 

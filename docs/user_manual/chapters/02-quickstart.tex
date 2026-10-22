@@ -1,0 +1,36 @@
+\chapter{十分钟完成第一份文档}\label{ch:quick}
+本例只使用内置数字、小数点和几何分数线，无需先导入个人字库。随手册提供 \code{examples/01-first-document.md}，可以导入，也可以直接复制下方源码。
+
+\section{输入与观察}
+\begin{enumerate}
+\item 打开应用，确认\ui{设置 → 正文}中的内容模式为\ui{Markdown 混排}，Markdown 格式为\ui{普通 Markdown}。
+\item 点击左侧源码区，输入或粘贴下列内容。独立公式的起止双美元符号分别占一行。
+\item 等待底部显示“预览已更新”。右侧应出现数字正文、两列表格和一个分数；允许出现数学校准提醒。
+\end{enumerate}
+\par\noindent\begin{minipage}{\linewidth}
+\begin{Source}
+12.3
+
+| 1 | 2 |
+| --- | --- |
+| 3.4 | 5.6 |
+
+$$
+\frac{1}{2}
+$$
+\end{Source}
+\end{minipage}\par\medskip
+\shot{workspace.png}{1}{数字、表格与分数的实际编辑界面。左侧为源码，右侧为手写页面。}
+
+\section{调整一项设置}
+将光标放在表格源码中，打开\ui{设置 → 元素 → 表格设置…}。先保留总宽 160 mm、最小行高 8 mm、数字高度 3.8 mm、留白 0.3 mm。确认当前作用范围后修改对齐方式，观察预览，再取消或确认。学习时每次只改一个参数，更容易理解效果。
+
+\section{保存并导出}
+\begin{enumerate}
+\item 点击顶部\ui{保存}，选择项目名称，保存为 \code{.inkdoc}。下次用\ui{打开 → 打开项目…}继续。
+\item 点击\ui{查看问题}。错误需要修复；“数学校准尚未人工复核”提醒表示需要在正式书写前检查纸面效果。
+\item 点击顶部\ui{导出 SVG…}，选择一个尚不存在的输出目录。多页文档会按页输出。
+\item 核对导出目录中的 \code{page-001.svg} 和说明清单。它们是机器输出；项目文件仍用于后续修改。
+\end{enumerate}
+
+\note{不要将带中文标题的示例作为“无需字库”的首次测试。中文能出现在输入框中，但预览仍需要相应手写轨迹。首次练习成功后，再按第\ref{ch:resources}章导入个人资源。}

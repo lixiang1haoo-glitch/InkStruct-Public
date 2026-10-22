@@ -1,0 +1,117 @@
+{
+  "name": "华科物理实验扫描模板 · 数字测量草案",
+  "width_mm": 195.02966666666669,
+  "height_mm": 270.0443333333333,
+  "first": {
+    "body": {
+      "name": "body",
+      "x_mm": 16.5,
+      "y_mm": 80,
+      "width_mm": 166,
+      "height_mm": 160
+    },
+    "rules": [
+      {
+        "name": "outer-frame",
+        "points": [
+          [
+            12.62296755599473,
+            61.53153023809524
+          ],
+          [
+            190.88624983530963,
+            61.53153023809524
+          ],
+          [
+            190.88624983530963,
+            244.29367726190478
+          ],
+          [
+            12.62296755599473,
+            244.29367726190478
+          ],
+          [
+            12.62296755599473,
+            61.53153023809524
+          ]
+        ],
+        "width_mm": 0.3
+      }
+    ],
+    "anchors": [
+      {
+        "name": "name-line-start",
+        "x_mm": 35.65265645586298,
+        "y_mm": 35.68442976190476
+      },
+      {
+        "name": "experiment-name-start",
+        "x_mm": 40.27786594202899,
+        "y_mm": 74.06930285714286
+      }
+    ],
+    "reserved": [
+      {
+        "name": "printed-header",
+        "x_mm": 16.5,
+        "y_mm": 15,
+        "width_mm": 166,
+        "height_mm": 46
+      },
+      {
+        "name": "experiment-title",
+        "x_mm": 16.5,
+        "y_mm": 64,
+        "width_mm": 166,
+        "height_mm": 13
+      }
+    ],
+    "background": null
+  },
+  "continuation": {
+    "body": {
+      "name": "body",
+      "x_mm": 9,
+      "y_mm": 20,
+      "width_mm": 166,
+      "height_mm": 230
+    },
+    "rules": [
+      {
+        "name": "outer-frame",
+        "points": [
+          [
+            4.239775362318841,
+            16.39554880952381
+          ],
+          [
+            183.75571854413704,
+            16.39554880952381
+          ],
+          [
+            183.75571854413704,
+            257.3136719047619
+          ],
+          [
+            4.239775362318841,
+            257.3136719047619
+          ],
+          [
+            4.239775362318841,
+            16.39554880952381
+          ]
+        ],
+        "width_mm": 0.3
+      }
+    ],
+    "anchors": [],
+    "reserved": [],
+    "background": null
+  },
+  "mode": "preprinted",
+  "offset_x_mm": 0,
+  "offset_y_mm": 0,
+  "source_sha256": "766c3b33db0696382be609e2e8ceb09085ee1ab6cbf2bfdb97cd30d35f085045",
+  "calibration": "unreviewed",
+  "schema_version": "inkstruct_page_template_v1"
+}

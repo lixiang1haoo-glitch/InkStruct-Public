@@ -1,0 +1,35 @@
+{
+  "audit_date": "2026-10-10",
+  "pdf_pages": 39,
+  "body_sections": 22,
+  "appendices": 3,
+  "subsections": 86,
+  "han_characters_in_source": 19467,
+  "equation_environments": 43,
+  "numbered_tables": 13,
+  "desktop_compiler": "success",
+  "pdf_export_compiler": "XeLaTeX / TeX Live 2026 / latexmk",
+  "visual_review": {
+    "renderer": "Ghostscript 10.07.0",
+    "all_pages_contact_sheets": true,
+    "dense_formula_table_full_page_check": true,
+    "missing_or_overlapping_content_observed": false,
+    "note": "Bundled Poppler lacked an accessible Adobe-GB1 language map; final PDF was visually verified with Ghostscript instead."
+  },
+  "source_actualtext_unicode_verified": true,
+  "overfull_boxes": 0,
+  "missing_glyph_warnings": 0,
+  "undefined_citations_or_references": 0,
+  "nonfatal_underfull_box_warnings": 6,
+  "project_tests": {
+    "command": ".venv/bin/python -m pytest",
+    "passed": 200,
+    "skipped": 4,
+    "elapsed_seconds": 4.8,
+    "historical_training_rerun": false
+  },
+  "original_190_file_hashes_unchanged": true,
+  "tex_sha256": "7cbb0c45dc5dab4fa63ca28bf8c363d8892a7487fe859d48dafb4873f0a8fee6",
+  "pdf_sha256": "109d9a3848a070adeab906261a00a898a965c21657a3838c97f8ff5a3a2f55ea",
+  "historical_metrics": "transcribed from repository reports, not rerun"
+}
