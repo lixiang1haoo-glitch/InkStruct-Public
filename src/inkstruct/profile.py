@@ -31,12 +31,16 @@ from .schemas import (
     ComponentTrajectoryPrototype,
     FactorizedStyleProfile,
     Point2D,
+    SourceTrajectorySample,
+    SourceTrajectoryStroke,
     StrokePrototype,
     StyleProfile,
 )
+from .source_trajectory import MIN_MAPPING_CONFIDENCE, TRAJECTORY_SCHEMA, source_trajectory
 from .structures import StructureRepository
 
 DEFAULT_PROFILE_ROOT = Path("profiles")
+PROFILE_BUILDER_VERSION = "component_trajectory_v4_source_v1"
 
 
 def _mean(values: list[float], default: float) -> float:
@@ -156,6 +160,8 @@ def build_profile(
     structures: StructureRepository,
     profile_root: Path = DEFAULT_PROFILE_ROOT,
     style_checkpoint: Path | None = None,
+    *,
+    retain_source_trajectories: bool = False,
 ) -> tuple[StyleProfile, Path]:
     x_scales: list[float] = []
     y_scales: list[float] = []
@@ -178,6 +184,8 @@ def build_profile(
     sample_count = 0
     corrected_order_samples: list[str] = []
     ambiguous_order_samples: list[str] = []
+    source_trajectories: dict[str, SourceTrajectorySample] = {}
+    source_exclusions: list[dict[str, str]] = []
     for sample in iter_index(index_path):
         if sample.writer_id != writer_id:
             excluded.append({"sample_id": sample.sample_id, "reason": "writer mismatch"})
@@ -199,6 +207,14 @@ def build_profile(
             continue
         if aligned.stroke_order_status == "corrected":
             corrected_order_samples.append(sample.sample_id)
+        if retain_source_trajectories:
+            trajectory, reason = source_trajectory(sample, aligned, graph)
+            if trajectory is not None:
+                if sample.sample_id in source_trajectories:
+                    raise ValueError(f"duplicate source sample_id: {sample.sample_id}")
+                source_trajectories[sample.sample_id] = trajectory
+            else:
+                source_exclusions.append({"sample_id": sample.sample_id, "reason": str(reason)})
         sample_count += 1
         characters.add(sample.character)
         user_glyph_bbox = _glyph_bbox(aligned.normalized_strokes)
@@ -617,9 +633,22 @@ def build_profile(
     checkpoint_identity = (
         factorized_style.checkpoint_sha256 if factorized_style is not None else "deterministic"
     )
-    profile_seed = (
-        f"{writer_id}:{index_sha256}:{profile_schema}:component_trajectory:{checkpoint_identity}"
-    ).encode()
+    build_identity = {
+        "builder_version": PROFILE_BUILDER_VERSION,
+        "writer_id": writer_id,
+        "index_sha256": index_sha256,
+        "structure_sha256": structures.content_sha256(),
+        "profile_schema": profile_schema,
+        "checkpoint_sha256": checkpoint_identity,
+        "trajectory_schema": TRAJECTORY_SCHEMA if retain_source_trajectories else None,
+        "parameters": {
+            "normalization_extent": 0.85,
+            "alignment_points": 16,
+            "control_points": 8,
+            "source_min_mapping_confidence": MIN_MAPPING_CONFIDENCE,
+        },
+    }
+    profile_seed = json.dumps(build_identity, sort_keys=True, separators=(",", ":")).encode()
     profile_version = hashlib.sha256(profile_seed).hexdigest()[:16]
     profile = StyleProfile(
         schema_version=profile_schema,
@@ -669,7 +698,13 @@ def build_profile(
         excluded_samples=excluded,
         style_tokens=style_tokens[:256],
         factorized_style=factorized_style,
+        trajectory_schema=TRAJECTORY_SCHEMA if retain_source_trajectories else None,
+        source_trajectories=source_trajectories,
+        build_identity=build_identity,
     )
+    if retain_source_trajectories:
+        profile.coverage["source_trajectory_sample_count"] = len(source_trajectories)
+        profile.coverage["source_trajectory_exclusions"] = source_exclusions
     target_dir = Path(profile_root).resolve() / writer_id
     target_dir.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(asdict(profile), ensure_ascii=False, indent=2) + "\n"
@@ -687,6 +722,15 @@ def build_profile(
 
 def load_profile(path: Path) -> StyleProfile:
     value = json.loads(Path(path).read_text(encoding="utf-8"))
+    if value.get("trajectory_schema") not in (None, TRAJECTORY_SCHEMA):
+        raise ValueError(f"unsupported trajectory schema: {value['trajectory_schema']}")
+    source_trajectories = {
+        key: SourceTrajectorySample(**{
+            **item,
+            "strokes": [SourceTrajectoryStroke(**stroke) for stroke in item["strokes"]],
+        })
+        for key, item in value.get("source_trajectories", {}).items()
+    }
     prototypes = {key: StrokePrototype(**item) for key, item in value["prototypes"].items()}
     component_layouts = {
         key: ComponentLayoutPrototype(**item)
@@ -728,5 +772,6 @@ def load_profile(path: Path) -> StyleProfile:
             "component_trajectories": component_trajectories,
             "character_component_trajectories": character_component_trajectories,
             "factorized_style": factorized_style,
+            "source_trajectories": source_trajectories,
         }
     )

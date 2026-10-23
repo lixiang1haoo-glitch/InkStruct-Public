@@ -1,0 +1,33 @@
+{
+  "version": "near_best_exemplar_variation_v1",
+  "development": "existing 32 scx cross-character development targets",
+  "margins": [
+    0.0,
+    0.0025,
+    0.005,
+    0.01
+  ],
+  "candidate_limit": 16,
+  "quality_weight": "source mean mapping confidence * exp(-(score-best_score)/margin)",
+  "duplicate_policy": "64 matching anchors per stroke after the shared placement, rounded to 8 decimals; matching only, output points unchanged",
+  "selection_rule": "largest margin with expected character-mean geometry <= 1.01 * D and expected terminal angle <= D + 0.5 degrees; expected values use actual sampler probabilities; otherwise margin 0",
+  "confirmation": "remaining compatible wsq test characters not in terminal_selection confirmation; same frozen training-only profile/pool",
+  "confirmed_scope": "candidate-based reproducible variation, not a measured within-character natural handwriting distribution",
+  "seeds": [
+    1001,
+    2002,
+    3003,
+    4004,
+    5005
+  ],
+  "component_naturalness_evidence": {
+    "grouping": "same writer, canonical, variant, role, parent layout, stroke count",
+    "normalization": "one common translation and positive scale",
+    "descriptor": "16 arclength matching anchors + normalized stroke lengths + terminal directions at 8% and 20% of each stroke",
+    "minimum_distinct_source_characters": 8,
+    "calibration": "character-held-out nearest-neighbor distances, per-character median, 95th percentile",
+    "leakage_control": "remove target character before fitting; remove donor character when evaluating a generated exemplar",
+    "variation_gate": "at least two near-best distinct shapes within empirical range, otherwise deterministic D",
+    "claim": "compatibility with observed same-component variation across characters; not direct repeated-character variance"
+  }
+}

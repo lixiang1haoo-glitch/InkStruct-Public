@@ -586,6 +586,32 @@ class StructureRepository:
         finally:
             connection.close()
 
+    def content_sha256(self) -> str:
+        """Hash logical structure content, including committed WAL changes.
+
+        Exclude machine-specific paths and build timestamps. Read metadata and
+        graphs in one SQLite snapshot instead of hashing only the main DB file.
+        """
+        digest = hashlib.sha256()
+        connection = sqlite3.connect(self.path)
+        try:
+            connection.execute("BEGIN")
+            metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+            identity = {key: metadata.get(key) for key in (
+                "schema_version", "source", "source_version", "coordinate_space", "component_schema"
+            )}
+            digest.update(json.dumps(identity, sort_keys=True).encode())
+            for character, payload in connection.execute(
+                "SELECT character, graph_json FROM characters ORDER BY codepoint"
+            ):
+                digest.update(json.dumps(
+                    [character, json.loads(payload)], sort_keys=True, separators=(",", ":")
+                ).encode())
+                digest.update(b"\n")
+        finally:
+            connection.close()
+        return digest.hexdigest()
+
 
 def _is_gb2312_hanzi(character: str) -> bool:
     if len(character) != 1 or not "\u3400" <= character <= "\u9fff":

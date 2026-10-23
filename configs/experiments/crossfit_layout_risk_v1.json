@@ -1,0 +1,14 @@
+{
+  "policy": "crossfit_layout_risk_v1",
+  "scope": "experimental only; previously observed development and regression",
+  "proposal": "Frozen calibrated layout M_D_1.0; fixed whole donor and positive isotropic transform",
+  "training": "Only original train characters; three folds assigned by sha256(layout-risk-v1:+character) modulo 3 across writers; rebuild v4 and retained-source profiles from other folds; public task selection before target scoring; mean repeats within character",
+  "examples": "Only actually changed M versus D proposals; one outcome per writer/character; safe benefit iff geometry ratio <1, every stroke max error increase <=0.005 and character mean terminal angle increase <=0.5 degrees",
+  "features": "public position/extent/stroke count, D-to-public center/scale, M-to-D center/scale, empirical band distance and effective strength, exact-tier flag, nearest disjoint public leaf relation residual and proposed relation change; no gold features",
+  "learner": "IQR-scaled RMS neighbor distance with scale floor0.1, exclude query character across all writers before scaling, closest up to8 within distance2, require5; accept only safe fraction>=threshold and mean geometry ratio<1",
+  "development_scopes": ["author", "pooled"],
+  "development_thresholds": [0.6, 0.8, 1.0],
+  "selection": "user001 existing development only; strictly improve mean geometry vs D, angle <=D+0.5deg, each character <=1.05D, each stroke max increase <=0.005, fixed donor; prefer lowest geometry then author scope then highest threshold; otherwise D",
+  "regression": "existing user001 test and scx/mjb/wsq cohorts; no new validation claim; ungated M always shown; no character exceptions or retuning",
+  "limits": "Crossfit proposals use two-thirds of each author's training archive; inference uses original full train profiles. This distribution shift and sparse changed proposals limit risk estimates. Safe fraction is not a calibrated probability of naturalness."
+}

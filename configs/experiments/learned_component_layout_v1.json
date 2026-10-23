@@ -1,0 +1,29 @@
+{
+  "policy": "training_component_layout_residual_v1",
+  "scope": "user_001 existing 41-character development and 42-character observed regression; no fresh validation claim",
+  "training": "only existing train-only retained-source profile; grouped by character before any averaging",
+  "features": "public full-glyph normalized bbox component center x/y divided by 0.85, log(width/0.85)/2, log(height/0.85)/2, log(stroke count)/4",
+  "response": "source component center minus public component center and log source/public max-span ratio, using complete source points",
+  "prediction": "exclude target character and every repeat; exact component context first, otherwise role plus parent layout; up to 8 nearest distinct characters within feature distance 0.5; minimum 4; median within character then median across characters",
+  "limits": "abstain if center residual norm >0.15 or span ratio outside [2/3,1.5]; never clip predicted output",
+  "strengths": [
+    0.0,
+    0.1,
+    0.25,
+    0.5,
+    1.0
+  ],
+  "arms": {
+    "L_D": "D donor fixed; blend old placement center/log span with training prediction",
+    "L_H": "H donor fixed; identical target prediction and strength"
+  },
+  "geometry": "one common positive isotropic scale and translation for all donor strokes; no averaging raw trajectories, per-stroke output fitting or source changes",
+  "safety": "existing invariants, no new strict interstroke crossing versus A, each stroke length/A length in [0.4,2.5]; otherwise exact original D/H placement",
+  "development_selection": "choose lowest mean geometry among learned/public arms and strengths with geometry strictly below D, mean terminal angle <=D+0.5 degrees, each character geometry <=1.05*D, each stroke maximum local error averaged across captures <=D+0.005, same source activation; ties smaller strength then P_D,L_D,P_H,L_H; otherwise D",
+  "interpretation": "training data can jointly supply donor and layout model; layout prediction is not independent naturalness evidence; target originals only evaluated after all outputs fixed",
+  "default": "independent experiment only",
+  "controls": {
+    "P_D": "D donor fixed, public normalized component layout, same strengths",
+    "P_H": "H donor fixed, public normalized component layout, same strengths"
+  }
+}

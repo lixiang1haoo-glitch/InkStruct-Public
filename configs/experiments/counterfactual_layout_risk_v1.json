@@ -1,0 +1,15 @@
+{
+  "policy": "counterfactual_layout_risk_v1",
+  "scope": "training coverage extension; same observed development and regression; no fresh validation",
+  "training": "Reuse all compatible components and exact 12 frozen character-crossfit v4/source profiles; independently trial shared isotropic moves toward the public component layout on training-fold targets only",
+  "strengths": [0.05, 0.1, 0.25, 0.5],
+  "intervention": "Trial moves may be proposed even inside the empirical layout band, only during crossfit training. Keep original D donor, no source compression, no per-stroke transform. Existing geometry invariants/crossing/arc gates apply. Score all generated trials after generation boundary",
+  "labels": "Same geometry improvement, each stroke max increase<=0.005, character angle increase<=0.5deg; mean repeats within component; only actual changed, valid-reference trials labeled",
+  "grouping": "Query character excluded before scaling; median features per author-character for IQR; nearest component/proposal in each author-character may vote once; minimum5, maximum8, distance<=2, scale floor0.1; same as previous grouped risk gate",
+  "development_scopes": ["author", "pooled"],
+  "development_thresholds": [0.6, 0.8, 1.0],
+  "inference": "Gate the original frozen M_D_1.0 proposal only. No trial strengths or additional component combinations can be generated at inference. Original D/M and source donor fixed",
+  "control": "All-component observational training examples (33) versus counterfactual training, both through same grouped learner; control at frozen scope/threshold in regression",
+  "selection": "Select counterfactual arm on existing user001 development: strictly improve mean geometry vsD, angle<=D+0.5, each character<=1.05D, each stroke max increase<=0.005; same donors; tie author then higher threshold; otherwise D",
+  "limits": "Trial labels are interventions, not natural independent writing variations; several moves/repeats/components of a character are dependent. Crossfit/full-train shift and manual evaluation limits remain. No naturalness probability claim"
+}

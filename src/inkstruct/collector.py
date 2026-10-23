@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
+from .capture_workflow_ui import CaptureLifecycleMixin, install_capture_management
 from .cli import PROJECT_ROOT
 from .stroke_reference import create_stroke_reference_widget_class
 from .structures import StructureRepository
+from .symbol_capture_ui import install_symbol_tab
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +45,15 @@ def check_stroke_count(
 
 
 def _collector_source() -> Path:
+    configured = os.environ.get("INKSTRUCT_COLLECTOR_SOURCE")
+    if configured:
+        source = Path(configured).expanduser().resolve()
+        if not (source / "handwriting_collector" / "ui.py").is_file():
+            raise RuntimeError(f"INKSTRUCT_COLLECTOR_SOURCE 中找不到采集器内核：{source}")
+        return source
     candidates = [
+        Path(getattr(sys, "_MEIPASS", PROJECT_ROOT)) / "collector_kernel",
+        PROJECT_ROOT / "artifacts" / "external" / "data_collection",
         PROJECT_ROOT / "legacy" / "data_collection",
         PROJECT_ROOT.parent / "data_collection",
     ]
@@ -53,7 +64,9 @@ def _collector_source() -> Path:
     raise RuntimeError(f"找不到采集器内核，已检查：\n{searched}")
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, create_only=False, workspace=None, database=None):
+    workspace_root = Path(workspace) if workspace else PROJECT_ROOT
+    database_path = Path(database) if database else PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
     arguments = list(argv or sys.argv)
     smoke_test = "--smoke-test" in arguments
     source = _collector_source()
@@ -66,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError("采集器需要安装 inkstruct[desktop] 和 data_collection") from error
 
     repository = StructureRepository(
-        PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
+        database_path
     )
     StrokeReferenceWidget = create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets)
 
@@ -76,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         except KeyError:
             return None
 
-    class ValidatedSingleCharacterWidget(collector_ui.SingleCharacterWidget):
+    class ValidatedSingleCharacterWidget(CaptureLifecycleMixin, collector_ui.SingleCharacterWidget):
         def __init__(self, output_root_provider, parent=None):
             self.structures = repository
             self.stroke_count_label = None
@@ -133,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
                 self.stroke_count_label.setStyleSheet("color: #B91C1C; font-weight: 600;")
             else:
                 self.stroke_count_label.setStyleSheet("color: #475569;")
-            self.save_button.setEnabled(bool(check.matches and has_trajectory))
+            self.save_button.setEnabled(bool(check.matches and has_trajectory and not self.canvas.pen_down))
 
         def save_current(self) -> None:
             check = self._stroke_check()
@@ -150,30 +163,81 @@ def main(argv: list[str] | None = None) -> int:
                 super().save_current()
 
     class CollectorWindow(collector_ui.MainWindow):
+        writer_selected = QtCore.Signal(str)
+
         def __init__(self):
-            super().__init__()
+            super().__init__(auto_resume=False)
+            if create_only:
+                # Integrated workspaces do not inherit another collector's output folder.
+                self._integrated_initial_choice = self.output_root is None
+                self.settings = QtCore.QSettings("InkStruct", "Capture")
+                default_workspace = Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.GenericDataLocation)) / 'InkStruct/workspace'
+                key = 'output_root' if workspace_root == default_workspace else 'output_root/' + str(workspace_root.resolve())
+                self._capture_root_key = key
+                self.output_root = Path(self.settings.value(key, str(workspace_root / "capture"), str))
+                self.output_root.mkdir(parents=True, exist_ok=True)
+                self._update_status()
+            # Keep legacy line data readable, but retire its page and global keys.
+            app = QtWidgets.QApplication.instance()
+            app.removeEventFilter(self.line_widget)
+            self.tabs.removeTab(self.tabs.indexOf(self.line_widget))
+            self.line_widget.hide()
             previous = self.single_widget
             index = self.tabs.indexOf(previous)
             self.tabs.removeTab(index)
             previous.setParent(None)
             previous.deleteLater()
             self.single_widget = ValidatedSingleCharacterWidget(self.ensure_output_root)
-            self.tabs.insertTab(index, self.single_widget, "单字任务采集")
+            self.tabs.insertTab(index, self.single_widget, "汉字样本")
             self.tabs.setCurrentIndex(index)
+            install_symbol_tab(self, collector_ui, QtCore, QtGui, QtWidgets)
+            if self.output_root is None:
+                self.output_root = workspace_root / 'capture'
+                self.output_root.mkdir(parents=True, exist_ok=True)
+            install_capture_management(self, self.output_root)
             self.apply_ui_settings(self.ui_settings)
             self.setWindowTitle("InkStruct 墨构 · 轨迹采集器")
-            if self.output_root is not None:
-                QtCore.QTimer.singleShot(0, lambda: self.single_widget.resume_task(quiet=True))
 
         def choose_output_root(self) -> Path | None:
             if not smoke_test:
-                return super().choose_output_root()
+                if hasattr(self, 'symbol_widget'):
+                    for widget in (self.single_widget, self.symbol_widget):
+                        if not widget._can_switch():
+                            return self.output_root
+                selected = QtWidgets.QFileDialog.getExistingDirectory(self, '选择采集数据目录', str(self.output_root or workspace_root))
+                if not selected:
+                    return self.output_root
+                if hasattr(self.single_widget, '_capture_catalog'):
+                    for widget in (self.single_widget, self.symbol_widget):
+                        if widget.task:
+                            widget._capture_catalog.set_state(widget._capture_kind, widget.task.task_id, 'paused')
+                        widget._close_task()
+                self.output_root = Path(selected)
+                self.output_root.mkdir(parents=True, exist_ok=True)
+                self.settings.setValue(getattr(self, '_capture_root_key', 'output_root'), str(self.output_root))
+                if hasattr(self.single_widget, '_capture_catalog'):
+                    from .capture_management import CaptureCatalog
+                    for widget in (self.single_widget, self.symbol_widget):
+                        widget._capture_catalog = CaptureCatalog(self.output_root)
+                        widget.writer_picker.catalog = widget._capture_catalog
+                        widget.writer_picker.reload()
+                        widget.writer_edit.clear()
+                    self.capture_selected_writer = ''
+                self._update_status()
+                return self.output_root
             self.output_root = PROJECT_ROOT / "artifacts" / "collector_smoke"
             self.output_root.mkdir(parents=True, exist_ok=True)
             self._update_status()
             return self.output_root
 
+        def apply_ui_settings(self, settings):
+            super().apply_ui_settings(settings)
+            if hasattr(self, 'symbol_widget'):
+                self.symbol_widget.canvas.set_render_settings(settings.stroke_width_scale, settings.grid_scale)
+
     application = QtWidgets.QApplication.instance() or QtWidgets.QApplication(arguments)
+    if create_only:
+        return CollectorWindow()
     application.setOrganizationName("InkStruct")
     application.setApplicationName("InkStruct Collector")
     application.setStyle("Fusion")

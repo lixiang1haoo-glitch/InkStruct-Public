@@ -122,6 +122,9 @@ class AlignedGlyph:
     order_confidence: float = 1.0
     order_identity_improvement: float = 0.0
     order_alternative_margin: float = 0.0
+    # Captured order, before the legacy 16-point matching representation.
+    # Shares point indices with pressure_strokes/time_strokes.
+    source_normalized_strokes: list[list[Point2D]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -215,6 +218,26 @@ class FactorizedStyleProfile:
 
 
 @dataclass(slots=True)
+class SourceTrajectoryStroke:
+    standard_stroke_id: str
+    user_order: int
+    points: list[Point2D]
+    pressure: list[float]
+    t_ms: list[int]
+    arc_parameters: list[float]
+    confidence: float
+
+
+@dataclass(slots=True)
+class SourceTrajectorySample:
+    sample_id: str
+    character: str
+    source_sha256: str
+    stroke_order_status: str
+    strokes: list[SourceTrajectoryStroke]
+
+
+@dataclass(slots=True)
 class StyleProfile:
     schema_version: str
     profile_version: str
@@ -237,6 +260,9 @@ class StyleProfile:
     excluded_samples: list[dict[str, str]] = field(default_factory=list)
     style_tokens: list[list[float]] = field(default_factory=list)
     factorized_style: FactorizedStyleProfile | None = None
+    trajectory_schema: str | None = None
+    source_trajectories: dict[str, SourceTrajectorySample] = field(default_factory=dict)
+    build_identity: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

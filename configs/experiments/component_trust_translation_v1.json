@@ -1,0 +1,26 @@
+{
+  "policy": "whole_component_minimax_translation_v1",
+  "development": "existing user_001 hierarchy development, 41 valid characters; already observed development data",
+  "regression": "existing user_001 42-character confirmation is now observed regression only; never called fresh validation",
+  "baseline": "same A, D, hierarchy evidence, complete candidate pool and shared isotropic transforms",
+  "direction_mode": "author",
+  "direction_weight": 0.04,
+  "radii": [
+    0.0,
+    0.005,
+    0.01,
+    0.02,
+    0.03,
+    0.05,
+    0.08
+  ],
+  "guard": "every component stroke's continuous normalized-arclength correspondence distance from D is <= radius; compute exact maximum over union of both vertex arc parameters; endpoints included; no output resampling",
+  "zero_radius": "return exact D; disabled guard (None) returns unchanged H",
+  "positive_radius": "rerank only D-safe complete candidates that satisfy the guard; use frozen H score, always retain D as fallback",
+  "development_selection": "lowest terminal angle among radii with unchanged source activation, mean geometry <=1.01*D, each character mean geometry <=1.05*D+1e-12, each component stroke maximum local error averaged across its captures <=D+0.005; require terminal improvement, ties prefer smaller radius; else radius zero",
+  "guarantee": "per-stroke Hausdorff distance to D is bounded by radius, hence change in Hausdorff error to any unknown reference is bounded by radius; does not guarantee mean-distance improvement, direction improvement, realism or pressure similarity",
+  "scope": "local positional bound; all selected source points, pressure and within-stroke times retained, global times retimed; no production default change",
+  "placement": "one common translation per candidate, minimizing maximum continuous correspondence displacement from D; exact 2D smallest disk of displacement hull, at most 64 hull points, otherwise keep original; existing topology/bounds gates retained",
+  "controls": "H original; P same H donor with minimax common translation; T radius-only guard with original placements; R translated whole-candidate pool with same radius; D frozen reference",
+  "development_history": "separate extension after radius-only experiment failed strict local gate; same predeclared gates and radii, no regression measurements used to set parameters"
+}

@@ -1,0 +1,46 @@
+{
+  "policy": "unclipped_reference_overlay_v1",
+  "status": "experimental, default off; source frame recovered without origin migration",
+  "graphics_sha256": "a28c478b5178e98f67f510b2d52fde08a69dc664654ef43498253b9b764d46ee",
+  "dictionary_sha256": "744bb05d5b0742e9ee35c37791f94d56a173349b3367569e7ca11e510364d203",
+  "database_content_sha256": "abbf1eaa5493fdc19aab516ffd49f153a3586c3e74c7643068a5fc275f7d38ae",
+  "evidence": "Make Me a Hanzi README lines116-125: source bounds(0,900)-(1024,-124); existing importer clamps y<0. Restore exact points in original legacy frame to isolate clamp removal from origin migration. Upstream/font medians are not author handwriting.",
+  "outline_repairs": [
+    {
+      "version": "reviewed_source_median_override_v1",
+      "status": "experimental; no upstream edits",
+      "character": "瀝",
+      "stroke_id": "s6",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "outline_sha256": "5eb07833827d406a7b1b05b5f2375fa9482d3011c387446bad5c9abc089bc932",
+      "median_sha256": "feabb0d21c8e47b3032474e34378b36bdf9754c408177b03da59f918e6b7ef18",
+      "algorithm": "single_strip_outline_median_v1",
+      "cross_sections": 40,
+      "license": "Derived from Make Me a Hanzi outlines under Arphic Public License; see third_party/makemeahanzi/COPYING"
+    },
+    {
+      "version": "reviewed_source_median_override_v1",
+      "status": "experimental; no upstream edits",
+      "character": "黧",
+      "stroke_id": "s1",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "outline_sha256": "d592891b69047cec697f68a05431b64a6a5b922263256c863fd8cd4659660e2b",
+      "median_sha256": "fc4267184ed71916df2f3f21e034f8ef569e886fd76404d12591de6b4ba060b8",
+      "algorithm": "single_strip_outline_median_v1",
+      "cross_sections": 40,
+      "license": "Derived from Make Me a Hanzi outlines under Arphic Public License; see third_party/makemeahanzi/COPYING"
+    },
+    {
+      "character": "盼",
+      "stroke_id": "s7",
+      "source_version": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+      "outline_sha256": "0004b533c5beb15a2e0ed31805b457b8cfdcaf3f04f299c24ce4961d49c6f200",
+      "median_sha256": "5801e29bdc9170dfd5d7f08478c80e31f28674a6e6366724bccdaa86d5bdcd6d",
+      "algorithm": "reviewed_single_strip_sparse_v1",
+      "cross_sections": 40,
+      "evidence": "Two-point chord cuts outside its corresponding curved outline; both anchors lie inside. Manual visual review of outline/source median on 2026-10-07. Retain anchors, reconstruct only single-interval interior sections.",
+      "license": "Derived from Make Me a Hanzi outlines under Arphic Public License; see third_party/makemeahanzi/COPYING"
+    }
+  ],
+  "complex_repairs": "none: outline coverage, turn and mapping flags require explicit review; no generic strip reconstruction"
+}

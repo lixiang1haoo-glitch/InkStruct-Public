@@ -967,18 +967,44 @@ class HybridGenerator(DeterministicGenerator):
         return fit_glyph_to_canvas(glyph)
 
 
-def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool) -> None:
+def _write_glyph(glyph: GeneratedGlyph, run_dir: Path, png: bool, source_diagnostics=None, repair_diagnostics=None) -> None:
     name = glyph.codepoint
     trajectory_path = run_dir / "trajectories" / f"{name}.json"
     trajectory_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = trajectory_path.with_suffix(".json.building")
+    payload = asdict(glyph)
+    if source_diagnostics is not None:
+        payload["source_components"] = source_diagnostics
+    if repair_diagnostics is not None:
+        payload["geometry_repairs"] = repair_diagnostics
     temporary.write_text(
-        json.dumps(asdict(glyph), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     temporary.replace(trajectory_path)
     render_svg(glyph, run_dir / "previews" / f"{name}.svg")
     if png:
         render_png(glyph, run_dir / "previews" / f"{name}.png")
+
+
+def _source_summary(diagnostics):
+    audit = diagnostics["geometry_audit"]
+    return {
+        **({"observed_reconstruction": diagnostics["observed_reconstruction"]} if "observed_reconstruction" in diagnostics else {}),
+        "accepted_component_count": diagnostics["accepted_component_count"],
+        "accepted_stroke_ids": diagnostics["accepted_stroke_ids"],
+        "fallback_reason": diagnostics["fallback_reason"],
+        "minimum_A_stroke_confidence": audit["min_stroke_confidence"],
+        "low_A_confidence_stroke_ids": audit["low_confidence_stroke_ids"],
+        "geometry_warning_count": len(audit["geometry_warnings"]),
+        "geometry_warnings": audit["geometry_warnings"],
+        "structure_warnings": audit["structure_warnings"],
+        "donors": [{"component": r["canonical"],
+                    "source_character": r["selection"]["selected"]["candidate"]["character"],
+                    "source_sample_id": r["selection"]["selected"]["candidate"]["sample_id"],
+                    "representation": r["representation"],
+                    "minimum_source_mapping_confidence": min(r["source_mapping_confidence"].values())}
+                   for r in diagnostics["components"] if r.get("selection", {}).get("selected")],
+    }
 
 
 def generate_run(
@@ -994,9 +1020,23 @@ def generate_run(
     confidence_threshold: float | None = None,
     component_conditioning: bool | str = True,
     component_strength: float = 1.0,
+    trajectory_mode: str = "legacy",
+    source_profile_path: Path | None = None,
+    source_nested_views: bool = False,
+    source_observed: bool = False,
+    reviewed_geometry: bool = False,
+    source_characters_path: Path | None = None,
     progress_callback: Callable[[dict], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
 ) -> tuple[dict, Path]:
+    if trajectory_mode not in {"legacy", "source-raw", "source-simplified"}:
+        raise ValueError("unknown trajectory mode")
+    if trajectory_mode == "legacy" and (source_profile_path or source_nested_views or source_characters_path or source_observed):
+        raise ValueError("source options require an explicit source trajectory mode")
+    if trajectory_mode != "legacy" and checkpoint is not None:
+        raise ValueError("source trajectory mode does not support neural checkpoints")
+    if trajectory_mode != "legacy" and source_profile_path is None:
+        raise ValueError("source trajectory mode requires --source-profile")
     profile = load_profile(profile_path)
     if profile.writer_id != writer_id:
         raise ValueError("profile writer does not match requested writer")
@@ -1016,6 +1056,47 @@ def generate_run(
             profile, structure_version, component_conditioning, component_strength
         )
     )
+    source_generator = None
+    source_identity = None
+    if trajectory_mode != "legacy":
+        from .exemplar_generation import (
+            SIMPLIFICATION_EPSILON,
+            SOURCE_POLICY,
+            SourceComponentGenerator,
+        )
+
+        source_profile = load_profile(source_profile_path)
+        allowed = ({c for c in Path(source_characters_path).read_text(encoding="utf-8")
+                    if not c.isspace()} if source_characters_path is not None else None)
+        source_class = SourceComponentGenerator
+        if source_observed:
+            from .observed_reconstruction import ObservedSourceGenerator
+            source_class = ObservedSourceGenerator
+        source_generator = source_class(generator, source_profile, structures,
+            mode=trajectory_mode, nested_views=source_nested_views, allowed_characters=allowed)
+        source_identity = {
+            "policy": SOURCE_POLICY, "mode": trajectory_mode,
+            "source_profile_sha256": sha256_file(Path(source_profile_path)),
+            "source_characters_sha256": sha256_file(Path(source_characters_path)) if source_characters_path else None,
+            "nested_views": source_nested_views,
+            "epsilon": SIMPLIFICATION_EPSILON if trajectory_mode == "source-simplified" else None,
+            "implementation_sha256": {name: sha256_file(Path(__file__).with_name(name + ".py"))
+                for name in ("exemplar_generation", "exemplar_index", "component_views", "fast_placement",
+                             "contextual_trajectory", "trajectory_experiment", "generate", "geometry_audit")},
+        }
+        if source_observed:
+            source_identity["observed_reconstruction"] = True
+            source_identity["implementation_sha256"]["observed_reconstruction"] = sha256_file(Path(__file__).with_name("observed_reconstruction.py"))
+    repair_processor = None
+    if reviewed_geometry:
+        if checkpoint is not None or generator.component_mode != "adaptive" or generator.component_strength != 1.:
+            raise ValueError("reviewed geometry requires deterministic adaptive generation at strength 1")
+        from .reviewed_geometry import ReviewedGeometryProcessor
+        root = Path(__file__).resolve().parents[2]
+        repair_processor = ReviewedGeometryProcessor(generator, structures,
+            root / "configs/geometry_repairs/reviewed_v1.json",
+            root / "third_party/makemeahanzi/graphics.txt",
+            root / "third_party/makemeahanzi/dictionary.txt")
     run_id = run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid.uuid4().hex[:8]
     run_dir = Path(output_root).resolve() / writer_id / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -1036,6 +1117,10 @@ def generate_run(
         ),
         "png": png,
     }
+    if source_identity is not None:
+        run_identity["source_components"] = source_identity
+    if repair_processor is not None:
+        run_identity["geometry_repairs"] = repair_processor.identity
     if manifest_path.is_file():
         try:
             previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1050,6 +1135,8 @@ def generate_run(
     started_clock = time.perf_counter()
     completed: list[str] = []
     failed: list[dict[str, str]] = []
+    source_results: dict[str, dict] = {}
+    repair_results: dict[str, dict] = {}
 
     def write_manifest(status: str) -> dict:
         manifest = {
@@ -1069,7 +1156,7 @@ def generate_run(
             "profile_path": str(Path(profile_path).resolve()),
             "profile_version": profile.profile_version,
             "structure_database": str(structures.path.resolve()),
-            "generator": type(generator).__name__,
+            "generator": type(source_generator or generator).__name__,
             "component_mode": generator.component_mode,
             "component_strength": generator.component_strength,
             "checkpoint": str(Path(checkpoint).resolve()) if checkpoint else None,
@@ -1079,6 +1166,17 @@ def generate_run(
                 else None
             ),
         }
+        if source_identity is not None:
+            manifest["source_components"] = {
+                "source_profile_path": str(Path(source_profile_path).resolve()),
+                "mode": trajectory_mode,
+                "characters_with_source_components": sum(v["accepted_component_count"] > 0 for v in source_results.values()),
+                "by_character": source_results,
+                "confidence_semantics": "A scores inherited; source mapping evidence is reported separately, uncalibrated",
+            }
+        if repair_processor is not None:
+            manifest["geometry_repairs"] = {"changed_characters": [c for c, r in repair_results.items() if r["applied"]],
+                                            "by_character": repair_results}
         temporary_manifest = manifest_path.with_suffix(".json.building")
         temporary_manifest.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -1105,18 +1203,43 @@ def generate_run(
                     raise ValueError("cached trajectory identity differs")
             except (OSError, KeyError, TypeError, AttributeError, ValueError) as error:
                 raise ValueError(f"cannot safely reuse {trajectory_path}; use a new run-id") from error
+            if source_identity is not None:
+                if cached.get("source_components", {}).get("run_identity") != source_identity:
+                    raise ValueError("cached source trajectory identity differs; use a new run-id")
+                source_results[character] = _source_summary(cached["source_components"])
+            if repair_processor is not None:
+                if cached.get("geometry_repairs", {}).get("run_identity") != repair_processor.identity:
+                    raise ValueError("cached reviewed geometry identity differs; use a new run-id")
+                repair_results[character] = cached["geometry_repairs"]
             completed.append(character)
         else:
             try:
                 graph = structures.get(character)
-                glyph = generator.generate(graph)
+                source_diagnostics = None
+                if source_generator is None:
+                    glyph = generator.generate(graph)
+                else:
+                    glyph, source_diagnostics = source_generator.generate(graph)
+                    source_diagnostics["run_identity"] = source_identity
+                repair_diagnostics = None
+                if repair_processor is not None:
+                    glyph, repair_diagnostics = repair_processor.apply(glyph, graph)
+                    repair_diagnostics["run_identity"] = repair_processor.identity
+                    if source_diagnostics is not None and repair_diagnostics["geometry_audit"] is not None:
+                        source_diagnostics["geometry_audit"] = repair_diagnostics["geometry_audit"]
                 if len(glyph.strokes) != len(graph.strokes):
                     raise RuntimeError("generator violated stroke-count invariant")
                 if [stroke.order for stroke in glyph.strokes] != list(
                     range(1, len(graph.strokes) + 1)
                 ):
                     raise RuntimeError("generator violated stroke-order invariant")
-                _write_glyph(glyph, run_dir, png)
+                if repair_diagnostics is None:
+                    _write_glyph(glyph, run_dir, png, source_diagnostics)
+                else:
+                    _write_glyph(glyph, run_dir, png, source_diagnostics, repair_diagnostics)
+                    repair_results[character] = repair_diagnostics
+                if source_diagnostics is not None:
+                    source_results[character] = _source_summary(source_diagnostics)
                 completed.append(character)
             except (KeyError, OSError, RuntimeError, ValueError) as error:
                 failed.append({"character": character, "reason": str(error)})

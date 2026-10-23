@@ -1,0 +1,1060 @@
+% !TEX program = xelatex
+% Standalone source: no external figures, bibliography database, or private samples.
+\documentclass[UTF8,a4paper,11pt,fontset=fandol]{ctexart}
+\usepackage[margin=24mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,bm,booktabs,longtable,array,tabularx}
+\usepackage{graphicx,xcolor,tikz,enumitem,fancyhdr,float}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{xurl}
+\usepackage[unicode,colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black,citecolor=blue!45!black]{hyperref}
+\usepackage{listings}
+\ifdefined\XeTeXgenerateactualtext\XeTeXgenerateactualtext=1\fi
+\hypersetup{pdftitle={InkStruct：结构先验驱动的个性化汉字在线轨迹生成与文档审校系统},pdfauthor={InkStruct 技术文档},pdfsubject={基于当前工作区源码的技术实现论文}}
+\definecolor{inkblue}{HTML}{173653}
+\definecolor{softgray}{HTML}{F3F5F7}
+\ctexset{section={format=\Large\bfseries\color{inkblue}},subsection={format=\large\bfseries},subsubsection={format=\normalsize\bfseries}}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small InkStruct 技术实现}
+\fancyhead[R]{\small 2026-10-10 工作区快照}
+\fancyfoot[C]{\thepage}
+\setlength{\parskip}{0.35em}
+\setlength{\emergencystretch}{3em}
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+\setlist{itemsep=2pt,topsep=4pt}
+\renewcommand{\arraystretch}{1.2}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\src}[1]{\textsf{实现依据：}\path{src/inkstruct/#1}。}
+\newcommand{\clip}{\operatorname{clip}}
+\newcommand{\dist}{\operatorname{dist}}
+\newcommand{\mean}{\operatorname{mean}}
+\newcommand{\R}{\mathbb{R}}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,backgroundcolor=\color{softgray},frame=single,rulecolor=\color{black!15},aboveskip=8pt,belowskip=8pt}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+\vspace*{18mm}
+{\Large\color{inkblue}系统实现与实验技术论文\par}
+\vspace{12mm}
+{\Huge\bfseries InkStruct（墨构）\par}
+\vspace{7mm}
+{\LARGE\bfseries 结构先验驱动的个性化汉字\par 在线轨迹生成与文档审校系统\par}
+\vspace{12mm}
+{\large 数据协议、分层建模、源轨迹保真、结构修复、\par 实验评估与桌面应用的完整实现说明\par}
+\vfill
+\begin{minipage}{0.92\textwidth}
+\small
+\textbf{文档性质：}基于本地源码及仓库实验记录整理的技术实现论文；不将实现清单等同于方法新颖性证明，不将历史实验记录等同于本次复现实验。\\[4pt]
+\textbf{审计日期：}2026 年 10 月 10 日（Asia/Shanghai）。\\[4pt]
+\textbf{软件版本：}\code{inkstruct 0.2.0}；Python 要求为 3.12 或 3.13。\\[4pt]
+\textbf{Git 基线：}\path{7a1178cbc7986e7fe13f3efa7b230b061a3a036b}。\\[4pt]
+\textbf{快照范围：}包含该基线上的未提交工作区修改，尤其是文档排版和文本审校编辑器。可核查文件哈希见随附 \path{source_snapshot.json}。\\[4pt]
+\textbf{数据边界：}正文不复制私人原始采样、模型权重或字形资产；结果表仅引用仓库已记录的汇总数据。
+\end{minipage}
+\vspace{15mm}
+\end{titlepage}
+\pagenumbering{roman}
+\hypersetup{pageanchor=true}
+
+\begin{abstract}
+InkStruct 面向有限个人在线笔迹样本下的汉字轨迹生成，将内容约束交给标准字符结构，将个性化几何交给书写者档案，并将生成轨迹作为后续页面排版与人工审校的不可变资产。当前生产默认是确定性的 ComponentTrajectory v4 adaptive：先建立版本化字符图，再对采集笔画进行保守的全局笔顺匹配，抽取整字风格、部件布局、条件化笔画残差和共享局部坐标系中的完整部件原型；生成时依据信息支持程度选择整组部件轨迹或分层回退，最后以端点填充三次 B 样条和弧长重采样得到在线点序列。系统另实现可选分层 Transformer 残差模型、完整源轨迹供体迁移、保护折钩的有界简化、标准结构审计、局部几何修正与多类布局风险实验。本文逐项说明实际数据结构、公式、阈值、控制流、版本绑定、误差指标和已知边界，特别区分标准笔画身份保持、几何交叉约束、源轨迹保真与感知质量。文档层采用原始文本区间、不可变字形资源、页面布局快照和共享绘制操作；审校评价绑定字形字节哈希，并通过异步请求版本、原子保存和导出诊断门槛维持一致性。历史固定折实验中，v4 的 DTW 为 0.036816，强制 v5 为 0.048835，安全 v5 全部回退到 v4；这些证据支持保留默认生成路径，但不足以证明广泛的跨作者风格泛化。本次工作区测试为 200 项通过、4 项跳过，未重新执行历史 GPU 训练或私有数据实验。
+
+\textbf{关键词：}汉字结构先验；在线手写轨迹；部件原型；笔顺匹配；源轨迹保真；分层残差模型；页面排版；可追溯审校
+\end{abstract}
+\clearpage
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{研究对象、范围与证据口径}
+\subsection{任务定义}
+设目标字符为 $c$，标准结构图为 $G_c$，书写者为 $w$，可用个人样本集合为 $\mathcal{D}_w$。系统先建立档案 $P_w=\mathcal{B}(\mathcal{D}_w,G)$，再生成
+\begin{equation}
+\widehat{Y}_{w,c}=\mathcal{F}(G_c,P_w;\theta),\qquad
+\widehat{Y}_{w,c}=\{\widehat{S}_1,\ldots,\widehat{S}_{n_c}\}.
+\end{equation}
+第 $i$ 笔输出为有序点列 $\widehat{S}_i=\{(x_{ij},y_{ij},t_{ij},p_{ij},z_{ij})\}_{j=1}^{m_i}$，其中 $p$ 是压力，$z$ 为落笔、抬笔或整字结束状态。目标不仅是得到静态图像，还要保持笔画身份、顺序和可导出的时序轨迹。
+
+默认 $\theta$ 主要表示确定性规则、门槛与模式配置，并非每个用户必须训练的网络参数。原 SDT 只属于项目演进与效果对照背景，不参与当前生产调用路径。系统不导出 TTF/OTF，不以连笔生成、识别准确率或压力笔刷为当前已实现目标\cite{repo-main,repo-arch}。
+
+\subsection{四种证据不能互相替代}
+\begin{enumerate}
+\item \textbf{源码事实：}函数、字段、条件和默认值可直接在本次工作区核查。
+\item \textbf{本次检查：}在当前环境实际运行的自动测试与文稿编译检查。
+\item \textbf{历史实验：}仓库文档记录的训练、回归和人工评价数字；本文转述其设计与限制，不声称重新计算。
+\item \textbf{分析性推论：}由代码导出的复杂度、误差传播和局限。例如保持笔数并不构成所有笔画交叉关系保持的证明。
+\end{enumerate}
+本文采用“系统实现论文”体例，而不是补造作者、机构、外部基准、显著性检验或学术创新优先权。公式尽量与程序同义；用于概括控制流的公式会明确其抽象层次。
+
+\subsection{当前功能分层}
+\begin{table}[H]\centering\small
+\caption{当前实现状态与适用边界}
+\begin{tabularx}{\textwidth}{L{31mm}XL{30mm}}
+\toprule
+层次 & 已实现内容 & 状态\\\midrule
+核心生成 & 结构库、样本导入、对齐、v4 档案、批量生成、审计 & 默认主路径\\
+神经生成 & 分层 Transformer、可微曲线损失、置信回退 & 可选实验\\
+源轨迹 & 完整部件检索、共同变换、有界简化、同字重建 & 显式开关\\
+几何修正 & 复核白名单、结构源修正、局部交叉保护 & 默认关闭\\
+研究策略 & 末向、变体、宽高比、布局和风险模型 & 离线实验\\
+页面与审校 & 纯文本分页、SVG/PNG、Qt 编辑、评价项目 & 当前工作区已实现\\
+未来文档能力 & Markdown、数学、表格、自由页面、完整文档包 & 尚未接入\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{总体架构与数据流}
+\subsection{内容、风格与呈现的职责划分}
+系统的基本层级为“整字布局 $\rightarrow$ 部件整体轨迹 $\rightarrow$ 部件内部笔画 $\rightarrow$ 在线采样点”。标准结构负责字符有哪些笔及其标准次序；个人档案负责这些笔如何分布、变形和赋予动态属性。文档层进一步负责字形在页面上的度量与放置，不重新建模字形。
+
+\begin{figure}[H]\centering
+\begin{tikzpicture}[node distance=7mm and 9mm,box/.style={draw=inkblue,rounded corners,align=center,font=\small,text width=43mm,minimum height=13mm},arr/.style={-{Latex[length=2mm]},draw=inkblue}]
+\node[box] (public) {公共中心线与 IDS\\版本化 CharacterGraph};
+\node[box,right=of public] (samples) {个人采集 JSON\\路径、哈希、索引};
+\node[box,below=of samples] (align) {笔顺与几何对齐\\保守纠错、歧义隔离};
+\node[box,below=of public] (profile) {风格档案\\全局／布局／部件轨迹};
+\node[box,below=of profile] (generate) {生成与可选修正\\分层回退、边界适配};
+\node[box,right=of generate] (assets) {不可变轨迹资产\\内容哈希与字形度量};
+\node[box,below=of assets] (layout) {原始文本到页面快照\\源区间、诊断、PaintOp};
+\node[box,left=of layout] (review) {预览、人工评价与导出\\版本拒绝、原子保存};
+\draw[arr] (samples)--(align);
+\draw[arr] (public)--(profile);
+\draw[arr] (align)--(profile);
+\draw[arr] (profile)--(generate);
+\draw[arr] (generate)--(assets);
+\draw[arr] (assets)--(layout);
+\draw[arr] (layout)--(review);
+\end{tikzpicture}
+\caption{生产数据流。神经模型和源轨迹策略是生成阶段的可选路径；审校评价不会自动写回训练集。}
+\end{figure}
+
+\subsection{实现与依赖}
+包使用 Hatchling 构建，核心依赖只有 NumPy 与 Pillow。桌面 extra 固定 PySide6 6.9.2；训练 extra 引入 PyTorch、h5py 和 lmdb；实验绘图依赖 Matplotlib。CLI、采集器、生成器和文本审校器分别有独立入口。这使确定性生成与桌面采集不必携带 GPU 训练栈。
+
+数据分为源码、公开结构子模块与本地运行产物。结构 SQLite、样本索引、个人档案、输出轨迹、实验报告与模型权重通常位于 Git 忽略目录。生成按书写者和运行 ID 分层，避免不同用户档案交叉污染。当前库文档记载支持 9,574 个有效简繁字符；这不是对所有 Unicode 汉字或所有地区规范字形的覆盖声明。
+
+\subsection{核心不变量与保证强度}
+\begin{equation}
+|\widehat{Y}_{w,c}|=|G_c.\mathrm{strokes}|,
+\qquad (\mathrm{id}_i,\mathrm{order}_i)=(\mathrm{id}^{G}_i,i).
+\end{equation}
+输出必须具有有限坐标、有效压力和合法时序；未知字符应登记失败而不静默替代。标准图固定一笔一个输出令牌，能限制增加、删除和重排笔画；但输出笔画可以在几何上新增相交、缩短或改变曲率。因此本文将“笔画身份拓扑”与“实际平面几何关系”分开讨论。默认 v4 没有针对所有字符实施精确的全局拓扑保持优化。
+
+\section{数据协议与坐标系统}
+\subsection{主要数据模型}
+\src{schemas.py}
+\begin{longtable}{L{38mm}L{108mm}}
+\caption{轨迹生成层的数据模型}\\\toprule
+模型 & 主要内容及作用\\\midrule\endfirsthead
+\toprule 模型 & 主要内容及作用\\\midrule\endhead
+\code{CharacterGraph} & 字符、码位、地区标签、IDS、部件树、标准笔画、关系、来源版本、置信与部件警告。\\
+\code{StandardStroke} & 标准 ID、次序、中心线、包围盒、部件路径、几何签名；语义笔画类型字段可为空。\\
+\code{ComponentNode} & 节点 ID、路径、规范身份、具体变体、结构角色、父子关系、所辖笔画、包围盒和置信。\\
+\code{RawSample} & 单字采集、书写者、画布尺寸、原始点、源路径、SHA-256 与采集元信息。\\
+\code{AlignedGlyph} & 显式标准笔到用户笔映射、16 点表示、完整源点通道、压力、时间、笔顺判断及证据差值。\\
+\code{StyleProfile} & 全局参数、多类原型、覆盖统计、排除原因、风格令牌、可选因子化风格与完整源轨迹。\\
+\code{GeneratedGlyph} & 协议版本、字符和作者、结构/档案版本、生成器标签、逐笔点列、置信和画布适配诊断。\\
+\bottomrule
+\end{longtable}
+
+\subsection{采集输入与不可变来源}
+\src{samples.py}
+输入协议为 \code{handwriting_single_v1}。导入验证字段、字符、画布和笔画数据，索引保留原文件路径及内容哈希；不会为建档改写原 JSON。合并与替换索引是独立操作，不等于修改采样本体。源数据哈希可追踪哪些采集文件参与档案建立。
+
+压力和时间在原始点上逐项关联。对齐纠正笔顺之后，几何、压力和时间必须使用同一用户笔索引；不能将标准顺序的几何与原采集顺序的动态数据简单并列。原始采样频率也不等于弧长密度，后文区分源点保留与重采样输出。
+
+\subsection{三个坐标域}
+公共中心线来自 1024 em 字体坐标，原始 $y$ 轴向上。当前默认导入器执行
+\begin{equation}
+x=\clip(X/1024,0,1),\qquad y=\clip(1-Y/1024,0,1).
+\label{eq:public-normalize}
+\end{equation}
+此定义与上游坐标基线有关；逐点裁切会丢失部分合法字体坐标，已由独立审计发现，不能把它写成完全无损变换。
+
+个人采样的 $x,y$ 都是逻辑像素。对齐阶段对\emph{整字}统一居中并等比缩放：设整字包围盒中心为 $\bm{c}$、最长边为 $L$，则
+\begin{equation}
+\bm{p}'=\begin{bmatrix}0.5\\0.5\end{bmatrix}+\frac{0.85}{L}(\bm{p}-\bm{c}).
+\label{eq:user-normalize}
+\end{equation}
+不分别除以画布宽高，因此非方形采集窗口不会在对齐时压扁字形。代码随后限制到单位区间；在有效非退化整字和上述归一化下，点本来就应落在内部。全局时间尺度统计另有按画布宽高计算长度的历史路径，这与几何对齐的等比坐标处理并不完全一致。
+
+文档层以毫米为页面单位，以 em 为资产局部单位。资产内部保持左上原点、$y$ 向下；页面放置只施加字号对应的统一缩放与平移，不再对单字执行自动撑满或笔画归一化。
+
+\subsection{两种形状归一化的区别}
+旧笔画残差使用该笔自己的最小坐标和最大边长，保持该笔宽高比；部件完整轨迹使用部件共同包围盒的宽与高分别归一化，以保存各笔在同一部件框内的相对位置。后一表示并不意味着最终变换总为相似变换：v4 重新放置部件时可以通过目标框产生横纵不同的缩放；实验源轨迹默认则显式限制共同正等比缩放。
+
+\section{标准字符图与结构数据库}
+\subsection{IDS 解析、身份与角色}
+\src{structures.py}
+系统递归解析 12 种二元或三元表意描述算子，生成前缀路径树。根 ID 为 \code{c_root}，子路径编码为 \code{c_0}、\code{c_0_1} 等。结构角色包括左右、上下、内外、各方向包围与重叠角色。源 \code{matches} 的笔画路径以前缀匹配方式赋予各层节点，因此父节点包含子节点笔画。
+
+偏旁变体通过固定表映射为规范身份，例如亻对应人、扌对应手、氵对应水；同时保留实际变体，避免把身份相同误当作形态完全相同。阝被表示为“阜/邑”的复合标签，并没有自动完成文字学歧义消解。缺失 IDS、未知符号、无笔画节点等进入警告和降低置信的分支，而不是补造拆字。
+
+\subsection{几何签名}
+\src{geometry.py}
+每笔先按弧长重采样到 12 点，再将相邻向量量化到八方向，合并连续重复方向。转角超过 $\pi/5$ 记作一次转折；平均绝对角变化作为曲率代理。宽大于高的 1.8 倍为宽笔，反之为高笔，其余为均衡。最后一段方向变化大于 $\pi/2$ 标记为 hook。签名键包含方向序列、转折数、宽高类型和 hook 标志。
+
+这些是从稀疏中心线抽取的几何代理，并非人工标注的横、竖、撇、捺、折、钩等完整书法语义类别。源码存在可选 \code{stroke_type}，不意味着当前公共数据库已经填充该标签。
+
+\subsection{关系边的实际语义}
+相邻笔画产生 \code{precedes}；所有笔对根据包围盒判断“相交”“接触”和左右上下。包围盒双轴重叠即登记 \code{intersects}，间隙欧氏长度不超过 0.025 即登记 \code{touches}。因此这里的相交是\textbf{粗粒度包围盒关系}，不能用来证明中心线真的相交。后续实验的严格线段交叉是另一种计算。
+
+\subsection{存储、构建与版本}
+SQLite 使用 \code{metadata} 与 \code{characters} 两张主要表。字符表按字符主键保存码位、地区、笔数、分解及完整图 JSON，并为地区和笔数建索引。构建先写 \code{.building} 临时数据库，完成后替换目标文件；报告统计拒绝记录及部件警告。逻辑内容哈希用于约束高保真档案与结构版本一致，运行层也会使用数据库文件哈希。
+
+结构字包的大陆简体分组依赖现有简体标记和 GB2312 范围，服务于采集目标筛选。该分组不能解释为项目完成了国家语言文字规范的独立校勘。
+
+\section{笔顺感知的样本对齐}
+\subsection{几何匹配代价}
+\src{alignment.py}
+等笔数不代表等笔顺。系统对标准笔 $i$ 和采集笔 $j$ 构建全矩阵代价
+\begin{equation}
+C_{ij}=0.45d_{\rm shape}+0.24d_{\rm pos}+0.13d_{\rm end}
++0.10d_{\rm len}+0.08d_{\rm dir}.
+\end{equation}
+形状距离在笔内等比归一化后比较 16 个弧长点，允许反向匹配但加 0.10 惩罚；端点反向匹配另加 0.08。位置为包围盒中心距离；长度项为截断到 1 的绝对对数长度比。方向使用首末端向量角差，反向替代也有 0.12 惩罚。系统允许反向作为匹配容错，不表示生成后会自动把所有反写笔恢复到规范书写方向。
+
+引入弱次序先验后求解
+\begin{equation}
+\pi^*=\arg\min_{\pi\in\mathfrak S_n}\sum_{i=1}^n\left[C_{i,\pi(i)}+
+0.025\frac{|i-\pi(i)|}{\max(1,n-1)}\right].
+\end{equation}
+实现为不依赖 SciPy 的 Hungarian 算法，一次求解为 $O(n^3)$。
+
+\subsection{纠错不是无条件接受最优置换}
+设恒等映射代价为 $J_0$，最优为 $J_*$；逐个禁用最优匹配边并重新求解得到最佳其他方案 $J_2$。归一化证据为
+\begin{equation}
+\Delta_0=\frac{J_0-J_*}{n},\qquad\Delta_2=\frac{J_2-J_*}{n}.
+\end{equation}
+如果最优仍是恒等映射，状态为 declared。若是非恒等映射且 $\Delta_0\ge0.04$、$\Delta_2\ge0.012$，记录 corrected 并保存显式置换；若改善至少 0.015 但证据不足，记录 ambiguous，保留恒等索引但将样本排除出风格原型。更弱的改善保留 declared。
+
+证据分数为
+\begin{equation}
+e=\min(1,\Delta_0/0.10)\min(1,\Delta_2/0.04).
+\end{equation}
+普通映射置信为 $\exp(-3C_{ij})$，纠错映射乘以 $0.80+0.20\max(0.35,e)$；歧义映射上限为 0.25。这里的置信是启发式支持强度，不是经独立标注校准的笔顺正确概率。最佳替代方案需要至多 $n$ 次额外 Hungarian 求解，因此这条完整保守检查的最坏复杂度为 $O(n^4)$，不能仅报告单次匹配复杂度。
+
+\subsection{不等笔数的动态规划}
+当标准笔数 $n$ 与采集笔数 $m$ 不同，单调动态规划允许步长 $(1,1)$、$(2,1)$、$(1,2)$：
+\begin{equation}
+D(i+a,j+b)=\min\{D(i+a,j+b),D(i,j)+C^{(a,b)}_{ij}\}.
+\end{equation}
+合并相邻两笔的情况增加 0.22 惩罚。仅支持相邻局部拆并，不能表达任意跨越重组。代码中的 \code{one_to_many} 与 \code{many_to_one} 名称容易因观察方向不同产生歧义，应以记录中的 \code{standard_orders} 和 \code{user_orders} 列表为准。
+
+复杂映射保留在对齐结果和全局统计中；构建部件原型仍要求相应标准笔具有置信至少 0.30 的一一映射。评估使用同一个显式映射恢复标准次序，不再按采集顺序直接 zip，防止“已纠错几何又被错误配对”\cite{alignment-note}。
+
+\section{书写者档案与分层原型}
+\subsection{整字风格统计}
+\src{profile.py}
+比较归一化个人字与标准字包围盒，统计横纵尺寸比例和中心偏移；用整字点的 $\operatorname{Cov}(x,y)/\operatorname{Var}(y)$ 估计斜度，并限制在 $[-0.35,0.35]$。统计平均压力和单位路径长度用时。生成时统一应用
+\begin{equation}
+T_w(x,y)=\begin{bmatrix}
+0.5+s_x(x-0.5)+h(y-0.5)+o_x\\
+0.5+s_y(y-0.5)+o_y
+\end{bmatrix}.
+\label{eq:global-transform}
+\end{equation}
+这不是从多字中辨认潜在书法风格的独立统计模型，而是可解释的几何摘要。由于采集整字已统一到 0.85 最长边，绝对物理书写尺寸不会原样保留在这些参数中。
+
+\subsection{旧笔画残差}
+对标准与用户笔各自取 8 个弧长点，令 $\mathcal{N}$ 为笔内等比归一化，存储
+\begin{equation}
+R_{ik}=\mathcal{N}(U_i)_k-\mathcal{N}(S_i)_k,\quad k=1,\ldots,8.
+\end{equation}
+原型按“几何签名@部件路径”分组，以映射置信加权平均。压力在采样索引的归一化位置上插值为 8 值，时长为末点减首点且至少 1 ms。这些压力控制值不是严格按物理弧长从原采样对应插值，因此平滑主路径主要维持总体动态特征，不能宣称逐点动态保真。
+
+\subsection{布局与笔画几何分离}
+部件布局存储相对于整字包围盒的四维框差 $\Delta B$，建档时限制于 $[-0.20,0.20]$。字专属键包含字符前缀，跨字键保留 canonical、variant、role 与父布局。兄弟关系原型按父布局和子角色组合存储各子框相对于父框的差量。
+
+条件笔画原型在局部形状残差之外，保存笔画框相对于部件框的差量（限制于 $[-0.35,0.35]$），以及起终点差量（各维限制于 $[-0.25,0.25]$）。分开保存位置、长度和形状，避免每笔独立归一化之后丢失长短比例。记录样本数与来源字符数，后者用于区分“同字多次重复”与“多个字符都支持”的证据。
+
+\subsection{共享坐标系的完整部件原型}
+对无子节点且至少两笔的部件，将全部所属笔画放在\emph{同一个用户部件框}中，分别抽取 8 点：
+\begin{equation}
+Q_{ik}=\left(\frac{x_{ik}-x_c}{w_c},\frac{y_{ik}-y_c}{h_c}\right).
+\end{equation}
+给定同键实例 $r$，以置信 $a_r$ 加权聚合
+\begin{equation}
+\overline Q_{ik}=\frac{\sum_r a_r Q^{(r)}_{ik}}{\sum_r a_r},
+\quad \overline p_{ik}=\frac{\sum_r a_r p^{(r)}_{ik}}{\sum_r a_r},
+\quad \overline d_i=\frac{\sum_r a_r d_i^{(r)}}{\sum_r a_r}.
+\end{equation}
+部件控制值裁至 $[-0.15,1.15]$。同一部件内多笔的相对位置、长短和形状由整体平均保留，不再从互不相关的单笔库拼装。仍需注意“完整部件原型”表示整组一致性，而不是保留了每条原始采样点；16 点对齐、8 点抽取、平均与后续平滑仍会损失高频细节。
+
+档案同时保存跨字聚合与 \code{character::component} 直接原型。直接原型可在已写过的字上更充分重建个人形状，但留出评估必须按字符组重新建档，不能让目标同字的直接原型进入训练档案。
+
+\subsection{风格令牌与档案身份}
+风格令牌为 40 维：16 点二维坐标 32 维、包围盒 4 维、相对笔次、原始点数密度及宽高各一维。最终档案保留前 256 个令牌；这是固定截断，不是均衡采样的全样本压缩。可选 v5 档案另保存 64 维作者潜变量和不确定性。
+
+构建身份包含作者、索引 SHA-256、结构逻辑内容哈希、构建器版本、协议、检查点身份、轨迹保留开关和关键参数。排序 JSON 后取 SHA-256 前 16 位为档案版本；带版本文件与当前 \code{profile.json} 均采用临时写入后替换。版本哈希提供输入追踪，但不自动保证原始外部文件永久存在。
+
+\section{默认 v4 确定性生成器}
+\subsection{模式、候选索引与选择顺序}
+\src{generate.py, component_style.py}
+支持 \code{off}、\code{stroke}、\code{layout}、\code{full} 和 \code{adaptive} 五种部件模式，强度范围为 $[0,1.5]$。构造时按笔画签名与部件 canonical 建立内存索引，避免逐字扫描全部原型。adaptive 使用跨字符证据限制变形幅度；full 是诊断消融，并不代表更高质量。
+
+完整部件生成按“同字直接原型 $\rightarrow$ 精确上下文跨字原型 $\rightarrow$ 同规范身份近似上下文”的次序查找。跨字候选必须笔数相同；近似上下文的评分为
+\begin{equation}
+r=3\mathbf{1}_{\rm variant}+2\mathbf{1}_{\rm role}+\mathbf{1}_{\rm parent}.
+\end{equation}
+这里各指示项表示与目标一致；并列时优先来源字符更多、置信更高者。默认整体路径只应用于非根、无子节点、至少两笔的部件。根节点即使在建档中满足部分抽取条件，也不会在这个放置循环中直接整字替换。
+
+\begin{table}[H]\centering\small
+\caption{adaptive 模式中主要证据门槛；$N$ 为来源字符数，$a$ 为原型置信，$\eta$ 为部件强度}
+\begin{tabularx}{\textwidth}{L{29mm}L{34mm}X}
+\toprule
+分支 & 准入条件 & 权重或上界\\\midrule
+同字部件轨迹 & 笔数相符 & $\min(1,0.92+0.03n)\eta$，$n$ 为样本数\\
+精确跨字轨迹 & $N\ge2$ & $\min(0.88,0.48+0.08N)\max(0.55,\min(1,a/0.70))\eta$\\
+近似跨字轨迹 & $N\ge3,r\ge5$ & $\min(0.72,0.38+0.06N)\max(0.50,\min(1,a/0.70))\eta$\\
+精确部件布局 & $N\ge2$ & $\min(0.35,0.12+0.06N)\eta$\\
+近似部件布局 & $N\ge3,r\ge5$ & $\min(0.25,0.10+0.04N)\eta$\\
+兄弟布局关系 & $N\ge5$ & $\min(0.24,0.08+0.008N)\eta$\\
+精确条件笔残差 & $N\ge3$ & $\min(0.75,\min(0.55,0.20+0.10N)\eta)$\\
+\bottomrule
+\end{tabularx}
+\end{table}
+表中强度若大于 1，部分完整部件权重可以超过 1，所以代码允许有限外推，而非所有分支都严格凸组合。生产默认强度为 1；源轨迹实验明确要求该值。
+
+\subsection{布局构建与共同放置}
+先将标准部件框表示为相对于标准整字框的坐标，加上衰减布局残差；相对边界限制为 $[-0.10,1.10]$，宽或高小于 0.02 则放弃该布局。兄弟布局关系在父框中计算，再以框偏移补充到目标框中。直接同字部件轨迹采用完整字专属布局权重，并关闭兄弟关系修正，避免特定字的交错结构被通用布局再次覆盖。
+
+令目标框为 $B^*=(x_0,y_0,x_1,y_1)$，将部件局部原型映射为
+\begin{equation}
+\widetilde Q_{ik}=\big(x_0+(x_1-x_0)\overline Q^x_{ik},\;
+y_0+(y_1-y_0)\overline Q^y_{ik}\big).
+\end{equation}
+标准笔也通过同一个部件框变换得到 $Q^{\rm std}_{ik}$，两者按支持权重混合：
+\begin{equation}
+Q^*_{ik}=(1-\alpha)Q^{\rm std}_{ik}+\alpha\widetilde Q_{ik}.
+\end{equation}
+共同框约束多笔相互位置，但框本身不是基于所有邻笔接触关系求解的全局最优解。
+
+\subsection{没有完整部件时的回退}
+生成每一标准笔时，若没有完整部件提案，先执行部件布局，再执行条件笔画框与端点修正，再选择条件局部残差或旧签名残差。近似签名的旧残差乘以 0.60；adaptive 同时存在新旧残差时按证据权重混合。若完全无原型，则用标准中心线和全局变换，压力取个人均值。
+
+条件笔画的框宽高至少 0.005，避免退化放置。局部残差添加在当前变换后的笔画最长边归一化坐标中，而不是直接叠加固定字框位移。若完整部件原型已经选中，最终控制点与动态属性会由整组部件分支接管，不再额外叠加单笔残差。这一点是部件内部一致性的核心。
+
+\subsection{B 样条与输出采样}
+\src{geometry.py, generate.py}
+代码使用端点重复填充的均匀三次 B 样条。对相邻四控制点，局部参数 $u\in[0,1]$ 的基函数为
+\begin{align}
+b_0(u)&=(1-u)^3/6,& b_1(u)&=(3u^3-6u^2+4)/6,\\
+b_2(u)&=(-3u^3+3u^2+3u+1)/6,& b_3(u)&=u^3/6,
+\end{align}
+\begin{equation}
+\bm{s}(u)=\sum_{k=0}^{3}b_k(u)\bm{q}_{i+k}.
+\end{equation}
+控制序列两端各重复三份端点，再扫描所有局部窗口。抽出的 8 个点直接作为控制点，\textbf{没有}求解“让样条精确通过这些点”的拟合方程。因此算法有平滑效应，重采样密度增加也不能恢复被控制点压缩与平均抹掉的折角。
+
+v4 按控制折线路径长度 $L_q$ 确定
+\begin{equation}
+m_i=\max(24,\min(128,\lceil120L_q\rceil)),
+\quad m_{\rm over}=\max(64,2m_i).
+\end{equation}
+先以 $m_{\rm over}$ 点评估曲线，再统一弧长重采样为 $m_i$ 点。样条求值关闭逐点裁切，待全部几何完成后统一适配画布。每笔时长来自原型，缺失时用 $\max(80,L_q\tau_w)$；时间沿输出点索引线性分配，笔间固定 60 ms。最后一点按是否整字末笔标记为 up 或 end。
+
+\subsection{置信、来源标签与可解释性}
+每笔记录 \code{style_source} 与 \code{component_key}，区分直接部件、精确或近似部件、条件笔画、布局、旧签名与全局回退。整字置信由笔置信聚合；其来源主要是对齐质量和分支衰减，不能当作美观度或人类认可概率。输出追踪可以解释“用了哪一类证据”，但聚合原型并不保存每个控制点的全部原样本混合权重链。
+
+\section{画布边界、批量生成与运行身份}
+\subsection{整字适配取代末端裁切}
+\src{canvas_boundary.py}
+设最终未舍入字形包围盒为 $(x_0,y_0,x_1,y_1)$，超界量为
+\begin{equation}
+o=\max(0,-x_0,-y_0,x_1-1,y_1-1).
+\end{equation}
+只有 $o>10^{-9}$ 才适配；恰好触边不是错误。默认留白 $m=0.02$，最长跨度为 $L$，缩放
+\begin{equation}
+s=\min\left(1,\frac{1-2m}{L}\right),\qquad
+\bm{p}^{\rm out}=s\bm{p}+\bm{t}.
+\end{equation}
+平移逐轴选择满足留白的最小必要值，例如
+\begin{equation}
+t_x=\max\{m-sx_0,\min(0,1-m-sx_1)\}.
+\end{equation}
+整字只用一个正等比变换，保留笔内形状、相互角度、压力、时间和点数；最终坐标统一保留 6 位小数。$s<0.8$ 或任一平移绝对值超过 0.2 标记需复核。这里保证的是对\emph{当前生成几何}不逐点压平，不能修复公共结构在早期导入中已经丢失的点。
+
+\subsection{输出目录、失败与续跑}
+\src{generate.py}
+每个运行目录包含 manifest、按码位命名的轨迹 JSON 和 SVG/PNG 预览。输入字符去重并保留首次出现次序；这适合字库生成，正文中重复字则由文档 occurrence 层保留。单字异常登记到失败列表，未支持字符不会替代为其他字。
+
+运行身份包括作者、档案文件哈希、结构数据库文件哈希、检查点哈希、部件模式与强度、置信门槛、PNG 配置和边界策略。实验路径进一步绑定源档案、训练白名单、实现文件和修正规则哈希。已有运行身份不符就拒绝续跑；无 manifest 的旧轨迹目录也拒绝复用。manifest 通过临时文件替换发布，记录 running、cancelled 或 completed。
+
+已有轨迹的复用还检查字符、作者、档案版本及画布策略，源轨迹和复核修正检查各自身份。需要注意：默认路径并未把所有生成器实现源码都纳入运行身份；只有同一身份下的部分字段检查也不是对整个文件的完整重验。生产追溯仍应同时保存 Git/工作区快照，不能仅凭 run-id 推断执行了哪一版实现。
+
+\section{v5 分层神经残差模型与训练}
+\subsection{网络结构}
+\src{model.py, factorized.py}
+模型将风格点集令牌和标准笔画令牌投影到 256 维，使用 8 注意力头、4 层风格编码器、6 层结构编码器和 4 层交叉注意力解码器；前馈维度为 1024，dropout 为 0.1，采用 pre-norm。一个标准笔画对应一个输出令牌，输出 8 个二维残差控制点及压力、时长、密度、置信等头。
+
+\begin{table}[H]\centering\small
+\caption{神经模型默认配置与输出边界}
+\begin{tabularx}{\textwidth}{L{43mm}X}
+\toprule
+项目 & 当前实现\\\midrule
+输入令牌 & 40 维几何、包围盒、次序和密度特征\\
+基础残差 & $0.35\tanh(W_rh)$，维度 $8\times2$\\
+可选整字细化 & 将局部解码特征与整字池化特征拼接，输出上界 0.03 的附加残差\\
+压力／置信 & sigmoid；有这些输出头不等于当前数据监督了所有头\\
+时长／密度 & softplus，生成时再施加最小时长及点数上下界\\
+作者潜变量 & 64 维均值和对数方差；方差对数限制在 $[-8,4]$\\
+结构上下文 & canonical、角色/父布局、签名、部件路径，各取 SHA-256 前 4 字节映射，共 16 维\\
+\bottomrule
+\end{tabularx}
+\end{table}
+四段哈希上下文是固定数值编码，不是预训练语义嵌入；不能假设两个哈希距离近就代表部件语义接近。代码没有另外加入传统正弦位置编码，笔次信息由令牌字段表达。因子化路径默认以作者均值作为潜变量，不进行每次生成的随机重参数化采样。
+
+\subsection{CASIA 训练样本组织}
+\src{train.py}
+训练采用同作者 reference/query episode，并对作者划分训练、验证和测试。query 必须与结构笔数相符，reference 来自同作者其他记录；默认 8 份参考，episode 风格令牌最多取 96 个。当前这条训练路径对 query 笔画按已有顺序与标准笔 zip，没有调用用户建档的保守 Hungarian 纠错器，因此用户样本对齐机制的保证不能直接移植为 CASIA 训练数据已经完成笔顺纠错的证据。
+
+监督残差在\emph{标准笔}的最小坐标和最长边坐标系中计算，与 v4 各笔分别归一化再求局部差的定义有所不同。置信标签由残差范数的 $\exp(-5\mean\|R\|)$ 构造，密度标签是原笔点数裁至 $[24,128]$ 后除以 128。POT 不提供实测压力和时间，正式训练没有用伪造常数压力或时长监督这些头。
+
+\subsection{目标函数}
+有效标准笔掩码记为 $v_i$。基础损失包含残差均方误差、密度均方误差和置信二元交叉熵：
+\begin{equation}
+\mathcal L_0=\mathcal L_{\rm residual}+0.2\mathcal L_{\rm density}+0.1\mathcal L_{\rm confidence}.
+\end{equation}
+可微 B 样条在每笔采样 24 点。曲线辅助损失为
+\begin{equation}
+\mathcal L_{\rm curve}=\mathcal L_{\rm point}+0.35\mathcal L_{\rm endpoint}
++0.2\mathcal L_{\rm tangent}+0.1\mathcal L_{\rm curvature}.
+\end{equation}
+点与端点用欧氏距离；切向项是 $1-\cos$，曲率项比较相邻单位切向差。整字图像代理采用软中心线距离场：
+\begin{equation}
+d_\tau(\bm{x})=-\tau\log\sum_j\exp\left(-\|\bm{x}-\bm{s}_j\|/\tau\right)-r,
+\end{equation}
+其中 $\tau=0.006$，有效半径取 $\max(0.012,0.6/H)$。在 32 与 64 两种分辨率上比较裁至 $[-0.08,0.08]$ 的场之绝对差。这里是中心线点距离 soft-min 减半径，不是精确轮廓的解析符号距离，且软最小值受点数与温度影响。
+
+因子化模式另加入作者 KL 正则与异方差残差项
+\begin{align}
+\mathcal L_{\rm KL}&=-\tfrac12\mean(1+\ell_w-\mu_w^2-e^{\ell_w}),\\
+\mathcal L_{\rm unc}&=\mean_i(v_i(E_i e^{-\ell_i}+\ell_i)),
+\end{align}
+其中有效笔平均按掩码归一。总损失为
+\begin{equation}
+\mathcal L=\mathcal L_0+\lambda_c\mathcal L_{\rm curve}+\lambda_s\mathcal L_{\rm SDF}
++10^{-4}\mathcal L_{\rm KL}+10^{-4}\mathcal L_{\rm unc}.
+\end{equation}
+训练使用 AdamW，梯度范数裁至 5。正式配置中 $\lambda_c=1$、$\lambda_s=0.25$。验证早停目标未包含训练使用的所有 SDF 与正则项，不能把两者直接视为完全同一个标量目标。
+
+\subsection{不确定性与确定性记忆融合}
+若预测逐笔对数方差为 $\ell_i$，不确定性 $u_i=\exp(\ell_i/2)$，置信修正为 $a'_i=a_i\exp(-u_i/2)$。均值置信低于门槛或检查点不具 formal 身份时，整字回退 v4。诊断时可显式将门槛设为 0 绕过未正式训练检查点的回退条件，不应视作生产默认。
+
+通过门槛后，若存在确定性记忆，神经权重为
+\begin{equation}
+\beta_i=\clip(e^{-u_i},0.15,0.85),\qquad
+Q_i=\beta_iQ_i^{\rm neural}+(1-\beta_i)Q_i^{\rm memory}.
+\end{equation}
+当记忆来源为直接或精确部件轨迹时，$\beta_i$ 强制为 0。没有真实动态监督的检查点继续使用 v4 压力与时长。神经输出点数按预测密度与 $180L_q$ 两者的较大者决定，仍限制在 24--128。
+
+\subsection{校准与复现的实际边界}
+门槛在 0.30--0.80、步长 0.05 的网格内，由作者隔离验证 episode 选择。但校准代码的 fallback error 是\textbf{零残差标准结构代理误差}，并未在每个 episode 真正构建用户 v4 档案后调用完整回退生成器。因此“校准门槛”不意味着已对真实混合系统实现严格的质量概率校准。
+
+训练记录包含随机状态、优化器状态、best/last 检查点、数据哈希、配置、环境与 Git 元数据。正式模式要求干净工作区，支持配置身份检查与恢复；这些机制增强可追踪性，但不消除训练数据笔顺、跨域分布或指标代理的局限。
+
+\section{完整源轨迹：保真存储、供体检索与共同变换}
+\subsection{独立高保真通道}
+\src{source_trajectory.py}
+可选 \code{source_trajectory_v1} 从对齐前保留的归一化原采样读取数据，要求整字完整、无歧义一一映射且每笔置信至少 0.30。保存标准笔 ID、原用户笔次、所有点、压力、原时间和累计弧长参数：
+\begin{equation}
+t_j^{\rm arc}=\frac{\sum_{k<j}\|\bm{p}_{k+1}-\bm{p}_k\|}{\sum_k\|\bm{p}_{k+1}-\bm{p}_k\|}.
+\end{equation}
+此 $t^{\rm arc}$ 是几何参数，不是采样时间。对齐纠错后各笔原时间可能不再跨笔单调，因此解码必须重排输出时间，不能把原时间直接拼接成标准笔顺序列。
+
+\subsection{完整部件供体索引}
+\src{exemplar_index.py, component_views.py}
+候选必须来自同作者的训练白名单，排除目标同字全部采样。索引以部件上下文加笔数为键；非根叶部件至少两笔，结构置信至少 0.8，部件平均映射置信至少 0.55，宽高不得退化。可选嵌套视图通过验证后的拆分补充部件检索，不直接修改原结构数据库。
+
+将标准部件各笔采样 16 点，在共同中心与最大跨度下计算形状描述。候选形状误差不大于 0.18，对数宽高比差不大于 0.7；排序分数为
+\begin{equation}
+q=d_{\rm std-shape}+0.1|\log(a_s/a_t)|+0.03(1-a_{\rm mapping}).
+\end{equation}
+这些比较只用公共结构与供体映射支持，不读目标手写原稿。键相同和笔数相同仍不足以保证供体在目标上下文中自然。
+
+\subsection{共同正等比最小二乘放置}
+\src{contextual_trajectory.py, fast_placement.py}
+目标锚点来自固定 v4 输出；源和目标每笔均取 16 个弧长点，因而各笔等权。设中心化锚点为 $\widetilde{X}_k,\widetilde{Y}_k$，求
+\begin{equation}
+s^*=\frac{\sum_k\widetilde{X}_k^{\mathsf T}\widetilde{Y}_k}{\sum_k\|\widetilde{X}_k\|^2},
+\qquad\bm{b}^*=\overline{Y}-s^*\overline{X}.
+\end{equation}
+要求 $s^*>0$；无旋转、无逐笔独立缩放。锚点只用于估计 $T(\bm{p})=s^*\bm{p}+\bm{b}^*$，输出对\emph{每个完整源点}施加同一变换。
+
+最多考察结构排序前 16 个供体，按放置后锚点误差加 $0.01q$ 重排。快速实现先算廉价分数，再依次组装和验证候选，选择首个安全解；高于已选分数且尚未检查者明确标记为未检查，不能记录为已通过。缓存仅保存供体匹配锚点，不把缓存锚点作为实际输出。
+
+\subsection{整部件准入与回退}
+候选须满足标准笔身份、有限数值、合法边界和动态不变量；相对当前基线不能新增严格笔间交叉；每笔长度比必须在 $[0.4,2.5]$。无候选通过则完整保留原部件。逐部件处理只选互不重叠的笔组；最终再相对最初 v4 基线核查新增交叉。
+
+严格交叉检测是中心线横穿判定，不包含全部自交、共线重叠、相切、端点接触或实际笔宽下的粘连。因此“无新增严格交叉”只是具体的兼容门槛，并非完整视觉拓扑证明。基线已有交叉也不会被这个门槛自动消除。
+
+输出 \code{source_components} 记录候选、变换、源哈希、标准笔映射、保留点索引、拒绝原因和几何审计。源路径继承 A 的字/笔置信，另存映射支持；继承分数没有校准为新布局质量。
+
+\subsection{受限共同空间位移场}
+实验实现用 $3\times3$ 高斯中心产生共享位移场：
+\begin{equation}
+D(\bm{p})=\sum_{k=1}^{9}w_k(\bm{p})\bm{a}_k,\qquad
+w_k=\frac{\exp(-\|\bm{p}-\bm{c}_k\|^2/(2r^2))}{\sum_j\exp(-\|\bm{p}-\bm{c}_j\|^2/(2r^2))}.
+\end{equation}
+在归一化坐标中用 ridge 0.005 拟合，半径 0.65，并根据系数与中心直径限制导数上界至 0.25。若全局 Lipschitz 常数小于 1，则恒等映射加该位移场在连续意义下单射；采样折线连线仍需离散交叉检查。开发未显示额外收益，冻结强度为 0，这个可解释数学约束没有成为当前入口的默认变形\cite{context-note}。
+
+\section{保护折钩的简化与已采集整字重建}
+\subsection{受保护的分段 RDP}
+\src{trajectory_experiment.py, exemplar_generation.py}
+\code{source-simplified} 在 raw 选择与变换全部冻结后才简化。输出坐标误差预算为 0.004，并按变换缩放换回源坐标容差。保护集合包含首末点、起笔长度 $\min(0.01,0.1L)$ 内的点、末段 $\min(0.025,0.25L)$ 邻域及前一个点，以及在半径 $r=\min(0.012,0.08L)$ 和 $1.5r$ 两尺度转角都至少 $45^\circ$ 的点。
+
+相邻保护点之间应用 Ramer--Douglas--Peucker 递归，返回源点索引而不是新插值点。几何、压力和笔内时间均按相同索引抽取。若改变部件内部或最终整字的严格笔间交叉集合，整部件回退 raw。raw 和 simplified 共享同一供体及变换计划，排除了“先简化改变下一部件候选选择”的混杂。
+
+这种误差预算限制表示差异，不约束与目标原稿的误差；源点中的抖动可能被保护，圆弯也可能更显折线。真实折点保持与感知自然性应分别评价。
+
+\subsection{同字原稿优先路径}
+\src{observed_reconstruction.py}
+显式 \code{source-observed} 优先选择已采集目标整字。条件包括完整标准映射、无歧义、有效坐标与压力、笔内时间单调、非退化，以及逐笔映射置信至少 0.35。多份合格原稿按最低映射置信、平均置信和样本 ID 确定性选择。
+
+完整路径采用建档归一化坐标的恒等变换，不拟合 v4 布局、不逐笔拉伸、不混供体、不再次平滑；简化仍使用 0.004 预算和整字交叉保护。没有合格同字原稿则进入跨字供体路径，再失败才保留 v4。同字和跨字均受训练字符白名单限制。
+
+同字恒等重建近零误差是表示复用的预期结果，\textbf{不是未见字泛化}。这里的原稿也不是设备物理尺寸，而是式\eqref{eq:user-normalize}后的归一化源点。源时间按标准次序重新拼接，保留笔内相对时间与压力。
+
+\section{源部件生成的研究扩展}
+本节描述仓库存在的研究代码；除前文显式源轨迹入口外，不应据模块存在就推断这些策略已进入生产默认。多项实验最终冻结为不改变基线的参数，这本身是应保留的实验结论。
+
+\subsection{末端方向与作者条件参考}
+\src{terminal_selection.py, author_terminal_context.py, author_terminal_hierarchy.py}
+末向向量从曲线尾部固定物理弧长窗口估计，而非只取最后两个相邻点，减少不同采样密度对方向测量的影响。评分改变的是\emph{整份供体部件}的选择，不直接旋转单笔尾部。
+
+作者条件参考在训练数据中聚合同部件的圆周方向，或者使用相对于公共结构方向的残差；证据稀疏时，按 hook、转折数与宽高类型等几何签名回退到更宽的参考层。圆周统计避免角度 $-\pi$ 与 $\pi$ 的算术均值错误。参考只能作为候选排序线索，不证明被选供体会维持整字几何。
+
+\subsection{连续偏移约束与共同平移}
+\src{component_trust.py, component_trust_translation.py}
+信任域策略比较两个笔画在共同归一化弧长下的连续位置差。分段线性曲线可在两条曲线的弧长节点并集上精确检查对应偏移上界，而不依赖任意固定采样密度。对整个部件设相应局部约束，限制末向评分换供体时偏离原部件过大。
+
+共同平移进一步试图用一个二维位移使完整候选落入最小最大偏移约束；所有笔画、压力和时间保持同源，不允许逐笔独立纠形。这些约束只限制相对于 D 的变化，D 本身若偏离目标，较小变化并不必然更好。仓库记录两种方案均未通过开发质量门槛，冻结半径为 0，即原 D\cite{trust-note}。
+
+\subsection{受限宽高比}
+\src{component_aspect.py}
+对固定对应锚点，实验求解正对角缩放与平移的最小二乘问题：
+\begin{equation}
+\min_{s_x,s_y,\bm b}\sum_k\|\operatorname{diag}(s_x,s_y)X_k+\bm b-Y_k\|^2,
+\quad s_x,s_y>0,\quad 1/\rho\le s_x/s_y\le\rho.
+\end{equation}
+这保持整部件使用同一个变换，但会改变角度和末向。开发中不同宽高上限均未同时满足预设目标，最终选择 $\rho=1$，恢复等比路径。不能把一个凸优化问题求解准确等同于生成效果改善。
+
+\subsection{完整实例变体与自然变化参考}
+\src{exemplar_variation.py, component_variation_evidence.py}
+变体策略在近最优的完整供体中以可复现种子和 occurrence 身份抽样，使用几何指纹去除等价实例，并从同作者跨字同部件建立形状相容范围。输出不添加随机坐标抖动，不平均混合不同供体笔画。
+
+同作者不同字中的同一部件受到角色和邻字结构影响，其分布不能替代同作者同字重复书写分布。仓库实验虽能产生多个真实供体形状，但未通过开发质量门槛；本文不把“有变体”和“自然性已验证”混为一谈\cite{variation-note}。
+
+\subsection{学习布局、经验范围与过度收缩}
+\src{learned_component_layout.py, calibrated_component_layout.py}
+布局证据从训练字符的部件位置与大小相对公共结构的残差学习，使用同上下文证据；稀疏时回退到相同角色和父布局。校准模块用训练字留一误差构造经验范围，结合尺度下限与稳健统计决定是否移动。
+
+冻结的 M 路径使用训练原稿决定移动必要性与强度，再朝公共位置调整；不是全量替换成学习中心。多作者回归发现合法原稿也会落在经验范围之外，“涤”和“铜”在被拉回时恶化。这揭示把低频但合理个性当作异常的风险：经验覆盖范围本身不是质量判别器\cite{layout-note,multiwriter-note}。
+
+\subsection{交叉拟合与反事实试移风险}
+\src{layout_risk.py, component_layout_risk.py, counterfactual_layout_risk.py}
+风险模型预测“是否接受一个已给定的布局改动”，不生成新供体。按字符哈希分三折，同字跨作者与重复采集保持同折；重建源档案以排除目标泄漏。近邻证据按作者--字符聚合，每组最多贡献一票，防止一个字有很多部件或多次试移就占据多数支持。
+
+最初只有少量有效改动标签；后来扩展到所有兼容部件和多个试移幅度，得到 3,088 条相关试移标签，覆盖 753 个作者--字符、358 个不同汉字。标签多不等于独立自然书写样本多。训练可使用目标原稿评价提议是否收益，但推理特征不能含查询目标的原稿、评分结果或采样 ID。
+
+\subsection{46 维分组逻辑模型}
+\src{trajectory_layout_risk.py, grouped_logistic_risk.py, context_offset_risk.py}
+特征由 22 维布局/邻部件关系与 24 维推理可得笔画几何构成。几何块比较原路径和提案相对于 v4 A 的平均/最大距离、端点、末向、长度等；它不接受目标原稿输入。可分别训练 layout、geometry 与 combined 三种视图。
+
+令作者--字符组 $g$ 有 $n_g$ 条记录，权重 $w_j\propto1/n_g$；加权中心化和尺度标准化后将特征裁至 $[-5,5]$。模型为
+\begin{equation}
+p_j=\sigma(\beta_0+\bm\beta^{\mathsf T}\bm z_j),\qquad
+\mathcal L=\sum_jw_j\big[\log(1+e^{\eta_j})-y_j\eta_j\big]+\frac\lambda2\|\bm\beta\|^2.
+\end{equation}
+截距不受惩罚，尺度下限为 0.1；Newton 法与回溯线搜索求解，梯度残差未达到条件则报错。验证先隔离供体生成折，再在每个生成折中隔离目标字符元折，形成九个训练内单元。查询时排除同字所有记录；不足五个训练作者--字符组则拒绝提供决策。
+
+后续在冻结数值模型上加入作者、部件或层次 logit 偏移，使用正则化限制稀疏类别。记录显示 Brier 从 0.234575 降至 0.234349，但 235 个生成字的实际输出决定不变，“涤”仍被误放；风险扩展因此暂停。小幅预测指标改善不能替代实际输出收益验证\cite{risk-note}。
+
+\section{结构缺陷审计、源修正与局部几何保护}
+\subsection{检测层与修改层分离}
+\src{geometry_audit.py, structure_defects.py, outline_median.py}
+几何审计覆盖长度、退化、端点、局部折返、轮廓内含、轮廓覆盖及结构映射。报警仅表示候选，不自动授权修改。轮廓覆盖差可能来自字体粗细或正常宽折角，不能一律解释为缺钩；未决 IDS 也不能靠几何阈值自动决定正确笔顺。
+
+历史扩展扫描覆盖 9,574 字、112,617 笔。默认式\eqref{eq:public-normalize}把上游合法负 $Y$ 压到 $y=1$；独立修正层恢复 $1-Y/1024$，保留旧参考原点而不同时整体换坐标。参考坐标可大于 1，最终生成另做整字边界适配。恢复 6,012 笔裁切信息，结合三笔白名单共改动 6,015 笔、4,465 字；这些是历史审计统计，不是本次重新扫描结果\cite{structure-note}。
+
+\subsection{白名单轮廓中心线重建}
+黧 s1 与瀝 s6 是近点中心线；盼 s7 是丢失弯曲的内部路径。对已复核的细长单轮廓，用主方向截面中点构造估计中心线；盼的特定重建锁定端点，只重建内部。复杂钩、多区间、多分支或端点歧义不进入同一算法。
+
+轮廓离散包含检查只证明采样点满足相应离散条件，不是连续解析包含证明，也不是恢复作者原稿。修复的是公共结构估计；个人风格仍来自已有档案。
+
+\subsection{不写数据库的参考修正层}
+\src{structure_corrections.py}
+修正仓库包装器检查上游文件、逻辑数据库、逐笔来源和配置哈希，深拷贝字符图后修改指定中心线，并重算包围盒、签名和关系。上游文件、旧数据库与原始样本不变。这种独立层允许 A 原参考、B 只换参考、C 换参考并重建同索引档案的明确消融。
+
+参考变动可能影响笔画签名、候选选择、残差尺度、布局与画布适配；C 重建档案还会改变未修复字的全局风格和共享原型。因此“确定源缺陷修好”与“全库生成无副作用”不是同一命题。
+
+\subsection{已复核局部生成修正}
+\src{reviewed_geometry.py, topology_repair.py}
+\code{--reviewed-geometry} 只接受确定性 adaptive、强度 1。修正配置锁定来源、字符、标准笔与预算。近空笔只有原输出长度低于候选长度 10\% 才重建；候选整字可用于计算，但只取白名单笔画替换。新增交叉仅允许指定笔在预算内平移，无安全解则完整放弃提案。
+
+既有“丢/侈”交叉规则要求作者、结构版本和整字几何哈希与复核对象一致；来源标记为 source 或 observed 的真实轨迹即使几何相同也受保护。其他笔画保持原几何与压力，时间按输出顺序重新组织。192 个历史保护字字形字段不变属于局部性证据，不代表所有未知字都不会受其他修正策略影响\cite{repair-note}。
+
+\subsection{固定风格的结构位移传递}
+\src{structure_delta.py}
+该实验固定原生成输出 $Y_0$，只传递旧参考 $S_0$ 到修正参考 $S_1$ 的位移：
+\begin{equation}
+Y_1(u)=Y_0(u)+A\big(S_1(u)-S_0(u)\big),
+\quad A=s_{\rm canvas}\begin{bmatrix}s_x&h\\0&s_y\end{bmatrix}.
+\end{equation}
+恢复裁切且源顶点数相同时，利用原索引对应，并用恢复后源弧长参数化，避免旧裁切重合点抹掉被恢复的末端；顶点不同时只采用明确标注为近似的归一化弧长对应。输出使用节点并集，不再次重选原型或 B 样条平滑。
+
+真实源笔仍排除。可选 guard 对新增严格交叉作有界平移，不能解决或越界则整个提案回退。该路径隔离结构修复的传递作用，但不从数学上保证作者意图正确，也未默认接入生产\cite{delta-note}。
+
+\section{补采规划与采集桌面应用}
+\subsection{覆盖驱动的采集分数}
+\src{recommend.py}
+候选来自项目维护的常用字池，统计部件上下文、规范身份、变体、部件内笔槽、整字布局及笔画签名覆盖。基础特征权重分别为 6.0、3.0、2.5、1.5、1.0、0.35；目标实例数分别以 3、3、2、4、8、3 为基本配置，并结合公共库频数调整。
+
+覆盖欠缺贡献考虑公共频率、是否核心部件以及距支持门槛的进度，最多取六项最大贡献，再加常用度奖励、减笔数工作量和结构警告惩罚。已写字中重复次数不足者另作稳定性锚点推荐。该分数是启发式采集规划，不是有理论最优保证的最小集合覆盖求解器。
+
+\subsection{信息增益代理}
+对于特征 $f$，当前计数 $n_f$、候选贡献 $k_f$，虚拟方差从 $u/(1+n_f)$ 降到 $u/(1+n_f+k_f)$：
+\begin{equation}
+\operatorname{IG}(c)=\frac{\sum_f w_f(1+\log(1+\nu_f))
+\left[\frac{u}{1+n_f}-\frac{u}{1+n_f+k_f}\right]}
+{(1+0.035n_c^{1.15})(1+0.25q_c)}.
+\end{equation}
+$\nu_f$ 是公共库频数，$q_c$ 是结构警告数。每选一字后更新虚拟覆盖。这个“信息增益”是计数型不确定性减少代理，不是完整贝叶斯生成模型计算的条件互信息。
+
+\subsection{目标字符集与分档计划}
+覆盖分数对笔画签名、部件身份、上下文、部件轨迹与布局分配 0.20、0.15、0.25、0.30、0.10 权重，并按目标字集实际特征质量归一：
+\begin{equation}
+\mathrm{Coverage}=\frac{100}{\sum_{k:M_k>0}w_k}\sum_{k:M_k>0}w_k\frac{C_k}{M_k}.
+\end{equation}
+输出 90/95/99/99.9/100 档增量 TXT/CSV 和审计信息。预计覆盖假设新采样通过对齐与抽取，不是生成质量百分数；采集后必须重新建档验证。复杂样本被隔离时，实际覆盖可能低于计划。
+
+\subsection{采集器的输入与反馈}
+\src{collector.py, desktop.py, stroke_reference.py, capture_boundary.py}
+采集器提供字符任务、标准笔数检查、重录提示、当前或下一标准笔的绿色参考，以及留白参考框和触边保存确认。参考生成、标准笔数与记录保存相互分离；触边提示是输入质量反馈，不能代替后续完整几何对齐。
+
+生成器负责样本导入、建档、文字生成、预览和可选高保真副档案，训练与实验配置不要求采集器携带。桌面中访问原始样本不等于修改原始样本。真实手写设备、压力标定和跨平台输入延迟仍需独立验收。
+
+\section{文档、字形资产与页面场景模型}
+\subsection{四层不可变对象}
+\src{document/schema.py, assets/glyph_provider.py, scene/schema.py}
+文档层区分四种身份：原始源码 Document、某次出现 Occurrence、可复用字形 GlyphAsset，以及排版 Fragment。重复字符可以共享资产，但必须有各自的出现位置。
+
+\begin{table}[H]\centering\small
+\caption{文档层对象与身份边界}
+\begin{tabularx}{\textwidth}{L{34mm}X}
+\toprule 对象 & 字段与职责\\\midrule
+\code{SourceSpan} & 原始字符串的 Unicode scalar 半开区间 $[a,b)$\\
+\code{Document} & 源文、节点、页面与样式、document ID、revision、模式和种子\\
+\code{Occurrence} & 某次文本出现的 ID、所属节点、源区间和原文片段\\
+\code{GlyphAsset} & 字节哈希、原 JSON、不可变点列、度量、中心线包围盒\\
+\code{Fragment} & 出现位置到页/行/毫米坐标的映射，逻辑框、墨迹框、资产 ID 和状态\\
+\code{PaintOp} & 一条笔画折线、毫米笔宽、颜色及 occurrence ID\\
+\code{LayoutSnapshot} & 请求身份、文档版本、全部页面、诊断、资源键与布局版本\\
+\bottomrule\end{tabularx}
+\end{table}
+
+\subsection{字形资产适配与资源冻结}
+适配器只接受 \code{personal_trajectory_v1}，验证连续笔次、非空轨迹、有限数据、单位边界、压力范围、整数单调时间和合法 pen-state。\textbf{不}重新适配字框、不重采样、不排序，不删除带 up/end 的末点；这些末点仍是实际几何端点。
+
+资产 ID 为原 JSON 字节的 SHA-256，保存原字节和冻结点列；因此即使几何一样，仅 JSON 排版或其他字段改变也可能产生新身份。这比“仅按字符评价”保守，但不能称为对几何语义做了规范化去重。汉字默认 advance 1 em，baseline/ascent/descent 为 0.88/0.88/0.12。非汉字必须提供显式度量校准，否则拒绝假定同样度量。
+
+GlyphProvider 对一次请求需要的不同字符预先读取并冻结资源集，包含坏资产原因。资源键涵盖 provider 版本、资产哈希、度量与失败集合；一字最多读 16 MiB。这是单次请求的确定资源快照，没有后台自动监听目录修改。
+
+\subsection{原始文本与 Unicode 边界}
+\src{document/source.py}
+解析不规范化 CR、LF、CRLF；每个段落和 occurrence 都映射到原始源码，末尾换行会额外保留空段落，产生可见垂直空间。分段器保守地聚合组合标记、emoji 修饰符、地区指示符对、ZWJ 序列和标签字符，但没有完整实现 UAX 14/29。
+
+复杂脚本、RTL 等不支持片段被保留并诊断，而非丢弃。Python 源区间按 Unicode scalar 计数，Qt 使用 UTF-16 code unit；转换函数显式拒绝落在代理对中间的偏移。一个非 BMP 汉字在 Python 是一个 scalar，在 Qt 需要两个 UTF-16 单元。
+
+\section{毫米排版、诊断与渲染导出}
+\subsection{测量与行框}
+\src{layout/plain.py}
+默认 A4 页面为 $210\times297$ mm，四边留白 20 mm；字号 6 mm，行高 9 mm，笔宽 0.3 mm。空格 advance 为 0.5 em，全角空格 1 em，tab 固定 2 em，NBSP 0.5 em 且不能断行；tab 不是对齐到动态制表位。
+
+设字号 $e$、笔宽半径 $r$，资产基线 $b_a$、中心线纵向范围 $[y_0,y_1]$，实际升降部为
+\begin{align}
+a&=e\max(a_a,b_a-y_0)+r,\\
+d&=e\max(d_a,y_1-b_a)+r.
+\end{align}
+行高 $H=\max(H_{\rm configured},\max_i a_i+\max_i d_i)$，基线位于额外行距居中后的位置。这样逻辑行框和真实墨迹范围均纳入笔宽，不把中心线刚好在边界误认为成品完全不越界。
+
+\subsection{贪心断行和分页}
+实现顺序累加 advance，保存最近合法且能放下的断点；超宽时退到该断点。禁则子集禁止开括号出现在行尾、闭括号或句末标点出现在行首，并保护 ASCII 字母数字连续串和部分数字单位组合。无合法断点的超宽原子串仍消费一次并登记溢出，避免在空页上无限重试。
+
+分页在行框放不下且当前页已有行时换页；单行比空页还高则诊断。硬换行附到前行，包括内容恰好占满的情况。分页结束核查全部 fragment 的 occurrence ID 序列与原文完全相同，既不漏字，也不去重重复字。
+
+\subsection{放置与场景一致性}
+对页面位置 $(x,b)$，资产点变换为
+\begin{equation}
+X=x+ex_a,\qquad Y=b-eb_a+ey_a.
+\end{equation}
+每笔生成一个 PaintOp；Qt、SVG 和 PNG 消费同一场景快照，不各自重排。画面选择、评价色标是交互叠加层，不写入成品 PaintOp。
+
+逻辑框用于命中与定位，墨迹框由变换后的中心线包围盒加半笔宽得到。固定笔宽保留源压力但不把压力转换成粗细；时间也仅保留在资产中，页面没有模拟书写动画。
+
+\subsection{错误门槛与输出发布}
+\src{renderers/pages.py, renderers/qt.py}
+missing、failed、unsupported、行宽/行高溢出、禁则违例或墨迹越界均产生明确诊断。正式导出要求无 error；调试导出允许占位但加入明显 debug 标识。不能将红框缺字预览包装为完整手写成品。
+
+SVG 用毫米画布和折线、圆端点呈现，PNG 按 $\mathrm{DPI}/25.4$ 转像素，单页上限四千万像素。两种后端共享几何，但栅格化和抗锯齿不保证像素一致。导出先构建同目录暂存文件夹，所有页与布局 JSON 完成后再发布新目录；已有目录拒绝覆盖。
+
+\subsection{快照键的覆盖范围}
+\begin{equation}
+K=H(\mathrm{Document},\mathrm{ResourceKey},\mathrm{SegmentationVersion},
+\mathrm{LayoutVersion},\mathrm{RequestID}).
+\end{equation}
+因此文稿、页面尺寸、样式、资产、校准或布局版本改变都会改变请求上下文。未来若添加字体、数学渲染器、变体和版面覆盖，必须扩展权威输入；当前键不应提前声称覆盖尚不存在的系统状态。
+
+\section{文本审校编辑器与一致性机制}
+\subsection{界面与双向定位}
+\src{editor/app.py}
+左侧为原生纯文本编辑与字形列表，右侧为当前页预览、单字放大及好/不好/待复核评价。点击页面 fragment 将原始源区间转换为显示区间与 UTF-16 光标区间；源文本选择反向定位 occurrence。页面缩放通过毫米到屏幕比例处理，点击命中使用相同变换。
+
+列表可筛选、逐个跳转未评字。显示仅当前页，不为每一个采样点创建界面对象；这减少 Qt 对象开销，但全文排版与场景存储仍按正文规模增长。
+
+\subsection{防抖、取消与过期结果拒绝}
+文本和样式变化递增 revision，取消旧请求，立即禁止旧页面上的评价与导出。输入停止约 280 ms 后启动后台排版；输入法 preedit 不进入持久正文，composition 状态下延迟提交任务。
+
+工作线程在冻结的 Document 与资源集上构建快照。发布时同时检查 revision 和当前请求 key：
+\begin{equation}
+\mathrm{publish}(R)\iff R.\mathrm{revision}=\mathrm{currentRevision}
+\;\land\;R.\mathrm{key}=\mathrm{currentKey}.
+\end{equation}
+过期成功与过期失败都不能覆盖新内容。取消是协作式的，不意味着中途强制终止所有计算；界面仍靠发布检查保证一致性。旧任务结束后可立即调度最新内容。
+
+\subsection{原始换行与原生撤销}
+\src{editor/review.py}
+SourceBuffer 让 Qt 以 LF 显示，同时保存原始换行。编辑时计算显示字符串最长公共前后缀，通过边界映射把局部替换写回 raw，未动区段保持原换行。新换行优先沿用文稿现有 CRLF，其次 CR，否则 LF。
+
+最多缓存 128 个显示文本状态对应的 raw 版本，帮助原生 undo 恢复原换行；超过缓存范围或相同显示串对应不同原始换行的复杂历史，不保证任意编辑序列字节级恢复。这也不是通用操作变换或持久文档事务引擎。
+
+\subsection{评价绑定资产而非字符}
+ReviewBook 以资产 ID 为键，同一资产在多处出现共享评价；重新生成或改动字节导致新哈希，旧评价不会误套。记录作者、生成器、档案版本、运行路径、备注、评分时源码哈希、位置及前后文。上下文是\emph{评分发生时}的信息，不承诺随后编辑自动迁移。
+
+评价变更采用独立 undo/redo 栈，与正文撤销分开；旧资产评价即使不在当前正文也继续保留。没有资产或坏资产不能评价。人工评价不等于生成置信，不会自动写回轨迹、补充训练标签或触发修复。
+
+\subsection{项目保存与 CSV 输出}
+\code{.inkreview} 保存正文、外部生成目录引用、页面/样式与所有评价；不嵌入原轨迹，移动设备仍需要对应目录。保存前与替换前两次核对原文件哈希，同目录临时文件写入后 flush、fsync，再 replace；外部修改或失败时保留旧文件。没有周期自动保存、崩溃恢复，也不能把该项目格式视为完整 \code{.inkdoc} 包。
+
+CSV 以 UTF-8 BOM 输出全部评价，对以等号、加减号、@ 或特定控制字符开始的文本添加文本前缀，防止备注被电子表格当作公式；原项目 JSON 保留原备注。关闭与切换项目时处理未保存修改。原型限制正文十万 scalar、文本导入 2 MiB、项目 16 MiB；这些是资源预算，不是已完成大字库性能验收的证据\cite{editor-note}。
+
+\section{评价指标、数据隔离与实验协议}
+\subsection{协议有效性检查}
+\src{evaluate.py, quality.py}
+运行评估逐字读取轨迹，核查笔数、连续顺序、标准 ID、至少两点、坐标和压力范围、单调时间及画布适配信息；另调用局部几何审计。采样质量审计区分笔数不符、低置信、已纠正错序与需要重录的歧义。协议通过回答“是否符合当前输出契约”，不能独立证明汉字可读、风格真实或笔顺语言学正确。
+
+\subsection{平滑轨迹指标}
+\src{metrics.py}
+DTW 在各笔 32 个弧长点上保留方向，采用
+\begin{equation}
+D_{ij}=\|a_i-b_j\|+\min(D_{i-1,j},D_{i,j-1},D_{i-1,j-1}),
+\quad d_{\rm DTW}=D_{32,32}/64.
+\end{equation}
+分母固定为两序列长度和，而不是最优对齐路径的实际长度。Chamfer 比较采样点双向最近距离；端点误差为起末距离平均；切向与曲率比较在 16 点表示上计算。旧 polyline distance 在正反方向中取带反向惩罚的较小值，与方向保持 DTW 不是同一指标。
+
+渲染指标在 64/128 像素网格以中心线到线段距离减笔宽半径构造墨迹区域，报告裁断距离场差与 IoU。20 维手工 style descriptor 包含包围盒、均值、协方差、笔数、长度统计和八方向直方图；其余弦相似度不是独立训练的作者识别准确率。可选 CASIA 作者嵌入相似度来自因子化模型作者均值向量，两者应在结果表中明确区分。
+
+\subsection{不同点数下的源轨迹评价}
+\src{trajectory_experiment.py}
+为了不偏袒高密度输出，源轨迹实验使用弧长加权双向点到线段距离。设曲线长度为 $L_A,L_B$，概念定义为
+\begin{equation}
+d(A,B)=\frac12\left[\frac1{L_A}\int_A\dist(x,B)\,ds+
+\frac1{L_B}\int_B\dist(y,A)\,ds\right].
+\end{equation}
+实现以保留原顶点且间隔不大于 0.003 的数值积分近似。局部最大偏差包含所有源顶点和积分点，仍是离散近似，不能称为精确连续 Hausdorff 距离。末向用共同物理窗口测量，另报告长度相对误差、端点和操作性短钩指标。评估积分点不写回实际输出。
+
+\subsection{统计单位与泄漏控制}
+\src{experiment.py}
+按字符分组划分，避免同字重复采样跨训练与测试；作者泛化进一步要求作者隔离。训练档案只能由允许字符建立，源候选显式排除查询同字。所有输出和决策应先封存再读取目标原稿评分。重复采样先字内平均，再字间统计；不同参数重复使用同一源点的审计数不是独立样本量。
+
+分层评估按笔数、布局和部件覆盖报告，支持 2,000 次 bootstrap 区间、预算扫描、固定折消融与盲包评分。存在这些工具不意味着每份历史报告都完成了足量盲评或置信区间。已经被观察和用于机制分析的留出集，后续只能诚实称为回归集。
+
+\section{已记录实验结果及其解释}
+\subsection{v5 正式训练与固定折比较}
+以下来自 2026-08-20 仓库记录，原正式实验基线为 \path{25126b35143489e9c89b99e7f474fdae30168608}；与本文工作区基线不同。记录环境为 Python 3.13.9、NumPy 2.5.2、PyTorch 2.11.0+cu128 和 RTX 5070 Ti。三种子都扫描 50,000 条训练记录，batch 8、参考数 8，每 20 步验证，patience 5。本文没有在当前 Mac 重跑这些训练\cite{v5-note}。
+
+\begin{table}[H]\centering
+\caption{历史三种子训练：步数上限不是实际完成步数}
+\begin{tabular}{rrrrl}\toprule
+种子 & 完成步 & 最佳步 & 最佳验证损失 & 状态\\\midrule
+1001 & 180 & 80 & 0.684644 & 早停\\
+2002 & 560 & 460 & 0.655828 & 早停，选用\\
+3003 & 380 & 280 & 0.668275 & 早停\\\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]\centering\small
+\caption{历史固定折消融：58 个有效评分字符；距离越低越好，嵌入相似度越高越好}
+\begin{tabular}{lrrrr}\toprule
+方法 & Polyline & DTW & SDF & 作者嵌入相似度\\\midrule
+标准骨架 & 0.138704 & 0.064604 & 0.023085 & 0.947502\\
+v4 adaptive & 0.080633 & 0.036816 & 0.017703 & 0.947318\\
+v5 safe & 0.080633 & 0.036816 & 0.017703 & 0.947318\\
+v5 forced & 0.103707 & 0.048835 & 0.020767 & 0.862889\\\bottomrule
+\end{tabular}
+\end{table}
+59 个生成文件中有一字因既有笔数不匹配未评分；safe 的 59 个文件全部低模型置信回退。因此 safe 与 v4 数字相同，\emph{不能}解释为神经分支已达到 v4 质量。强制路径 DTW 约差 32.6\%、SDF 约差 17.3\%；骨架的作者嵌入分数略高于 v4，也说明该代理不能独立排列感知个性化质量。
+
+历史全库 v4 平滑生成记录为 9,574/9,574、149.58 秒、结构检查失败为 0。它说明该次环境和档案下运行完成，不是跨机器性能承诺，更不是每字视觉正确的证明。早期单评审 60 项 smoke 盲包为 v4 胜 57、平 3、v5 胜 0；不能据一个评审构造正式人群置信结论。
+
+\subsection{完整轨迹表示与跨字适配的不同结果}
+原始轨迹实验按训练 458、开发 179、留出 156 字分组；跨字评分为有兼容供体的受限 64 字子集。A 为训练档案 v4，B 为原完整轨迹包围盒放置，C 为同供体同变换简化，M 为同供体 16/8 点和样条表示对照\cite{raw-note}。
+
+\begin{table}[H]\centering\small
+\caption{历史跨字 64 目标：仅比较迁移部件，不由未变笔画稀释差异}
+\begin{tabular}{lrrrr}\toprule
+路径 & 平均几何偏差 & 长度绝对相对差 & 末向误差 & 优于/差于 A\\\midrule
+A & 0.040304 & 13.92\% & $20.00^\circ$ & ---\\
+B & 0.046024 & 18.31\% & $18.29^\circ$ & 21/43\\
+C & 0.046011 & 18.35\% & $18.29^\circ$ & 20/44\\
+M & 0.046526 & 19.17\% & $18.67^\circ$ & 20/44\\\bottomrule
+\end{tabular}
+\end{table}
+B 相对 A 几何偏差增加 14.2\%，却改善平均末向 $1.71^\circ$。C 相对 B 点数从 5,886 降到 2,529，减少 57.0\%，说明简化具有存储收益；不能由此推导跨字形状更接近作者。这个旧 B 实验还出现相对 A 新增严格交叉，不能与后来带安全门槛的 D 混为同一算法。
+
+\subsection{共同最小二乘与多作者结果}
+D 改用共同锚点拟合、候选重排与整部件准入。开发冻结后，在 scx 的 27 个新确认目标与 mjb 的 53 个目标记录如下\cite{context-note}。
+\begin{table}[H]\centering\small
+\caption{历史 D 确认结果：几何收益与方向代价同时存在}
+\begin{tabular}{llrr}\toprule
+作者/字数 & 方法 & 平均几何偏差 & 末向误差\\\midrule
+scx/27 & A & 0.036626 & $20.34^\circ$\\
+ & D & 0.035502 & $22.14^\circ$\\
+mjb/53 & A & 0.041873 & $14.24^\circ$\\
+ & D & 0.040552 & $14.75^\circ$\\\bottomrule
+\end{tabular}
+\end{table}
+几何均差分别下降约 3.07\% 和 3.16\%，末向却变差。在后来的 wsq 64 字新作者验证中，D/E 相对 A 的部件几何均差约增加 1.42\%、末向约增加 $1.50^\circ$；末向重排 E 没有改选任何供体。结论应是存在条件性收益与跨作者失效，不能宣称普遍提升。
+
+作者分层末向 H 在另一批 42 字/60 原稿留出数据中，将末向从 $26.03^\circ$ 降到 $22.56^\circ$，几何均差仅从 0.043118 到 0.043116；六个改选字中三个几何恶化。该批物理作者身份未独立确认，不应称为新作者验证\cite{terminal-note}。
+
+\subsection{同字重建、结构修复与负实验}
+已采集整字重建在两份档案的 128 个目标中有 122 个通过映射准入，完整路径 31,648 点坐标与压力逐项等于归一化原稿，简化为 15,851 点。剩余六字拒绝并保留在报告中；不得以 122 个成功样本宣称全部无损\cite{observed-note}。
+
+结构传递消融中，G 相对 A 的既有 144 有原稿回归均差由 0.044438 变为 0.044450，略差约 0.027\%；G 的优势是限制影响范围和拒绝越界，而不是已经证明作者质量改善。全图重建档案 C 均差为 0.043497，但改变了共享风格与未修正笔，不能把全部均值收益归给源中心线本身\cite{delta-note}。
+
+\begin{longtable}{L{33mm}L{70mm}L{39mm}}
+\caption{研究策略的冻结结论概览}\\\toprule
+策略 & 记录结论 & 推广边界\\\midrule\endfirsthead
+\toprule 策略 & 记录结论 & 推广边界\\\midrule\endhead
+共同位移场 & 开发无额外收益，强度冻结 0 & 不默认启用\\
+受限宽高比 & 未同时通过几何和末向门槛，冻结等比 & 不放开横纵缩放\\
+信任半径/平移 & 均未通过开发门槛，半径 0 & 保留 D\\
+实例变体 & 有真实形态多样性，开发质量门槛未过 & 不证明自然变化\\
+经验布局范围 & 少数改善，涤/铜出现误伤 & 范围不能当质量标签\\
+交叉拟合近邻 & 有效支持少，开发回退 D & 不降低门槛挽救结果\\
+训练试移风险 & 有限区分能力，仍误放涤 & 不进入正式默认\\
+46 维逻辑模型 & 预测信息有限，未解决实际误伤 & 保留训练内隔离\\
+上下文偏移 & Brier 小幅下降，输出决策未变 & 扩展已暂停\\
+结构位移 guard & 局部性较强，整体几何未提升 & 仅实验与机制分析\\
+\bottomrule
+\end{longtable}
+
+\section{本次工作区核验与工程复现}
+\subsection{本次已实际执行的检查}
+2026-10-10 在当前工作区使用已有虚拟环境执行完整测试：
+\begin{lstlisting}
+.venv/bin/python -m pytest
+200 passed, 4 skipped in 4.80s
+\end{lstlisting}
+跳过不计为通过；当前环境缺少可选 PyTorch，神经相关测试无法据此宣称已验证。该测试结果与此前 2026-10-09 编辑器记录的数量一致，但这里是本次实际运行结果。本文编写未改动生成、训练或 UI 实现，也未自动重建个人档案、批量重生成原有产物或重新运行 GPU 训练。
+
+\subsection{测试覆盖的主要契约}
+\begin{longtable}{L{34mm}L{110mm}}
+\caption{测试主题与可核查契约}\\\toprule
+主题 & 当前测试文件及重点\\\midrule\endfirsthead
+\toprule 主题 & 当前测试文件及重点\\\midrule\endhead
+结构与对齐 & \path{tests/test_structures.py}、\path{tests/test_alignment_order.py}：树、映射、纠错和歧义隔离。\\
+核心生成 & \path{tests/test_pipeline.py}、\path{tests/test_component_generation.py}：端到端协议、原型与回退。\\
+画布与采集 & \path{tests/test_canvas_boundary.py}、\path{tests/test_capture_boundary_ui.py}：整体适配、触边及局部形状。\\
+高保真通道 & \path{tests/test_source_trajectory.py}、\path{tests/test_source_generation_entry.py}：几何/压力/时间同索引、来源与身份。\\
+源重建与修正 & \path{tests/test_observed_reconstruction.py}、\path{tests/test_reviewed_geometry.py}：原稿保护、回退和修正局部性。\\
+结构修复 & \path{tests/test_structure_corrections.py}、\path{tests/test_structure_delta.py}：哈希绑定、裁切恢复、位移传递及越界拒绝。\\
+研究策略 & 对应 \path{tests/test_*risk.py}、\path{tests/test_component_trust.py} 等：分组隔离、特征和冻结回退。\\
+页面内核 & \path{tests/test_document_layout.py}、\path{tests/test_document_qt.py}：源映射、分页前进、导出门槛和渲染。\\
+审校编辑器 & \path{tests/test_editor_review.py}、\path{tests/test_editor_qt.py}：版本评价、保存冲突、点击、IME、撤销和旧任务拒绝。\\
+\bottomrule
+\end{longtable}
+离屏 Qt 测试能检验事件和状态，却不能代替 macOS/Windows 真机输入法候选切换、真实数位笔压力或大文档交互延迟测量。测试数量也不是质量指标的替代品。
+
+\subsection{最小生产复现流程}
+以下示例在仓库根目录运行；作者与路径为需要替换的参数，不自动创建或提供私人样本。源代码副本可重建工具链，个人化结果还需合法取得的对应数据。
+\begin{lstlisting}
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[desktop,dev]'
+.venv/bin/inkstruct structures info
+.venv/bin/inkstruct samples import /path/to/samples --writer writer_demo
+.venv/bin/inkstruct profile build --writer writer_demo
+.venv/bin/inkstruct generate --writer writer_demo \
+  --text '墨构' --run-id technical_demo
+.venv/bin/inkstruct evaluate --run outputs/writer_demo/technical_demo
+\end{lstlisting}
+如结构库不存在，需要获取仓库绑定的公共子模块并先运行 \code{structures build}。依赖版本以本次 \path{pyproject.toml} 为准；Windows/CUDA 锁文件不能直接视为 Mac 的可移植环境锁。
+
+\subsection{显式实验与文档入口}
+\begin{lstlisting}
+.venv/bin/inkstruct generate --writer writer_demo \
+  --profile profiles/writer_demo/profile.json \
+  --source-profile /path/to/source-profile.json \
+  --trajectory-mode source-raw --source-nested-views \
+  --text '墨构' --run-id source_demo \
+  --output-root outputs/source_experiments
+
+.venv/bin/inkstruct document edit \
+  --source /path/to/source.txt \
+  --run outputs/writer_demo/technical_demo
+\end{lstlisting}
+高保真副档案需要建档时保留源轨迹；仅更改生成参数不能从旧 8 点控制量恢复原采样。未见字评估还需 \code{--source-characters} 白名单，并单独由训练组建立 A 档案。\code{--source-observed} 表示已采集字重建，不应混入跨字泛化分数。
+
+\subsection{文稿与快照复现}
+本文主文件为单文件 XeLaTeX 文档，不依赖外部图片、个人字形或 BibTeX 数据库。图表由 TeX 内建绘制，引用表指向仓库源码与记录。推荐在本目录编译：
+\begin{lstlisting}
+xelatex -interaction=nonstopmode -halt-on-error inkstruct_technical_paper.tex
+xelatex -interaction=nonstopmode -halt-on-error inkstruct_technical_paper.tex
+\end{lstlisting}
+第二遍用于目录、交叉引用和页码。随附源码快照记录审计基线、原工作区状态及参与技术论述的源文件哈希；它不打包私人数据，也不将未提交文件自动变为版本库历史。
+
+\section{复杂度、工程局限与后续问题}
+\subsection{主要成本来源}
+设标准笔数为 $n$，源点总数为 $P$，文稿 occurrence 数为 $N$。对齐代价矩阵约 $O(n^2)$，保守替代匹配最坏 $O(n^4)$；不等笔数 DP 状态数为 $O(nm)$。v4 对每笔固定控制点和有限输出点，几何生成近似线性于笔数，但候选索引中同身份原型检索仍有扫描成本。
+
+源轨迹输出至少需要 $O(P)$ 时间与空间；严格交叉判定依赖笔对和线段对，点数多时会明显增加开销。快速候选路径减少昂贵验证次数，却不改变最坏所有候选均需验证的可能。Transformer 自注意力随令牌数呈二次成本；40 维投影不等于整网计算复杂度为常数。
+
+页面分段、测量和 PaintOp 建立随 occurrence 和源点实例总数增长；相同资产只读一次，但同字多次出现仍各有场景笔画坐标。当前只显示单页降低界面绘制成本，没有证明全文布局和所有缓存都满足严格低延迟或总内存上界。
+
+\subsection{当前实现中值得持续跟踪的技术债}
+\begin{enumerate}
+\item \textbf{结构与档案兼容。}旧档案是在可能裁切的参考上学习残差；修参考后若不重新校准，旧残差可能不合适；直接全量重建又会影响未改字。
+\item \textbf{细节表示损失。}v4 平均与样条可平滑噪声，也会损伤短钩和折角；源点保真仅解决表示，不解决供体与上下文匹配。
+\item \textbf{置信语义。}对齐、候选、风险评分、模型输出和人工评价各有含义，不能共享一个未经校准的“质量百分比”。
+\item \textbf{动态与几何对应。}平滑路径压力插值、固定笔间间隔和索引线性时间不是原笔速度曲线恢复；当前静态页面也不使用压力笔刷。
+\item \textbf{语言与字体边界。}IDS、GB2312 和默认 em 度量提供工程先验，不代表全部规范字形、复杂文字与 Unicode 排版已覆盖。
+\item \textbf{版本与持久化。}运行身份对默认实现源码覆盖有限；资产字节哈希过于敏感；原子替换不等于完备的崩溃恢复和可移植文档包。
+\item \textbf{验证外推。}若用少数作者、单次采集和已观察回归调参，无法推断跨作者自然性。需独立字集、重复采集及多人盲评。
+\end{enumerate}
+
+\subsection{后续验证次序的分析性建议}
+先完善来源明确的标准缺陷与档案兼容验证，保持未修改字符的保护集；再针对候选覆盖、供体内部比例和上下文接触分别设计实验。泛化评估应预先固定训练/开发/测试边界，并同时报告平均收益、最差局部损伤、回退比例和覆盖缺口。
+
+文档方向宜先完成可验证的源补丁事务、出现身份迁移、字体与标点度量、Unicode 标准测试和总资源预算，再引入 Markdown、数学、表格与自由版面。这里只是基于当前边界的工程建议，不将这些工作写成已完成特性或用户已批准的新开发计划。
+
+\section{结论}
+InkStruct 当前实现体现了结构确定内容、档案提供个性化、原始轨迹保留细节、页面快照隔离呈现的分层设计。v4 以显式对齐、共同部件坐标与保守回退形成可在 CPU 上运行的默认流程；v5 与源轨迹实验扩展了表达能力，但现有证据不支持无条件替换默认路径。结构修复、几何兼容和作者风格质量是三个独立验收目标，任何一个代理指标通过都不能覆盖另两个目标。
+
+页面与审校实现把字库生成扩展为可检查的文本工作流：原始源码可追溯到页面出现，资产身份决定评价继承，异步版本与导出门槛保护当前状态。该实现已具备具体自动测试支持，同时明确保留 Unicode、复杂文档、跨平台设备和自然性评估的未完成边界。本文将默认行为、可选开关、实验负结果与未来范围分别记录，为后续重构、复现和论文写作提供可核查的技术基线。
+
+\appendix
+\section{主要模块到实现责任的索引}
+表中路径均相对于 \path{src/inkstruct/}。这些索引用于定位实现，不把模块名称作为效果证明。
+\begin{longtable}{L{64mm}L{80mm}}
+\toprule 模块 & 责任\\\midrule\endfirsthead
+\toprule 模块 & 责任\\\midrule\endhead
+\path{schemas.py} & 生成层数据类及递归序列化\\
+\path{structures.py} & IDS、标准图、SQLite、字符包与逻辑哈希\\
+\path{geometry.py} & 包围盒、长度、重采样、几何签名、样条\\
+\path{samples.py} & 原样本读取、导入、合并、替换和索引迭代\\
+\path{alignment.py} & 全局指派、错序判别、拆并动态规划\\
+\path{profile.py} & 多层原型建档、动态统计、因子化与源通道\\
+\path{component_style.py} & 上下文键、部件笔槽、相对框与变换\\
+\path{generate.py} & v4/v5 生成、回退、批量身份与续跑\\
+\path{canvas_boundary.py} & 整字适配和边界诊断\\
+\path{render.py} & 单字 SVG/PNG 预览\\
+\path{model.py}、\path{train.py} & 分层神经模型、CASIA episode 与正式训练\\
+\path{torch_render.py}、\path{factorized.py} & 可微曲线损失与固定结构上下文编码\\
+\path{metrics.py}、\path{evaluate.py} & 轨迹/渲染/风格代理指标和运行评估\\
+\path{experiment.py}、\path{quality.py} & 分组实验、预算/盲包、采样质量审计\\
+\path{recommend.py} & 常用字补采、信息增益、分档覆盖\\
+\path{source_trajectory.py} & 完整归一化源点、动态与标准映射\\
+\path{component_views.py} & 可验证的嵌套部件检索视图\\
+\path{exemplar_index.py} & 同作者跨字完整部件索引\\
+\path{exemplar_generation.py} & raw/simplified 可选生成与审计\\
+\path{fast_placement.py} & 候选先排序后验证及锚点缓存\\
+\path{contextual_trajectory.py} & 共同等比拟合和可选位移场\\
+\path{trajectory_experiment.py} & 保护简化、交叉、源轨迹几何指标\\
+\path{observed_reconstruction.py} & 已采集整字原稿优先\\
+\path{terminal_selection.py} & 末向感知完整供体重排\\
+\path{author_terminal_context.py}、\path{author_terminal_hierarchy.py} & 作者条件及分层末向证据\\
+\path{component_trust.py}、\path{component_trust_translation.py} & 连续偏移与共同平移约束\\
+\path{component_aspect.py} & 受限对角缩放\\
+\path{exemplar_variation.py}、\path{component_variation_evidence.py} & 完整实例变体与训练形状相容范围\\
+\path{learned_component_layout.py}、\path{calibrated_component_layout.py} & 布局残差学习和训练内校准\\
+\path{layout_risk.py}、\path{component_layout_risk.py} & 字符分组与近邻风险证据\\
+\path{counterfactual_layout_risk.py}、\path{trajectory_layout_risk.py} & 试移风险与逐笔几何特征\\
+\path{grouped_logistic_risk.py}、\path{context_offset_risk.py} & 分组逻辑模型与类别偏移\\
+\path{geometry_audit.py}、\path{structure_defects.py} & 输出及源结构缺陷筛查\\
+\path{outline_median.py}、\path{structure_corrections.py} & 白名单轮廓重建、隔离参考修正\\
+\path{reviewed_geometry.py}、\path{topology_repair.py} & 局部可选修正与有界交叉保护\\
+\path{structure_delta.py} & 固定风格的参考差向量传递\\
+\path{collector.py}、\path{capture_boundary.py} & 采集任务与触边反馈\\
+\path{desktop.py}、\path{generator_app.py} & Qt 公共界面与生成器入口\\
+\path{stroke_reference.py} & 标准笔数和笔顺参考\\
+\path{cli.py} & 命令路由、默认路径与参数检查\\
+\path{document/schema.py}、\path{document/source.py} & 原始源码、半开区间、保守分段\\
+\path{document/cli.py} & 文档预览、编辑与导出入口\\
+\path{assets/glyph_provider.py} & 不可变资产、字节身份与 em 度量\\
+\path{layout/plain.py} & 毫米测量、断行、分页与诊断\\
+\path{scene/schema.py} & Fragment、PaintOp 与页面快照\\
+\path{renderers/pages.py}、\path{renderers/qt.py} & 静态导出与 Qt 当前页显示\\
+\path{editor/review.py}、\path{editor/app.py} & 评价、保存、原始换行、异步 UI\\
+\bottomrule
+\end{longtable}
+
+\section{关键参数和语义速查}
+\begin{longtable}{L{53mm}L{30mm}L{61mm}}
+\toprule 参数 & 当前值 & 语义\\\midrule\endfirsthead
+\toprule 参数 & 当前值 & 语义\\\midrule\endhead
+用户归一化最长边 & 0.85 & 对齐时统一整字尺度\\
+对齐／控制点数 & 16／8 & 不代表原始采样点数\\
+生成节点范围 & 24--128 & 仅平滑路径，raw 可变长\\
+标准到用户次序先验 & 0.025 & 弱先验，非硬次序锁\\
+纠错改善／替代间隔 & 0.04／0.012 & 同笔数非恒等映射接受门槛\\
+原型一一映射门槛 & 0.30 & 低于则不进该笔原型\\
+同字原稿逐笔门槛 & 0.35 & 更保守的整字准入\\
+源供体均值门槛 & 0.55 & 同时要求结构置信 0.8\\
+最大放置候选数 & 16 & 不保证全供体全局最优\\
+源笔长度比范围 & 0.4--2.5 & 相对基线 A 的保护\\
+简化输出误差预算 & 0.004 & 归一化字框单位\\
+整字越界适配留白 & 0.02 & 仅真正超界时启用\\
+笔间时间间隔 & 60 ms & 合成约定，非作者实测分布\\
+普通默认页面／边距 & A4／20 mm & 样式可调\\
+字号／行高／笔宽 & 6／9／0.3 mm & 固定笔宽渲染\\
+编辑防抖 & 280 ms & IME composition 时延迟\\
+原始换行历史缓存 & 128 状态 & 不等于持久事务日志\\
+正文／文本文件上限 & 十万 scalar／2 MiB & 编辑原型预算\\
+单资产／审校项目上限 & 各 16 MiB & 不含全项目总资源保证\\
+单页 PNG 像素预算 & 四千万 & DPI 与页面尺寸共同决定\\
+\bottomrule
+\end{longtable}
+
+\section{来源、许可与引用说明}
+以下参考项均为本地仓库的一手实现或实验记录，文档内容核对日期为 2026-10-10。本文不把项目自述当作外部独立基准；无需联网即可查阅，算法符号用于解释源码而非声称发明 Hungarian、B 样条、Transformer 或 RDP。
+
+项目代码许可为 MIT。仓库 \path{THIRD_PARTY_DATA.md} 将 Make Me a Hanzi dictionary 标记为 LGPL-3.0-or-later、graphics 标记为 Arphic Public License；这是来源记录的转述。个人采样与 CASIA 数据不属于项目代码许可，不随本文分发。论文没有复制用户轨迹图、样本文件或模型权重。
+
+\begin{thebibliography}{99}
+\small
+\bibitem{repo-main} InkStruct. 项目说明与依赖元数据. \path{README.md}; \path{pyproject.toml}; \path{THIRD_PARTY_DATA.md}.
+\bibitem{repo-arch} InkStruct. 架构说明与实现记录. \path{docs/ARCHITECTURE.md}; \path{docs/IMPLEMENTATION_REPORT.md}; \path{src/inkstruct/}.
+\bibitem{alignment-note} InkStruct. Stroke Order Alignment v2. \path{docs/STROKE_ORDER_ALIGNMENT_V2.md}; \path{src/inkstruct/alignment.py}.
+\bibitem{v5-note} InkStruct. v5 Implementation and Formal Training Results, 2026-08-20. \path{docs/V5_IMPLEMENTATION_AND_PRELIMINARY_RESULTS.md}; \path{configs/training/v5_formal.json}.
+\bibitem{raw-note} InkStruct. 完整源轨迹直接变换实验, 2026-10-07. \path{docs/RAW_TRAJECTORY_EXPERIMENT_20261007.md}.
+\bibitem{context-note} InkStruct. 上下文完整轨迹优化与已知问题推进, 2026-10-07. \path{docs/CONTEXTUAL_TRAJECTORY_PROGRESS_20261007.md}; \path{docs/SOURCE_GENERATION_ENTRY_20261007.md}.
+\bibitem{observed-note} InkStruct. 已采集整字的原稿优先重建, 2026-10-07. \path{docs/OBSERVED_RECONSTRUCTION_20261007.md}.
+\bibitem{terminal-note} InkStruct. 末向选择与作者条件参考, 2026-10-07. \path{docs/TERMINAL_SELECTION_EXPERIMENT_20261007.md}; \path{docs/AUTHOR_TERMINAL_CONTEXT_20261007.md}.
+\bibitem{trust-note} InkStruct. 完整部件的连续偏移约束与共同平移实验, 2026-10-07. \path{docs/COMPONENT_TRUST_EXPERIMENT_20261007.md}; \path{docs/COMPONENT_ASPECT_EXPERIMENT_20261007.md}.
+\bibitem{variation-note} InkStruct. 跨字同部件自然变化参考与完整实例抽样实验, 2026-10-07. \path{docs/EXEMPLAR_VARIATION_EXPERIMENT_20261007.md}.
+\bibitem{layout-note} InkStruct. 训练布局与经验范围控制实验, 2026-10-07. \path{docs/LEARNED_COMPONENT_LAYOUT_20261007.md}.
+\bibitem{multiwriter-note} InkStruct. 三作者冻结布局回归, 2026-10-07. \path{docs/LAYOUT_MULTIWRITER_REGRESSION_20261007.md}.
+\bibitem{risk-note} InkStruct. 布局风险实验系列, 2026-10-07. \path{docs/CROSSFIT_LAYOUT_RISK_20261007.md}; \path{docs/COUNTERFACTUAL_LAYOUT_RISK_20261007.md}; \path{docs/TRAJECTORY_LAYOUT_RISK_20261007.md}; \path{docs/GROUPED_LOGISTIC_RISK_20261007.md}; \path{docs/CONTEXT_RISK_PAUSED_20261007.md}.
+\bibitem{structure-note} InkStruct. 标准结构扩展审计与首批修复, 2026-10-07. \path{docs/STRUCTURE_AUDIT_REPAIR_20261007.md}.
+\bibitem{repair-note} InkStruct. 已复核局部几何修正的可选入口, 2026-10-07. \path{docs/REVIEWED_GEOMETRY_ENTRY_20261007.md}; \path{configs/geometry_repairs/reviewed_v1.json}.
+\bibitem{delta-note} InkStruct. 固定风格的结构修复传递与作用范围消融, 2026-10-07. \path{docs/STRUCTURE_DELTA_EXPERIMENT_20261007.md}.
+\bibitem{page-note} InkStruct. 排版计划评审及构建记录, 2026-10-09. \path{docs/PAGE_LAYOUT_PROGRESS_20261009.md}.
+\bibitem{editor-note} InkStruct. 纯文本字形检查应用, 2026-10-09. \path{docs/TEXT_REVIEW_APP.md}.
+\end{thebibliography}
+\end{document}

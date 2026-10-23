@@ -1,0 +1,27 @@
+\chapter{应用、项目与资源}\label{ch:basics}
+\section{启动编辑器}
+macOS 用户解压当前交付包，打开完整的 \code{InkStructEditor.app}，无需另装 Python。更新前先保存项目并退出旧版，再打开新应用；不要单独移动包内工作程序。
+
+本册对应 \code{InkStructEditor-macos-arm64-auto-scripts.zip}，包含公式图形化设置重设计，并保留旧版键盘焦点修复。正常打开后，菜单栏属于 InkStruct，左侧源码区可输入。
+
+源码用户可用仓库启动脚本。Windows 需使用配套的启动或离线安装材料，不能运行 macOS 的 \code{.app}。
+
+\section{三类对象要分开保存}
+\par\noindent\begin{tabularx}{\linewidth}{@{}P{28mm}P{34mm}Y@{}}
+\toprule
+对象 & 常见格式 & 用途\\\midrule
+文档源码 & \code{.md}、\code{.txt} & 保存要写的内容与标记；单独保存不带字形、评价和完整样式。\\
+原生项目 & \code{.inkdoc} & 保存内容、排版设置、已选字形、内嵌资源、模板绑定与评价；日常继续编辑和跨机传递优先使用。\\
+可复用模板 & 模板 \code{.json} & 规定纸张、正文区、固定填写区和规则；不包含某份报告的正文。\\
+\bottomrule
+\end{tabularx}
+
+SVG/PNG 是结果文件，不代替项目。生成目录提供汉字等轨迹，符号 ZIP 提供录制样本；项目内嵌已纳入的资源，不自动复制整个外部字库。
+
+\section{旧项目如何处理}
+旧数字表格项目 \code{.inktable} 可导入并另存为 \code{.inkdoc}，引用的样本包须仍在原位置且内容一致。迁移后基线可能变化；严格复现旧排版时保留旧项目与旧工具。
+
+\code{.inkreview} 用于独立字形检查，保存评价与生成目录引用，不内嵌全部轨迹。本册的保存与恢复以 \code{.inkdoc} 为准。
+
+\section{屏幕尺寸与纸面尺寸}
+预览缩放只改变屏幕显示，不改变纸面毫米尺寸；“100\%”不是物理校准。普通页面默认为 A4、四边页边距 20 mm；其他纸型和正文区域通过页面模板设置。

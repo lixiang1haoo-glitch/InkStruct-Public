@@ -552,6 +552,26 @@ def _target_coverage_score(
     )
 
 
+def greedy_marginal_order(candidates, gain, tie_key):
+    """Shared lazy weighted-set-cover order; caller updates coverage after each yield.
+
+    Gains must be nonnegative and nonincreasing as coverage grows. Keeping the
+    tie key explicit preserves the legacy planner's exact order while allowing
+    an experimental collection budget to use the same selection mechanism.
+    """
+    heap = [(-gain(c), tie_key(c), c) for c in candidates]
+    heapq.heapify(heap)
+    while heap:
+        negative_gain, tie, character = heapq.heappop(heap)
+        actual_gain = gain(character)
+        if abs(actual_gain + negative_gain) > 1e-12:
+            heapq.heappush(heap, (-actual_gain, tie, character))
+            continue
+        if actual_gain <= 1e-15:
+            return
+        yield character
+
+
 def plan_target_coverage_tiers(
     structures: StructureRepository,
     profile: StyleProfile,
@@ -665,30 +685,15 @@ def plan_target_coverage_tiers(
     candidate_pool = candidate_universe - accepted_characters
     for tier, threshold in enumerate(thresholds, start=1):
         phase: list[str] = []
-        heap = [
-            (
-                -candidate_gain(character),
-                candidate_metadata[character]["stroke_count"],
-                ord(character),
-                character,
-            )
-            for character in candidate_pool - selected_set
-        ]
-        heapq.heapify(heap)
+        order = greedy_marginal_order(
+            candidate_pool - selected_set, candidate_gain,
+            lambda c: (candidate_metadata[c]["stroke_count"], ord(c)),
+        )
         while _target_coverage_score(covered_mass, target_mass) + 1e-10 < threshold:
-            if not heap:
-                raise RuntimeError(f"target coverage score {threshold} is unreachable")
-            negative_gain, stroke_count, codepoint, character = heapq.heappop(heap)
-            if character in selected_set:
-                continue
-            actual_gain = candidate_gain(character)
-            if abs(actual_gain + negative_gain) > 1e-12:
-                heapq.heappush(
-                    heap, (-actual_gain, stroke_count, codepoint, character)
-                )
-                continue
-            if actual_gain <= 1e-15:
-                raise RuntimeError(f"target coverage score {threshold} is unreachable")
+            try:
+                character = next(order)
+            except StopIteration as exc:
+                raise RuntimeError(f"target coverage score {threshold} is unreachable") from exc
             selected.append(character)
             selected_set.add(character)
             phase.append(character)

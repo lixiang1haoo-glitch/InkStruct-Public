@@ -1,0 +1,14 @@
+{
+  "policy": "all_component_layout_risk_v1",
+  "scope": "development extension after sparse single-component training; existing observed regression only",
+  "profiles": "Reuse exact 12 frozen character-crossfit profiles/calibrations from layout_risk training_v1; no rebuilding or target fold inclusion",
+  "tasks": "Every nonroot leaf component with >=2 strokes, public confidence>=0.8 and compatible train-fold candidates. Each component is proposed independently against A, never combine multiple proposals in a glyph",
+  "fixed": "Same D/M donor choice, M_D_1.0 proposal, 22 inference-only features, score labels, distance<=2, minimum5 votes, maximum8 votes, scale floor0.1, thresholds and quality gates",
+  "grouping": "One label per author-character-component after averaging repeat captures; query character excluded across authors; feature IQR from median features per author-character; only nearest component in each author-character group may vote",
+  "control": "Single-component prior examples replayed through identical grouped learner; retain original A/D/M and the old source candidate. Any new decision is from expanded evidence and grouping, not changed trajectories or donor selection",
+  "development_scopes": ["author", "pooled"],
+  "development_thresholds": [0.6, 0.8, 1.0],
+  "selection": "Choose among all-component development arms only; strictly lower mean geometry vsD, angle<=D+0.5deg, every character<=1.05D, each stroke max-error increment<=0.005, unchanged donors; tie lower geometry, author, higher threshold; otherwise D",
+  "regression": "Use frozen choice on existing 42 user001 and 144 scx/mjb/wsq cases; single-component control at same frozen scope/threshold; no regression tuning",
+  "limits": "No fresh test claim, no calibrated naturalness probability, overlapping characters and components not independent samples; crossfit/full-train distribution shift remains"
+}

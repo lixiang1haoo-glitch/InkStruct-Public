@@ -1,0 +1,18 @@
+{
+  "version": "terminal_selection_protocol_v1",
+  "development": "existing 32 scx cross-character development tasks",
+  "confirmation": "wsq; previously unused author; hash-character training/test groups",
+  "candidate_policy": "same original top 16 compatible whole-source components as D",
+  "placement_policy": "same positive shared scale and translation as D; never deform tips",
+  "terminal_references": ["baseline", "structure"],
+  "weights": [0.0, 0.0025, 0.005, 0.01, 0.02, 0.04],
+  "terminal_window": "min(0.02, 0.15 * reference_stroke_length) normalized glyph units",
+  "penalty": "equal-stroke mean of 1 minus cosine similarity; undefined directions abstain",
+  "selection_rule": "among variants with geometry mean no more than 1% above D and activation count equal to D, minimize mean terminal angle error; then geometry, weight, reference; if no improvement over D keep D",
+  "confirmation_cap": 64,
+  "confirmation_order": "round robin by component context using existing raw-transform-v1 character hashes",
+  "evaluation_unit": "character; average target component stroke metrics within each character",
+  "confirmation_rule": "report A/D/frozen E on the same targets, with coverage/fallback/geometry/terminal direction/arc length; no tuning or default promotion based on confirmation",
+  "data_policy": "same character repeats stay together; target captures used only after all selection is finished",
+  "limitations": "exploratory development, one new author, descriptive paired results; no significance claim"
+}

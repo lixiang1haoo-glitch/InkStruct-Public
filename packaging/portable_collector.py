@@ -17,6 +17,8 @@ from inkstruct.stroke_reference import (
     create_stroke_reference_widget_class,
     load_reference_bundle,
 )
+from inkstruct.symbol_capture import CHARACTERS, SymbolStorage
+from inkstruct.symbol_capture_ui import install_symbol_tab
 
 
 def resource_path(name: str) -> Path:
@@ -141,6 +143,7 @@ class CollectorWindow(collector_ui.MainWindow):
         if line_index >= 0:
             self.tabs.removeTab(line_index)
         self.tabs.setCurrentWidget(self.single_widget)
+        install_symbol_tab(self, collector_ui, QtCore, QtGui, QtWidgets)
         self.apply_ui_settings(self.ui_settings)
         self.setWindowTitle("InkStruct 墨构 · 轻量轨迹采集器")
         if self.output_root is not None:
@@ -173,7 +176,22 @@ def run_self_test(output_path: Path) -> int:
                 device_pixel_ratio=1.0,
             )
             sample = json.loads(sample_path.read_text(encoding="utf-8"))
+            symbol_task = CollectionTask.create(
+                "symbol-self-test", "builtin:symbols", "selftest", [("α", 5, 0)]
+            )
+            symbol_storage = SymbolStorage(root / "symbol_collection")
+            _, symbol_path = symbol_storage.save_single(
+                writer_id="selftest", task=symbol_task, item=symbol_task.current_item(),
+                trajectory=trajectory, canvas_width=560, canvas_height=320,
+                device_pixel_ratio=1.0,
+            )
+            symbol_sample = json.loads(symbol_path.read_text(encoding="utf-8"))
+            recovered = symbol_storage.reconcile_task(symbol_task)
             checks = {
+                "symbol_character_count": len(CHARACTERS),
+                "symbol_schema": symbol_sample["schema_version"],
+                "symbol_variable_strokes": symbol_sample["stats"]["stroke_count"] == 2,
+                "symbol_recovered": recovered == 1,
                 "mapping_character_count": len(STROKE_COUNTS),
                 "reference_character_count": len(STROKE_REFERENCES),
                 "ten_expected_strokes": STROKE_COUNTS.get("十"),
@@ -184,6 +202,10 @@ def run_self_test(output_path: Path) -> int:
                 "legacy_npy_created": any(root.rglob("*.npy")),
             }
             passed = checks == {
+                "symbol_character_count": 188,
+                "symbol_schema": "inkstruct_symbol_sample_v1",
+                "symbol_variable_strokes": True,
+                "symbol_recovered": True,
                 "mapping_character_count": 9574,
                 "reference_character_count": 9574,
                 "ten_expected_strokes": 2,

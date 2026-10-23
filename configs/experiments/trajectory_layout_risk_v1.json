@@ -1,0 +1,13 @@
+{
+  "policy": "trajectory_layout_risk_v1",
+  "scope": "feature ablation on fixed crossfit trial labels; previously observed development/regression only",
+  "fixed": "Same 3088 labeled training interventions, original fold profiles, A/D/M outputs, source donors, labels, grouped votes, distance2, minimum5/maximum8, scale floor0.1, development/regression cohorts and quality gates",
+  "geometry_features": "For each selected standard stroke compare D and proposal P to frozen v4 A using unified polyline evaluation: mean distance, max distance, endpoint distance, terminal angle, relative absolute arc-length error, startpoint distance; summarize D/A mean and max plus per-stroke P/A-D/A mean and max, normalized by [0.05,0.05,0.05,30deg,0.25,0.05] =>24 features. No target original provided",
+  "distance": "IQR scale each feature from author-character medians; weighted sum of mean squared standardized distances in old22/new24 blocks, then square root; weight0 exactly old metric, not dimension dilution",
+  "geometry_weights": [0.0, 0.25, 0.5, 0.75, 1.0],
+  "development_scopes": ["author", "pooled"],
+  "development_thresholds": [0.6, 0.8, 1.0],
+  "selection": "Select among positive geometry weights on existing user001 dev: mean geometry<D, angle<=D+0.5deg, each character<=1.05D, each stroke local increment<=0.005, fixed donors; tie mean geometry then smaller positive geometry weight then author then higher threshold; otherwise D",
+  "regression_controls": "Weight0 at same selected scope/threshold plus prior frozen weight0 pooled0.6; no regression retuning",
+  "limits": "A is a baseline, not truth: closer to A may preserve its distortions. No naturalness probability. Repeated dev with one changed character is weak selection evidence. Crossfit/full-train distribution shift and observed-test status remain. No production entry changes."
+}
