@@ -6,13 +6,14 @@ from ..ui_behavior import protect_parameter_wheels
 
 
 class SvgExportDialog(QtWidgets.QDialog):
-    def __init__(self, count, optimize=True, parent=None):
+    def __init__(self, count, optimize=True, parent=None, *, force=False):
         super().__init__(parent)
         protect_parameter_wheels(QtWidgets.QApplication.instance())
+        self.force = force
         self.count = count
         self.options = None
         self.setObjectName('svg_export_dialog')
-        self.setWindowTitle('导出 SVG')
+        self.setWindowTitle('强制导出 SVG' if force else '导出 SVG')
         self.setMinimumWidth(540)
         column = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
@@ -45,6 +46,10 @@ class SvgExportDialog(QtWidgets.QDialog):
                                '\n先校验原始排版，再以左上角为原点同步缩放输出坐标与 SVG 画布（含 viewBox）；笔宽不变。'
                                '\n输出尺寸随比例改变，仍会校验缩放后的画布边界；原文档纸张和预览不变。'
                                '\n所有选项只作用于本次冻结的导出，不重新排版。文件沿用原文档页码。')
+        if force:
+            note.setText("强制导出只保留已排出的有效笔迹，缺失处留空；不绘制错误占位框。"
+                         "\n无效、单点或越出纸张的笔画会跳过；未排出的后续内容不自动补排。"
+                         "\n随 SVG 提供 issues.txt / issues.json 问题清单，页码、比例和路径优化仅作用于导出。")
         note.setWordWrap(True)
         column.addWidget(note)
         self.error = QtWidgets.QLabel('')
@@ -62,7 +67,7 @@ class SvgExportDialog(QtWidgets.QDialog):
             if any(not c.hasAcceptableInput() for c in self.scales):
                 raise ValueError('比例输入无效')
             self.options = ExportOptions(parse_pages(self.pages.text(), self.count), self.tables.isChecked(),
-                self.scales[0].value() / 100, self.scales[1].value() / 100, self.registration.isChecked())
+                self.scales[0].value() / 100, self.scales[1].value() / 100, self.registration.isChecked(), self.force)
         except ValueError as error:
             self.error.setText(str(error))
             return

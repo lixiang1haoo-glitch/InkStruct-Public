@@ -27,7 +27,7 @@ def summarize(path):
     title, detail = entry(font)
     counts = {key: len({r['character'] for r in font.records if group(r) == key and r['enabled']})
               for key in GROUPS[1:]}
-    origins = Counter('合成/复用' if ('symbol_construction' in s or 'confirmed_reuse' in s or 'shared_punctuation' in s)
+    origins = Counter('合成/复用' if any(key in s for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
                       else '独立录制' if s.get('source_kind') == 'recorded' else '生成'
                       for s in font.provenance.values())
     return {'stamp': list(fingerprint(path)), 'manifest': {k: font.manifest.get(k) for k in
@@ -35,7 +35,7 @@ def summarize(path):
             'title': title, 'detail': detail, 'groups': counts, 'origins': dict(origins)}
 
 
-def inspect_font(path, text, char='', sample=0, category='全部', offset=0):
+def inspect_font(path, text, char='', sample=0, category='全部', offset=0, *, preset='custom'):
     font = FontPackage(path, verify_all=False)
     records = [r for r in font.records if r['enabled'] and (category == '全部' or group(r) == category)]
     chars = sorted({r['character'] for r in records}, key=ord)
@@ -47,7 +47,17 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0):
     if char:
         chars = [c for c in chars if c in char]
     preview_text = text[:120]
+    if preset == 'mixed':
+        available = {r['character'] for r in font.records if r['enabled']}
+        preferred = '中国书法文字自然山水天地春风明月孔正果我'
+        han = ''.join(c for c in preferred if c in available)
+        han += ''.join(c for c in sorted(available, key=ord)
+                       if group({'character': c, 'letter_style': ''}) == '汉字' and c not in han)
+        preview_text = (han[:8] + '\n' if han else '') + 'Abc 0123456789\n，。！？ ∶ ∘ ℃ ～'
     selected_char = chars[0] if char and chars else ''
+    if preset == 'formula' and not selected_char:
+        return {**formula_preview(font), 'characters': chars[offset:offset+200],
+                'total': len(chars), 'source': '', 'samples': 0, 'stamp': fingerprint(path)}
     if selected_char:
         preview_text = selected_char
     glyphs = {c: tuple(font.glyphs(c)) for c in set(preview_text) if not c.isspace()}
@@ -83,7 +93,7 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0):
     sample_count = 0
     if chosen:
         summary = chosen.font_core['summary']
-        origin = ('由录制笔迹合成/复用' if any(key in summary for key in ('symbol_construction', 'confirmed_reuse', 'shared_punctuation'))
+        origin = ('由录制笔迹合成/复用' if any(key in summary for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
                   else '独立录制' if summary['source_kind'] == 'recorded' else '生成字形')
         sample_count = len(glyphs[selected_char])
         source = f'{selected_char} · U+{ord(selected_char):04X} · 样本 {sample % sample_count + 1}/{sample_count}\n{group(chosen.font_core["record"])} · {origin}\n候选 {chosen.sample_id}\n来源状态：{summary["author_source_status"]} · 评价：{summary["review_status"]}'
@@ -91,4 +101,31 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0):
             source += '\n' + '\n'.join(summary['warnings'])
     return {'svg': ''.join(svg).encode(), 'missing': ''.join(dict.fromkeys(missing)), 'source': source,
             'characters': chars[offset:offset+200], 'total': len(chars), 'samples': sample_count,
-            'stamp': fingerprint(path)}
+            'stamp': fingerprint(path), 'preview_text': preview_text,
+            'preview_note': '汉字从本字体可用字中选取。' if preset == 'mixed' and not selected_char else ''}
+
+
+def formula_preview(font):
+    """Reuse the math/layout renderer in a private, bounded preview document."""
+    from ..assets.resolver import AssetResolver
+    from ..document.markdown import parse_markdown
+    from ..document.schema import PageProfile, StyleProfile
+    from ..document.styles import FlowStyle
+    from ..layout.blocks import layout_markdown
+    from ..math.style import MathStyle
+    from ..renderers.pages import page_svg
+
+    text = '$$\na^2+b^2=c^2\n$$\n\n$$\n\\frac{1}{2}+\\frac{1}{2}=1\n$$'
+    document = parse_markdown(text)
+    required = {o.text for o in document.occurrences} | {'−'}
+    resolver = AssetResolver(embedded=font.glyphs(required), builtin_numbers=False)
+    snapshot = layout_markdown(document, resolver, page=PageProfile(90, 60, 6),
+                               style=StyleProfile(10, 15, .22),
+                               flow=FlowStyle(math=MathStyle.handwriting(em_mm=10)))
+    counts = Counter(d.code for d in snapshot.diagnostics)
+    return {'svg': page_svg(snapshot, 0, debug=not snapshot.exportable).encode(), 'preview_text': text,
+            'missing': ''.join(dict.fromkeys(o.text for o in document.occurrences
+                                             if o.text not in resolver.pools and not o.text.isspace())),
+            'preview_note': '公式使用本字体与现有排版规则；这是独立诊断预览，非成品导出。',
+            'diagnostics': [f'{code} · {count} 项（详见提示）' for code, count in counts.items()],
+            'diagnostic_details': '\n'.join(d.code + '：' + d.message for d in snapshot.diagnostics)}

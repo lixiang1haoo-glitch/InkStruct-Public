@@ -43,8 +43,8 @@ assert d.pages['body'].punctuation_spacing.currentData()=='handwriting'
 d.pages['body'].punctuation_spacing.setCurrentIndex(1)
 d.reject()
 assert before==(w.flow,w.resolver.selection_records(),w.source_session.atom_ids)
-d=SettingsDialog(w,category='body');d.apply_current.setChecked(True)
-assert d.apply(),d.error.text()
+d=SettingsDialog(w,category='body')
+assert d.apply(to_document=True),d.error.text()
 d.reject();ready()
 assert w.flow.punctuation_spacing=='handwriting' and not w.optimize.isChecked()
 assert w.resolver.selection_records()==before[1] and w.source_session.atom_ids==before[2]

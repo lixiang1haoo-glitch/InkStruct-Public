@@ -29,6 +29,7 @@ class ExportOptions:
     scale_x: float = 1
     scale_y: float = 1
     registration: bool = False
+    force: bool = False
 
     def __post_init__(self):
         if (not self.pages or any(type(i) is not int or i < 0 for i in self.pages)
@@ -37,7 +38,7 @@ class ExportOptions:
         if any(type(v) not in (int, float) or not math.isfinite(v) or not 0.1 <= v <= 10
                for v in (self.scale_x, self.scale_y)):
             raise ValueError('比例校正须为 10%–1000%')
-        if any(type(v) is not bool for v in (self.table_contents, self.registration)):
+        if any(type(v) is not bool for v in (self.table_contents, self.registration, self.force)):
             raise ValueError('导出选项无效')
 
 
@@ -59,7 +60,13 @@ def prepare_export(snapshot, document, flow, options):
     if options.pages[-1] >= len(snapshot.pages):
         raise ValueError('导出页码超出冻结快照范围')
     image_scope = reference_image_export_scope(snapshot)
-    plan = plan_from_snapshot(snapshot, omit_reference_images=bool(image_scope))
+    forced_scope = {}
+    if options.force:
+        from .forced import force_plan
+        plan, forced_scope = force_plan(snapshot)
+        image_scope = None
+    else:
+        plan = plan_from_snapshot(snapshot, omit_reference_images=bool(image_scope))
     table_owners = set()
     table_occurrences = set()
     if not options.table_contents:
@@ -103,6 +110,17 @@ def prepare_export(snapshot, document, flow, options):
         # Scale the output canvas with its coordinates, retaining physical pen
         # width. PlotPage still validates the final ink against that new canvas.
         width, height = page.width_mm * options.scale_x, page.height_mm * options.scale_y
+        if options.force:
+            from .forced import fits_page
+            kept = []
+            for stroke in strokes:
+                if fits_page(stroke, width, height):
+                    kept.append(stroke)
+                else:
+                    forced_scope["omitted_strokes"].append({"page_index": page.index,
+                        "occurrence_id": stroke.occurrence_id, "stroke_id": stroke.stroke_id,
+                        "reason": "scaled-stroke-outside-physical-page"})
+            strokes = tuple(kept)
         pages.append(replace(page, width_mm=width, height_mm=height, strokes=strokes))
         canvases.append({'page_index': page.index, 'page_number': page.index + 1,
                          'source_size_mm': [page.width_mm, page.height_mm],
@@ -118,4 +136,11 @@ def prepare_export(snapshot, document, flow, options):
         scope['omitted_images'] = [{**i, 'output_bounds_mm': [v * (options.scale_x if n % 2 == 0 else options.scale_y)
                                                             for n, v in enumerate(i['bounds'])]}
                                    for i in image_scope['omitted_images'] if i['page_index'] in options.pages]
+    if options.force:
+        scope.update(forced_scope)
+        scope["omitted_strokes"] = [v for v in scope["omitted_strokes"] if v["page_index"] in options.pages]
+        scope["omitted_images"] = [v for v in scope["omitted_images"] if v["page_index"] in options.pages]
+        emitted = {s.stroke_id for p in pages if p.index in options.pages for s in p.strokes}
+        for marker in scope["registration_marks"]:
+            marker["exported"] = marker["stroke_id"] in emitted
     return replace(plan, pages=tuple(pages)), scope

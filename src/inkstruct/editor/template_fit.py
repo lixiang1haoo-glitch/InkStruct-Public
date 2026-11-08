@@ -5,22 +5,8 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from .problem_details import ISSUE_LABELS
 from .review import atomic_write
-
-ISSUE_LABELS = {
-    "template-slot-required": "必填字段尚未绑定内容，请选择对应源码块。",
-    "template-slot-kind": "内容类型不符合字段要求，请检查正文、公式或表格的选择。",
-    "template-slot-policy": "内容绑定与字段的页面、字号或锚点设置不一致。",
-    "template-binding-source-missing": "绑定的源码块已不存在，请重新绑定或解除绑定。",
-    "template-binding-region-missing": "找不到绑定的填写区，请恢复区域或重新绑定。",
-    "template-binding-anchor-missing": "找不到绑定的基线锚点，请检查模板设置。",
-    "template-field-configuration-invalid": "填写区配置无法排版，请检查尺寸与内容设置。",
-    "template-field-height-overflow": "内容超出填写区高度，请增大区域或调整排版。",
-    "template-field-ink-overflow": "实际笔迹超出填写区，请调整区域或排版。",
-    "template-field-image-overflow": "图片超出填写区，请调整图片或区域尺寸。",
-    "template-footnote-definition-binding": "脚注定义不能单独绑定到填写区。",
-    "template-calibration-unreviewed": "模板坐标尚未经纸面校准，需要试写后核对位置。",
-}
 
 
 class TemplateFitDialog(QtWidgets.QDialog):

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from .ui_behavior import compact_field
 from .capture_management import (
     CaptureCatalog,
     ManagedRepository,
@@ -17,16 +18,25 @@ from .capture_management import (
 class WriterPicker(QtWidgets.QComboBox):
     textChanged = QtCore.Signal(str)
 
-    def __init__(self, catalog, selected='', parent=None):
+    def __init__(self, catalog, selected='', parent=None, *, allow_external=False):
         super().__init__(parent)
         self.catalog = catalog
+        self.allow_external = allow_external
         self.setObjectName('capture_writer_picker')
         self.setMinimumContentsLength(16)
         self.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        if allow_external:
+            self.setEditable(True)
+            self.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+            self.setCompleter(None)
+            self.lineEdit().setPlaceholderText('请选择书写者，或输入外部作者 ID')
         self.reload(selected)
-        self.currentIndexChanged.connect(lambda _: self.textChanged.emit(self.text()))
+        signal = self.currentTextChanged if allow_external else self.currentIndexChanged
+        signal.connect(lambda _: self.textChanged.emit(self.text()))
 
     def text(self):
+        if self.allow_external and (self.currentIndex() < 0 or self.currentText() != self.itemText(self.currentIndex())):
+            return self.currentText()
         return self.currentData() or ''
 
     def showPopup(self):
@@ -34,18 +44,29 @@ class WriterPicker(QtWidgets.QComboBox):
         super().showPopup()
 
     def setText(self, value):
-        self.setCurrentIndex(max(0, self.findData(value)))
+        index = self.findData(value)
+        if self.allow_external and (index < 0 or not value):
+            with QtCore.QSignalBlocker(self):
+                self.setCurrentIndex(-1)
+                self.setEditText(value)
+            self.textChanged.emit(value)
+        else:
+            self.setCurrentIndex(max(0, index))
 
     def reload(self, selected=''):
         with QtCore.QSignalBlocker(self):
             self.clear()
+            catalog = self.catalog() if callable(self.catalog) else self.catalog
             try:
-                writers = self.catalog.writers()
+                writers = catalog.writers()
+                self.setToolTip('')
                 self.setEnabled(True)
-            except (OSError, ValueError) as error:
+            except (OSError, ValueError, ImportError) as error:
                 self.addItem('采集管理记录需要修复', '')
-                self.setToolTip(str(error) + '\n' + str(self.catalog.index))
-                self.setEnabled(False)
+                self.setToolTip(str(error) + '\n' + str(catalog.index))
+                self.setEnabled(self.allow_external)
+                if self.allow_external:
+                    self.setText(selected)
                 return
             self.addItem('请选择书写者…', '')
             for key, item in sorted(writers.items(), key=lambda pair: (pair[1]['name'], pair[0])):
@@ -83,11 +104,11 @@ class HanTaskDialog(QtWidgets.QDialog):
         row.addWidget(add)
         form.addRow('书写者', row)
         self.name = QtWidgets.QLineEdit(self.path.stem if self.path else '汉字样本采集')
-        form.addRow('任务名称', self.name)
+        form.addRow('任务名称', compact_field(self.name, maximum=340))
         self.repeats = QtWidgets.QSpinBox()
         self.repeats.setRange(1, 100)
         self.repeats.setValue(5)
-        form.addRow('CSV 空份数 / 默认份数', self.repeats)
+        form.addRow('CSV 空份数 / 默认份数', compact_field(self.repeats))
         layout.addLayout(form)
         self.summary = QtWidgets.QLabel()
         self.summary.setWordWrap(True)
@@ -514,7 +535,7 @@ class CaptureLifecycleMixin:
         from handwriting_collector.tasks import CollectionTask, TaskRepository
 
         from .resource_catalog import atomic_json
-        from .symbol_tasks import CUSTOM_PREFIX, source_configuration
+        from .symbol_tasks import CUSTOM_PREFIXES, source_configuration
         repository = TaskRepository(entry['root'])
         if action == 'rename':
             name, ok = QtWidgets.QInputDialog.getText(self, '修改任务名称', '新名称：', text=entry['task'].name)
@@ -566,10 +587,11 @@ class CaptureLifecycleMixin:
             key = item.character, item.source_index
             counts[key] = counts.get(key, 0) + 1
         source = entry['task'].source
-        if source.startswith(CUSTOM_PREFIX):
+        if source.startswith(CUSTOM_PREFIXES):
             config = source_configuration(source)
             config['reuse'] = []
-            source = CUSTOM_PREFIX + json.dumps(config, separators=(',', ':'))
+            prefix = next(prefix for prefix in CUSTOM_PREFIXES if source.startswith(prefix))
+            source = prefix + json.dumps(config, separators=(',', ':'))
         task = CollectionTask.create(name.text().strip(), source, picker.text(), [(c,n,index) for (c,index),n in counts.items()])
         path = repository.path_for(task.task_id)
         path.parent.mkdir(parents=True, exist_ok=False)
@@ -610,8 +632,9 @@ def install_capture_management(window, root):
         widget.resume_button.hide()
         widget.example_button.setText('创建任务')
         panel = QtWidgets.QWidget()
+        panel.setObjectName('capture_writer_panel')
         column = QtWidgets.QVBoxLayout(panel)
-        column.setContentsMargins(0, 0, 0, 0)
+        column.setContentsMargins(12, 10, 12, 10)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(QtWidgets.QLabel('书写者'))
         widget.writer_picker = WriterPicker(catalog)

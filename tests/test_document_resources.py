@@ -150,9 +150,10 @@ def test_notes_and_fixed_source_requirements_are_not_lost_and_geometric_rules_ne
     doc = parse_markdown("1[^a]\n\n[^a]: $\\sqrt{2}$ $\\overline{3}$")
     r = AssetResolver(builtin_numbers=True)
     report = inspect_resources(doc, r, flow=FlowStyle(math=STYLE))
-    assert [g["character"] for g in report["gaps"]] == ["√"]
-    assert len(report["construction_requirements"]) == 1
-    assert not inspect_resources(doc, r)["gaps"]
+    assert [g["character"] for g in report["gaps"]] == ["√", "−"]
+    assert len(report["construction_requirements"]) == 2
+    geometric = FlowStyle(math=MathStyle(fraction_source="geometric"))
+    assert not inspect_resources(doc, r, flow=geometric)["gaps"]
 
 
 def test_existing_choices_are_returned_unchanged_and_geometry_is_not_claimed():

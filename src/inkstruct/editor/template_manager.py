@@ -3,10 +3,11 @@
 import json
 from pathlib import Path
 
-from PySide6 import QtCore, QtSvgWidgets, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
-from ..document.flow_template import FlowTemplate, PageLayout
+from ..document.flow_template import FlowTemplate
 from ..document.template_authoring import read_template, template_json
+from .template_viewport import FitSvgPreview
 
 
 def catalog_settings():
@@ -39,10 +40,66 @@ def description(template):
     return f"{template.name}\n{template.width_mm:g} × {template.height_mm:g} mm · " + (
         "简单模板"
         if kind == "simple"
-        else f"自定义模板 · {len(template.start_pages)} 起始 / {len(template.loop_pages)} 循环布局 · {len(template.fields)} 字段"
+        else f"自定义模板 · {len(template.start_pages)} 起始 / {len(template.loop_pages)} 循环页 · {len(template.fields)} 字段"
         if kind == "custom"
         else "旧版模板 · 保留原协议与绑定"
     )
+
+
+def save_reusable_template(editor, path, template):
+    from ..document.template_revision import version_template
+    from ..resource_catalog import TemplateStore, workspace_for
+
+    versioned = version_template(template)
+    raw = template_json(versioned)
+    from ..document.template_authoring import parse_template
+    parse_template(raw)
+    with Path(path).open('x', encoding='utf-8') as stream:
+        stream.write(raw)
+    TemplateStore(workspace_for(editor) / 'templates').add(path)
+    remember_template(path)
+
+def export_template_json(parent, template):
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, '导出 JSON', template.name + '.json', '模板 (*.json)'
+    )
+    if path:
+        with Path(path).open('x', encoding='utf-8') as stream:
+            stream.write(template_json(template))
+
+
+def copy_template_as(parent, editor, template):
+    path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        parent, '另存为新模板', '', '模板 (*.json)'
+    )
+    if path:
+        save_reusable_template(editor, path, template)
+    return path
+
+
+def save_external_template(path, original, candidate):
+    from ..document.template_authoring import parse_template
+    from ..document.template_revision import version_template
+
+    path = Path(path)
+    if path.is_symlink():
+        raise ValueError('不能覆盖符号链接指向的模板，请另存为新模板。')
+    raw = template_json(version_template(candidate, parent=original))
+    parse_template(raw)
+    data = raw.encode('utf-8')
+    save = QtCore.QSaveFile(str(path))
+    if not save.open(QtCore.QIODevice.WriteOnly):
+        raise OSError(save.errorString())
+    try:
+        if save.write(data) != len(data):
+            raise OSError(save.errorString())
+        if read_template(path) != original:
+            raise ValueError('原模板文件已改变，请重新打开后编辑，或另存为新模板。')
+        if not save.commit():
+            raise OSError(save.errorString())
+    finally:
+        if save.isOpen():
+            save.cancelWriting()
 
 
 class TemplatePicker(QtWidgets.QDialog):
@@ -61,17 +118,23 @@ class TemplatePicker(QtWidgets.QDialog):
         self.list.setMinimumHeight(80)
         self.list.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
         self.list.addItem("保留当前选择")
-        self.options = [template, None]
-        self.list.addItem("普通页面（不使用模板）")
+        from ..global_defaults import GlobalDefaultsStore
+        try:
+            ordinary = GlobalDefaultsStore().ordinary_template()
+        except (ValueError, TypeError, OSError):
+            ordinary = FlowTemplate(name="普通页面", mode="blank")
+        self.options = [template, ordinary]
+        self.list.addItem("普通页面 · 内置简单模板")
         from ..resource_catalog import TemplateStore, workspace_for
         self.store = TemplateStore(workspace_for(parent) / 'templates')
         try:
             for entry in self.store.entries():
                 if not entry['archived']:
                     self.options.append(entry)
-                    self.list.addItem('库内 · ' + entry['name'])
+                    revision = entry.get('revision', {}).get('number', 1)
+                    self.list.addItem(f'库内 · {entry["name"]} · 修订 {revision}')
         except (OSError, ValueError):
-            self.list.addItem('模板库索引异常，请到字体与模板查看')
+            self.list.addItem('模板库索引异常，请到模板库查看')
             self.options.append({'unavailable': True})
         for path in catalog_paths():
             self.options.append(path)
@@ -79,7 +142,7 @@ class TemplatePicker(QtWidgets.QDialog):
         self.list.setCurrentRow(0)
         self.list.currentRowChanged.connect(self.select)
         row.addWidget(self.list, 1)
-        self.preview = QtSvgWidgets.QSvgWidget()
+        self.preview = FitSvgPreview()
         pane = QtWidgets.QWidget()
         right = QtWidgets.QVBoxLayout(pane)
         self.layout_picker = QtWidgets.QComboBox()
@@ -98,9 +161,9 @@ class TemplatePicker(QtWidgets.QDialog):
         self.error = QtWidgets.QLabel()
         self.error.setWordWrap(True)
         col.addWidget(self.error)
-        load = QtWidgets.QPushButton("从文件导入…")
-        load.clicked.connect(self.load)
-        col.addWidget(load)
+        self.import_button = QtWidgets.QPushButton("从文件导入…")
+        self.import_button.clicked.connect(self.load)
+        col.addWidget(self.import_button)
         self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
         )
@@ -110,217 +173,88 @@ class TemplatePicker(QtWidgets.QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         col.addWidget(self.buttons)
-        self.show_preview()
+        self.select(0)
 
-    def show_preview(self):
-        self.summary.setText(description(self.template))
+    def show_preview(self, candidate):
+        from .template_library import preview_layouts
+
+        self.preview_candidate = candidate
         with QtCore.QSignalBlocker(self.layout_picker):
             self.layout_picker.clear()
-            if isinstance(self.template, FlowTemplate):
-                for layout in self.template.effective_layouts:
-                    self.layout_picker.addItem(layout.label, layout.layout_id)
-            elif self.template:
-                self.layout_picker.addItem('首页', 'first')
-                self.layout_picker.addItem('续页', 'continuation')
+            for key, label in preview_layouts(candidate):
+                self.layout_picker.addItem(label, key)
         self.render_layout()
+
+    def render_layout(self, *_):
+        from ..document.template_authoring import geometry_preview
+
+        candidate = self.preview_candidate
+        try:
+            svg = (geometry_preview(candidate, self.layout_picker.currentData()).encode() if candidate else
+                   b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280"><rect width="200" height="280" fill="white" stroke="gray"/></svg>')
+            if not self.preview.show_svg(svg):
+                raise ValueError("模板预览渲染失败")
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            self.preview_failed(str(error))
+            return
+        self.template = candidate
+        self.summary.setText(description(candidate))
         self.error.clear()
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(True)
 
-    def render_layout(self, *_):
-        if isinstance(self.template, FlowTemplate):
-            from ..document.flow_template_preview import geometry_preview
-            self.preview.load(
-                geometry_preview(
-                    self.template, self.layout_picker.currentData() or self.template.effective_layouts[0].layout_id
-                ).encode()
-            )
-        elif self.template is not None:
-            from ..document.template_authoring import geometry_preview as legacy_preview
-
-            self.preview.load(legacy_preview(self.template, self.layout_picker.currentData() or 'first').encode())
-        else:
-            self.preview.load(
-                b'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="280"><rect width="200" height="280" fill="white" stroke="gray"/></svg>'
-            )
-        self.preview.renderer().setAspectRatioMode(QtCore.Qt.KeepAspectRatio)
+    def preview_failed(self, error, *, clear_layouts=False):
+        self.template = None
+        if clear_layouts:
+            self.preview_candidate = None
+            with QtCore.QSignalBlocker(self.layout_picker):
+                self.layout_picker.clear()
+        self.summary.setText('模板不可预览')
+        self.preview.clear()
+        self.error.setText(error)
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
 
     def select(self, index):
         try:
+            if not 0 <= index < len(self.options):
+                raise ValueError('请选择模板')
             item = self.options[index]
             if isinstance(item, dict):
                 if item.get('unavailable'):
                     raise ValueError('模板库索引异常，原数据保留')
-                self.template = self.store.read(item)
+                candidate = self.store.read(item)
             else:
-                self.template = read_template(item) if isinstance(item, Path) else item
-            self.show_preview()
-        except (ValueError, TypeError, OSError) as error:
-            self.error.setText(str(error))
-            self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
+                candidate = read_template(item) if isinstance(item, Path) else item
+            self.show_preview(candidate)
+        except (ValueError, TypeError, OSError, KeyError) as error:
+            self.preview_failed(str(error), clear_layouts=True)
 
     def load(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "导入模板库副本（原文件保留）", "", "模板 (*.json)")
         if path:
             try:
-                self.template = self.store.read(self.store.add(path))
+                entry = self.store.add(path)
                 remember_template(path)
-                self.show_preview()
-            except (ValueError, TypeError, OSError) as error:
-                self.error.setText(str(error))
-                self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
+                row = next((i for i, item in enumerate(self.options)
+                            if isinstance(item, dict) and item.get('id') == entry['id']), len(self.options))
+                if row == len(self.options):
+                    self.options.append(entry)
+                    self.list.addItem(f'库内 · {entry["name"]} · 修订 {entry.get("revision", {}).get("number", 1)}')
+                else:
+                    self.options[row] = entry
+                with QtCore.QSignalBlocker(self.list):
+                    self.list.setCurrentRow(row)
+                self.select(row)
+            except (ValueError, TypeError, OSError, KeyError) as error:
+                with QtCore.QSignalBlocker(self.list):
+                    self.list.setCurrentRow(-1)
+                self.preview_failed(str(error), clear_layouts=True)
+
+    def accept(self):
+        if self.buttons.button(QtWidgets.QDialogButtonBox.Ok).isEnabled():
+            super().accept()
 
 
-class DefaultTemplateChoice(QtWidgets.QWidget):
-    def __init__(self, template, parent=None):
-        super().__init__(parent)
-        self.template = template
-        col = QtWidgets.QVBoxLayout(self)
-        self.summary = QtWidgets.QLabel()
-        self.summary.setTextFormat(QtCore.Qt.PlainText)
-        self.summary.setWordWrap(True)
-        col.addWidget(self.summary)
-        b = QtWidgets.QPushButton("选择新文档默认模板…")
-        b.clicked.connect(self.choose)
-        col.addWidget(b)
-        self.set_template(template)
-
-    def set_template(self, template):
-        self.template = template
-        self.summary.setText(description(template))
-
-    def choose(self):
-        d = TemplatePicker(self.template, self, default=True)
-        try:
-            if d.exec() == QtWidgets.QDialog.Accepted:
-                self.set_template(d.template)
-        finally:
-            d.deleteLater()
-
-    def configuration(self):
-        return self.template
-
-    def binding_configuration(self):
-        return ()
-
-
-class TemplateManagerPage(QtWidgets.QWidget):
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
-        col = QtWidgets.QVBoxLayout(self)
-        current = QtWidgets.QGroupBox("当前文档布局")
-        box = QtWidgets.QVBoxLayout(current)
-        info = QtWidgets.QLabel(description(owner.editor.flow.template))
-        info.setTextFormat(QtCore.Qt.PlainText)
-        info.setWordWrap(True)
-        box.addWidget(info)
-        b = QtWidgets.QPushButton("编辑当前文档布局…")
-        b.clicked.connect(
-            lambda: owner.request_template_action("document", owner.editor.flow.template)
-        )
-        box.addWidget(b)
-        col.addWidget(current)
-        col.addWidget(QtWidgets.QLabel("可复用模板 · 编辑副本不会修改原文件或当前文档"))
-        self.list = QtWidgets.QListWidget()
-        self.list.setMinimumHeight(80)
-        self.list.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Ignored)
-        for path in catalog_paths():
-            item = QtWidgets.QListWidgetItem(path.stem)
-            item.setToolTip(str(path))
-            item.setData(QtCore.Qt.UserRole, str(path))
-            self.list.addItem(item)
-        col.addWidget(self.list, 1)
-        row = QtWidgets.QHBoxLayout()
-        for text, call in [
-            ("新建模板…", self.create),
-            ("导入模板…", self.load),
-            ("编辑副本…", self.edit_copy),
-        ]:
-            b = QtWidgets.QPushButton(text)
-            b.clicked.connect(call)
-            row.addWidget(b)
-        col.addLayout(row)
-        migrate = QtWidgets.QToolButton()
-        migrate.setText("高级操作")
-        migrate.setPopupMode(QtWidgets.QToolButton.InstantPopup)
-        migration_menu = QtWidgets.QMenu(migrate)
-        migration_menu.addAction("显式复制旧布局为新模板…", self.migrate_copy)
-        migrate.setMenu(migration_menu)
-        col.addWidget(migrate)
-        self.error = QtWidgets.QLabel(
-            "进入工作台前退出设置；工作台单独确认，不会被设置窗口的取消影响。"
-        )
-        self.error.setWordWrap(True)
-        col.addWidget(self.error)
-
-    def create(self):
-        kind, ok = QtWidgets.QInputDialog.getItem(
-            self,
-            "新建模板",
-            "选择模板类型",
-            ["简单模板：纸张与四向边距", "自定义模板：背景、页组与文本框"],
-            0,
-            False,
-        )
-        if ok:
-            template = (
-                FlowTemplate()
-                if kind.startswith("简单")
-                else FlowTemplate(
-                    name="自定义模板",
-                    kind="custom",
-                    layouts=(PageLayout("layout-1", "布局 1"),),
-                    loop_pages=("layout-1",),
-                )
-            )
-            self.owner.request_template_action("reusable", template)
-
-    def load(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "导入可复用模板", "", "模板 (*.json)")
-        if path:
-            try:
-                template = read_template(path)
-                remember_template(path)
-                item = QtWidgets.QListWidgetItem(
-                    template.name + (" · 旧版" if not isinstance(template, FlowTemplate) else "")
-                )
-                item.setData(QtCore.Qt.UserRole, path)
-                item.setToolTip(path)
-                self.list.addItem(item)
-                self.list.setCurrentItem(item)
-                self.error.setText("已加入最近使用列表；当前文档和默认设置未改变。")
-            except (ValueError, TypeError, OSError) as error:
-                self.error.setText(str(error))
-
-    def edit_copy(self):
-        item = self.list.currentItem()
-        if item:
-            try:
-                self.owner.request_template_action(
-                    "reusable", read_template(item.data(QtCore.Qt.UserRole))
-                )
-            except (ValueError, TypeError, OSError) as error:
-                self.error.setText(str(error))
-        else:
-            self.error.setText("请先选择或导入模板。")
-
-    def migrate_copy(self):
-        item = self.list.currentItem()
-        try:
-            if item is None:
-                raise ValueError("请先选择已导入的旧版模板。")
-            template = read_template(item.data(QtCore.Qt.UserRole))
-            if isinstance(template, FlowTemplate):
-                raise TypeError("此模板已使用现有字段协议，无需迁移。")
-            from ..document.flow_template import migrate_layout
-
-            candidate = migrate_layout(template)
-            self.owner.request_template_action("reusable", candidate)
-        except (ValueError, TypeError, OSError) as error:
-            self.error.setText(str(error))
-
-
-def perform_template_action(editor, action, template, *, target=None):
+def perform_template_action(editor, action, template, *, target=None, save_revision=None, initial_blank=None):
     from .flow_template_designer import FlowTemplateDesigner
     from .template_designer import TemplateDesignerDialog
 
@@ -332,42 +266,58 @@ def perform_template_action(editor, action, template, *, target=None):
     )
     if modern:
         dialog = FlowTemplateDesigner(
-            template, editor, editor=editor, document_mode=action == "document"
+            template, editor, editor=editor, document_mode=action == "document",
+            save_revision=save_revision, initial_blank=initial_blank,
         )
     else:
         dialog = TemplateDesignerDialog(template, editor)
         dialog.setWindowTitle(
-            "旧版模板 · 编辑当前文档布局" if action == "document" else "旧版模板 · 编辑可复用副本"
+            "旧版模板 · 编辑当前文档版式" if action == "document" else
+            "旧版模板 · 编辑现有模板" if save_revision is not None else "旧版模板 · 编辑可复用副本"
         )
         dialog.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText(
-            "应用到当前文档" if action == "document" else "保存为新模板…"
+            "应用到当前文档" if action == "document" else
+            "保存修改" if save_revision is not None else "另存为新模板…"
         )
+        dialog.saved_revision = None
         if action != "document":
             dialog.buttons.accepted.disconnect()
 
             def save_legacy():
                 try:
                     candidate = dialog.configuration()
-                    path, _ = QtWidgets.QFileDialog.getSaveFileName(
-                        dialog, "保存旧模板副本（保留原文件）", "", "模板 (*.json)"
-                    )
-                    if not path:
+                    if save_revision is not None:
+                        dialog.saved_revision = save_revision(candidate)
+                        dialog.accept()
                         return
-                    with Path(path).open("x", encoding="utf-8") as stream:
-                        stream.write(template_json(candidate))
-                    remember_template(path)
-                    from ..resource_catalog import TemplateStore, workspace_for
-                    TemplateStore(workspace_for(editor) / 'templates').add(path)
-                    dialog.accept()
-                except (ValueError, TypeError, OSError) as error:
+                    if copy_template_as(dialog, editor, candidate):
+                        dialog.accept()
+                except (ValueError, TypeError, OSError, KeyError) as error:
                     dialog.error.setText(str(error))
 
             dialog.buttons.accepted.connect(save_legacy)
+            if save_revision is not None:
+                def run_file_action(callback):
+                    try:
+                        callback(dialog.configuration())
+                    except (ValueError, TypeError, OSError, KeyError) as error:
+                        dialog.error.setText(str(error))
+
+                copy = dialog.buttons.addButton("另存为新模板…", QtWidgets.QDialogButtonBox.ActionRole)
+                export = dialog.buttons.addButton("导出 JSON…", QtWidgets.QDialogButtonBox.ActionRole)
+                copy.clicked.connect(lambda: run_file_action(
+                    lambda candidate: copy_template_as(dialog, editor, candidate)
+                ))
+                export.clicked.connect(lambda: run_file_action(
+                    lambda candidate: export_template_json(dialog, candidate)
+                ))
     if target:
         dialog.focus_target(target)
     try:
-        if dialog.exec() == QtWidgets.QDialog.Accepted and action == "document":
-            editor.template_content_panel.apply_template(dialog.configuration())
+        if dialog.exec() == QtWidgets.QDialog.Accepted:
+            if action == "document":
+                editor.template_content_panel.apply_template(dialog.configuration())
+            return dialog.saved_revision
     except (ValueError, TypeError, OSError) as error:
         QtWidgets.QMessageBox.warning(editor, "模板未应用", str(error))
     finally:

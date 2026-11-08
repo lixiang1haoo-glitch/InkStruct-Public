@@ -77,14 +77,22 @@ class TemplateStore:
         if len(raw) > 8*1024*1024:
             raise ValueError('模板目录索引过大，原文件保留')
         data = json.loads(raw)
-        if not isinstance(data, dict) or set(data) != {'schema', 'entries'} or data['schema'] != 'inkstruct_template_catalog_v1':
+        if (not isinstance(data, dict) or set(data) != {'schema', 'entries'}
+                or data['schema'] not in {'inkstruct_template_catalog_v1', 'inkstruct_template_catalog_v2'}):
             raise ValueError('未知模板管理索引，原文件保留')
         entries = data['entries']
         if not isinstance(entries, list) or len(entries) > 10000:
             raise ValueError('模板目录索引无效')
         ids = set()
         for item in entries:
-            if (not isinstance(item, dict) or set(item) != {'id', 'name', 'source', 'created_ns', 'archived'}
+            keys = {'id', 'name', 'source', 'created_ns', 'archived'}
+            if isinstance(item, dict) and 'revision' in item and data['schema'].endswith('_v2'):
+                from .document.template_revision import TemplateRevision
+                if not isinstance(item['revision'], dict):
+                    raise ValueError('模板目录修订条目无效')
+                TemplateRevision(**item['revision'])
+                keys.add('revision')
+            if (not isinstance(item, dict) or set(item) != keys
                     or not isinstance(item['id'], str) or len(item['id']) != 64
                     or any(c not in '0123456789abcdef' for c in item['id'])
                     or item['id'] in ids or not isinstance(item['name'], str)
@@ -117,11 +125,61 @@ class TemplateStore:
             raise ValueError('库内模板超过容量限制')
         if hashlib.sha256(raw).hexdigest() != item['id']:
             raise ValueError('库内模板内容已改变；请重新显式导入，不能自动替换')
-        return parse_template(raw.decode('utf-8'))
+        template = parse_template(raw.decode('utf-8'))
+        if 'revision' in item:
+            from dataclasses import asdict
+            if template.revision is None or asdict(template.revision) != item['revision']:
+                raise ValueError('模板库修订与文件身份不一致')
+        return template
+
+    def newer(self, template):
+        """Only a confirmed descendant of this exact snapshot is an update."""
+        from .document.template_revision import template_revision
+
+        prior = template_revision(template)
+        entries = [e for e in self.entries()
+                   if e.get('revision', {}).get('template_id') == prior.template_id]
+        reachable = {prior.revision_id: prior.number}
+        matches = []
+        for entry in sorted(entries, key=lambda e: e['revision']['number']):
+            revision = entry['revision']
+            if reachable.get(revision['parent_id']) != revision['number'] - 1:
+                continue
+            reachable[revision['revision_id']] = revision['number']
+            if not entry['archived']:
+                matches.append(entry)
+        return tuple(sorted(matches, key=lambda e: (e['revision']['number'], e['created_ns']), reverse=True))
+
+    def superseded_ids(self, entries):
+        """Ancestors of active revisions belong in history, not the current list."""
+        by_revision = {entry['revision']['revision_id']: entry for entry in entries if 'revision' in entry}
+        legacy_sources = {str(self.path(entry['id'])): entry for entry in entries if 'revision' not in entry}
+        superseded = set()
+        for entry in entries:
+            if entry['archived']:
+                continue
+            revision = entry.get('revision')
+            while revision and revision['parent_id']:
+                parent = by_revision.get(revision['parent_id'])
+                if parent is None:
+                    # Local saves of a legacy template retain its managed path.
+                    parent = legacy_sources.get(entry['source'])
+                if parent is None or parent['id'] in superseded:
+                    break
+                prior = parent.get('revision')
+                if prior and (prior['template_id'] != revision['template_id']
+                              or prior['number'] + 1 != revision['number']):
+                    break
+                superseded.add(parent['id'])
+                entry, revision = parent, prior
+        return superseded
 
     @catalog_write
-    def add(self, source):
-        from .document.template_authoring import MAX_FLOW_TEMPLATE_BYTES, parse_template
+    def add(self, source, *, revision_parent=None):
+        from .document.template_authoring import (
+            MAX_FLOW_TEMPLATE_BYTES,
+            parse_template,
+        )
 
         source = Path(source).resolve()
         with source.open('rb') as stream:
@@ -129,28 +187,76 @@ class TemplateStore:
         if len(raw) > MAX_FLOW_TEMPLATE_BYTES:
             raise ValueError('模板文件超过容量限制')
         template = parse_template(raw.decode('utf-8'))
-        identity = hashlib.sha256(raw).hexdigest()
+        if revision_parent is not None:
+            if template.revision is not None:
+                raise ValueError('文件已有修订身份，请直接导入以保留原修订关系')
+            return self._save_revision(template, revision_parent, source, self.entries())
+        return self._add(raw, template, source, self.entries())
+
+    @catalog_write
+    def save_revision(self, parent_id, candidate):
         entries = self.entries()
+        parent = next((entry for entry in entries if entry['id'] == parent_id), None)
+        if parent is None or parent['archived']:
+            raise ValueError('原修订已移出模板库，请恢复后重试。')
+        return self._save_revision(candidate, self.read(parent), self.path(parent_id), entries)
+
+    def _save_revision(self, candidate, parent, source, entries):
+        from .document.template_authoring import parse_template, template_json
+        from .document.template_revision import version_template
+
+        raw = template_json(version_template(candidate, parent=parent))
+        return self._add(raw.encode('utf-8'), parse_template(raw), source, entries)
+
+    def _add(self, raw, template, source, entries):
+        from dataclasses import asdict
+
+        identity = hashlib.sha256(raw).hexdigest()
+        if template.revision:
+            revision = asdict(template.revision)
+            related = next((item for item in entries if item.get('revision', {}).get('revision_id')
+                            == template.revision.revision_id), None)
+            if related:
+                if related['revision'] != revision:
+                    raise ValueError('同一修订标识对应不同内容或关系')
+                self.read(related)
+                related['archived'] = False
+                self._write(entries)
+                return related
         target = self.path(identity)
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.is_symlink():
             raise ValueError('库内目标不能是符号链接')
+        created = False
         try:
-            with target.open('xb') as stream:
-                stream.write(raw)
-        except FileExistsError:
-            if target.read_bytes() != raw:
-                raise ValueError('已有模板副本损坏，原文件保留') from None
-        existing = next((item for item in entries if item['id'] == identity), None)
-        if existing:
-            existing['archived'] = False
-            item = existing
-        else:
-            item = {'id': identity, 'name': template.name, 'source': str(source),
-                    'created_ns': time.time_ns(), 'archived': False}
-            entries.append(item)
-        atomic_json(self.index, {'schema': 'inkstruct_template_catalog_v1', 'entries': entries})
+            try:
+                with target.open('xb') as stream:
+                    created = True
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except FileExistsError:
+                if target.read_bytes() != raw:
+                    raise ValueError('已有模板副本损坏，原文件保留') from None
+            existing = next((item for item in entries if item['id'] == identity), None)
+            if existing:
+                existing['archived'] = False
+                item = existing
+            else:
+                item = {'id': identity, 'name': template.name, 'source': str(source),
+                        'created_ns': time.time_ns(), 'archived': False}
+                if template.revision:
+                    item['revision'] = revision
+                entries.append(item)
+            self._write(entries)
+        except (OSError, ValueError, TypeError):
+            if created:
+                target.unlink(missing_ok=True)
+            raise
         return item
+
+    def _write(self, entries):
+        atomic_json(self.index, {'schema': 'inkstruct_template_catalog_v2', 'entries': entries})
 
     @catalog_write
     def update(self, identity, **changes):
@@ -163,7 +269,7 @@ class TemplateStore:
         if 'archived' in changes and type(changes['archived']) is not bool:
             raise ValueError('无效移出状态')
         item.update(changes)
-        atomic_json(self.index, {'schema': 'inkstruct_template_catalog_v1', 'entries': entries})
+        self._write(entries)
 
 
 class FontMetadata:

@@ -15,9 +15,12 @@ from ..assets.glyph_provider import GlyphMetrics
 from ..assets.resolver import AssetResolver, SelectedAsset
 from ..assets.symbol_provider import ResolvedGlyph
 from ..editor.review import atomic_write
+from ..fonts.identity import KEYS as FONT_RELEASE_KEYS
+from ..fonts.identity import embedded_identity, release_identity
 from ..math.schema import MATH_VERSION
 from .editing import SourceSession
-from .markdown import DIALECT_VERSION, OBSIDIAN_VERSION, dialect_version
+from .han_variation import variation_record
+from .markdown import dialect_version
 from .package_validation import (
     read_json,
     validate_manifest,
@@ -27,10 +30,20 @@ from .package_validation import (
 )
 from .schema import PageProfile, StyleProfile
 from .styles import FlowStyle
+from .template_revision import template_record
 
 VERSION = "inkstruct_document_package_v1"
 FONT_VERSION = "inkstruct_document_package_v2"
 TEMPLATE_VERSION = "inkstruct_document_package_v3"
+# Only these exact historical grammars are accepted, never arbitrary revisions.
+PACKAGE_DIALECTS = {
+    name: frozenset({
+        dialect_version(name),
+        dialect_version(name).removesuffix("/break-commands-v2"),
+        dialect_version(name).removesuffix("/break-commands-v2") + "/break-commands-v1",
+    })
+    for name in ("markdown", "obsidian")
+}
 MAX_MEMBER_BYTES = 16_000_000
 # Catalogs aggregate many individually bounded glyphs, including font provenance.
 # The writer can legitimately exceed the per-glyph/member size in this one index.
@@ -47,6 +60,7 @@ class LoadedDocument:
     file_hash: str
     flow: FlowStyle
     reviews: tuple[dict, ...] = ()
+    migration_notice: str = ""
 
 
 def _json(value):
@@ -82,14 +96,20 @@ def package_bytes(
     from ..math.style import math_style_record
 
     flow_record = asdict(flow or FlowStyle())
+    if flow and flow.template:
+        flow_record['template'] = template_record(flow.template, flow_record['template'])
+    flow_record["han_variation"] = variation_record((flow or FlowStyle()).han_variation)
     flow_record["math"] = math_style_record((flow or FlowStyle()).math)
     for image_style in [flow_record["image"], *(v for _, v in flow_record["image_overrides"])]:
         if image_style["schema_version"] == "inkstruct_image_style_v1":
             image_style.pop("height_mm")
-    if flow_record["schema_version"] not in {"inkstruct_flow_style_v3", "inkstruct_flow_style_v4"}:
+    if flow_record["schema_version"] not in {"inkstruct_flow_style_v3", "inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
         flow_record.pop("latin_spacing")
-    if flow_record["schema_version"] != "inkstruct_flow_style_v4":
+    if flow_record["schema_version"] not in {"inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
         flow_record.pop("punctuation_spacing")
+    if flow_record["schema_version"] != "inkstruct_flow_style_v5":
+        flow_record.pop("paragraph_align")
+        flow_record.pop("han_variation")
     for record in flow_record["images"]:
         for prefix in (
             ("original",)
@@ -121,6 +141,11 @@ def package_bytes(
             resources.append(record)
             members[filename] = raw
     members["resources.json"] = _json(resources)
+    if resolver.font_identity:
+        members['font-source.json'] = _json({
+            'schema_version': 'inkstruct_font_source_v1',
+            **dict(zip(FONT_RELEASE_KEYS, resolver.font_identity, strict=True)),
+        })
     manifest = {
         "schema_version": TEMPLATE_VERSION if (flow or FlowStyle()).named_fields else FONT_VERSION if any(g.font_core for pool in resolver.pools.values() for g in pool) else VERSION,
         "dialect": dialect_version(flow_record["markdown_dialect"]),
@@ -226,10 +251,7 @@ def load_package(path: Path) -> LoadedDocument:
         if manifest['schema_version']==TEMPLATE_VERSION and set(manifest)!={
                 'schema_version','dialect','math_version','seed','optimize','allow_reverse','sha256','template_content_protocol'}:
             raise ValueError('Unknown template project manifest fields')
-        if manifest["schema_version"] not in {VERSION, FONT_VERSION, TEMPLATE_VERSION} or manifest["dialect"] not in {
-            DIALECT_VERSION,
-            OBSIDIAN_VERSION,
-        }:
+        if manifest["schema_version"] not in {VERSION, FONT_VERSION, TEMPLATE_VERSION} or manifest["dialect"] not in frozenset().union(*PACKAGE_DIALECTS.values()):
             raise ValueError("Unsupported document package or dialect version")
         if manifest.get("math_version", MATH_VERSION) != MATH_VERSION:
             raise ValueError("Unsupported math grammar version")
@@ -241,8 +263,9 @@ def load_package(path: Path) -> LoadedDocument:
         )
         styles = read_json(members["styles.json"], dict, "styles.json")
         if (
-            dialect_version(styles.get("flow", {}).get("markdown_dialect", "markdown"))
-            != manifest["dialect"]
+            manifest["dialect"] not in PACKAGE_DIALECTS.get(
+                styles.get("flow", {}).get("markdown_dialect", "markdown"), ()
+            )
         ):
             raise ValueError("Document manifest and flow dialect disagree")
         for record in styles.get("flow", {}).get("images", []):
@@ -264,7 +287,16 @@ def load_package(path: Path) -> LoadedDocument:
         validate_selections(choices)
         glyphs = tuple(_glyph(r, members) for r in resources)
         selections = tuple(SelectedAsset(**s) for s in choices)
-        resolver = AssetResolver(embedded=glyphs, seed=manifest["seed"], selections=selections)
+        if 'font-source.json' in members:
+            font_record = read_json(members['font-source.json'], dict, 'font-source.json')
+            identity = release_identity(font_record)
+            if (set(font_record) != {'schema_version', *FONT_RELEASE_KEYS}
+                    or font_record['schema_version'] != 'inkstruct_font_source_v1' or identity is None):
+                raise ValueError("Invalid document font release reference")
+        else:
+            identity = embedded_identity(glyphs)
+        resolver = AssetResolver(embedded=glyphs, seed=manifest["seed"], selections=selections,
+                                 font_identity=identity)
         for selection in selections:
             if not any(
                 (g.asset_id, g.sample_id, g.metrics_key)
@@ -278,7 +310,7 @@ def load_package(path: Path) -> LoadedDocument:
         if flow.named_fields != (manifest["schema_version"] == TEMPLATE_VERSION):
             raise ValueError("Template and project protocol versions disagree")
         if flow.named_fields and (manifest.get("template_content_protocol") != "inkstruct_named_fields_v1"
-                                  or styles['flow'].get('schema_version') not in {'inkstruct_flow_style_v2', 'inkstruct_flow_style_v3', 'inkstruct_flow_style_v4'}):
+                                  or styles['flow'].get('schema_version') not in {'inkstruct_flow_style_v2', 'inkstruct_flow_style_v3', 'inkstruct_flow_style_v4', 'inkstruct_flow_style_v5'}):
             raise ValueError("Unsupported named-field project protocol")
         if flow.math.delimiter_source == "sample" and any(
             ":math-rule:" in s.occurrence_id for s in selections
@@ -295,6 +327,11 @@ def load_package(path: Path) -> LoadedDocument:
                 pass
             else:
                 migrate_equation_choices(document, resolver)
+        migration_notice = ""
+        if manifest["dialect"].endswith("/break-commands-v1"):
+            from .break_migration import migrate_v1_breaks
+
+            session, migration_notice = migrate_v1_breaks(session, flow)
         return LoadedDocument(
             session,
             resolver,
@@ -304,6 +341,7 @@ def load_package(path: Path) -> LoadedDocument:
             sha256(raw).hexdigest(),
             flow,
             reviews,
+            migration_notice,
         )
     except (
         KeyError,

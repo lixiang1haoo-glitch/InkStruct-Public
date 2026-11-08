@@ -1,7 +1,6 @@
 """Three-pane template GUI over the existing immutable template draft operations."""
 
 from dataclasses import replace
-from pathlib import Path
 from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -73,28 +72,25 @@ class PageTree(QtWidgets.QTreeWidget):
         self.setDefaultDropAction(QtCore.Qt.MoveAction)
 
     def dropEvent(self, event):
-        source = self.currentItem()
         target = self.itemAt(event.position().toPoint())
-        if source is None or source.parent() is None or target is None:
+        source = self.owner.tree_data()
+        if not source or target is None:
             event.ignore()
             return
-        group = source.parent()
-        if (
-            group.data(0, QtCore.Qt.UserRole) == "unused"
-            or target not in (group, source)
-            and target.parent() is not group
-        ):
+        _, key, index = source
+        data = target.data(0, QtCore.Qt.UserRole)
+        if key == "unused" or (data != key and (not isinstance(data, tuple) or data[1] != key)):
             event.ignore()
             return
-        if not self.owner.flush():
+        if data == key:
+            destination = 0
+        else:
+            destination = data[2] + (self.dropIndicatorPosition() == self.DropIndicatorPosition.BelowItem)
+            destination -= index < destination
+        if self.owner.tree_move(destination - index):
+            event.acceptProposedAction()
+        else:
             event.ignore()
-            return
-        super().dropEvent(event)
-        key = group.data(0, QtCore.Qt.UserRole)
-        values = tuple(
-            group.child(i).data(0, QtCore.Qt.UserRole)[0] for i in range(group.childCount())
-        )
-        self.owner.guard(lambda: self.owner.commit(replace(self.owner.template, **{key: values})))
 
 
 def interactive_canvas(owner):
@@ -208,16 +204,22 @@ def interactive_canvas(owner):
 
 
 class WorkbenchUI:
-    def __init__(self, template=None, parent=None, *, editor=None, document_mode=True):
+    def __init__(self, template=None, parent=None, *, editor=None, document_mode=True,
+                 save_revision=None, initial_blank=None):
         self.ui_ready = False
         self.ui_loading = False
         self.selected_frame_id = None
         self.draw_role = None
+        self.page_selection = None
+        self.initial_blank = initial_blank
         self.editor_context = editor
         self.document_mode = document_mode
+        self.save_revision = save_revision
+        self.saved_revision = None
         super().__init__(template, parent)
         self.setWindowTitle(
-            "模板工作台 · 当前文档布局" if document_mode else "模板工作台 · 可复用模板副本"
+            "模板工作台 · 当前文档版式" if document_mode else
+            "模板工作台 · 编辑现有模板" if save_revision is not None else "模板工作台 · 可复用模板副本"
         )
         # Retire the old tabbed forms but retain their draft commands for compatibility.
         self.tabs.hide()
@@ -245,7 +247,9 @@ class WorkbenchUI:
         more.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         menu = QtWidgets.QMenu(more)
         menu.addAction("高级 JSON…", self.edit_json)
-        menu.addAction("另存可复用模板副本…", self.save)
+        if save_revision is None:
+            menu.addAction("另存为新模板…", self.save)
+        menu.addAction("导出 JSON…", self.export_json)
         menu.addAction(
             "复制全部字段骨架",
             lambda: QtWidgets.QApplication.clipboard().setText(self.template.skeleton()),
@@ -254,15 +258,17 @@ class WorkbenchUI:
         heading.addWidget(more)
         col.addLayout(heading)
         self.scope_label = QtWidgets.QLabel(
-            "只修改本份文档的布局；确认后可撤销。"
+            "修改本份文档的页面版式，确认后可撤销。"
             if document_mode
+            else "保存修改会更新当前模板。另存为新模板会创建独立副本。"
+            if save_revision is not None
             else "编辑模板副本，另存新文件；不改变当前文档和全局默认。"
         )
         self.scope_label.setWordWrap(True)
         if self.template.migration:
             self.scope_label.setText(
                 self.scope_label.text()
-                + "\n显式迁移副本：仅复制布局；原正文与绑定保留，锚点、倍率和页面策略需人工核对。"
+                + "\n迁移副本会复制页面版式，保留原正文与绑定。请核对锚点、倍率和页面策略。"
             )
         col.addWidget(self.scope_label)
         self.splitter = QtWidgets.QSplitter()
@@ -274,30 +280,38 @@ class WorkbenchUI:
         self.page_tree.currentItemChanged.connect(self.tree_selected)
         left_col.addWidget(self.page_tree, 1)
         row = QtWidgets.QHBoxLayout()
-        for title, callback in [
-            ("上移", lambda: self.tree_move(-1)),
-            ("下移", lambda: self.tree_move(1)),
-            ("移除引用", self.tree_remove),
-        ]:
+        self.page_moves = []
+        for title, direction in [("上移", -1), ("下移", 1)]:
             b = QtWidgets.QPushButton(title)
-            b.clicked.connect(callback)
+            b.clicked.connect(lambda checked=False, step=direction: self.tree_move(step))
+            self.page_moves.append(b)
             row.addWidget(b)
         left_col.addLayout(row)
+        self.remove_reference = QtWidgets.QPushButton("从此页组移除")
+        self.remove_reference.clicked.connect(self.tree_remove)
+        left_col.addWidget(self.remove_reference)
+        self.join_spare = QtWidgets.QPushButton("加入页组…")
+        self.join_spare.clicked.connect(self.join_selected_layout)
+        left_col.addWidget(self.join_spare)
+        self.delete_spare = QtWidgets.QPushButton("删除备用版式")
+        self.delete_spare.clicked.connect(self.tree_remove)
+        left_col.addWidget(self.delete_spare)
         add = QtWidgets.QToolButton()
-        add.setText("添加布局…")
+        add.setText("添加页面版式…")
         add.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         menu = QtWidgets.QMenu(add)
-        menu.addAction("新增空布局", self.new_layout)
-        menu.addAction("引用现有布局", self.reference_layout)
-        menu.addAction("复制为独立布局", self.duplicate_layout)
+        menu.addAction("新增空白版式", self.new_layout)
+        menu.addAction("引用现有页面版式", self.reference_layout)
+        menu.addAction("复制为独立页面版式", self.duplicate_layout)
         menu.addAction("导入 PDF 页面…", self.import_pdf)
         add.setMenu(menu)
         left_col.addWidget(add)
         self.finish.setParent(left)
         self.finish.toggled.disconnect()
         self.finish.toggled.connect(self.finish_changed)
+        self.finish.setToolTip("勾选后，即使正文已经结束，仍会生成本轮循环页组中剩余的页面。")
         left_col.addWidget(self.finish)
-        self.loop_info = QtWidgets.QLabel("循环组末尾 → 返回本组第一张布局；实际页码连续递增。")
+        self.loop_info = QtWidgets.QLabel("循环组末尾返回本组第一张页面版式。勾选末尾补齐后，正文结束仍生成本轮剩余页面。")
         self.loop_info.setWordWrap(True)
         left_col.addWidget(self.loop_info)
         self.splitter.addWidget(left)
@@ -327,7 +341,7 @@ class WorkbenchUI:
         self.property_tabs = QtWidgets.QTabWidget()
         properties = QtWidgets.QWidget()
         self.property_form = QtWidgets.QVBoxLayout(properties)
-        self.paper_box = QtWidgets.QGroupBox("纸张与布局")
+        self.paper_box = QtWidgets.QGroupBox("纸张与页面版式")
         paper_form = QtWidgets.QFormLayout(self.paper_box)
         self.paper_form = paper_form
         for key, title in [
@@ -357,10 +371,10 @@ class WorkbenchUI:
             self.offset_controls[key] = c
             paper_form.addRow(title, c)
         self.property_form.addWidget(self.paper_box)
-        self.layout_box = QtWidgets.QGroupBox("当前布局")
+        self.layout_box = QtWidgets.QGroupBox("当前页面版式")
         layout_form = QtWidgets.QVBoxLayout(self.layout_box)
         self.layout_label = QtWidgets.QLineEdit()
-        self.layout_label.setPlaceholderText("布局名称")
+        self.layout_label.setPlaceholderText("页面版式名称")
         self.layout_label.editingFinished.connect(self.flush)
         layout_form.addWidget(self.layout_label)
         for title, callback in [
@@ -387,8 +401,8 @@ class WorkbenchUI:
         self.field_choice.setMinimumContentsLength(10)
         self.field_choice.currentIndexChanged.connect(self.field_selected)
         frame_form.addRow("引用字段", self.field_choice)
-        self.new_field_button = QtWidgets.QPushButton("新建字段声明…")
-        self.new_field_button.clicked.connect(lambda: self.declare_field(True))
+        self.new_field_button = QtWidgets.QPushButton("为所选框新建并绑定字段…")
+        self.new_field_button.clicked.connect(lambda: self.declare_field(True, bind=True))
         frame_form.addRow(self.new_field_button)
         self.geometry_controls = {}
         for key, title in [
@@ -425,7 +439,7 @@ class WorkbenchUI:
         self.field_list = QtWidgets.QListWidget()
         declarations_col.addWidget(self.field_list)
         for title, callback in [
-            ("新增字段", lambda: self.declare_field(True)),
+            ("新增字段声明…", lambda: self.declare_field(True)),
             ("编辑声明", lambda: self.declare_field(False)),
             ("删除字段", self.delete_declaration),
             ("复制字段写法", self.copy_declaration),
@@ -447,7 +461,13 @@ class WorkbenchUI:
         cancel = QtWidgets.QPushButton("取消")
         cancel.clicked.connect(self.reject)
         bottom.addWidget(cancel)
-        self.confirm = QtWidgets.QPushButton("应用到当前文档" if document_mode else "保存为新模板…")
+        if save_revision is not None:
+            save_as = QtWidgets.QPushButton("另存为新模板…")
+            save_as.clicked.connect(self.save)
+            bottom.addWidget(save_as)
+        self.confirm = QtWidgets.QPushButton(
+            "应用到当前文档" if document_mode else "保存修改" if save_revision is not None else "另存为新模板…"
+        )
         self.confirm.clicked.connect(self.accept)
         bottom.addWidget(self.confirm)
         col.addLayout(bottom)
@@ -464,11 +484,15 @@ class WorkbenchUI:
 
     def import_pdf(self):
         if self.flush():
-            previous = len(self.template.layouts)
             super().import_pdf()
-            if len(self.template.layouts) > previous:
-                self.layouts.setCurrentRow(previous)
-                self.refresh()
+
+    def commit(self, template):
+        if self.initial_blank is not None and any(
+            p.layout_id == self.initial_blank.layout_id and p != self.initial_blank
+            for p in getattr(template, "layouts", ())
+        ):
+            self.initial_blank = None
+        super().commit(template)
 
     def import_image(self):
         if self.flush():
@@ -487,35 +511,53 @@ class WorkbenchUI:
         t = self.template
         layout = self.current_layout()
         chosen = layout.layout_id if layout else None
+        spare = next((self.page_tree.topLevelItem(i) for i in range(self.page_tree.topLevelItemCount())
+                      if self.page_tree.topLevelItem(i).data(0, QtCore.Qt.UserRole) == "unused"), None)
+        spare_expanded = spare is not None and spare.isExpanded()
         self.page_tree.clear()
         used = (*t.start_pages, *t.loop_pages)
+        by_id = {p.layout_id: p for p in t.layouts}
+        fallback = selected = None
         for key, title, ids in [
             ("start_pages", "起始页组 · 顺序出现一次", t.start_pages),
             ("loop_pages", "循环页组 · 顺序循环", t.loop_pages),
             (
                 "unused",
-                "未使用布局",
+                "备用版式（未加入页组）",
                 tuple(p.layout_id for p in t.layouts if p.layout_id not in used),
             ),
         ]:
+            if not ids:
+                continue
             group = QtWidgets.QTreeWidgetItem([title])
             group.setData(0, QtCore.Qt.UserRole, key)
             group.setFlags(group.flags() & ~QtCore.Qt.ItemIsDragEnabled)
             self.page_tree.addTopLevelItem(group)
             for index, identity in enumerate(ids):
-                p = next(p for p in t.layouts if p.layout_id == identity)
+                p = by_id[identity]
                 count = used.count(identity)
                 item = QtWidgets.QTreeWidgetItem(
                     [p.label + (f" · 共用 {count} 处" if count > 1 else "")]
                 )
-                item.setData(0, QtCore.Qt.UserRole, (identity, key, index))
+                data = (identity, key, index)
+                item.setData(0, QtCore.Qt.UserRole, data)
                 item.setFlags(
                     (item.flags() | QtCore.Qt.ItemIsDragEnabled) & ~QtCore.Qt.ItemIsDropEnabled
                 )
                 group.addChild(item)
-                if identity == chosen:
-                    self.page_tree.setCurrentItem(item)
-            group.setExpanded(True)
+                if data == self.page_selection:
+                    selected = item
+                if fallback is None and identity == chosen:
+                    fallback = item
+            group.setExpanded(key != "unused" or spare_expanded)
+        item = selected or fallback
+        self.page_tree.setCurrentItem(item)
+        self.page_selection = self.tree_data()
+        if item:
+            item.parent().setExpanded(True)
+            self.select_layout_id(self.page_selection[0])
+            layout = self.current_layout()
+        self.update_page_actions()
         self.left_panel.setVisible(t.kind == "custom")
         self.property_tabs.setTabVisible(1, t.kind == "custom")
         self.layout_box.setVisible(t.kind == "custom")
@@ -526,7 +568,7 @@ class WorkbenchUI:
             (
                 "重复单页 · 正文自动分页"
                 if t.kind == "simple"
-                else f"布局：{layout.label} · 修改影响全部引用"
+                else f"页面版式：{layout.label} · 修改影响全部引用"
             )
             if layout
             else ""
@@ -559,7 +601,7 @@ class WorkbenchUI:
         for f in t.fields:
             self.field_choice.addItem(f.label, f.field_id)
         self.update_frame_controls()
-        self.template_status.setText("布局结构有效；实际内容、字形与越框问题请通过试排检查。")
+        self.template_status.setText("页面版式结构有效。实际内容、字形与越框问题可通过试排检查。")
         self.hint.setText(
             "简单模板只设置纸张与边距。预览采用当前排版样式；字号、行距仍由排版设置管理。"
             if t.kind == "simple"
@@ -680,6 +722,8 @@ class WorkbenchUI:
 
     def tree_selected(self, item, previous=None):
         if self.ui_loading or item is None or item.parent() is None:
+            if not self.ui_loading:
+                self.update_page_actions()
             return
         data = item.data(0, QtCore.Qt.UserRole)
         if not self.flush():
@@ -687,25 +731,50 @@ class WorkbenchUI:
             self.page_tree.setCurrentItem(previous)
             self.ui_loading = False
             return
-        self.selected_frame_id = None
-        index = next(
-            i for i, p in enumerate(self.template.effective_layouts) if p.layout_id == data[0]
-        )
-        self.layouts.setCurrentRow(index)
+        if self.current_layout().layout_id != data[0]:
+            self.selected_frame_id = None
+        self.page_selection = data
         self.refresh()
+
+    def select_layout_id(self, identity):
+        for i, layout in enumerate(self.template.effective_layouts):
+            if layout.layout_id == identity:
+                self.layouts.setCurrentRow(i)
+                break
 
     def tree_data(self):
         item = self.page_tree.currentItem()
         return item.data(0, QtCore.Qt.UserRole) if item and item.parent() else None
 
+    def update_page_actions(self):
+        data = self.tree_data()
+        spare = bool(data and data[1] == "unused")
+        key, index = (data[1], data[2]) if data and not spare else (None, -1)
+        count = len(getattr(self.template, key)) if key else 0
+        for button, enabled in zip(self.page_moves, (index > 0, 0 <= index < count - 1)):
+            button.setEnabled(enabled)
+        self.remove_reference.setVisible(not spare)
+        self.remove_reference.setEnabled(bool(key and (key != "loop_pages" or count > 1)))
+        self.join_spare.setVisible(spare)
+        self.delete_spare.setVisible(spare)
+
     def tree_move(self, direction):
         data = self.tree_data()
         if data and data[1] != "unused" and self.flush():
-            _identity, key, index = data
+            identity, key, index = data
             values = list(getattr(self.template, key))
-            if 0 <= index + direction < len(values):
-                values[index], values[index + direction] = values[index + direction], values[index]
-                self.guard(lambda: self.commit(replace(self.template, **{key: tuple(values)})))
+            destination = index + direction
+            if 0 <= destination < len(values) and destination != index:
+                values.insert(destination, values.pop(index))
+                try:
+                    candidate = replace(self.template, **{key: tuple(values)})
+                except ValueError as error:
+                    self.error.setText(str(error))
+                    return False
+                self.page_selection = (identity, key, destination)
+                self.commit(candidate)
+                return True
+        return False
 
     def tree_remove(self):
         data = self.tree_data()
@@ -713,22 +782,46 @@ class WorkbenchUI:
             return
         identity, key, index = data
         if key == "unused":
-            self.guard(
-                lambda: self.commit(
-                    replace(
-                        self.template,
-                        layouts=tuple(p for p in self.template.layouts if p.layout_id != identity),
-                    )
-                )
-            )
+            self.page_selection = None
+            self.selected_frame_id = None
+            self.commit(replace(self.template, layouts=tuple(
+                p for p in self.template.layouts if p.layout_id != identity
+            )))
         else:
             values = list(getattr(self.template, key))
             values.pop(index)
-            self.guard(lambda: self.commit(replace(self.template, **{key: tuple(values)})))
+            if key == "loop_pages" and not values:
+                return
+            candidate = replace(self.template, **{key: tuple(values)})
+            if values:
+                index = min(index, len(values) - 1)
+                self.page_selection = (values[index], key, index)
+            else:
+                self.page_selection = (candidate.loop_pages[0], "loop_pages", 0)
+            self.selected_frame_id = None
+            self.commit(candidate)
+
+    def append_page_reference(self, key, layout, *, add_layout=False):
+        pages = getattr(self.template, key)
+        candidate = replace(
+            self.template,
+            layouts=(*self.template.layouts, layout) if add_layout else self.template.layouts,
+            **{key: (*pages, layout.layout_id)},
+        )
+        self.page_selection = (layout.layout_id, key, len(pages))
+        self.selected_frame_id = None
+        self.commit(candidate)
+
+    def join_selected_layout(self):
+        data = self.tree_data()
+        if data and data[1] == "unused" and self.flush():
+            key = self.destination_group()
+            if key:
+                self.guard(lambda: self.append_page_reference(key, self.current_layout()))
 
     def destination_group(self):
         value, ok = QtWidgets.QInputDialog.getItem(
-            self, "加入页面组", "放置位置", ["循环页组", "起始页组"], 0, False
+            self, "加入页组", "放置位置", ["循环页组", "起始页组"], 0, False
         )
         return ("loop_pages" if value == "循环页组" else "start_pages") if ok else None
 
@@ -738,17 +831,9 @@ class WorkbenchUI:
         key = self.destination_group()
         if key:
             p = PageLayout(
-                "layout-" + uuid4().hex[:12], "布局 " + str(len(self.template.layouts) + 1)
+                "layout-" + uuid4().hex[:12], "页面版式 " + str(len(self.template.layouts) + 1)
             )
-            self.commit(
-                replace(
-                    self.template,
-                    layouts=(*self.template.layouts, p),
-                    **{key: (*getattr(self.template, key), p.layout_id)},
-                )
-            )
-            self.layouts.setCurrentRow(len(self.template.layouts) - 1)
-            self.refresh()
+            self.guard(lambda: self.append_page_reference(key, p, add_layout=True))
 
     def reference_layout(self):
         if not self.flush():
@@ -756,16 +841,12 @@ class WorkbenchUI:
         layouts = self.template.layouts
         labels = [f"{p.label} · {p.layout_id}" for p in layouts]
         value, ok = QtWidgets.QInputDialog.getItem(
-            self, "引用共用布局", "修改该布局将影响全部引用", labels, 0, False
+            self, "引用共用页面版式", "修改该版式将影响全部引用", labels, 0, False
         )
         key = self.destination_group() if ok else None
         if key:
             p = layouts[labels.index(value)]
-            self.guard(
-                lambda: self.commit(
-                    replace(self.template, **{key: (*getattr(self.template, key), p.layout_id)})
-                )
-            )
+            self.guard(lambda: self.append_page_reference(key, p))
 
     def duplicate_layout(self):
         if not self.flush():
@@ -774,15 +855,7 @@ class WorkbenchUI:
         key = self.destination_group()
         if key and p:
             duplicate = replace(p, layout_id="layout-" + uuid4().hex[:12], label=p.label + " 副本")
-            self.commit(
-                replace(
-                    self.template,
-                    layouts=(*self.template.layouts, duplicate),
-                    **{key: (*getattr(self.template, key), duplicate.layout_id)},
-                )
-            )
-            self.layouts.setCurrentRow(len(self.template.layouts) - 1)
-            self.refresh()
+            self.guard(lambda: self.append_page_reference(key, duplicate, add_layout=True))
 
     def start_draw(self, role):
         if self.flush():
@@ -795,20 +868,22 @@ class WorkbenchUI:
 
     def create_frame(self, role, values):
         fid = ""
+        fields = self.template.fields
         if role == "field":
-            labels = [f.label + " · " + f.field_id for f in self.template.fields] + ["新建字段…"]
+            labels = [f.label + " · " + f.field_id for f in fields] + ["新建字段…"]
             value, ok = QtWidgets.QInputDialog.getItem(
                 self, "引用字段", "选择字段声明", labels, 0, False
             )
             if not ok:
                 return
             if value == labels[-1]:
-                field = self.declare_field(True)
+                field = self.ask_field(NamedField("field_" + uuid4().hex[:8], "新字段"))
                 if not field:
                     return
                 fid = field.field_id
+                fields = (*fields, field)
             else:
-                fid = self.template.fields[labels.index(value)].field_id
+                fid = fields[labels.index(value)].field_id
         p = self.current_layout()
         key = "frame-" + uuid4().hex[:12]
         order = max((f.order for f in p.body_frames), default=0) + 1
@@ -820,8 +895,12 @@ class WorkbenchUI:
             order,
             fid,
         )
+        updated = replace(p, frames=(*p.frames, frame))
+        candidate = replace(self.template, fields=fields, layouts=tuple(
+            updated if layout.layout_id == p.layout_id else layout for layout in self.template.layouts
+        ))
         self.selected_frame_id = key
-        self.update_layout(frames=(*p.frames, frame))
+        self.commit(candidate)
 
     def replace_frame(self, frame):
         self.update_layout(
@@ -838,7 +917,16 @@ class WorkbenchUI:
                 )
             )
 
-    def declare_field(self, new):
+    def ask_field(self, field):
+        dialog = FieldDeclarationDialog(field, self)
+        try:
+            if dialog.exec() == QtWidgets.QDialog.Accepted:
+                return dialog.configuration()
+        finally:
+            dialog.deleteLater()
+        return None
+
+    def declare_field(self, new, *, bind=False):
         if not self.flush():
             return None
         index = self.field_list.currentRow()
@@ -848,10 +936,9 @@ class WorkbenchUI:
         field = (
             NamedField("field_" + uuid4().hex[:8], "新字段") if new else self.template.fields[index]
         )
-        dialog = FieldDeclarationDialog(field, self)
         try:
-            if dialog.exec() == QtWidgets.QDialog.Accepted:
-                field = dialog.configuration()
+            field = self.ask_field(field)
+            if field:
                 fields = (
                     (*self.template.fields, field)
                     if new
@@ -861,7 +948,9 @@ class WorkbenchUI:
                 )
                 selected = self.selected_frame()
                 changes = {"fields": fields}
-                if new and selected and selected.role == "field":
+                if bind:
+                    if not selected or selected.role != "field":
+                        raise ValueError("请先选择要绑定的字段框。")
                     p = self.current_layout()
                     p = replace(
                         p,
@@ -879,8 +968,6 @@ class WorkbenchUI:
                 return field
         except (ValueError, TypeError) as error:
             self.error.setText(str(error))
-        finally:
-            dialog.deleteLater()
         return None
 
     def delete_declaration(self):
@@ -948,26 +1035,24 @@ class WorkbenchUI:
     def save(self):
         if not self.flush():
             return False
-        from .template_manager import remember_template
+        from .template_manager import copy_template_as
 
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "保存为新模板（不覆盖原文件）", "", "模板 (*.json)"
-        )
-        if not path:
-            return False
-        written = False
         try:
-            with Path(path).open("x", encoding="utf-8") as stream:
-                stream.write(template_json(self.template))
-            written = True
-            remember_template(path)
-            from ..resource_catalog import TemplateStore, workspace_for
-            TemplateStore(workspace_for(self.editor_context or self) / 'templates').add(path)
-            self.error.setText("已另存并加入模板库：" + path + "；当前文档与默认设置未改变。")
+            path = copy_template_as(self, self.editor_context or self, self.template)
+            if not path:
+                return False
+            self.error.setText("已复制并加入模板库 · " + path)
             return True
         except (ValueError, OSError) as error:
-            self.error.setText(("模板文件已另存，但未加入模板库；可稍后显式导入：" + path + "\n" if written else "") + str(error))
+            self.error.setText(str(error))
             return False
+
+    def export_json(self):
+        if not self.flush():
+            return
+        from .template_manager import export_template_json
+
+        self.guard(lambda: export_template_json(self, self.template))
 
     def configuration(self):
         if not self.flush():
@@ -975,6 +1060,7 @@ class WorkbenchUI:
         return self.template
 
     def focus_target(self, target):
+        self.page_selection = None
         super().focus_target(target)
         p = self.current_layout()
         self.selected_frame_id = (
@@ -1003,5 +1089,14 @@ class WorkbenchUI:
             super().history(redo)
 
     def accept(self):
-        if self.flush() and (self.document_mode or self.save()):
-            QtWidgets.QDialog.accept(self)
+        if not self.flush():
+            return
+        if self.save_revision is not None:
+            try:
+                self.saved_revision = self.save_revision(self.template)
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                self.error.setText(str(error))
+                return
+        elif not self.document_mode and not self.save():
+            return
+        QtWidgets.QDialog.accept(self)

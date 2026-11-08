@@ -1,6 +1,7 @@
 """Current-document template selection, field form and fit evidence."""
 
 from dataclasses import replace
+from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
@@ -18,6 +19,12 @@ class TemplateContentPanel(QtWidgets.QWidget):
         self.history_session = self.refresh_key = None
         col = QtWidgets.QVBoxLayout(self)
         col.addWidget(QtWidgets.QLabel('当前文档资源'))
+        libraries = QtWidgets.QHBoxLayout()
+        for category, title in [('fonts', '打开字体库'), ('templates', '打开模板库')]:
+            button = QtWidgets.QPushButton(title)
+            button.clicked.connect(lambda _checked=False, key=category: self.open_library(key))
+            libraries.addWidget(button)
+        col.addLayout(libraries)
         self.font_summary = QtWidgets.QLabel()
         self.font_summary.setWordWrap(True)
         self.font_summary.setTextFormat(QtCore.Qt.PlainText)
@@ -25,6 +32,9 @@ class TemplateContentPanel(QtWidgets.QWidget):
         choose_font = QtWidgets.QPushButton('更换本文字体…')
         choose_font.clicked.connect(self.choose_font)
         col.addWidget(choose_font)
+        self.connect_font_button = QtWidgets.QPushButton('连接原版本…')
+        self.connect_font_button.clicked.connect(self.connect_font)
+        col.addWidget(self.connect_font_button)
         self.summary = QtWidgets.QLabel()
         self.summary.setWordWrap(True)
         self.summary.setTextFormat(QtCore.Qt.PlainText)
@@ -32,7 +42,11 @@ class TemplateContentPanel(QtWidgets.QWidget):
         b = QtWidgets.QPushButton("更换模板…")
         b.clicked.connect(self.choose_template)
         col.addWidget(b)
-        edit_layout = QtWidgets.QPushButton('编辑本文布局…')
+        self.newer_template_button = QtWidgets.QPushButton('查看新版…')
+        self.newer_template_button.clicked.connect(self.view_newer_template)
+        col.addWidget(self.newer_template_button)
+        self.revision_lookup = (None, None)
+        edit_layout = QtWidgets.QPushButton('编辑本文页面版式…')
         edit_layout.clicked.connect(self.edit_layout)
         col.addWidget(edit_layout)
         col.addWidget(QtWidgets.QLabel("字段"))
@@ -67,7 +81,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
             b.clicked.connect(callback)
             col.addWidget(b)
         note = QtWidgets.QLabel(
-            "制作可复用模板：字体与模板 → 模板。\n模板随文档保存，不跟随外部文件更新。"
+            "在模板库制作可复用模板。\n模板随文档保存，换版需明确确认。"
         )
         note.setWordWrap(True)
         col.addWidget(note)
@@ -82,8 +96,27 @@ class TemplateContentPanel(QtWidgets.QWidget):
         self.refresh()
 
     def refresh(self):
+        from ..fonts.library import fingerprint
+        from ..resource_catalog import TemplateStore, workspace_for
+
         w = self.editor
         t = w.flow.template
+        store = TemplateStore(workspace_for(w) / 'templates')
+        try:
+            stamp = fingerprint(store.index)
+        except OSError:
+            stamp = None
+        revision_key = (id(t), store.index, stamp)
+        if revision_key != self.revision_lookup[0]:
+            try:
+                candidates = store.newer(t) if t and stamp else ()
+                update = (store, candidates[0]) if candidates else None
+            except (OSError, TypeError, ValueError) as error:
+                self.message.setText(str(error))
+                update = None
+            self.revision_lookup = (revision_key, update)
+        self.newer_template_button.setVisible(self.revision_lookup[1] is not None)
+        self.connect_font_button.setVisible(bool(w.resolver.font_identity and not w.run_path))
         snapshot = getattr(w, "snapshot", None)
         key = (
             w.source_session.document_id,
@@ -99,8 +132,6 @@ class TemplateContentPanel(QtWidgets.QWidget):
             return
         self.refresh_key = key
         path = getattr(w, 'run_path', '')
-        from pathlib import Path
-
         from ..resource_catalog import FontMetadata
         label = ''
         if path and Path(path).suffix == '.inkfont':
@@ -120,12 +151,13 @@ class TemplateContentPanel(QtWidgets.QWidget):
         detail = (
             "简单模板"
             if kind == "simple"
-            else f"自定义模板 · {len(t.start_pages)} 张起始布局 · {len(t.loop_pages)} 张循环布局"
+            else f"自定义模板 · {len(t.start_pages)} 张起始页 · {len(t.loop_pages)} 张循环页"
             if kind == "custom"
-            else "旧版模板 · 保留原布局与内容对应"
+            else "旧版模板 · 保留原版式与内容对应"
         )
         self.summary.setText(
-            f"模板：{t.name}\n{detail}" if t else "普通页面\n正文自动换行与分页。可更换为已有模板。"
+            f"模板：{t.name}" + (f" · 修订 {t.revision.number}" if t.revision else '') + f"\n{detail}"
+            if t else "普通页面\n正文自动换行与分页。可更换为已有模板。"
         )
         self.fill.setEnabled(t is not None and (not w.flow.named_fields or bool(t.fields)))
         self.fill.setText("编辑旧版内容对应…" if t and not w.flow.named_fields else "填写字段…")
@@ -161,7 +193,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         if snapshot is None or getattr(w, "worker", None) or w.timer.isActive():
             self.issues.addItem("正在排版；结果尚未更新。")
         elif not snapshot.diagnostics:
-            self.issues.addItem("本次内容检查未发现问题；纸面校准需实物核对。")
+            self.issues.addItem("本次内容检查未发现问题。")
         else:
             for d in snapshot.diagnostics:
                 item = QtWidgets.QListWidgetItem(
@@ -211,7 +243,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         else:
             self.editor.navigate_span(d.span)
             self.message.setText(
-                d.message + ("\n布局调整：编辑本文布局。" if target else "")
+                d.message + ("\n可编辑本文页面版式。" if target else "")
             )
 
     def choose_template(self):
@@ -237,17 +269,61 @@ class TemplateContentPanel(QtWidgets.QWidget):
             use_document_font(self.editor, picker.path, self)
         picker.deleteLater()
 
+    def open_library(self, category):
+        from ..resources_ui import open_management
+        open_management(self.editor, category)
+
+    def connect_font(self):
+        from ..fonts.library import find_font_release
+        from ..resource_catalog import workspace_for
+        from .resource_apply import ResourceApplyDialog
+
+        w = self.editor
+        identity = w.resolver.font_identity
+        if not identity:
+            return
+        try:
+            path = find_font_release(workspace_for(w) / 'fonts', identity)
+            if path is None:
+                self.message.setText('字体库没有找到精确原版本。可选择原版文件，或使用“更换本文字体…”查看新版影响。')
+                selected, _ = QtWidgets.QFileDialog.getOpenFileName(self, '选择本文原版字体', '', '字体 (*.inkfont)')
+                if not selected:
+                    return
+                path = Path(selected)
+            dialog = ResourceApplyDialog(w, font=path, exact_identity=identity, parent=self)
+            if dialog.exec() == QtWidgets.QDialog.Accepted:
+                self.message.setText('已完整验证并连接原版字体；原冻结选样保留。')
+            dialog.deleteLater()
+        except (OSError, ValueError) as error:
+            self.message.setText(str(error))
+
+    def view_newer_template(self):
+        from .resource_apply import TemplateApplyDialog
+
+        self.refresh()
+        if self.revision_lookup[1] is None:
+            return
+        store, entry = self.revision_lookup[1]
+        try:
+            dialog = TemplateApplyDialog(self.editor, store.read(entry), self)
+            if dialog.exec() == QtWidgets.QDialog.Accepted:
+                self.message.setText('已换用新版模板，当前文档可撤销。')
+            dialog.deleteLater()
+        except (OSError, ValueError, TypeError) as error:
+            self.message.setText(str(error))
+
     def edit_layout(self):
         from .template_manager import perform_template_action
         perform_template_action(self.editor, 'document', self.editor.flow.template)
 
-    def apply_template(self, template):
+    def apply_template(self, template, *, bindings=None):
         w = self.editor
         if w.source_session is not self.history_session:
             self.template_undo.clear()
             self.template_redo.clear()
             self.history_session = w.source_session
-        flow = replace(w.flow, template=template)
+        flow = replace(w.flow, template=template,
+                       template_bindings=w.flow.template_bindings if bindings is None else bindings)
         if flow == w.flow:
             return
         self.template_undo.append(
@@ -293,7 +369,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
             return
         template, bindings, version, expected, checkpoint = source[-1]
         if w.flow.template != expected:
-            self.message.setText("当前布局已改变，无法撤销过期操作。")
+            self.message.setText("当前页面版式已改变，无法撤销过期操作。")
             return
         flow = replace(
             w.flow, template=template, template_bindings=bindings, schema_version=version

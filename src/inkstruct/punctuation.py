@@ -4,7 +4,7 @@
 # Ideographic stops/commas, quotes, book-title marks and mathematical symbols
 # deliberately remain distinct. Do not apply broad Unicode normalization.
 SHARED_PUNCTUATION = {
-    '，': ',', '；': ';', '：': ':', '！': '!', '？': '?',
+    '，': ',', '．': '.', '；': ';', '：': ':', '！': '!', '？': '?',
     '（': '(', '）': ')', '［': '[', '］': ']', '｛': '{', '｝': '}', '％': '%',
 }
 CHINESE_PUNCTUATION = '。、【】《》〈〉「」『』“”‘’—…'

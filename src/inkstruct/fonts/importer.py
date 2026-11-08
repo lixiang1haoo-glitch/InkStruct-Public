@@ -6,12 +6,14 @@ import gzip
 import tempfile
 import uuid
 import zipfile
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
 from ..assets.glyph_provider import GlyphMetrics, adapt_glyph
 from ..assets.symbol_provider import DEFAULT_SYMBOL_PROFILE, adapt_symbol
 from ..punctuation import CHINESE_PUNCTUATION, POLICY, SHARED_PUNCTUATION, shared_characters
+from .publication_rules import PublicationRules
 from .core import (
     FEATURES,
     FORMAT,
@@ -83,6 +85,14 @@ def generated_records(run, writer):
     protocol = _read(root / "protocol.json")
     if writer not in protocol.get("writers", []):
         raise ValueError("运行中没有此书写者")
+    from ..generation_variants import MAX_CANDIDATES, POOL_VERSION, candidate_payloads
+    limit = 1
+    if "candidate_pool" in protocol:
+        policy = protocol["candidate_pool"]
+        if (not isinstance(policy, dict) or policy.get("version") != POOL_VERSION
+                or type(policy.get("limit")) is not int or not 2 <= policy["limit"] <= MAX_CANDIDATES):
+            raise ValueError("不支持的生成候选池协议")
+        limit = policy["limit"]
     for char in protocol["characters"]:
         stem = root / writer / f"{ord(char):04X}"
         row = _read(stem.with_suffix(".json"))
@@ -99,7 +109,15 @@ def generated_records(run, writer):
         payload = _read(stem.with_suffix(".json.gz"))
         if payload["glyph"].get("character") != char or payload["glyph"].get("writer_id") != writer:
             raise ValueError("轨迹身份不符")
-        yield payload["glyph"], row, payload, protocol
+        candidates = candidate_payloads(payload, row, writer=writer, character=char,
+                                        profile_hash=protocol.get("profile", {}).get("sha256"), limit=limit)
+        primary = {k: v for k, v in payload.items() if k != "candidate_pool"} if limit > 1 else payload
+        yield primary["glyph"], row, primary, protocol
+        for candidate in candidates[1:]:
+            strokes = candidate["stroke_sources"]
+            record = {"source_strokes": len(strokes), "reference_strokes": 0, "stroke_sources": strokes,
+                      "missing": [], "author_only_ready": True}
+            yield candidate["glyph"], record, candidate, protocol
 
 
 def make_generated(glyph, row, payload, protocol):
@@ -256,7 +274,7 @@ def symbol_records(path):
                 if len(raw) > MAX_MEMBER:
                     raise ValueError("样本过大")
                 v = decode(raw)
-                if v.get("schema_version") == "inkstruct_symbol_sample_v1":
+                if isinstance(v, dict) and v.get("schema_version") == "inkstruct_symbol_sample_v1":
                     yield raw, v
 
 
@@ -313,22 +331,179 @@ def make_symbol(raw, value):
     return t, metrics, summary
 
 
+def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidence):
+    from ..symbol_reuse import REUSE_POLICY, declarations, reuse_options
+    from .publication import symbol_group, symbol_input
+
+    def selected(group):
+        return groups is None or group in groups
+
+    def reject(group, character, reason, *, source=None):
+        if diagnostics is None:
+            raise ValueError(reason)
+        diagnostics.append({"group": group, "target": character, "reason": reason,
+                            "source": source, "invalid": True})
+
+    by_id = {}
+    for raw, value in symbol_records(symbol_input(symbols, writer)):
+        if value.get("writer_id") != writer:
+            raise ValueError("扩展样本含有其他书写者，请选择同一作者的目录或 ZIP")
+        character = value.get("character")
+        if not isinstance(character, str) or len(character) != 1:
+            raise ValueError("扩展样本含有无效字符身份")
+        sample_id = value.get("sample_id")
+        if not isinstance(sample_id, str) or not sample_id or sample_id in by_id:
+            raise ValueError("扩展样本身份无效或重复，请选择单一采集库")
+        by_id[sample_id] = (raw, value)
+
+    prepared = {}
+
+    def prepare(sample_id):
+        if sample_id not in prepared:
+            raw, value = by_id[sample_id]
+            t, m, s = make_symbol(raw, value)
+            validate_trajectory(t)
+            validate_summary(s, len(t["strokes"]))
+            prepared[sample_id] = t, m, s
+        return prepared[sample_id]
+
+    recorded = []
+    for sid, (raw, value) in by_id.items():
+        character = value["character"]
+        style = value.get("variant", {}).get("letter_style", "unspecified")
+        group = symbol_group(character, style)
+        if selected(group):
+            try:
+                t, m, s = prepare(sid)
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError) as error:
+                reject(group, character, str(error), source=sid)
+                continue
+            recorded.append((raw, value, style, t, m, s))
+    direct = {t["character"] for _, _, _, t, _, _ in recorded}
+    styles = {(t["character"], style) for _, _, style, t, _, _ in recorded}
+    for raw, value, style, t, m, s in recorded:
+        append(t, m, s, value, sha(raw), style if latin(t["character"]) else "not_applicable")
+        for target in shared_characters(t["character"]):
+            full = target if target in SHARED_PUNCTUATION else t["character"]
+            if target in direct or not rules.allows(("shared", full)):
+                continue
+            sharing = {"policy": POLICY, "source_character": t["character"],
+                       "source_sample_id": value["sample_id"], "source_sha256": sha(raw)}
+            target_metrics = dict(m)
+            target_metrics["advance"] = (max(1.0, m["advance"]) if target in SHARED_PUNCTUATION
+                                         else adapt_symbol(raw).metrics.advance)
+            append({**t, "character": target}, target_metrics,
+                   {**s, "shared_punctuation": sharing,
+                    "evidence_scope": "same recorded strokes shared by explicit punctuation policy; not a separate recording"},
+                   {"shared_punctuation": sharing, "original_sample": value},
+                   sha(encoded([POLICY, sha(raw), target])))
+
+    mappings = {(group, target): source for group, target, source in reuse_options()}
+    choices = {choice.target: choice for choice in rules.donors}
+    if choices.keys() - mappings.keys() or len(choices) != len(rules.donors):
+        raise ValueError("本次选用的笔迹供体不在规则目录内")
+    upright = {}
+    for sid, (raw, value) in by_id.items():
+        char = value["character"]
+        if latin(char) and value.get("variant", {}).get("letter_style") == "upright":
+            upright.setdefault(char, []).append(sid)
+    if evidence is not None:
+        for char, ids in upright.items():
+            for sid in ids:
+                try:
+                    prepare(sid)
+                except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                    continue
+                raw, value = by_id[sid]
+                evidence.donors.setdefault(char, {})[sid] = (sha(raw), value)
+
+    def target_styles(group):
+        return ("italic", "italic") if group == "latin_italic" else ("not_applicable", "unspecified")
+
+    def emit(target, target_style, metadata, marker, policy, sid, raw, value, shape):
+        t, m, s = shape
+        sharing = {**metadata, "policy": policy, "source_sample_id": sid, "source_sha256": sha(raw)}
+        scope = ("user-confirmed reuse of recorded upright ink" if marker == "confirmed_reuse"
+                 else "enabled whitelist mapping of recorded upright ink")
+        append({**t, "character": target}, m,
+               {**s, marker: sharing, "evidence_scope": scope + "; no independent target recording or synthetic slant"},
+               {marker: sharing, "original_sample": value},
+               sha(encoded([policy, sha(raw), target, target_style])), target_style)
+
+    reuse_records = [item for item in declarations(symbols, writer)
+                     if (item["group"], item["target"]) not in choices]
+    reuse_records.extend({"group": group, "target": target, "source": mappings[group, target],
+                          "source_style": "upright", "sample_ids": [choice.sample_id], "confirmed": True}
+                         for (group, target), choice in choices.items())
+    confirmed = {(item["group"], item["target"]) for item in reuse_records}
+    if evidence is not None:
+        evidence.confirmed.update(confirmed)
+    for reuse in reuse_records:
+        group, target = reuse["group"], reuse["target"]
+        rule = group, target
+        if not selected(group) or not rules.allows(rule, confirmed=True):
+            continue
+        target_style, capture_style = target_styles(group)
+        if (target, capture_style) in styles:
+            continue
+        sources = []
+        for sid in reuse["sample_ids"]:
+            try:
+                if sid not in by_id:
+                    raise ValueError("借用来源已缺失或已重录，请重新选择供体：" + target)
+                raw, value = by_id[sid]
+                if rule in choices and sha(raw) != choices[rule].sha256:
+                    raise ValueError("借用来源笔迹已变化，请重新选择供体：" + target)
+                if (value["character"] != reuse["source"]
+                        or value.get("variant", {}).get("letter_style") != reuse["source_style"]):
+                    raise ValueError("复用来源身份或写法不匹配")
+                sources.append((sid, raw, value, prepare(sid)))
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError) as error:
+                reject(group, target, str(error), source=sid)
+                break
+        else:
+            for sid, raw, value, shape in sources:
+                emit(target, target_style, reuse, "confirmed_reuse", REUSE_POLICY, sid, raw, value, shape)
+
+    for (group, target), source in mappings.items():
+        key = group, target
+        if key in confirmed or not selected(group) or not rules.allows(key):
+            continue
+        target_style, capture_style = target_styles(group)
+        if (target, capture_style) in styles:
+            continue
+        for sid in upright.get(source, ()):
+            try:
+                shape = prepare(sid)
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                continue
+            raw, value = by_id[sid]
+            metadata = {"group": group, "target": target, "source": source, "source_style": "upright"}
+            emit(target, target_style, metadata, "mapped_reuse", "mapped-symbol-share-v1", sid, raw, value, shape)
+
+
 def build_font(
-    output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None
+    output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
+    symbol_groups=None, diagnostics=None, phase=None, rules=PublicationRules(), rule_evidence=None,
 ):
-    if not run and not symbols:
+    """Prepare the same candidates for review (output=None) or for packaging."""
+    from .publication import symbol_group
+
+    preview = output is None
+    if not run and not symbols and not preview:
         raise ValueError("请选择生成结果或符号样本")
     if package_kind not in {"user", "developer"}:
         raise ValueError("无效包类型")
     font_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "inkstruct-font:" + writer + ":" + name))
     candidates = []
+    trajectories = {}
     metrics = {}
     provenance = {}
     members = {}
     protocol_record = None
     seen = set()
-    with tempfile.TemporaryDirectory() as d:
-        folder = Path(d)
+    with (nullcontext() if preview else tempfile.TemporaryDirectory()) as directory:
+        folder = Path(directory) if directory else None
 
         def append(t, m, s, source, source_hash, letter_style="not_applicable"):
             validate_trajectory(t)
@@ -339,9 +514,12 @@ def build_font(
             seen.add(cid)
             h = trajectory_hashes(t)
             file = "glyphs/" + h["trajectory_hash"] + ".json"
-            dest = folder / h["trajectory_hash"]
-            dest.write_bytes(encoded(t))
-            members[file] = dest
+            if preview:
+                trajectories[file] = t
+            else:
+                dest = folder / h["trajectory_hash"]
+                dest.write_bytes(encoded(t))
+                members[file] = dest
             r = {
                 "candidate_id": cid,
                 "character": t["character"],
@@ -351,16 +529,19 @@ def build_font(
                 "source_summary_hash": semantic_hash(s),
                 "letter_style": letter_style,
                 "style_evidence": "explicit-construction" if 'symbol_construction' in s else
-                "confirmed-reuse" if 'confirmed_reuse' in s else "capture-declared"
+                "confirmed-reuse" if 'confirmed_reuse' in s else "mapped-reuse" if 'mapped_reuse' in s else "capture-declared"
                 if letter_style in ("upright", "italic")
                 else "unknown",
                 "enabled": True,
                 "priority": 0 if s["source_kind"] == "recorded" else 1,
             }
+            if (s.get("symbol_construction", {}).get("rule") == "hbar-from-h-and-minus"
+                    and s["symbol_construction"]["sources"][1]["character"] == "-"):
+                r["priority"] += 1
             candidates.append(r)
             metrics[cid] = m
             provenance[cid] = s
-            if package_kind == "developer":
+            if package_kind == "developer" and not preview:
                 p = folder / (cid + ".source")
                 p.write_bytes(encoded(public_development(source)))
                 members["development/" + cid + ".json"] = p
@@ -384,72 +565,31 @@ def build_font(
                 )
                 protocol_record = protocol
         if symbols:
-            recorded = list(symbol_records(symbols))
-            provided_characters = {value['character'] for _, value in recorded}
-            provided_styles = {(v['character'], v.get('variant', {}).get('letter_style', 'unspecified'))
-                               for _, v in recorded}
-            for raw, value in recorded:
-                if value["writer_id"] != writer:
-                    raise ValueError("符号样本书写者与字体不一致")
-                t, m, s = make_symbol(raw, value)
-                ls = (
-                    value.get("variant", {}).get("letter_style", "unspecified")
-                    if latin(t["character"])
-                    else "not_applicable"
-                )
-                append(t, m, s, value, sha(raw), ls)
-                for target in shared_characters(t['character']):
-                    if target == t['character'] or target in provided_characters:
-                        continue
-                    sharing = {'policy': POLICY, 'source_character': t['character'],
-                               'source_sample_id': value['sample_id'], 'source_sha256': sha(raw)}
-                    target_metrics = dict(m)
-                    if target in SHARED_PUNCTUATION:
-                        target_metrics['advance'] = max(1.0, target_metrics['advance'])
-                    else:
-                        # When an old full-width capture supplies the ASCII form,
-                        # retain its original ink-based advance instead of the CJK cell.
-                        target_metrics['advance'] = adapt_symbol(raw).metrics.advance
-                    append({**t, 'character': target}, target_metrics,
-                           {**s, 'shared_punctuation': sharing,
-                            'evidence_scope': 'same recorded strokes shared by explicit punctuation policy; not a separate recording'},
-                           {'shared_punctuation': sharing, 'original_sample': value},
-                           sha(encoded([POLICY, sha(raw), target])))
-            from ..symbol_reuse import REUSE_POLICY, declarations
-            by_id = {value['sample_id']: (raw, value) for raw, value in recorded}
-            if len(by_id) != len(recorded):
-                raise ValueError('符号样本身份重复，请选择单一采集库')
-            for reuse in declarations(symbols, writer):
-                target_style = 'italic' if reuse['group'] == 'latin_italic' else 'not_applicable'
-                source_style = 'italic' if reuse['group'] == 'latin_italic' else 'unspecified'
-                # A separately recorded target always takes precedence over reuse.
-                if (reuse['target'], source_style) in provided_styles:
-                    continue
-                for sid in reuse['sample_ids']:
-                    if sid not in by_id:
-                        raise ValueError('复用来源样本已缺失或已重录，请重新确认复用：' + reuse['target'])
-                    raw, value = by_id[sid]
-                    if (value['character'] != reuse['source'] or value['writer_id'] != writer
-                            or value.get('variant', {}).get('letter_style') != reuse['source_style']):
-                        raise ValueError('复用来源身份或写法不匹配')
-                    t, m, s = make_symbol(raw, value)
-                    sharing = {**reuse, 'policy': REUSE_POLICY, 'source_sample_id': sid,
-                               'source_sha256': sha(raw)}
-                    append({**t, 'character': reuse['target']}, m,
-                           {**s, 'confirmed_reuse': sharing,
-                            'evidence_scope': 'user-confirmed reuse of recorded upright ink; no independent target recording or synthetic slant'},
-                           {'confirmed_reuse': sharing, 'original_sample': value},
-                           sha(encoded([REUSE_POLICY, sha(raw), reuse['target'], target_style])), target_style)
+            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, rules, rule_evidence)
         from .symbol_rules import POLICY as CONSTRUCTION_POLICY
         from .symbol_rules import constructions
 
         def load_candidate(record):
             cid = record['candidate_id']
-            return decode(members[record['file']].read_bytes()), metrics[cid], provenance[cid]
+            path = record['file']
+            trajectory = trajectories[path] if preview else decode(members[path].read_bytes())
+            return trajectory, metrics[cid], provenance[cid]
 
-        for t, m, s, key in constructions(candidates, load_candidate):
-            append(t, m, s, {'symbol_construction': s['symbol_construction']},
-                   sha(encoded([CONSTRUCTION_POLICY, key])))
+        disabled = {target for kind, target in rules.disabled if kind == "constructed"}
+        for t, m, s, key in constructions(candidates, load_candidate, diagnostics=diagnostics,
+                                          skip_invalid=diagnostics is not None, disabled=disabled):
+            style = s['symbol_construction'].get('base_letter_style', 'not_applicable')
+            if symbol_groups is not None and symbol_group(t['character'], style) not in symbol_groups:
+                continue
+            try:
+                append(t, m, s, {'symbol_construction': s['symbol_construction']},
+                       sha(encoded([CONSTRUCTION_POLICY, key])), style)
+            except (ValueError, TypeError, KeyError, OverflowError) as error:
+                if diagnostics is None:
+                    raise
+                diagnostics.append({'target': t['character'], 'reason': str(error), 'invalid': True})
+        if preview:
+            return candidates, provenance
         if not candidates:
             raise ValueError("没有可用字形")
         candidates.sort(
@@ -492,4 +632,6 @@ def build_font(
             "derived_from_package": None,
             "adapter": "inkfont-import-v1",
         }
+        if phase:
+            phase("封装")
         return write_archive(output, members, manifest)

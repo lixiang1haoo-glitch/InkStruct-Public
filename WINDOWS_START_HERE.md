@@ -1,6 +1,6 @@
 # InkStruct Windows 桌面开发交接
 
-当前源码基线为 **0.1.40**。团队成员请先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md) 和 [贡献约定](CONTRIBUTING.md)，按其中的 CPU 桌面环境、资源获取与分支流程启动。以下 0.1.3 迁移包说明仅保留为历史来源；其中 handoff 文件不随团队源码仓库分发，旧宿主机路径与初始化命令不作为新成员入口。
+当前 Windows 发布为 [**0.1.64**](docs/RELEASE_0_1_64_WINDOWS.md)。可从 [Windows Git 发布基线](docs/WINDOWS_GIT_BASELINE.md) 复核构建。团队成员请先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md) 和 [贡献约定](CONTRIBUTING.md)，按其中的 CPU 桌面环境、资源获取与分支流程启动。以下 0.1.3 迁移包说明仅保留为历史来源；其中 handoff 文件不随团队源码仓库分发，旧宿主机路径与初始化命令不作为新成员入口。
 
 日期：2026-10-14。迁移基线：桌面应用 0.1.3；Python 库 0.2.0。这是源码和数据迁移包，不是已经验收的 Windows 安装包；没有为迁移快照另发应用版本。下一次交付应用至少为 0.1.4。
 

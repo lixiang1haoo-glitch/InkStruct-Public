@@ -57,7 +57,8 @@ def _session(config, cancelled=lambda: False):
             raise ValueError('任务资源快照已改变，停止生成')
     base = FrozenStructureRepository(config['database'], cancelled)
     return prepare_generation(config['writer'], base, config['profile'], semantic=config['semantic'],
-                              reference_paths=config['references'], cancelled=cancelled)
+                              reference_paths=config['references'], cancelled=cancelled,
+                              candidate_limit=config.get('candidate_limit', 1))
 
 
 def _worker(connection, config, cancel_event):
@@ -87,7 +88,7 @@ def _worker(connection, config, cancel_event):
         connection.close()
 
 
-def verify_row(staging, writer, character, row, profile_hash):
+def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit=None):
     """Only committed rows with matching complete payloads can leave staging."""
     from .generation_workflow import read
     # In-memory tuples in provenance are JSON arrays on disk. Compare the exact
@@ -113,12 +114,18 @@ def verify_row(staging, writer, character, row, profile_hash):
             or row.get('missing') != payload.get('missing')
             or row.get('author_only_ready') != payload.get('author_only_ready')):
         raise ValueError('生成产物协议或来源记录不一致')
+    from .generation_variants import candidate_payloads
+    candidate_payloads(payload, row, writer=writer, character=character, profile_hash=profile_hash,
+                       limit=candidate_limit)
     return path
 
 
 def run_generation(output, writer, characters, base, profile_record, progress, cancelled, *,
-                   semantic=False, workers='auto', target_manifest=None, _context=None, timeout=300):
+                   semantic=False, workers='auto', target_manifest=None, candidate_limit=1, _context=None, timeout=300):
     from .generation_workflow import corrections, write
+    from .generation_variants import MAX_CANDIDATES
+    if type(candidate_limit) is not int or not 1 <= candidate_limit <= (MAX_CANDIDATES if semantic else 1):
+        raise ValueError("无效的生成候选数量")
     characters = list(characters)
     if not characters or len(set(characters)) != len(characters) or any(len(c) != 1 for c in characters):
         raise ValueError('生成目标必须是非空、去重的受支持单字符列表')
@@ -154,7 +161,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
                       'requested_count': len(characters), 'character': character})
 
     def accept(character, row, staging):
-        payload = verify_row(staging, writer, character, row, profile_record['sha256'])
+        payload = verify_row(staging, writer, character, row, profile_record['sha256'],
+                             candidate_limit=candidate_limit)
         if character in rows:
             raise ValueError('同一字符重复提交')
         dest = output / writer
@@ -199,7 +207,7 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
             copied.append(dest)
         if sha256_file(copied[0]) != profile_record['sha256']:
             raise ValueError('作者档案已改变，请重新建档')
-        config = {'writer': writer, 'database': str(database), 'semantic': semantic,
+        config = {'writer': writer, 'database': str(database), 'semantic': semantic, 'candidate_limit': candidate_limit,
                   'profile': {**profile_record, 'path': str(copied[0]), 'original_path': str(paths[0])},
                   'references': [str(p) for p in copied[1:]],
                   'hashes': {str(p): sha256_file(p) for p in [database, *copied]}}
@@ -293,9 +301,13 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
     execution['total_s'] = time.perf_counter() - started
     protocol.update(characters=complete, failed=failed, pending=[c for c in characters if c not in rows], status=status)
     write(output/'protocol.json', protocol)
-    result = {'completed_count': len(complete), 'failed_count': len(failed), 'failed': failed, 'status': status,
+    result = {'completed_count': len(complete), 'completed_preview': ''.join(complete[:24]),
+              'failed_count': len(failed), 'failed': failed, 'status': status,
               'warning_characters': [c for c in complete if rows[c]['warnings']],
               'method': protocol.get('method', 'v6.2 exp' if semantic else 'v6.1 exp'),
               'version': protocol.get('version'), 'execution': execution, 'pending': protocol['pending']}
+    if candidate_limit > 1:
+        result.update(candidate_count=sum(rows[c]['candidate_count'] for c in complete),
+                      variant_character_count=sum(rows[c]['candidate_count'] > 1 for c in complete))
     write(output/'summary.json', result)
     return result

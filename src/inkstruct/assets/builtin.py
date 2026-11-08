@@ -1,5 +1,7 @@
 """Explicit single-line numeric fallback shared with the standalone table tool."""
 
+from dataclasses import replace
+
 from ..document.schema import digest
 from ..table_editor.core import BUILTIN_GLYPHS
 from .glyph_provider import GlyphMetrics
@@ -23,4 +25,11 @@ def numeric_assets():
             b"{}",
             "builtin-numeric-em-v1",
         )
+    # Explicit width variant of the existing decimal point. Keep both Unicode
+    # identities so portable documents can validate and reopen either form.
+    dot = assets["."]
+    assets["．"] = replace(dot,
+        asset_id=digest(["builtin-numeric-em-v1", "．", dot.strokes]),
+        character="．", sample_id="builtin:．",
+        metrics=replace(dot.metrics, advance=max(1.0, dot.metrics.advance)))
     return assets

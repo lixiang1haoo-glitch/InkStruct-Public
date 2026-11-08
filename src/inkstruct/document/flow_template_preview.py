@@ -9,13 +9,13 @@ def geometry_preview(template, layout_id):
         raise ValueError("Unknown template layout")
     w, h = template.width_mm, template.height_mm
     lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}">',
         "<title>Template design reference — not machine output</title>",
-        f'<rect width="{w}" height="{h}" fill="white"/>',
+        f'<rect width="{w}" height="{h}" fill="white" stroke="#94a3b8" stroke-width="0.5"/>',
     ]
     if p.background:
         lines.append(
-            f'<image width="{w}" height="{h}" preserveAspectRatio="none" opacity="0.45" href="data:image/png;base64,{p.background.png_base64}"/>'
+            f'<image width="{w}" height="{h}" preserveAspectRatio="none" xlink:href="data:image/png;base64,{p.background.png_base64}"/>'
         )
     lines.append(f'<g transform="translate({template.offset_x_mm} {template.offset_y_mm})">')
     for r in p.rules:

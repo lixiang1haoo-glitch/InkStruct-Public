@@ -41,6 +41,7 @@ def test_sample_construction_choices_preview_cancel_reset_and_persist(tmp_path):
 import sys
 sys.path.insert(0, 'tests')
 from pathlib import Path
+from unittest.mock import patch
 from PySide6 import QtWidgets
 from test_math_sample_constructions import resolver
 from inkstruct.editor.math_settings import MathSettingsDialog
@@ -68,6 +69,16 @@ d.reject();assert original==MathStyle() and not r.selections
 path=Path(sys.argv[1])/'sources.inkdoc'
 save_package(path,SourceSession(r'$\sqrt{12}$'),r,PageProfile(),StyleProfile(),flow=FlowStyle(math=before))
 assert load_package(path).flow.math==before
+class LinkedFont:
+ def glyphs(self, characters, *, reuse):
+  assert '√' in characters and any(g.character=='√' for g in reuse)
+  return ()
+with patch('inkstruct.fonts.core.cached_font', return_value=LinkedFont()):
+ d = MathSettingsDialog(original,resolver=r,font_path=path.with_suffix('.inkfont'))
+ d.categories.setCurrentRow(4);d.refresh_preview()
+ assert '√' not in d.preview_resolver.pools  # no fallback to the other font's recorded root
+ assert '1' in d.preview_resolver.pools  # ordinary numeric fallback still applies
+ assert d.print_preview.box.ready
 print('sample sources Qt passed')
 """
     result = subprocess.run(
@@ -205,8 +216,8 @@ d.categories.setCurrentRow(9);d.refresh_preview();assert d.preview.box.ready
 before=d.preview.box.width
 d.controls['tag_gap_em'].setValue(180);d.refresh_preview();assert d.preview.box.width>before
 d.reset_category();assert d.configuration().tag_gap_em==1
-d.categories.setCurrentRow(8);d.formula.setText(r'\begin{aligned}1&2\\3&4\end{aligned}');d.refresh_preview()
-assert d.preview.box.ready
+d.categories.setCurrentRow(8);d.refresh_preview()
+assert d.print_preview.box.ready
 before_height=d.preview.box.ascent+d.preview.box.descent
 d.controls['alignment_row_gap_em'].setValue(120);d.refresh_preview()
 assert d.preview.box.ascent+d.preview.box.descent>before_height
@@ -223,7 +234,7 @@ d.categories.setCurrentRow(0)
 d.points.setValue(18)
 assert abs(d.configuration().em_mm-6.35)<1e-4
 assert abs(d.points.value()-18)<1e-4
-d.categories.setCurrentRow(5);d.formula.setText(r'\int_{1}^{3}12');d.refresh_preview()
+d.categories.setCurrentRow(5);d.example_choice.setCurrentIndex(1);d.refresh_preview()
 assert '缺少字形' in d.preview_status.text() and not d.preview.box.ready
 d.reject();assert style.em_mm==6.123456789 and not r.selections
 d.deleteLater();QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
@@ -240,7 +251,7 @@ d.deleteLater();QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.Defe
 
 
 @pytest.mark.skipif(importlib.util.find_spec("PySide6") is None, reason="desktop extra missing")
-def test_diagram_controls_focus_reset_examples_and_small_window():
+def test_live_measurements_semantics_and_small_window():
     program = r"""
 from PySide6 import QtCore, QtWidgets, QtTest
 from inkstruct.editor.math_settings import MathSettingsDialog, GROUPS
@@ -248,72 +259,68 @@ from inkstruct.math.style import MathStyle
 app = QtWidgets.QApplication([])
 d = MathSettingsDialog(MathStyle(em_mm=6.123456789))
 d.show(); app.processEvents()
+assert d.reference.font.familyName() == "Latin Modern Math"
 for i, group in enumerate(GROUPS):
     d.categories.setCurrentRow(i); d.refresh_preview(); app.processEvents()
-    diagram = d.diagrams[i]
-    assert set(diagram.dimensions) == {key for key, label in group[2]}
+    assert d.example_choice.isVisible() == (d.example_choice.count() > 1)
     for key, label in group[2]:
         control = d.controls[key]
         control.setFocus(); app.processEvents()
-        assert diagram.active_key == key
-        assert diagram.rect().contains(diagram.cards[key][0].geometry())
-        assert control.text() == control.textFromValue(control.value()) + control.suffix()
-        card, info = diagram.cards[key]
-        assert card.width() <= 140 and card.height() <= 50
-        assert info.text() == 'i' and info.toolTip()
-        start, end = diagram.leaders[key]
-        assert (start - end).manhattanLength() <= 40
-    # Wider windows translate the whole diagram; they do not spread the formula.
-    old_dimensions = dict(diagram.dimensions)
-    old_width = diagram.width()
-    d.resize(d.width() + 160, d.height()); app.processEvents()
-    shift = (diagram.width() - old_width) / 2
-    for key, (a, b) in diagram.dimensions.items():
-        old_a, old_b = old_dimensions[key]
-        assert abs((a - b).manhattanLength() - (old_a - old_b).manhattanLength()) < .01
-        assert abs(a.x() - old_a.x() - shift) < .01
-    d.resize(980, 740); app.processEvents()
+        assert d.active_key == key and control.property("activeMathDimension")
+        assert control.suffix().strip() in {"mm", "%"}
+        assert control.buttonSymbols() == QtWidgets.QAbstractSpinBox.NoButtons
     for j in range(d.example_choice.count()):
-        d.choose_example(j); d.refresh_preview(); app.processEvents()
+        d.example_choice.setCurrentIndex(j); d.refresh_preview(); app.processEvents()
         assert d.preview.box is not None, d.preview_status.text()
-        assert not d.preview_status.text().startswith('无法预览'), d.preview_status.text()
-# Switching categories preserves the user's trial source without modifying the document.
+        assert not any(e.code == "reference-glyph-missing" for e in d.print_preview.box.diagnostics)
+d.categories.setCurrentRow(1)
+d.example_choice.setCurrentIndex(0)
+assert d.example_choice.currentIndex() == 0
+d.refresh_preview(); app.processEvents()
+assert len(d.print_preview.guide_rows) == len(d.preview.guide_rows) == 2
+assert all(d.print_preview.annotation_marks(key) for key, _ in GROUPS[1][2])
+for key in ('operator_gap_em', 'binary_gap_em', 'operator_gap_em'):
+    d.controls[key].setFocus(); app.processEvents()
+    assert d.active_key == key and d.example_choice.currentIndex() == 0
+d.example_choice.setCurrentIndex(2); d.refresh_preview()
+glyphs = [(g.occurrence.text, g.outline.character) for g in d.print_preview.box.glyphs if g.outline]
+assert ("x", "𝑥") in glyphs and ("α", "𝛼") in glyphs
+assert all((c,c) in glyphs for c in "sinlogrankd2")
+assert "手写缺少字形" in d.preview_status.text()
+d.categories.setCurrentRow(2)
+d.controls["superscript_raise_em"].setValue(0)
+d.refresh_preview()
+for pane in (d.print_preview, d.preview):
+    mark = next(m for m in pane.box.dimensions if m.key == "superscript_raise_em")
+    assert mark.actual > mark.requested and mark.start[1] == 0
+parsed = d.preview_document
+d.controls["superscript_raise_em"].setValue(100); d.refresh_preview()
+assert d.preview_document is parsed
 d.categories.setCurrentRow(3)
-d.formula.setText(r'\frac{123}{45}')
+d.sources["fraction_source"].setCurrentIndex(d.sources["fraction_source"].findData("geometric"))
+d.example_choice.setCurrentIndex(1); d.refresh_preview()
+assert d.example_choice.currentData() != GROUPS[3][1]
+d.controls["fraction_clearance_em"].setValue(0); d.refresh_preview()
+for pane in (d.print_preview, d.preview):
+    marks = [m for m in pane.box.dimensions if m.key == "fraction_clearance_em"]
+    assert len(marks) == 4 and all(m.actual >= .449 for m in marks)
+    sizes = [m.actual for m in pane.box.dimensions if m.key == "fraction_scale"]
+    assert len(sizes) == 2 and min(sizes) < max(sizes)
+assert d.print_preview.pixels_per_mm == d.preview.pixels_per_mm
 d.categories.setCurrentRow(4); d.categories.setCurrentRow(3)
-assert d.formula.text() == r'\frac{123}{45}'
-assert d.example_choice.currentIndex() == -1
-before = d.configuration()
-d.controls['fraction_clearance_em'].setValue(42)
-reset = d.diagrams[3].cards['fraction_clearance_em'][0].findChild(QtWidgets.QToolButton, 'reset_fraction_clearance_em')
-QtTest.QTest.mouseClick(reset, QtCore.Qt.MouseButton.LeftButton)
+assert d.configuration().fraction_clearance_em == 0
+d.reset_buttons["fraction_clearance_em"].click()
 assert d.configuration().fraction_clearance_em == MathStyle.handwriting().fraction_clearance_em
 assert d.configuration().em_mm == 6.123456789
-d.refresh_preview()
-info = d.diagrams[3].cards['fraction_clearance_em'][1]
-assert '估算' in info.toolTip() and '0.37 mm' in info.toolTip()
-QtTest.QTest.mouseClick(info, QtCore.Qt.MouseButton.LeftButton)
-assert QtWidgets.QToolTip.isVisible()
-QtWidgets.QToolTip.hideText()
-# Small displays scroll the content while keeping Apply and Cancel reachable.
-d.resize(960, 700); app.processEvents()
-scroll = d.findChild(QtWidgets.QScrollArea)
-assert scroll.horizontalScrollBar().maximum() == 0
-assert d.size().width() == 960
-assert d.formula.isVisible()
-scroll.ensureWidgetVisible(d.formula); app.processEvents()
-assert scroll.viewport().rect().intersects(d.formula.rect().translated(d.formula.mapTo(scroll.viewport(), QtCore.QPoint())))
-d.guides.setChecked(True)
-assert d.preview.show_guides
-# Invalid trial text does not prevent returning to a valid example.
-d.formula.setText(r'\unsupported{12}'); d.refresh_preview()
-assert '无法预览' in d.preview_status.text() or not d.preview.box.ready
-d.choose_example(0); d.refresh_preview()
+d.resize(760,440); app.processEvents()
+assert d.categories.isVisible()
+assert d.parameter_scroll.verticalScrollBar().maximum() > 0
+assert d.parameter_scroll.horizontalScrollBar().maximum() == 0
+assert all(b.isVisible() and d.rect().contains(b.mapTo(d,b.rect().center()))
+           for b in d.findChild(QtWidgets.QDialogButtonBox).buttons())
+d.example_choice.setCurrentIndex(0); d.refresh_preview()
 assert d.preview.box is not None
-d.categories.setCurrentRow(0)
-d.alignment.setCurrentIndex(1); d.reset_category()
-assert d.configuration().display_align == 'center'
-print('diagram interaction and responsive layout passed')
+d.reject()
 """
     result = subprocess.run(
         [sys.executable, "-c", program],
@@ -343,8 +350,9 @@ def type_value(key, text):
     QtTest.QTest.keyClicks(control, text)
     wait()
     assert control.hasFocus()
+# Use the digit example so this test can exercise edits without a linked font.
 # No refresh_preview call or Enter/Tab: exercise the real input and timer path.
-d.categories.setCurrentRow(2); wait()
+d.categories.setCurrentRow(2); d.example_choice.setCurrentIndex(1); wait()
 before = d.preview.box
 zoom = d.preview.pixels_per_mm
 selected = d.preview_resolver.selection_records()
@@ -384,7 +392,8 @@ d.categories.setCurrentRow(7); wait()
 old_width = d.preview.box.width
 type_value('delimiter_width_em', '100')
 assert d.preview.box.width > old_width and d.preview.pixels_per_mm == zoom
-d.formula.setText('1234567890' * 8); wait()
+d.categories.setCurrentRow(0); wait()
+type_value('em_mm', '150')
 assert d.preview_scroll.horizontalScrollBar().maximum() > 0
 assert d.preview.pixels_per_mm == zoom
 d.preview_zoom.setCurrentIndex(d.preview_zoom.findData(100)); app.processEvents()

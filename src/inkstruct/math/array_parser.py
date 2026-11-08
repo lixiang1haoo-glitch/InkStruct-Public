@@ -125,7 +125,7 @@ def parse_array(p, start):
                 p.row(
                     lambda: (
                         p.text[p.pos : p.pos + 1] == "&"
-                        or p.text.startswith("\\\\", p.pos)
+                        or p.at_row_break()
                         or p.at_command("end")
                     )
                 )
@@ -147,8 +147,8 @@ def parse_array(p, start):
         children.append(row)
         if len(rows) > 32 or len(rows) * len(columns) > 256:
             p.fail("math-array-budget", "Array exceeds 32 rows or 256 cells", start, p.pos)
-        if p.text.startswith("\\\\", p.pos):
-            p.pos += 2
+        if p.at_row_break():
+            p.consume_row_break()
             p.space()
             if p.text[p.pos : p.pos + 1] in {"[", "*"}:
                 p.fail(

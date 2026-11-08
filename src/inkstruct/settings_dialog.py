@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .assets.resolver import AssetResolver
+from .document.han_variation import HanVariation
 from .document.markdown import parse_markdown
 from .document.styles import FlowStyle
 from .global_defaults import GlobalDefaultsStore, LayoutDefaults, apply_to_document
@@ -13,24 +13,21 @@ from .settings_elements import ElementPage
 from .settings_pages import (
     CapturePage,
     CompactSpinBox,
-    LocalPreview,
     ProfileForm,
     acceptable,
+    compact_form_parameters,
     embed,
     label,
 )
 
 CATEGORIES = (
     ("preview", "应用设置", "预览绘制", "CPU GPU 栅格化 缓存 显卡 加速"),
-    ("capture", "采集设置", "书写显示", "笔迹 粗细 书写格 田字格 配置"),
-    ("paper", "排版默认设置", "纸张与默认模板", "页面 尺寸 宽度 高度 页边距 默认模板"),
-    ("templates", "字体与模板", "打开模板库", "制作 新建 简单 自定义 布局 PDF 字段 管理"),
-    ("font", "排版默认设置", "字体与字形", "作者 资源 导入 目录 符号 覆盖"),
+    ("capture", "采集设置", "书写显示", "书写格 参考格 比例 田字格 配置"),
     (
         "body",
         "排版默认设置",
         "正文与段落",
-        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 英文 字距 标点 句读 间距",
+        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 英文 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
     ),
     (
         "math",
@@ -75,6 +72,55 @@ class BodyPage(QtWidgets.QWidget):
         self.punctuation_spacing.setAccessibleName("标点间距")
         self.punctuation_spacing.setToolTip("中英文标点按实际笔迹宽度排列，不预留半字或整字空位；保留最小笔迹间距。公式和代码不受影响；旧文档不自动切换。")
         form.addRow("标点间距", self.punctuation_spacing)
+        self.paragraph_align = QtWidgets.QComboBox()
+        self.paragraph_align.setObjectName("paragraph_align")
+        self.paragraph_align.setAccessibleName("正文对齐")
+        self.paragraph_align.addItem("两端对齐（段尾靠左）", "justify")
+        self.paragraph_align.addItem("左对齐（保留行尾空白）", "left")
+        self.paragraph_align.setCurrentIndex(self.paragraph_align.findData(owner.flow.paragraph_align))
+        self.paragraph_align.setToolTip("自动折行时，将余量分摊到汉字间隙、词间空格及公式边界；段尾与手动换行不拉伸，英文单词及公式内部不拆开。")
+        form.addRow("正文对齐", self.paragraph_align)
+        variation = owner.flow.han_variation
+        self.original_variation = variation
+        self.upgrade_variation = False
+        natural = QtWidgets.QGroupBox("自然书写（中文 · 实验性）")
+        natural_form = QtWidgets.QFormLayout(natural)
+        self.han_enabled = QtWidgets.QCheckBox("启用自然书写")
+        self.han_enabled.setObjectName("han_variation_enabled")
+        self.han_enabled.setChecked(variation.enabled)
+        natural_form.addRow(self.han_enabled)
+        self.variation_controls = {}
+        for name, title in (("strength", "笔画与倾斜变化"), ("size_strength", "字形大小变化"),
+                            ("spacing_strength", "字距变化"), ("baseline_strength", "基线上下变化")):
+            control = QtWidgets.QDoubleSpinBox()
+            control.setObjectName("han_variation_"+name)
+            control.setAccessibleName(title)
+            control.setRange(0,100)
+            control.setDecimals(1)
+            control.setSuffix(" %")
+            control.setSingleStep(5)
+            control.setValue(getattr(variation,name)*100)
+            self.han_enabled.toggled.connect(control.setEnabled)
+            control.setEnabled(variation.enabled)
+            self.variation_controls[name] = control
+            setattr(self,"han_"+name,control)
+            natural_form.addRow(title,control)
+        self.initial_variation_values = {k:c.value() for k,c in self.variation_controls.items()}
+        self.han_seed = QtWidgets.QSpinBox()
+        self.han_seed.setObjectName("han_variation_seed")
+        self.han_seed.setAccessibleName("自然书写随机种子")
+        self.han_seed.setRange(0,2147483647)
+        self.han_seed.setValue(variation.seed)
+        self.han_enabled.toggled.connect(self.han_seed.setEnabled)
+        self.han_seed.setEnabled(variation.enabled)
+        natural_form.addRow("随机种子",self.han_seed)
+        natural_form.addRow(label("四项强度可分别调节；100% 对应最大变化。字距和基线变化可能改变换行、分页。固定种子可复现；字体包、原始样本、公式和代码保持原样。"))
+        if variation.schema_version == "inkstruct_han_variation_v1" and variation.enabled:
+            natural_form.addRow(label("此项目保留旧版微扰效果；可主动切换新版，或修改任一自然书写选项后切换。"))
+            self.upgrade_natural = QtWidgets.QPushButton("使用新版自然书写")
+            self.upgrade_natural.clicked.connect(self.choose_natural_version)
+            natural_form.addRow(self.upgrade_natural)
+        form.addRow(natural)
         column.addLayout(form)
         self.style = ProfileForm(
             owner.style,
@@ -124,19 +170,8 @@ class BodyPage(QtWidgets.QWidget):
         column.addWidget(label("标题字号"))
         column.addWidget(headings)
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
-        self.preview = LocalPreview(owner.resolver, self.preview_configuration, self, letters=True)
-        self.timer = self.preview.timer
-        self.latin_spacing.currentIndexChanged.connect(self.preview.schedule)
-        self.punctuation_spacing.currentIndexChanged.connect(self.preview.schedule)
-        column.addWidget(label("效果预览"))
-        column.addWidget(self.preview)
-        for control in self.findChildren(QtWidgets.QDoubleSpinBox):
-            control.valueChanged.connect(self.preview.schedule)
         column.addStretch()
-
-    def preview_configuration(self):
-        style, changes = self.configuration()
-        return style, replace(self.owner.flow, **changes)
+        compact_form_parameters(self)
 
     def configuration(self):
         acceptable(self)
@@ -152,7 +187,23 @@ class BodyPage(QtWidgets.QWidget):
             "markdown_dialect": self.dialect.currentData(),
             "latin_spacing": self.latin_spacing.currentData(),
             "punctuation_spacing": self.punctuation_spacing.currentData(),
+            "paragraph_align": self.paragraph_align.currentData(),
+            "han_variation": self.variation_configuration(),
         }
+
+    def choose_natural_version(self):
+        self.upgrade_variation = True
+        self.upgrade_natural.setText("已选择新版算法")
+        self.upgrade_natural.setEnabled(False)
+
+    def variation_configuration(self):
+        original = self.original_variation
+        values = {key:(getattr(original,key) if control.value()==self.initial_variation_values.get(key)
+                       else control.value()/100) for key,control in self.variation_controls.items()}
+        if (not self.upgrade_variation and self.han_enabled.isChecked()==original.enabled and self.han_seed.value()==original.seed
+                and all(value==getattr(original,key) for key,value in values.items())):
+            return original
+        return HanVariation(enabled=self.han_enabled.isChecked(),seed=self.han_seed.value(),**values)
 
     def reset_defaults(self):
         self.style.reset_defaults()
@@ -161,6 +212,12 @@ class BodyPage(QtWidgets.QWidget):
         self.dialect.setCurrentIndex(0)
         self.latin_spacing.setCurrentIndex(0)
         self.punctuation_spacing.setCurrentIndex(0)
+        self.paragraph_align.setCurrentIndex(0)
+        self.han_enabled.setChecked(False)
+        self.han_seed.setValue(0)
+        self.initial_variation_values = {}
+        for key,control in self.variation_controls.items():
+            control.setValue(getattr(HanVariation(),key)*100)
         defaults = FlowStyle().heading_scales
         # Preserve exact initial values through the same comparison path.
         self.initial_headings = [None] * len(defaults)
@@ -168,139 +225,9 @@ class BodyPage(QtWidgets.QWidget):
             c.setValue(value)
 
 
-class PaperPage(QtWidgets.QWidget):
-    def __init__(self, owner):
-        super().__init__()
-        from .editor.template_manager import DefaultTemplateChoice
-
-        column = QtWidgets.QVBoxLayout(self)
-        self.page = ProfileForm(
-            owner.page,
-            [
-                ("width_mm", "纸张宽度", 0.000001, 2000, " mm"),
-                ("height_mm", "纸张高度", 0.000001, 2000, " mm"),
-                ("margin_mm", "页边距", 0, 1000, " mm"),
-            ],
-        )
-        column.addWidget(self.page)
-        column.addWidget(label("新文档默认；启用模板时采用模板中的纸张与书写区域。"))
-        self.template = DefaultTemplateChoice(owner.flow.template)
-        column.addWidget(self.template)
-        column.addWidget(label("制作模板：主窗口“字体与模板 → 模板”。修改本文布局：排版右侧“文档资源”。"))
-        column.addStretch()
-
-    def configuration(self):
-        acceptable(self)
-        return self.page.configuration(), self.template.configuration(), ()
-
-    def reset_defaults(self):
-        self.page.reset_defaults()
-        self.template.set_template(None)
-
-
-class FontPage(QtWidgets.QWidget):
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
-        column = QtWidgets.QVBoxLayout(self)
-        self.info = label("")
-        column.addWidget(self.info)
-        column.addWidget(
-            label(
-                "默认字体供新文档使用。选择后点击“应用”保存；已有项目继续使用其冻结字形。制作与管理在“字体与模板 → 字体”。"
-            )
-        )
-        for text, callback in [
-            ("选择已有字体包…", self.choose_font),
-            ("选择生成字形目录…", self.choose_run),
-            ("导入符号样本…", self.choose_symbols),
-            ("刷新当前资源", self.refresh),
-        ]:
-            button = QtWidgets.QPushButton(text)
-            button.clicked.connect(lambda checked=False, callback=callback: self.guard(callback))
-            column.addWidget(button)
-        column.addStretch()
-        self.update_info()
-
-    def guard(self, callback):
-        try:
-            callback()
-            self.update_info()
-            self.owner.error.clear()
-        except (ValueError, OSError, TypeError) as error:
-            self.owner.error.setText(str(error))
-
-    def update_info(self):
-        d = self.owner
-        source = d.run or d.symbols or "未指定默认字体（新文档以内置数字试排）"
-        self.info.setText(
-            f"当前资源：{source}\n可用字符：{len(d.resolver.pools)} 种。完整覆盖情况由文档排版检查。"
-        )
-
-    def set_font(self, path):
-        from .fonts.core import cached_font
-
-        font = cached_font(Path(path))
-        from .symbol_capture import CHARACTERS
-
-        visible = set(self.owner.editor.source_session.source) | set(CHARACTERS)
-        resolver = AssetResolver(embedded=font.glyphs(visible), builtin_numbers=True)
-        self.owner.run, self.owner.symbols = str(Path(path).resolve()), ""
-        self.owner.mode = "markdown"
-        self.owner.resource_changed(resolver)
-        if "body" in self.owner.pages:
-            self.owner.pages["body"].mode.setCurrentIndex(0)
-
-    def choose_font(self):
-        from .resources_ui import FontPicker
-        picker = FontPicker(self, default=True)
-        if picker.exec() == QtWidgets.QDialog.Accepted:
-            self.set_font(picker.path)
-        picker.deleteLater()
-
-    def set_run(self, path):
-        from .assets.glyph_provider import GlyphProvider
-        from .assets.symbol_provider import SymbolProvider
-
-        generated = GlyphProvider.from_run(Path(path), self.owner.editor.source_session.source)
-        samples = SymbolProvider.from_zip(Path(self.owner.symbols)) if self.owner.symbols else None
-        self.owner.run = str(Path(path).resolve())
-        self.owner.resource_changed(AssetResolver(generated, samples, builtin_numbers=True))
-
-    def choose_run(self):
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, "选择生成字形目录", self.owner.run)
-        if path:
-            self.set_run(path)
-
-    def choose_symbols(self):
-        from .assets.symbol_provider import SymbolProvider
-        from .document.table_style import calibrate_tables
-
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "导入符号样本", "", "样本 (*.zip)")
-        if path:
-            samples = SymbolProvider.from_zip(Path(path))
-            self.owner.flow = calibrate_tables(self.owner.flow, samples)
-            self.owner.symbols = str(Path(path).resolve())
-            resolver = AssetResolver(
-                symbols=samples,
-                embedded=tuple(g for pool in self.owner.resolver.pools.values() for g in pool),
-                builtin_numbers=True,
-            )
-            self.owner.resource_changed(resolver)
-
-    def refresh(self):
-        if self.owner.run:
-            if Path(self.owner.run).suffix == ".inkfont":
-                self.set_font(self.owner.run)
-            else:
-                self.set_run(self.owner.run)
-        else:
-            raise ValueError("当前使用内嵌资源，无外部目录需要刷新。")
-
-
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(
-        self, editor, collector=None, parent=None, *, category=None, target=None, reason=""
+        self, editor, collector=None, parent=None, *, category=None
     ):
         super().__init__(parent or editor)
         from .ui_behavior import protect_parameter_wheels
@@ -309,8 +236,6 @@ class SettingsDialog(QtWidgets.QDialog):
         self.editor, self.collector = editor, collector
         self.defaults_store = GlobalDefaultsStore()
         defaults, self.defaults_warning = self.defaults_store.load()
-        self.template_target, self.template_reason = target, reason
-        self.requested_template_action = None
         self.flow, self.style, self.page, self.mode = (
             defaults.flow,
             defaults.style,
@@ -318,7 +243,6 @@ class SettingsDialog(QtWidgets.QDialog):
             defaults.mode,
         )
         self.run, self.symbols, self.resolver = defaults.run, defaults.symbols, editor.resolver
-        self.resources_changed = False
         self.document = parse_markdown("", dialect=self.flow.markdown_dialect)
         self.pages, self.items = {}, {}
         self.current = None
@@ -326,7 +250,6 @@ class SettingsDialog(QtWidgets.QDialog):
         self.setWindowTitle("设置 · InkStruct")
         self.setModal(True)
         self.setSizeGripEnabled(True)
-        self.setMinimumSize(980, 640)
         self.setStyleSheet(
             "QCheckBox::indicator:unchecked {background: transparent; border: 1px solid #8995a5;} "
             "QTreeWidget::item {min-height: 28px;} "
@@ -364,11 +287,8 @@ class SettingsDialog(QtWidgets.QDialog):
         self.error = label("")
         self.error.setStyleSheet("color: #c44d4d;")
         outer.addWidget(self.error)
-        self.apply_current = QtWidgets.QCheckBox(
-            "同时将默认排版参数应用到当前文档（保留表格、图片独立设置）"
-        )
-        self.apply_current.setObjectName("apply_defaults_to_current_document")
-        outer.addWidget(self.apply_current)
+        self.has_current_document = bool(editor.session_path or editor.dirty or editor.source_session.source
+                                         or editor.document_started)
         footer = QtWidgets.QHBoxLayout()
         self.reset = QtWidgets.QPushButton("恢复本分类初始值")
         self.reset.clicked.connect(self.reset_current)
@@ -377,25 +297,23 @@ class SettingsDialog(QtWidgets.QDialog):
         self.buttons = QtWidgets.QWidget()
         actions = QtWidgets.QHBoxLayout(self.buttons)
         actions.setContentsMargins(0, 0, 0, 0)
-        for text, callback in [("取消", self.reject), ("应用", self.apply), ("确定", self.accept)]:
+        for text, callback in [("取消", self.reject), ("存为默认", self.accept),
+                               ("应用并保存", lambda: self.apply(to_document=True))]:
             button = QtWidgets.QPushButton(text)
             button.setMinimumWidth(72)
             button.clicked.connect(callback)
             button.setAutoDefault(False)
             actions.addWidget(button)
+            if text == "应用并保存":
+                hint = "更新当前文档，并保存为新文档默认"
+                button.setToolTip(hint)
+                button.setAccessibleDescription(hint)
+                button.setVisible(self.has_current_document)
         footer.addWidget(self.buttons)
-        self.close_management = QtWidgets.QPushButton("关闭设置")
-        self.close_management.clicked.connect(self.reject)
-        footer.addWidget(self.close_management)
         outer.addLayout(footer)
         groups = {}
         for key, group, title, words in CATEGORIES:
             if key == "capture" and collector is None:
-                continue
-            if key == "templates":
-                item = QtWidgets.QTreeWidgetItem(self.navigation, [title])
-                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
-                self.items[key] = item
                 continue
             if group not in groups:
                 item = QtWidgets.QTreeWidgetItem(self.navigation, [group])
@@ -409,17 +327,13 @@ class SettingsDialog(QtWidgets.QDialog):
         self.navigation.currentItemChanged.connect(self.category_selected)
         self.search.textChanged.connect(self.filter_categories)
         self.finished.connect(self.remember)
-        size = self.preferences.value("size", QtCore.QSize(1100, 780))
-        available = self.screen().availableGeometry().size()
+        size = self.preferences.value("size", QtCore.QSize(1480, 900))
+        available = (parent or editor).screen().availableGeometry().size()
+        self.setMinimumSize(min(840, available.width() - 40), min(640, available.height() - 64))
         self.resize(
-            min(size.width(), available.width() - 40), min(size.height(), available.height() - 64)
+            min(max(1480, size.width()), available.width() - 40),
+            min(max(900, size.height()), available.height() - 64),
         )
-        # Reserve the largest formula structure's intrinsic width, including
-        # its controls. Do not hide a scrollbar while clipping the contents.
-        self.make_page("math")
-        self.pages["math"].ensurePolished()
-        self.pages["math"].layout().activate()
-        self.setMinimumWidth(max(980, self.pages["math"].minimumSizeHint().width() + 330))
         initial = category or self.preferences.value("last_layout_category", "body", str)
         self.select(initial if initial in self.items else "body")
 
@@ -437,9 +351,10 @@ class SettingsDialog(QtWidgets.QDialog):
         self.error.clear()
         if key not in self.pages:
             self.make_page(key)
-        self.stack.setCurrentWidget(self.pages[key].parentWidget().parentWidget())
+        page = self.pages[key]
+        self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
-        self.heading.setText(title if key == "templates" else f"{group} › {title}")
+        self.heading.setText(f"{group} › {title}")
         self.scope_info.setText(
             "生效范围：本机采集显示"
             if key == "capture"
@@ -447,17 +362,6 @@ class SettingsDialog(QtWidgets.QDialog):
             if key == "preview"
             else "生效范围：全局默认，保存后新文档使用；已有文档保持原设置。"
         )
-        management = key == "templates"
-        self.apply_current.setVisible(not management)
-        self.buttons.setVisible(not management)
-        self.reset.setVisible(not management)
-        self.close_management.setVisible(management)
-        self.scope_info.setText(
-            "此处只提供管理入口；新文档默认与本文操作分别确认。"
-            if management
-            else self.scope_info.text()
-        )
-        self.reset.setEnabled(key != "font")
         self.reset.setText(
             "恢复沿用文档默认"
             if key in {"table", "image"} and self.pages[key].current_key
@@ -472,22 +376,10 @@ class SettingsDialog(QtWidgets.QDialog):
             page = PreviewSettingsPage()
         elif key == "capture":
             page = CapturePage(self.collector)
-        elif key == "templates":
-            page = QtWidgets.QWidget()
-            column = QtWidgets.QVBoxLayout(page)
-            column.addWidget(label('模板制作、整理与导出已集中在“字体与模板 → 模板”。\n新文档默认模板仍在“纸张与默认模板”中设置；本文布局在排版右侧编辑。'))
-            open_library = QtWidgets.QPushButton('打开模板库')
-            open_library.clicked.connect(lambda: self.request_template_action('manage', None))
-            column.addWidget(open_library)
-            column.addStretch()
-        elif key == "paper":
-            page = PaperPage(self)
         elif key == "body":
             page = BodyPage(self)
-        elif key == "font":
-            page = FontPage(self)
         elif key in {"table", "image"}:
-            page = ElementPage(key, self.document, self.flow)
+            page = ElementPage(key, self.document, self.flow, scrollable=False)
             page.scope.hide()
             page.explanation.setText(
                 "保存为全局默认，重启后保留；新文档使用这些值，已有文档保持原设置。"
@@ -499,60 +391,17 @@ class SettingsDialog(QtWidgets.QDialog):
                 )
             )
         elif key == "math":
-            from .editor.math_settings import GROUPS, MathSettingsDialog
+            from .editor.math_settings import MathSettingsDialog
 
-            page = embed(
-                MathSettingsDialog(
-                    self.flow.math, resolver=self.resolver, stroke_width=self.style.stroke_width_mm
-                )
-            )
-            page.categories.hide()
-            choice = QtWidgets.QComboBox()
-            choice.setAccessibleName("公式结构")
-            choice.addItems([group[0] for group in GROUPS])
-            choice.currentIndexChanged.connect(page.categories.setCurrentRow)
-            page.categories.currentRowChanged.connect(choice.setCurrentIndex)
-            page.layout().insertWidget(1, choice)
-            page.structure_choice = choice
-            # The unified page supplies the outer scroll area and title.
-            # Remove the legacy inner scroll container, retaining its controls.
-            legacy_body = page.layout().itemAt(2).layout()
-            inner_scroll = legacy_body.itemAt(1).widget()
-            content = inner_scroll.takeWidget()
-            # Deferred deletes posted before a modal event loop can stay alive
-            # until it closes. Hide the retired viewport and its scroll arrows now.
-            inner_scroll.hide()
-            inner_scroll.setObjectName("retired_math_scroll")
-            legacy_body.removeWidget(inner_scroll)
-            inner_scroll.deleteLater()
-            page.layout().removeItem(legacy_body)
-            page.layout().insertWidget(2, content)
-            heading = page.layout().itemAt(0).layout()
-            for i in range(heading.count()):
-                widget = heading.itemAt(i).widget()
-                if widget:
-                    widget.hide()
+            page = embed(MathSettingsDialog(
+                self.flow.math, resolver=self.resolver, stroke_width=self.style.stroke_width_mm,
+                embedded=True, font_path=self.run or self.editor.run_path,
+            ))
 
-            def reset_math():
-                from .math.style import MathStyle
-
-                index = page.categories.currentRow()
-                defaults = MathStyle.handwriting()
-                keys = {field for field, _ in GROUPS[index][2]}
-                source = {3: "fraction_source", 4: "radical_source", 7: "delimiter_source"}.get(
-                    index
-                )
-                if source:
-                    keys.add(source)
-                if index == 0:
-                    keys.add("display_align")
-                    keys.add("spacing_policy")
-                page.original = replace(page.original, **{k: getattr(defaults, k) for k in keys})
-                page.reset_category()
-                for field_key in keys & page.controls.keys():
-                    page.initial[field_key] = page.controls[field_key].value()
-
-            page.reset_defaults = reset_math
+            page.reset_defaults = page.reset_category
+            self.stack.addWidget(page)
+            self.pages[key] = page
+            return
         else:
             if key == "code":
                 from .editor.code_settings import CodeSettingsDialog
@@ -605,49 +454,6 @@ class SettingsDialog(QtWidgets.QDialog):
                 if button.isCheckable():
                     button.setChecked(True)
 
-    def request_template_action(self, action, template):
-        try:
-            flow, style, paper, mode, capture = self.collect()
-            changed = (flow, style, paper, mode) != (
-                self.flow,
-                self.style,
-                self.page,
-                self.mode,
-            ) or self.resources_changed
-            changed = changed or (
-                capture is not None
-                and self.collector is not None
-                and capture != self.collector.ui_settings
-            )
-            if changed:
-                answer = QtWidgets.QMessageBox.question(
-                    self,
-                    "尚有未保存的默认设置",
-                    "进入模板工作台前，是否保存这些默认设置？",
-                    QtWidgets.QMessageBox.Save
-                    | QtWidgets.QMessageBox.Discard
-                    | QtWidgets.QMessageBox.Cancel,
-                    QtWidgets.QMessageBox.Cancel,
-                )
-                if answer == QtWidgets.QMessageBox.Cancel:
-                    return
-                if answer == QtWidgets.QMessageBox.Save and not self.apply():
-                    return
-            self.requested_template_action = (action, template)
-            self.done(20)
-        except (ValueError, TypeError) as error:
-            self.error.setText(str(error))
-
-    def resource_changed(self, resolver):
-        self.resolver = resolver
-        self.resources_changed = True
-        if "math" in self.pages:
-            page = self.pages["math"]
-            page.preview_resolver = AssetResolver(
-                embedded=tuple(g for p in resolver.pools.values() for g in p), seed=resolver.seed
-            )
-            page.schedule_preview()
-
     def collect(self):
         flow, style, paper, mode = self.flow, self.style, self.page, self.mode
         capture = None
@@ -659,9 +465,6 @@ class SettingsDialog(QtWidgets.QDialog):
                     style, changes = page.configuration()
                     flow = replace(flow, **changes)
                     mode = page.mode.currentData()
-                elif key == "paper":
-                    paper, template, bindings = page.configuration()
-                    flow = replace(flow, template=template, template_bindings=bindings)
                 elif key in {"table", "image"}:
                     flow = replace(flow, **page.configuration())
                 elif key in {"math", "code", "footnote"}:
@@ -675,16 +478,18 @@ class SettingsDialog(QtWidgets.QDialog):
             raise ValueError("字体包使用 Markdown 模式；普通文字可直接输入。")
         return flow, style, paper, mode, capture
 
-    def apply(self):
+    def apply(self, *, to_document=False):
         try:
             flow, style, paper, mode, capture = self.collect()
             w = self.editor
             defaults = LayoutDefaults(paper, style, flow, mode, self.run, self.symbols)
             inspector = getattr(w, "element_inspector", None)
-            if self.apply_current.isChecked() and inspector and inspector.has_pending():
+            if to_document and not self.has_current_document:
+                raise ValueError("没有当前文档。")
+            if to_document and inspector and inspector.has_pending():
                 raise ValueError("右侧有未应用的元素修改，请先应用或取消，再应用全局默认。")
             if (
-                self.apply_current.isChecked()
+                to_document
                 and w.run_path.endswith(".inkfont")
                 and mode != "markdown"
             ):
@@ -705,17 +510,13 @@ class SettingsDialog(QtWidgets.QDialog):
             if capture_changed:
                 self.collector.ui_settings = capture
                 self.collector.apply_ui_settings(capture)
-            if self.apply_current.isChecked():
-                resources = (
-                    (self.run, self.symbols, self.resolver) if self.resources_changed else None
-                )
-                apply_to_document(w, defaults, resources=resources)
+            if to_document:
+                apply_to_document(w, defaults)
             self.flow, self.style, self.page, self.mode = flow, style, paper, mode
             if 'preview' in self.pages:
                 self.pages['preview'].save()
-            self.resources_changed = False
             self.error.setStyleSheet("color: #236747;")
-            self.error.setText("全局默认已保存；取消仅放弃尚未应用的修改。")
+            self.error.setText("已更新当前文档并存为默认。" if to_document else "已保存为新文档默认。")
             return True
         except (ValueError, OSError, TypeError) as error:
             self.error.setStyleSheet("color: #c44d4d;")
@@ -749,27 +550,13 @@ class SettingsDialog(QtWidgets.QDialog):
                 timer.stop()
 
 
-def open_settings(editor, collector=None, parent=None, *, category=None, target=None, reason=""):
-    while True:
-        dialog = SettingsDialog(
-            editor, collector, parent, category=category, target=target, reason=reason
-        )
-        try:
-            result = dialog.exec()
-            requested = dialog.requested_template_action
-        finally:
-            dialog.hide()
-            dialog.deleteLater()
-        if not requested:
-            return result
-        if requested[0] == 'manage':
-            from .resources_ui import open_management
-            open_management(editor, 'templates')
-            return result
-        from .editor.template_manager import perform_template_action
-
-        perform_template_action(editor, *requested, target=target)
-        category, target = "templates", None
+def open_settings(editor, collector=None, parent=None, *, category=None):
+    dialog = SettingsDialog(editor, collector, parent, category=category)
+    try:
+        return dialog.exec()
+    finally:
+        dialog.hide()
+        dialog.deleteLater()
 
 
 def gear_button(parent, callback):

@@ -166,6 +166,20 @@ def export_plan(
         }
         if export_scope is not None:
             manifest["export_scope"] = export_scope
+        if export_scope and export_scope.get("forced"):
+            (staging / "issues.json").write_text(
+                json.dumps(export_scope, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+            lines = ["强制 SVG 导出问题清单", export_scope["notice"],
+                     "导出页码：" + ", ".join(map(str, export_scope.get("page_numbers", ())))]
+            for d in export_scope.get("diagnostics", ()):
+                span = d.get("span", {})
+                lines.append(f"[{d.get('severity', '')}] {d.get('code', '')}: {d.get('message', '')} "
+                             f"(源码 {span.get('start', 0)}–{span.get('end', 0)})")
+            for item in export_scope.get("omitted_strokes", ()):
+                lines.append(f"第 {item['page_index']+1} 页 跳过笔画 {item.get('occurrence_id', '')}: {item['reason']}")
+            for item in export_scope.get("omitted_images", ()):
+                lines.append(f"第 {item['page_index']+1} 页 跳过图片: {item['source']}")
+            (staging / "issues.txt").write_text("\n".join(lines)+"\n", encoding="utf-8")
         (staging / "plotter.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False),
             encoding="utf-8",

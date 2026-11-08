@@ -34,6 +34,7 @@ def validate_macos_bundle(bundle: Path) -> dict:
 def source_snapshot():
     files = [
         *sorted((ROOT / "src/inkstruct").rglob("*.py")),
+        *sorted((ROOT / "src/inkstruct/editor/resources").glob("*.*")),
         ROOT / "pyproject.toml",
         ROOT / "packaging/editor_app.spec",
         ROOT / "packaging/editor_launcher.py",

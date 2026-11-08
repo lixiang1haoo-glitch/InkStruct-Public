@@ -21,6 +21,28 @@ MAX_PAGE_IMAGE = 40 * 1024**2
 COLORS = {"good": "#24845c", "bad": "#c34444", "review": "#bb841b"}
 
 
+class PreviewScrollArea(QtWidgets.QScrollArea):
+    zoom_requested = QtCore.Signal(int, QtCore.QPointF)
+
+    def __init__(self):
+        super().__init__()
+        self.wheel_remainder = 0
+
+    def wheelEvent(self, event):
+        if not event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+            self.wheel_remainder = 0
+            super().wheelEvent(event)
+            return
+        delta = event.angleDelta().y() or event.pixelDelta().y() * 3
+        self.wheel_remainder += delta
+        steps, remainder = divmod(abs(self.wheel_remainder), 120)
+        sign = 1 if self.wheel_remainder >= 0 else -1
+        self.wheel_remainder = sign * remainder
+        if steps:
+            self.zoom_requested.emit(sign * steps, event.position())
+        event.accept()
+
+
 class RasterSignals(QtCore.QObject):
     finished = QtCore.Signal(object)
 
@@ -55,6 +77,7 @@ class RasterWorker(QtCore.QRunnable):
 class ContinuousPageCanvas(QtWidgets.QWidget):
     selected = QtCore.Signal(object)
     task_activated = QtCore.Signal(object)
+    first_page_painted = QtCore.Signal(object)
     margin = 12
     gap = 24
 
@@ -71,6 +94,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         # old documents or their potentially large trajectory catalogs.
         self.preview_cache = BoundedCache(max_entries=256, max_weight=96 * 1024**2)
         self._generation = 0
+        self._first_painted_generation = -1
+        self._startup_background = None
         self._page_tokens = []
         self._next_page_token = 0
         self._job = None
@@ -114,9 +139,28 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             return QtCore.QRectF(self.rect())
         return QtCore.QRectF(QtCore.QRect(self.mapFrom(viewport, QtCore.QPoint()), viewport.size()))
 
-    def load_page(self, snapshot, index):
+    def clear_document(self):
+        if self._job:
+            self._job.cancelled.set()
+        self._generation += 1
+        self._page_tokens = []
+        self._rects.clear()
+        self._errors.clear()
+        self._startup_background = None
+        self.snapshot = self.selected_id = None
+        self.page_index = 0
+        self.setFixedSize(1, 1)
+        self.update()
+
+    def load_page(self, snapshot, index, *, startup_image=None):
         if snapshot is not self.snapshot:
             validate_snapshot(snapshot)
+            first = snapshot.pages[0] if snapshot.pages else None
+            if startup_image is not None:
+                self._startup_background = (first, startup_image)
+            elif (self._startup_background and
+                  (first is not self._startup_background[0] or not snapshot.exportable)):
+                self._startup_background = None
             old = self.snapshot
             reusable = {}
             if (old is not None and repr(old.page_profile) == repr(snapshot.page_profile)
@@ -202,7 +246,9 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             return True
         visible = self.viewport_rect()
         return all(self.preview_cache.get(self._key(index, tile)) is not None
-                   for index in self.pages_in_rect(visible) for tile in self._tiles(index, visible))
+                   for index in self.pages_in_rect(visible)
+                   if index != 0 or self._startup_background is None
+                   for tile in self._tiles(index, visible))
 
     def viewport_changed(self, *_):
         visible = self.viewport_rect()
@@ -243,6 +289,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                         and len(protected) + len(candidate) <= self.preview_cache.max_entries):
                     requests.append((neighbour, edge))
         for index, rect in requests:
+            if index == 0 and self._startup_background is not None:
+                continue
             if (index, self._spec()) in self._errors:
                 continue
             tiles = tuple(t for t in self._tiles(index, rect)
@@ -293,6 +341,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         if not self.snapshot:
             return
         dpr = self.devicePixelRatioF()
+        first_painted = False
         for index in self.pages_in_rect(dirty):
             page = self.page_rect(index)
             if not page.adjusted(-3, -3, 4, 4).intersects(dirty):
@@ -303,18 +352,27 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             if origin := self.snapshot.pages[index].source_layout:
                 painter.setPen(QtGui.QColor('#475569'))
                 painter.drawText(QtCore.QRectF(page.left(),page.top()-20,page.width(),18),
-                                 QtCore.Qt.AlignmentFlag.AlignLeft,f'第 {index+1} 页 · 来源布局：{origin}')
+                                 QtCore.Qt.AlignmentFlag.AlignLeft,f'第 {index+1} 页 · 来源版式：{origin}')
             painted = False
-            for tile in self._tiles(index, dirty):
-                image = self.preview_cache.get(self._key(index, tile))
-                if image is not None:
-                    x, y = (0, 0) if tile == FULL else (tile[0] * TILE / dpr, tile[1] * TILE / dpr)
-                    painter.drawImage(QtCore.QPointF(page.left() + x, page.top() + y), image)
-                    painted = True
+            if index == 0 and self._startup_background is not None:
+                painter.save()
+                painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+                painter.drawImage(page, self._startup_background[1])
+                painter.restore()
+                painted = True
+            else:
+                for tile in self._tiles(index, dirty):
+                    image = self.preview_cache.get(self._key(index, tile))
+                    if image is not None:
+                        x, y = (0, 0) if tile == FULL else (tile[0] * TILE / dpr, tile[1] * TILE / dpr)
+                        painter.drawImage(QtCore.QPointF(page.left() + x, page.top() + y), image)
+                        painted = True
             if not painted:
                 painter.setPen(QtGui.QColor('#64748b'))
                 message = self._errors.get((index, self._spec()), f'正在绘制第 {index + 1} 页…')
                 painter.drawText(page, QtCore.Qt.AlignmentFlag.AlignCenter, message)
+            elif index == 0 and self._first_painted_generation != self._generation:
+                first_painted = not page.intersected(dirty).intersected(self.viewport_rect()).isEmpty()
             for fragment, rect in self._geometry(index):
                 if not rect.adjusted(-3, -3, 3, 3).intersects(dirty):
                     continue
@@ -333,6 +391,10 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                     painter.setPen(QtGui.QPen(QtGui.QColor('#3c6bd9'), 2))
                     painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
                     painter.drawRect(rect.adjusted(-2, -2, 2, 2))
+        painter.end()
+        if first_painted:
+            self._first_painted_generation = self._generation
+            self.first_page_painted.emit(self.snapshot)
         self._queue()
 
     def mousePressEvent(self, event):

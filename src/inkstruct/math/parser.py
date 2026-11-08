@@ -7,6 +7,7 @@ Unsupported syntax fails closed while the caller retains the unmodified source.
 from dataclasses import replace
 
 from ..assets.glyph_provider import is_han
+from ..document.break_commands import FRAME_COMMANDS, LINE_COMMANDS, PAGE_COMMANDS, scan_break
 from ..document.schema import Diagnostic, SourceSpan
 from ..document.source_map import MappedText
 from .schema import MathNode, MathParseResult
@@ -93,6 +94,7 @@ SYMBOLS = {
     "propto": "∝",
     "infty": "∞",
     "partial": "∂",
+    "hbar": "ℏ",
     "nabla": "∇",
     "in": "∈",
     "notin": "∉",
@@ -187,6 +189,8 @@ STRUCTURES = frozenset(
         "label",
         "ref",
         "eqref",
+        "newline",
+        "linebreak",
     )
 )
 ACCENTS = frozenset(
@@ -230,7 +234,7 @@ DIRECT = (
     | RELATION
     | frozenset(SYMBOLS.values())
     | frozenset("ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ")
-    | frozenset("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-−=*/().,;:[]|!")
+    | frozenset("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-−=*/().,;:[]|!．")
 )
 
 
@@ -314,6 +318,24 @@ class Parser:
         end = self.pos + len(value)
         return end == len(self.text) or not (self.text[end].isascii() and self.text[end].isalpha())
 
+    def at_row_break(self):
+        if self.text.startswith("\\\\", self.pos):
+            return True
+        match = scan_break(self.text, self.pos)
+        return bool(match and match.name in LINE_COMMANDS and (match.error or match.strength == 4))
+
+    def consume_row_break(self):
+        if self.text.startswith("\\\\", self.pos):
+            self.pos += 2
+            return
+        start = self.pos
+        match = scan_break(self.text, self.pos)
+        if not match or match.name not in LINE_COMMANDS:
+            self.fail("math-line-break-context", "Expected an explicit row break")
+        self.pos = match.end
+        if match.error:
+            self.fail("math-break-option", match.error, start, self.pos)
+
     def row(self, stop=None):
         self.depth += 1
         if self.depth > 32:
@@ -392,6 +414,44 @@ class Parser:
             self.fail("math-group", "Unclosed group", a, len(self.text))
         self.pos += 1
         return self.node("Group", a, self.pos, (row,))
+
+    def argument(self, start, name, role="argument"):
+        """Read one math atom or a braced list, keeping following scripts outside.
+
+        Unlike a mandatory group, a TeX math argument may be one character or a
+        command. Ungrouped command chains need their own depth guard because
+        they do not pass through row(), which guards braced nesting.
+        """
+        self.space()
+        if (
+            self.pos == len(self.text)
+            or self.text[self.pos : self.pos + 1] in {"}", "_", "^", "&"}
+            or self.at_command("right")
+            or self.at_command("end")
+        ):
+            self.fail("math-argument", f"Missing {role} for \\" + name, start, self.pos)
+        ungrouped = self.text[self.pos : self.pos + 1] != "{"
+        if ungrouped:
+            self.depth += 1
+            if self.depth > 32:
+                self.fail("math-depth", "Formula nesting exceeds 32", start, self.pos)
+        try:
+            argument = self.atom()
+        finally:
+            if ungrouped:
+                self.depth -= 1
+        if argument.kind == "Space":
+            self.fail(
+                "math-argument",
+                f"The {role} for \\" + name + " cannot be spacing alone",
+                start,
+                self.pos,
+            )
+        return argument
+
+    @staticmethod
+    def empty_group(argument):
+        return argument.kind == "Group" and not argument.children[0].children
 
     def text_group(self, start, name):
         self.space()
@@ -486,7 +546,7 @@ class Parser:
             cell = self.row(
                 lambda: (
                     self.text[self.pos : self.pos + 1] == "&"
-                    or self.text.startswith("\\\\", self.pos)
+                    or self.at_row_break()
                     or self.at_command("end")
                 )
             )
@@ -507,9 +567,15 @@ class Parser:
                 if ending != name:
                     self.fail("math-environment", "Mismatched environment end", start, self.pos)
                 break
-            if self.text.startswith("\\\\", self.pos):
-                self.pos += 2
+            if self.at_row_break():
+                self.consume_row_break()
                 self.space()
+                if self.text[self.pos : self.pos + 1] in {"[", "*"}:
+                    self.fail(
+                        "math-matrix-option",
+                        "Per-row spacing and starred row breaks are unsupported; group a literal leading bracket",
+                        self.pos,
+                    )
                 if self.at_command("end"):
                     self.fail("math-matrix", "Trailing empty matrix row is not supported", self.pos)
                 row_start, cells = self.pos, []
@@ -548,7 +614,7 @@ class Parser:
             cell = self.row(
                 lambda: (
                     self.text[self.pos : self.pos + 1] == "&"
-                    or self.text.startswith("\\\\", self.pos)
+                    or self.at_row_break()
                     or self.at_command("end")
                 )
             )
@@ -577,8 +643,8 @@ class Parser:
             rows.append(self.node("AlignmentRow", row_start, self.pos, cells))
             if len(rows) > 32:
                 self.fail("math-alignment-budget", "Alignment exceeds 32 rows", start, self.pos)
-            if self.text.startswith("\\\\", self.pos):
-                self.pos += 2
+            if self.at_row_break():
+                self.consume_row_break()
                 self.space()
                 if self.text[self.pos : self.pos + 1] in {"[", "*"}:
                     self.fail(
@@ -618,9 +684,25 @@ class Parser:
             if c not in DIRECT and not is_han(c):
                 self.fail("math-symbol", "Unsupported direct math character: " + c, a, self.pos)
             # Only math ASCII hyphen/star denote mathematical minus/multiplication.
-            c = {"-": "−", "*": "∗"}.get(c, c)
+            c = {"-": "−", "*": "∗", "．": "."}.get(c, c)
             return self.node("Symbol", a, self.pos, value=c, math_class=symbol_class(c))
         name, _ = self.command()
+        if name in FRAME_COMMANDS | PAGE_COMMANDS:
+            self.fail(
+                "math-frame-break-context" if name in FRAME_COMMANDS else "math-page-break-context",
+                "Page/frame controls belong in body text outside math", a, self.pos,
+            )
+        if name in LINE_COMMANDS:
+            match = scan_break(self.text, a)
+            self.pos = match.end
+            if match.error:
+                self.fail("math-break-option", match.error, a, self.pos)
+            if match.strength < 4:
+                return self.node("Space", a, self.pos, value="zero")
+            self.fail(
+                "math-line-break-context",
+                "Use newline/linebreak inside aligned, matrix, cases or array", a, self.pos,
+            )
         if name in ACCENTS:
             self.depth += 1
             if self.depth > 32:
@@ -677,13 +759,20 @@ class Parser:
             children = [self.node("Symbol", a, self.pos, value=c) for c in name]
             return self.node("Operator", a, self.pos, children, math_class="op", value=name)
         if name == "mathrm":
-            group = self.group()
-            return replace(group, span=self.span(a, self.pos), attributes=(("style", "mathrm"),))
+            self.space()
+            argument_start = self.pos
+            argument = self.argument(a, name)
+            if argument.kind != "Group":
+                # Keep a structure's own style/attributes inside the roman scope.
+                row = self.node("Row", argument_start, self.pos, (argument,))
+                argument = self.node("Group", argument_start, self.pos, (row,))
+            return replace(argument, span=self.span(a, self.pos), attributes=(("style", "mathrm"),))
         if name in ("text", "operatorname"):
             return self.text_group(a, name)
         if name in ("frac", "dfrac", "tfrac"):
-            numerator, denominator = self.group(), self.group()
-            if not numerator.children[0].children or not denominator.children[0].children:
+            numerator = self.argument(a, name, "numerator argument")
+            denominator = self.argument(a, name, "denominator argument")
+            if self.empty_group(numerator) or self.empty_group(denominator):
                 self.fail("math-empty", "Fraction arguments cannot be empty", a, self.pos)
             return self.node(
                 "Fraction", a, self.pos, (numerator, denominator), attributes=(("style", name),)
@@ -697,8 +786,8 @@ class Parser:
                 if self.text[self.pos : self.pos + 1] != "]" or not degree.children:
                     self.fail("math-radical", "Invalid root degree", a, self.pos)
                 self.pos += 1
-            radicand = self.group()
-            if not radicand.children[0].children:
+            radicand = self.argument(a, name, "radicand argument")
+            if self.empty_group(radicand):
                 self.fail("math-empty", "Empty radicand", a, self.pos)
             return self.node(
                 "Radical",

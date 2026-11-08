@@ -44,7 +44,7 @@ def ready():
  raise AssertionError(w.status.text())
 ready()
 assert not w.snapshot.exportable and w.machine_export.isEnabled() and not w.page_export.isEnabled()
-assert '可确认跳过位图' in w.status.text()
+assert '跳过参考图片' in w.problems_panel.export_state.text()
 scope=reference_image_export_scope(w.snapshot)
 assert [i['reason'] for i in scope['omitted_images']]==['loaded-raster','resource-not-loaded']
 dialog_errors=[]

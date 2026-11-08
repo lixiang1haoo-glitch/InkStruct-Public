@@ -3,7 +3,7 @@
 from dataclasses import replace
 from uuid import uuid4
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from ..document.flow_template import PageLayout, TextFrame
 from ..document.template import Region, TemplateBackground
@@ -28,9 +28,12 @@ def selected_pages(text, count):
     return values
 
 
-def imported_template(template, results, source_hash, *, adopt_size=True, group="loop_pages"):
+def imported_template(template, results, source_hash, *, adopt_size=False, group="loop_pages",
+                      mode="append", initial_blank=None):
     if not results:
         raise ValueError("没有可导入页面")
+    if group not in {"start_pages", "loop_pages"} or mode not in {"append", "replace"}:
+        raise ValueError("PDF 导入的页组或操作无效")
     width, height = results[0]["size_mm"] if adopt_size else (template.width_mm, template.height_mm)
     layouts = []
     for r in results:
@@ -52,20 +55,29 @@ def imported_template(template, results, source_hash, *, adopt_size=True, group=
                 source_size_mm=tuple(r["size_mm"]),
             )
         )
+    new_ids = tuple(p.layout_id for p in layouts)
+    sequence = (*getattr(template, group), *new_ids) if mode == "append" else new_ids
+    other = "start_pages" if group == "loop_pages" else "loop_pages"
+    referenced = {*sequence, *getattr(template, other)}
+    retained = tuple(p for p in template.layouts if not (
+        mode == "replace" and p == initial_blank and p.layout_id not in referenced
+        and not (p.frames or p.rules or p.background)
+    ))
     return replace(
         template,
         kind="custom",
         width_mm=width,
         height_mm=height,
-        layouts=(*template.layouts, *layouts),
-        **{group: tuple(p.layout_id for p in layouts)},
+        layouts=(*retained, *layouts),
+        **{group: sequence},
     )
 
 
 class PdfPagesDialog(QtWidgets.QDialog):
-    def __init__(self, path, template, parent=None):
+    def __init__(self, path, template, parent=None, *, initial_blank=None):
         super().__init__(parent)
         self.template = template
+        self.initial_blank = initial_blank
         self.candidate = None
         self.results = []
         self.queue = []
@@ -74,8 +86,8 @@ class PdfPagesDialog(QtWidgets.QDialog):
         self.pdf = PdfProcess(self)
         self.pdf.completed.connect(self.receive)
         self.pdf.failed.connect(self.fail)
-        self.setWindowTitle("导入 PDF 页面为布局背景")
-        self.resize(650, 350)
+        self.setWindowTitle("导入 PDF 页面版式")
+        self.resize(670, 450)
         form = QtWidgets.QFormLayout(self)
         self.summary = QtWidgets.QLabel("正在读取 PDF，可取消…")
         self.summary.setWordWrap(True)
@@ -84,14 +96,19 @@ class PdfPagesDialog(QtWidgets.QDialog):
         self.pages.setPlaceholderText("例如 1-4 或 1,3,4；顺序保留")
         form.addRow("页码与顺序", self.pages)
         self.adopt = QtWidgets.QCheckBox("采用首个所选 PDF 页的物理纸张尺寸")
-        self.adopt.setChecked(True)
+        self.adopt.setChecked(initial_blank is not None)
         form.addRow(self.adopt)
         self.group = QtWidgets.QComboBox()
-        self.group.addItem("将所选页设为循环页组", "loop_pages")
-        self.group.addItem("将所选页设为起始页组", "start_pages")
-        form.addRow("页面组织", self.group)
+        self.group.addItem("循环页组", "loop_pages")
+        self.group.addItem("起始页组", "start_pages")
+        form.addRow("目标页组", self.group)
+        self.mode = QtWidgets.QComboBox()
+        self.mode.addItem("追加到页组", "append")
+        self.mode.addItem("替换整个页组", "replace")
+        self.mode.setCurrentIndex(1 if initial_blank is not None else 0)
+        form.addRow("导入方式", self.mode)
         note = QtWidgets.QLabel(
-            "旧布局保留，页组顺序明确替换为此次选择。若纸张尺寸不同，所有背景拉伸铺满纸张，已有框保持毫米坐标；越界将报错。PDF 只作参考，不进入机器轨迹。"
+            "采用新尺寸会调整整份模板的纸张。背景按宽高铺满，已有框仍按原毫米坐标定位，越界会阻止确认。PDF 底图只用于参考。"
         )
         note.setWordWrap(True)
         form.addRow(note)
@@ -99,8 +116,14 @@ class PdfPagesDialog(QtWidgets.QDialog):
         self.load.clicked.connect(self.start_render)
         form.addRow(self.load)
         self.error = QtWidgets.QLabel()
+        self.error.setTextFormat(QtCore.Qt.PlainText)
         self.error.setWordWrap(True)
         form.addRow(self.error)
+        self.impact = QtWidgets.QPlainTextEdit()
+        self.impact.setReadOnly(True)
+        self.impact.setMinimumHeight(100)
+        self.impact.setAccessibleName("PDF 导入影响")
+        form.addRow(self.impact)
         self.buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
             | QtWidgets.QDialogButtonBox.StandardButton.Cancel
@@ -108,14 +131,15 @@ class PdfPagesDialog(QtWidgets.QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         form.addRow(self.buttons)
-        self.pages.textEdited.connect(self.invalidate)
+        self.pages.textChanged.connect(self.invalidate)
         self.adopt.toggled.connect(self.invalidate)
         self.group.currentIndexChanged.connect(self.invalidate)
+        self.mode.currentIndexChanged.connect(self.invalidate)
         self.set_busy(True)
         self.pdf.request({"action": "open", "path": str(path)})
 
     def set_busy(self, busy):
-        for w in (self.pages, self.adopt, self.group, self.load):
+        for w in (self.pages, self.adopt, self.group, self.mode, self.load):
             w.setEnabled(not busy)
         self.buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setEnabled(
             not busy and self.candidate is not None
@@ -123,6 +147,7 @@ class PdfPagesDialog(QtWidgets.QDialog):
 
     def invalidate(self, *_):
         self.candidate = None
+        self.impact.clear()
         self.buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setEnabled(False)
 
     def start_render(self):
@@ -130,8 +155,7 @@ class PdfPagesDialog(QtWidgets.QDialog):
             self.queue = selected_pages(self.pages.text(), self.count)
             self.results = []
             self.candidate = None
-            self.adopt_selected = self.adopt.isChecked()
-            self.group_selected = self.group.currentData()
+            self.invalidate()
             self.set_busy(True)
             self.error.setText("正在渲染所选页面，可随时取消…")
             self.next_page()
@@ -143,17 +167,27 @@ class PdfPagesDialog(QtWidgets.QDialog):
             self.pdf.request({"action": "render", "index": self.queue.pop(0) - 1})
         else:
             try:
+                group, mode = self.group.currentData(), self.mode.currentData()
+                old_sequence = getattr(self.template, group)
                 self.candidate = imported_template(
                     self.template,
                     self.results,
                     self.source_hash,
-                    adopt_size=self.adopt_selected,
-                    group=self.group_selected,
+                    adopt_size=self.adopt.isChecked(), group=group, mode=mode,
+                    initial_blank=self.initial_blank,
                 )
-                w, h = self.results[0]["size_mm"]
-                self.error.setText(
-                    f"已读取 {len(self.results)} 页。首个所选页物理尺寸 {w:.3f} × {h:.3f} mm；点击确定后应用，可在外层撤销。"
+                names = {p.layout_id: p.label for p in self.template.layouts}
+                removed = " → ".join(names[key] for key in old_sequence) if mode == "replace" else ""
+                self.impact.setPlainText(
+                    f"目标：{self.group.currentText()} · {self.mode.currentText()}\n"
+                    f"导入顺序：{' → '.join(str(r['index'] + 1) for r in self.results)}\n"
+                    f"从目标页组移出：{removed or '无'}\n"
+                    f"整份模板纸张：{self.template.width_mm:.4g} × {self.template.height_mm:.4g} mm → "
+                    f"{self.candidate.width_mm:.4g} × {self.candidate.height_mm:.4g} mm"
                 )
+                if self.initial_blank is not None and self.initial_blank not in self.candidate.layouts:
+                    self.impact.appendPlainText("自动清理：未编辑且已无引用的初始空白版式。")
+                self.error.setText("页面已读取。确定后应用，可在工作台撤销。")
                 self.set_busy(False)
             except (ValueError, TypeError) as error:
                 self.fail(str(error))
@@ -171,6 +205,7 @@ class PdfPagesDialog(QtWidgets.QDialog):
 
     def fail(self, message):
         self.candidate = None
+        self.impact.clear()
         self.error.setText(message)
         self.set_busy(False)
         if self.pdf.closed:

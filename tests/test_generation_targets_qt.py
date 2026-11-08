@@ -22,19 +22,18 @@ f.refresh();assert f.target_current_button.isEnabled()
 f.choose_current_document()
 end=time.monotonic()+8
 while f.busy and time.monotonic()<end:app.processEvents();time.sleep(.01)
-assert not f.busy and f.text.text()=='孔正止',f.log.toPlainText()
+assert not f.busy and f.target_manifest['requested']==list('孔正止'),f.log.toPlainText()
 assert f.target_manifest['source']['identity']=={'document_id':'unchanged','revision':4}
 assert f.current_document_provider()[0]==source
 f.load_targets(lambda supported:target_manifest('孔正'*20000,['孔','正']))
 end=time.monotonic()+8
 while f.busy and time.monotonic()<end:app.processEvents();time.sleep(.01)
-assert f.text.text()=='孔正'
-f.text.setText('孔'*40000);assert len(f.text.text())==40000
-f.generate_all.setChecked(True);assert not f.target_document_button.isEnabled() and not f.text.isEnabled()
-f.generate_all.setChecked(False)
+assert f.target_manifest['requested']==list('孔正')
+assert '目标 2 字' in f.target_summary.text()
+assert not hasattr(f,'text') and not hasattr(f,'generate_all')
 f.method.setCurrentIndex(2);assert not f.parallelism.isEnabled()
 QtWidgets.QFileDialog.getOpenFileName=lambda *a:('','')
-before=f.text.text();f.choose_target_file();assert f.text.text()==before
+before=f.target_manifest;f.choose_target_file();assert f.target_manifest is before
 QtWidgets.QApplication.processEvents()
 f.close();w.hide()
 '''

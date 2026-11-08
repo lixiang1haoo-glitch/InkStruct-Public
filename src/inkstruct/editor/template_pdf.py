@@ -105,7 +105,7 @@ def apply_pdf_background(
     if mode == "new":
         margin = min(10, width / 10, height / 10)
         face = TemplateFace(Region("body", margin, margin, width - 2 * margin, height - 2 * margin))
-        template = PageTemplate("PDF 参考布局", width, height, face, face)
+        template = PageTemplate("PDF 参考版式", width, height, face, face)
     other = "continuation" if face_name == "first" else "first"
     source_hash = (
         source_sha256
@@ -149,8 +149,8 @@ class PdfReferenceDialog(QtWidgets.QDialog):
         self.page.setRange(1, 1)
         row.addRow("PDF 页码", self.page)
         self.mode = QtWidgets.QComboBox(self)
-        self.mode.addItem("仅替换当前页底图，保留纸张与布局", "background")
-        self.mode.addItem("按本页纸张尺寸新建布局", "new")
+        self.mode.addItem("仅替换当前页底图，保留纸张与页面版式", "background")
+        self.mode.addItem("按本页纸张尺寸新建页面版式", "new")
         row.addRow("导入方式", self.mode)
         self.dimensions = QtWidgets.QLabel(self)
         self.dimensions.setWordWrap(True)
@@ -246,7 +246,7 @@ class PdfReferenceDialog(QtWidgets.QDialog):
                     abs(width - self.template.width_mm) > 0.01
                     or abs(height - self.template.height_mm) > 0.01
                 ):
-                    note += " 当前纸张与 PDF 尺寸不同，底图将按当前纸张铺满；如需原始尺寸，请选择新建布局或先调整纸张。"
+                    note += " 当前纸张与 PDF 尺寸不同，底图将按当前纸张铺满；如需原始尺寸，请选择新建页面版式或先调整纸张。"
             self.note.setText(note + " PDF 仅作为参考，不会自动生成栏位、文字或机器轨迹。")
             self.error.clear()
         except (ValueError, TypeError, OSError) as error:

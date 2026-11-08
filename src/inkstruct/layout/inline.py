@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from ..assets.glyph_provider import is_han
 from ..assets.resolver import AssetResolver
 from ..assets.symbol_provider import ResolvedGlyph
+from ..document.break_commands import FLOW_BREAK_KINDS
 from ..document.cancellation import (
     LayoutCancelled,  # noqa: F401 - compatibility re-export
     check_cancel,
@@ -47,6 +48,13 @@ class InlineBox:
 def inline_runs(node: SemanticNode, *, underline=False, strike=False):
     underline = underline or node.kind in {"em", "strong"}
     strike = strike or node.kind == "s"
+    if node.kind == "break_command_error":
+        return []
+    if node.kind in FLOW_BREAK_KINDS:
+        attrs = dict(node.attributes)
+        if attrs.get("blocked") == "true" or attrs.get("strength", "4") != "4":
+            return []
+        return [InlineRun(Occurrence(node.node_id, node.node_id, node.span, "\f"), node.kind)]
     if node.kind == "footnote_reference" and node.occurrences:
         occurrence = Occurrence(node.node_id + ":reference", node.node_id, node.span, "\ufffc")
         return [InlineRun(occurrence, "footnote_reference", footnote=node.occurrences)]
@@ -59,6 +67,7 @@ def inline_runs(node: SemanticNode, *, underline=False, strike=False):
         "code_inline",
         "softbreak",
         "hardbreak",
+        "break_hint",
         "wiki_link",
         "wiki_embed",
     }:
@@ -90,6 +99,7 @@ def measure_runs(
     footnote_style=None,
     latin_spacing="capture",
     punctuation_spacing="capture",
+    han_variation=None,
 ):
     boxes, diagnostics = [], []
     em, radius = style.em_mm * scale, style.stroke_width_mm / 2
@@ -196,7 +206,9 @@ def measure_runs(
         )
         glyph, status, advance, offset = None, "ready", em, radius
         ascent, descent = 0.88 * em + radius, 0.12 * em + radius
-        if run.kind == "hardbreak":
+        if run.kind == "break_hint":
+            status, advance = "break-hint", 0
+        elif run.kind == "hardbreak":
             status, advance = "line-break", 0
         elif run.kind == "softbreak":
             cjk = (
@@ -254,10 +266,12 @@ def measure_runs(
         if box.run.kind == "code_inline":
             key = box.run.occurrence.node_id
             widths[key] = max(widths.get(key, box.em * 0.65), box.advance)
-    return [
+    from .han_variation import natural_metrics
+
+    return natural_metrics([
         replace(b, advance=widths[b.run.occurrence.node_id]) if b.run.kind == "code_inline" else b
         for b in boxes
-    ], diagnostics
+    ], han_variation, radius), diagnostics
 
 
 def box_occurrences(box):
@@ -283,7 +297,8 @@ def break_lines(boxes: list[InlineBox], width: float, *, first_width=None, cance
             right = boxes[end] if end < len(boxes) else None
             legal = (
                 right is None
-                or right.status == "line-break"
+                or box.status == "break-hint"
+                or right.status in {"line-break", "break-hint"}
                 or (
                     right.run.kind != "footnote_reference"
                     and legal_break(box.run.occurrence.text, right.run.occurrence.text)

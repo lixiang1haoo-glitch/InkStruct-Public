@@ -102,7 +102,7 @@ def test_delimiters_nested_environments_and_operator_limits_are_structural():
         ("x_", "math-script", "_"),
         ("{x", "math-group", "{x"),
         ("x}", "math-unexpected", "}"),
-        (r"\frac{1}x", "math-group", "x"),
+        (r"\frac{1}", "math-argument", r"\frac{1}"),
         (r"\frac{}{2}", "math-empty", r"\frac{}{2}"),
         (r"\text{\alpha}", "math-text-command", r"\alpha"),
         (r"x\limits_1", "math-limits", r"\limits"),

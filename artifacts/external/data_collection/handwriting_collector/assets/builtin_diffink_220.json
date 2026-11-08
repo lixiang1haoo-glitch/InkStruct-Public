@@ -1,0 +1,1119 @@
+{
+  "schema_version": "diffink_builtin_lines_v2",
+  "description": "200 training prompts and 20 validation prompts selected deterministically from local DiffInk HDF5 files for normal-size handwriting on the collection canvas.",
+  "constraints": {
+    "min_length": 15,
+    "max_length": 20,
+    "train_count": 200,
+    "val_count": 20,
+    "vocabulary": "All_zi.json",
+    "minimum_pool_character_frequency": 4,
+    "allowed_content": "CJK plus common punctuation supported by All_zi.json",
+    "sentence_ending_required": true
+  },
+  "selection": "complete official HDF5 rows; greedy character coverage with commonness and longer-line tie breaks; every 11th selected row assigned to validation",
+  "train": [
+    {
+      "source_split": "official_train",
+      "source_key": "line_18958",
+      "text": "该是敦煌莫高窟这座宏伟艺术殿堂的创建期。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9650",
+      "text": "学校利用调整计划降低标准指名录取考生。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15006",
+      "text": "古日扎布表示,成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13456",
+      "text": "一个从未和西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17346",
+      "text": "不知数。钿头银篦击节碎,血色罗裙翻酒污。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10464",
+      "text": "海南水果产业为何屡陷危机呢?令人深思。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11392",
+      "text": "自治区、直辖市先后取消了二元户口划分。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10248",
+      "text": "响经济和金融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10111",
+      "text": "险费率的幅度较大的,保监会应当进行听证。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_6492",
+      "text": "持国王逃往关帝庙避难,被清军捕获。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5120",
+      "text": "将一洋铅桶桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_721",
+      "text": "子大声打着呼呼,拉着我拼命朝山坡上跑。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13696",
+      "text": "民们却为泛滥成灾的旱獭与鼠害犯愁。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13948",
+      "text": "故已经成为造成儿童伤亡最主要的原因之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14529",
+      "text": "公布为世界受威胁植物红录,被宣告灭绝。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13518",
+      "text": "量和可开发利用的钴资源储量均居国内首位。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17607",
+      "text": "人收。新鬼烦冤旧鬼哭,天阴雨湿声啾啾。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_7804",
+      "text": "地球磁场的方向和强度,并将其封闭住。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12332",
+      "text": "耕作区树立基本农田保护和建设的典范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11934",
+      "text": "判决有罪,那么,最重要的应该是法律问题!"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_4760",
+      "text": "在沟底的陡坡上,玲珑剔透,晶莹明澈。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_440",
+      "text": "科学家观察宇宙诞生后形成的首批星系。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3482",
+      "text": "带有盘状饰物,女子的头部则有独特的发型。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17614",
+      "text": "六百一十六言,命曰《琵琶行》。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17255",
+      "text": "泣。座中泣下谁最多?江州司马青衫湿。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_246",
+      "text": "定过程中重硬件、轻软件的现象比较普遍。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11894",
+      "text": "护措施,使沿线环境得到有效保护。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8649",
+      "text": "度、社会风气等方面存在的漏洞太多。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3429",
+      "text": "月起对北京站站前街步行系统进行改造。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10141",
+      "text": "与克莱斯勒总部汇报,头绪比较清楚。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5343",
+      "text": "市走出了大牛行情,这又如何解释呢?"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15976",
+      "text": "酷,但后来的事实却被他不幸而言中。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1684",
+      "text": "干部接受新媒体的速度加快,程度更深。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12457",
+      "text": "道污水将统一输送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1948",
+      "text": "上达到了罗布泊研究的领先水平。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13784",
+      "text": "多新的鱼类和蛙类,真是令人兴奋。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14276",
+      "text": "挖的洞穴一个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10307",
+      "text": "是大量的生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5571",
+      "text": "在地上。一坐上交通艇就会鼾声大作。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16398",
+      "text": "部,而且努力打造自己的“黑客部队”。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_968",
+      "text": "的学术争论,并留下众多科学上的谜团。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15966",
+      "text": "剩”,水中微生物过度繁殖,水质下降。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13378",
+      "text": "水,使矿区本来就紧张的水资源雪上加霜。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16306",
+      "text": "“网络中心战”的美军而言十分危险。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_2097",
+      "text": "题,以及与此相关的一些问题,以飨读者。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3366",
+      "text": "大地主的土地一百二十亩,出租盘剥。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10731",
+      "text": "测:未来他们各自在中国将何去何从?"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5664",
+      "text": "全和社会事件多在论坛上得到反映。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_2466",
+      "text": "了。总之,几乎月月都有这样的新闻。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1462",
+      "text": "的气候和空气湿度有着巨大的作用。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16138",
+      "text": "外长城,是中国目前已发现的最北部的长城。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15192",
+      "text": "发现了一块曾与印度相连的大陆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1088",
+      "text": "上最知名和最受尊重的跨国公司之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11861",
+      "text": "到国家三级环境空气质量标准的要求。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8195",
+      "text": "一个集体的决策,一个科学的决策。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9289",
+      "text": "部部长对于他自己是一个很大的挑战。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_4060",
+      "text": "上下翻飞,发出“叮叮当当”的声响。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1615",
+      "text": "驰与克莱斯总部汇报,头绪比较清楚。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14030",
+      "text": "一个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3698",
+      "text": "个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_18932",
+      "text": "深处发现了一块曾与印度相连的大陆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14802",
+      "text": "洋深处发现了一块曾与印度相连的大陆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16408",
+      "text": "是这样被打造成一方特色经济的。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14462",
+      "text": "海洋深处发现了一块曾与印度相连的大陆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_6265",
+      "text": "比我们的“西施”还要“西施”!"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13793",
+      "text": "的洞穴一个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13655",
+      "text": "穴一个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16046",
+      "text": "城,是中国目前已发现的最北部的长城。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16322",
+      "text": "长城,是中国目前已发现的最北部的长城。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13554",
+      "text": "洞穴一个连一个,深不见底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14578",
+      "text": "和西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1391",
+      "text": "众都能看到火星“合”月的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8135",
+      "text": "将统一送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10499",
+      "text": "公众都能看到火星“合”月的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15051",
+      "text": "一个从未西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_524",
+      "text": "桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1783",
+      "text": "的生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3427",
+      "text": "西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13254",
+      "text": "量的生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14201",
+      "text": "未和西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13864",
+      "text": "从未和西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12264",
+      "text": "大量的生活垃圾整个污染带长数十里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15759",
+      "text": "布表示,成吉思汗就埋在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8682",
+      "text": "生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14833",
+      "text": "表示,成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3140",
+      "text": "量生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14496",
+      "text": "布表示,成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12104",
+      "text": "从本月起对北京站站前步行系统进行改造。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10005",
+      "text": "本月起对北京站站前街步行系统进行改造。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11362",
+      "text": "起对北京站站前街步行系统进行改造。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_279",
+      "text": "北京站站前街步行系统进行改造。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12414",
+      "text": "部长对于他自己是一个很大的挑战。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16598",
+      "text": "中的微生物过度繁殖,水质下降。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11913",
+      "text": "长对于他自己是一个很大的挑战。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5871",
+      "text": "翻飞,发出“叮叮当当”的声响。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3158",
+      "text": "里上下翻飞,发出“叮叮当当”的声响。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_2481",
+      "text": "在洞里上下翻飞,发出“叮叮当当”的声响。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_844",
+      "text": "洞里上下翻飞,发出“叮叮当当”的声响。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16056",
+      "text": "水中微生物过度繁殖,水质下降。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10053",
+      "text": "融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_678",
+      "text": "水将统一输送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_567",
+      "text": "和金融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10315",
+      "text": "污水将统一输送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3680",
+      "text": "的陡坡上,玲珑剔透,晶莹明澈。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_2223",
+      "text": "天亮公众都能看到火星“合”月的现象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10405",
+      "text": "亮公众都能看到火星“合”月的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8397",
+      "text": "将统一输送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8730",
+      "text": "统一输送到安宁污水厂进行处理。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_2687",
+      "text": "桶桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3079",
+      "text": "底的陡坡上,玲珑剔透,晶莹明澈。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1958",
+      "text": "区本来就紧张的水资源雪上加霜。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_702",
+      "text": "济和金融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9830",
+      "text": "天亮公众都能看到火星“合月”的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10355",
+      "text": "天亮公众都能看到火星“合”月的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10098",
+      "text": "经济和金融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9099",
+      "text": "那么,最重要的应该是法律问题!"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5013",
+      "text": "可开发利用的钴资源量均居国内首位。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9813",
+      "text": "树立基本农田保护和建设的典范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1224",
+      "text": "作区树立基本农田保护和建设的典范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_7194",
+      "text": "桶桨糊一般的薄粥放在板桌中央。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8978",
+      "text": "开发利用的钴资源储量均居国内首位。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1299",
+      "text": "储量和开发利用的钴资源储量均居国内首位。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_1988",
+      "text": "可开发利用的钴资源储量均居国内首位。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10219",
+      "text": "利用的钴资源储量均居国内首位。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12407",
+      "text": "利用调整计划降低标准指名录取考生。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_4172",
+      "text": "调整计划降低标准指名录取考生。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12233",
+      "text": "决策,一个集体的决策,一个科学的决策。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14325",
+      "text": "们挖的洞穴一个连一个,深不底,大如脸盆。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10532",
+      "text": "决了。总之,几乎月月都有这样的新闻。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13583",
+      "text": "饰物,女子的头部则有着独特的发型。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11439",
+      "text": "总之,几乎月月都有这样的新闻。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1280",
+      "text": "最知名和最受尊重的跨国公司之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12021",
+      "text": "知名和最受尊重的跨国公司之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13338",
+      "text": "市场上最知名和最受尊重的跨国公司之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1562",
+      "text": "的方向和强度,并将其封闭住。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13742",
+      "text": "的鱼类和蛙类,真是令人兴奋。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13833",
+      "text": "新的鱼类和蛙类,真是令人兴奋。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13969",
+      "text": "这么多新的鱼类和蛙类,真是令人兴奋。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13469",
+      "text": "这么多新的鱼类和蛙类,真是令人兴奋。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11057",
+      "text": "力度、社会风气等方面存在的漏洞太多。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16895",
+      "text": "但后来的事实却被他不幸而言中。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12133",
+      "text": "成为造成儿童伤亡最主要的原因之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16165",
+      "text": "络中心战”的美军而言十分危险。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5395",
+      "text": "一洋铅桶桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9009",
+      "text": "罪,那么,最重要的应该是法律问题!"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9074",
+      "text": "经成为造成儿童伤亡最主要的原因之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5828",
+      "text": "铅桶桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11640",
+      "text": "体上达到了罗布泊研究的领先水平。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_2043",
+      "text": "总体上达到了罗泊研究的领先水平。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8401",
+      "text": "造成儿童伤亡最主要的原因之一。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1115",
+      "text": "总体上达到了罗布泊研究的领先水平。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12191",
+      "text": "矿区本来就紧张的水资源雪上加霜。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16569",
+      "text": "网络中心战”的美军而言十分危险。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15484",
+      "text": "扎布表示,成吉思汗就葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3243",
+      "text": "已经成为造成儿童伤亡最主要的原因之一。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_443",
+      "text": "未来他们各自在中国将何去何从?"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1012",
+      "text": "达到国家三级环境空气质量标准的要求。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3170",
+      "text": "洋铅桶桨糊一般的薄粥放在板桌的中央。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_1603",
+      "text": "国家三级环境空气质量标准的要求。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12057",
+      "text": "使矿区本来就紧张的水资源雪上加霜。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14926",
+      "text": "扎布表示,成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16",
+      "text": "中重硬件、轻软件的现象比较普遍。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12077",
+      "text": "家三级环境空气质量标准的要求。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_7757",
+      "text": "大声打着呼呼,拉我拼命朝山坡上跑。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15314",
+      "text": "日扎布表示,成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5257",
+      "text": "着呼呼,拉着我拼命朝山坡上跑。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12448",
+      "text": "重硬件、轻软件的现象比较普遍。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_6393",
+      "text": "打着呼呼,拉着我拼命朝山坡上跑。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5316",
+      "text": "声打着呼呼,拉着我拼命朝山坡上跑。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12117",
+      "text": "过程重硬件、轻软件的现象比较普遍。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_2355",
+      "text": "海南水果为何屡陷危机呢?令人深思。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_9027",
+      "text": "海南水果产业为何屡陷危机?令人深思。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11778",
+      "text": "南水果产业为何屡陷危机呢?令人深思。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3966",
+      "text": "果产业为何屡陷危机呢?令人深思。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17486",
+      "text": "座中泣下谁最多?江州司马青衫湿。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_4567",
+      "text": "下泣下谁最多?江州司马青衫湿。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14557",
+      "text": "们却为泛滥成灾的旱獭与鼠害犯愁。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_327",
+      "text": "区、直辖市先后取消了二元户口划分。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14962",
+      "text": "莫高窟这座宏伟艺术殿堂的创建期。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_4155",
+      "text": "治区、直辖市先后取消了二元户口划分。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_86",
+      "text": "直辖市先后取消了二元户口划分。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_17629",
+      "text": "头银篦击节碎,血色罗裙翻酒污。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3961",
+      "text": "敦煌莫高窟这座宏伟艺术殿堂的创建期。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_8582",
+      "text": "率的幅度大的,保监会应当进行听证。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10377",
+      "text": "当地的气候和空气湿度有着巨大的作用。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16511",
+      "text": "过剩”,水中生物过度繁殖,水质下降。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_304",
+      "text": "判决了。总之,几乎月月都有这样的新闻。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10662",
+      "text": "子判决了。总之,几乎月月都有这样的新闻。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16972",
+      "text": "过剩”,水中微生物过度繁殖,水质下降。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_11325",
+      "text": "费率的幅度较大的,保监会应当进行听证。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1411",
+      "text": "调节当地的气候和空气湿度有着巨大的作用。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14302",
+      "text": "有盘状饰物,女子的头部则有着独特的发型。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_6435",
+      "text": "与此相关的一些问题,以飨读者。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_7629",
+      "text": "上。一坐上交通艇就会鼾声大作。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_1429",
+      "text": "问题,以及与此相关的一些问题,以飨读者。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3726",
+      "text": "盘状饰物,女子的头部则有着独特的发型。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1996",
+      "text": "以及与此相关的一些问题,以飨读者。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_1992",
+      "text": "争论,并留下众多科学上的谜团。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_413",
+      "text": "磁场的方向和强度,并将其封闭住。”"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_16615",
+      "text": "令部,而且努力打造自己的“黑客部队”。"
+    }
+  ],
+  "val": [
+    {
+      "source_split": "official_train",
+      "source_key": "line_1882",
+      "text": "到天亮公众都能看到火星“合”月的景象。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3003",
+      "text": "信仰自由、破坏人权的黑暗势力。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_1629",
+      "text": "少,对上级规定的读书不很认同。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_3286",
+      "text": "不怡,故曹子建毕竟还是曹子建。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14321",
+      "text": "乌草场已成为受害最严重的草场。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_3984",
+      "text": "处发现了一块曾与印度相连的大陆。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_2674",
+      "text": "大量的生活垃圾,整个污染带长数十公里。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_14296",
+      "text": "个从未和西方文明有过接触的印第安部落。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_5587",
+      "text": "从本月起对北京站站前街步行系统进行改造。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_2604",
+      "text": "和社会事件多在论坛上得到反应。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10148",
+      "text": "金融的稳定发展,对此需予以防范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_12432",
+      "text": "区树立基本农田保护和建设的典范。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13299",
+      "text": "幅度较大的,保监会应当进行听证。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_10036",
+      "text": "社会风气等方面存在的漏洞太多。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13536",
+      "text": "矿区本来紧张的水资源雪上加霜。"
+    },
+    {
+      "source_split": "official_val",
+      "source_key": "line_2381",
+      "text": "有罪,那么最重要的应该是法律问题!"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15850",
+      "text": "扎布表示成吉思汗就埋葬在鄂尔多斯。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_15525",
+      "text": "是敦煌莫高窟这座宏伟艺术殿堂的创建期。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_13462",
+      "text": "状饰物,女子的头部则有着独特的发型。"
+    },
+    {
+      "source_split": "official_train",
+      "source_key": "line_760",
+      "text": "受新媒体的速度加快,程度更深。"
+    }
+  ]
+}

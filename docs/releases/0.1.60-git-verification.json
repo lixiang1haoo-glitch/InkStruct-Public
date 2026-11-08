@@ -1,0 +1,99 @@
+{
+  "version": "0.1.60",
+  "commit": "220735f47a07716189d03097c97e5a61fd9e3328",
+  "tag": "app-v0.1.60",
+  "published_archive": {
+    "version": "0.1.60",
+    "filename": "InkStruct-0.1.60-Windows-x64.zip",
+    "bytes": 133703537,
+    "members": 1679,
+    "sha256": "30002dd595f8f36d685acd991b9f10b238af4274bb1c83aa1b83c83b54ea60db"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 340,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 176,
+      "failed": 4,
+      "same_failures_as_baseline": true,
+      "failures": [
+        "test_resource_management_preserves_document[template-library]",
+        "test_resource_management_preserves_document[template-apply]",
+        "test_resource_management_preserves_document[template-revision]",
+        "test_resource_management_preserves_document[template-workflow]"
+      ]
+    },
+    "native": {
+      "platform": "Windows Qt",
+      "partial_completed": [
+        "中",
+        "国"
+      ],
+      "partial_requested": 12,
+      "samples": {
+        "before": 39,
+        "after": 40,
+        "donors_before": 31,
+        "donors_after": 32
+      },
+      "published_characters": 184,
+      "published_candidates": 939,
+      "frozen_selections": 5129,
+      "archive_and_document_hashes_preserved": {
+        "font": "31e52b9d65b58c81f7f33b3796a849696659d9563eb77ab2840f9c0d77eded85",
+        "document": "1ae58dd5e2e249dd2c9c3b558d99beca8f7efae6b7cc6530b8159e336ba2d731"
+      }
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "app_version": "0.1.60",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      },
+      "InkStructTool.exe": {
+        "app_version": "0.1.60",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      }
+    },
+    "frozen_candidates": {
+      "characters": 4,
+      "candidates": 16,
+      "worker_counts": [
+        1,
+        2
+      ],
+      "same_reopened_svg": true
+    },
+    "frozen_full_smoke": {
+      "generation_and_publication": {
+        "v62": {
+          "characters": 11,
+          "candidates": 23
+        },
+        "v61": {
+          "characters": 11,
+          "candidates": 11
+        },
+        "v4": {
+          "characters": 11,
+          "candidates": 11
+        }
+      },
+      "status": "stopped_after_generation_and_publication",
+      "failure": "Math settings horizontal scrollbar assertion in broader offscreen check",
+      "baseline_0_1_59": "Broader check stopped earlier at collector task creation; math assertion not reached"
+    }
+  },
+  "previous_archive": {
+    "version": "0.1.59",
+    "filename": "InkStruct-0.1.59-Windows-x64.zip",
+    "sha256": "406ec90486a1d5903756aa7f739aa7b2894d2da716e937630e7aaf4e5f59bcab"
+  }
+}

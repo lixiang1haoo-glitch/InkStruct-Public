@@ -3,6 +3,7 @@
 from collections import Counter
 from dataclasses import asdict, replace
 
+from ..document.break_commands import constrain_flow_breaks
 from ..document.limits import BudgetedOps, PointAccumulator
 from ..document.schema import PageProfile, SourceSpan, digest
 from ..document.template_diagnostics import TemplateDiagnostic, binding_target, with_template_target
@@ -183,7 +184,11 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
                 line_height_mm=flow.code.line_height_mm * scale,
             ),
         )
-        field_doc = replace(document, nodes=nodes, diagnostics=())
+        field_diagnostics = []
+        field_nodes = constrain_flow_breaks(
+            nodes, field_diagnostics, context="fixed field", cancelled=cancelled
+        )
+        field_doc = replace(document, nodes=field_nodes, diagnostics=tuple(field_diagnostics))
         targets = range(len(pages)) if binding.pages == "all" else (0,)
         for index in targets:
             check_cancel(cancelled)

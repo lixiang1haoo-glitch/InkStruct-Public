@@ -149,8 +149,10 @@ TemplateSettingsDialog.exec=repair
 w.template_fit_report();ready()
 assert calls==['record-key'] and w.snapshot.exportable
 # A report may stay open while a programmatic project change arrives: no stale navigation.
+w.flow=replace(w.flow,template_bindings=())
+w.schedule_layout();ready()
 def stale(d):
-    d.selected_diagnostic=next(x for x in d.diagnostics)
+    d.selected_diagnostic=next(x for x in d.diagnostics if x.code=='template-slot-required')
     w.schedule_layout()
     return QtWidgets.QDialog.Accepted
 TemplateFitDialog.exec=stale

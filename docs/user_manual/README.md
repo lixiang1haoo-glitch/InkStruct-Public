@@ -10,14 +10,14 @@
 latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=build main.tex
 ```
 
-`build/main.pdf` 为结果。当前源码手册版本为 0.1.40；本次 Windows 环境未安装 XeLaTeX/latexmk，尚未重编译 0.1.40 PDF。历史 0.1.3 PDF 保留在 `artifacts/release_0_1_3/release/InkStruct用户手册_0.1.3.pdf`，不得当作新版手册。所有章节和截图都在本目录下，复制整个目录即可继续编译；不要只复制 `main.tex`。此手册包含多个文件和截图，需要本机 TeX Live，不使用仅接受单文件的内置编译器。
+`build/main.pdf` 为结果。当前源码手册版本为 0.1.46；本轮仅同步LaTeX源码，未重编译或验收新版PDF，历史 PDF 不代表当前手册。历史 0.1.3 PDF 保留在 `artifacts/release_0_1_3/release/InkStruct用户手册_0.1.3.pdf`，不得当作新版手册。所有章节和截图都在本目录下，复制整个目录即可继续编译；不要只复制 `main.tex`。此手册包含多个文件和截图，需要本机 TeX Live，不使用仅接受单文件的内置编译器。
 
 ## 维护结构
 
 - `00-reading`：适用版本、阅读路径和状态说明。
 - `01`–`02`：共享概念与首次上手；跨模块共性尽量集中在此。
 - `03`–`09`：编辑排版完整操作，按用户任务拆章。
-- `10-generation`：生成页的两种方法、导入建档与生成、来源警告、不可变批次和字体交接。
+- `10-generation`：v6.2/v6.1/v4、可选真实候选数量、导入建档、来源警告、不可变批次和字体交接。
 - `11-capture`：统一采集页、汉字与符号交接、设备验收边界。
 - `12`–`13`：故障速查与 Agent 协作附录。
 
@@ -27,6 +27,6 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=build main.tex
 
 ## 内容依据
 
-核对日期 2026-10-14。主要依据 `src/inkstruct/editor/workspace.py`、`document/schema.py` 与当前 Markdown、表格、数学、模板、图片、资源检查、恢复文档。以当前源码和交付版入口为准，历史开发记录中的旧按钮和未更新能力不直接照搬。
+本轮版本与大字体/候选数量说明核对日期2026-11-04，其余章节与历史截图按原记录保留。主要依据 `src/inkstruct/editor/workspace.py`、`document/schema.py` 与当前 Markdown、表格、数学、模板、图片、资源检查、恢复文档。以当前源码和交付版入口为准，历史开发记录中的旧按钮和未更新能力不直接照搬。
 
 截图来自界面整理验收中的 workspace/review 以及录制构件验收中的分式设置，原图复制保存在 `assets/`，不是产品界面设计稿。对应资源与应用状态可能随以后版本改变，更新手册时应一并替换截图。

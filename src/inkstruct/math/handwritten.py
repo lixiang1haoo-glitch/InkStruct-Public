@@ -10,7 +10,7 @@ from ..assets.symbol_provider import ResolvedGlyph
 from ..document.schema import Diagnostic, Occurrence, SourceSpan, digest
 from ..layout.measurement_cache import cached_measurement
 from .constructions import accent_geometry, array_geometry
-from .delimiters import delimiter_paths, node_delimiters
+from .delimiters import delimiter_frame, delimiter_paths, node_delimiters
 from .parser import BINARY, OPERATORS, RELATION
 from .sample_constructions import (
     delimiter_sample_paths,
@@ -20,7 +20,35 @@ from .sample_constructions import (
 )
 from .style import MathStyle
 
-MATH_LAYOUT_VERSION = "handwritten-math-m5-constructions-v1/sample-constructions-v2/auto-scripts-v1/compact-digit-floor-v1"
+MATH_LAYOUT_VERSION = "handwritten-math-m5-constructions-v1/sample-constructions-v2/auto-scripts-v1/compact-digit-floor-v1/latex-arguments-v2/sampled-accents-v1/axis-delimiters-v3/break-commands-v1"
+
+
+@dataclass(frozen=True)
+class MathOutline:
+    glyph_index: int
+    character: str
+    bounds: tuple[float, float, float, float]
+    advance: float
+    axis: float
+
+
+@dataclass(frozen=True)
+class MathDimension:
+    key: str
+    start: tuple[float, float]
+    end: tuple[float, float]
+    em: float
+    requested: float | None = None
+    label: str = ""
+    note: str = ""
+
+    @property
+    def actual(self):
+        return math.dist(self.start, self.end)
+
+    def translated(self, x, y):
+        return replace(self, start=(self.start[0] + x, self.start[1] + y),
+                       end=(self.end[0] + x, self.end[1] + y))
 
 
 @dataclass(frozen=True)
@@ -35,6 +63,7 @@ class MathGlyph:
     ascent_mm: float
     descent_mm: float
     status: str = "ready"
+    outline: MathOutline | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +86,7 @@ class MathBox:
     rules: tuple[MathRule, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
     version: str = MATH_LAYOUT_VERSION
+    dimensions: tuple[MathDimension, ...] = ()
 
     @property
     def ready(self):
@@ -80,6 +110,11 @@ def ink_bounds(box, stroke_width):
                     baseline + bottom * g.em_mm + radius,
                 )
             )
+        elif g.outline:
+            left, top, right, bottom = g.outline.bounds
+            origin = g.x_mm + g.origin_offset_mm
+            bounds.append((origin + left * g.em_mm, g.baseline_mm + top * g.em_mm,
+                           origin + right * g.em_mm, g.baseline_mm + bottom * g.em_mm))
         elif g.status != "space":
             bounds.append(
                 (
@@ -115,8 +150,13 @@ def measure_math(
     cancel_check=None,
     display=False,
     available_width=None,
+    inspect=False,
+    reference=None,
 ):
     style = style or MathStyle()
+    if reference:
+        style = replace(style, fraction_source="geometric", radical_source="geometric",
+                        delimiter_source="geometric")
     compact = style.spacing_policy == "handwriting"
     em = style.em_mm * scale
     if not math.isfinite(em) or em <= 0 or not math.isfinite(stroke_width) or stroke_width <= 0:
@@ -128,6 +168,9 @@ def measure_math(
 
     def empty(em, width=0):
         return MathBox(width, 0, 0, style.axis_em * em)
+
+    def measured(box, *values):
+        return replace(box, dimensions=(*values, *box.dimensions)) if inspect and values else box
 
     # Carry semantic style through the AST, without transforming recorded paths.
     style_requests = {}
@@ -148,8 +191,8 @@ def measure_math(
         occurrence = Occurrence(identity, owner, node.span, node.value)
         advance, offset, baseline = em, radius, 0
         ascent, descent = 0.88 * em + radius, 0.25 * em + radius
-        glyph, issues, status = None, [], "ready"
-        if em < stroke_width * style.min_em_stroke_ratio:
+        glyph, outline, issues, status = None, None, [], "ready"
+        if not reference and em < stroke_width * style.min_em_stroke_ratio:
             issues.append(
                 Diagnostic(
                     "math-size-limit",
@@ -159,6 +202,18 @@ def measure_math(
             )
         if node.value.isspace():
             advance, status = em * 0.5, "space"
+        elif reference:
+            try:
+                outline = reference(node.value, style_requests[id(node)])
+                left, top, right, bottom = outline.bounds
+                if node.value in BINARY | RELATION | OPERATORS or node.value == "∘":
+                    baseline = (outline.axis - style.axis_em) * em
+                offset = max(0, -left * em)
+                advance = max(outline.advance, right) * em + offset
+                ascent, descent = max(0, -top * em), max(0, bottom * em)
+            except ValueError as error:
+                status = "missing"
+                issues.append(Diagnostic("reference-glyph-missing", str(error), node.span))
         else:
             try:
                 glyph = resolver.resolve(occurrence, letter_style=style_requests.get(id(node), "italic"))
@@ -222,7 +277,7 @@ def measure_math(
                 status = "missing"
                 issues.append(Diagnostic("asset-missing", str(error), node.span))
         placed = MathGlyph(
-            occurrence, glyph, 0, baseline, em, advance, offset, ascent, descent, status
+            occurrence, glyph, 0, baseline, em, advance, offset, ascent, descent, status, outline
         )
         return MathBox(
             advance,
@@ -233,20 +288,30 @@ def measure_math(
             diagnostics=tuple(issues),
         )
 
-    def gap(left, right, em):
+    def gap_key(left, right):
         if left is None or left == "open" or right == "close":
-            return 0
+            return None
         if "rel" in (left, right):
-            return style.relation_gap_em * em
+            return "relation_gap_em"
         if "bin" in (left, right):
-            return style.binary_gap_em * em
+            return "binary_gap_em"
         if left == "punct" or "op" in (left, right):
-            return style.operator_gap_em * em
-        return 0
+            return "operator_gap_em"
+        return None
+
+    def gap(left, right, em):
+        key = gap_key(left, right)
+        return getattr(style, key) * em if key else 0
+
+    def dimension(key, start, end, em, label="", note=""):
+        return MathDimension(key, start, end, em, getattr(style, key) * em, label, note)
+
+    def size_mark(key, x, y, em, child_em, note=""):
+        return dimension(key, (x, y), (x, y - child_em), em, "字号", note)
 
     def combine(em, placements, rules=(), width=0):
         """Union conservative ink-inclusive boxes, retaining source traversal order."""
-        glyphs, combined_rules, issues = [], list(rules), []
+        glyphs, combined_rules, issues, dimensions = [], list(rules), [], []
         ascent = descent = 0
         for box, x, y in placements:
             glyphs.extend(
@@ -256,6 +321,8 @@ def measure_math(
                 replace(r, points=tuple((px + x, py + y) for px, py in r.points)) for r in box.rules
             )
             issues.extend(box.diagnostics)
+            if inspect:
+                dimensions.extend(d.translated(x, y) for d in box.dimensions)
             width = max(width, x + box.width)
             ascent, descent = max(ascent, box.ascent - y), max(descent, box.descent + y)
         for rule in combined_rules:
@@ -270,6 +337,7 @@ def measure_math(
             tuple(glyphs),
             tuple(combined_rules),
             tuple(issues),
+            dimensions=tuple(dimensions),
         )
 
     def rule(node, role, points):
@@ -307,8 +375,10 @@ def measure_math(
     def delimit(node, content, em, left, right):
         content = tight_vertical(content)
         clearance = max(style.delimiter_clearance_em * em, stroke_width * 1.5)
-        top = -(content.ascent if compact else max(content.ascent, 0.88 * em)) - clearance
-        bottom = (content.descent if compact else max(content.descent, 0.25 * em)) + clearance
+        top, bottom = delimiter_frame(
+            ascent=content.ascent, descent=content.descent,
+            axis=style.axis_em * em, em=em, radius=radius,
+        )
         width = max(style.delimiter_width_em * em, 3 * stroke_width)
 
         def side_width(side, character):
@@ -323,7 +393,7 @@ def measure_math(
             try:
                 glyph = resolver.resolve(sample_occurrence(node, owner, "delimiter-" + side, character))
                 l, t, r, b = glyph.bounds
-                natural = (r - l) * max(0, bottom - top - 2 * radius) / (b - t) + 2 * radius if b > t else cap
+                natural = (r - l) * (bottom - top) / (b - t) + 2 * radius if b > t else cap
                 return min(cap, max(2 * radius + .04 * em, natural))
             except ValueError:
                 # The sampled builder below retains the blocking diagnostic.
@@ -349,7 +419,7 @@ def measure_math(
                     node,
                     "delimiter-" + side,
                     character,
-                    "sample-delimiter-optical-v2" if compact else "sample-delimiter-affine-v1",
+                    "sample-delimiter-extensible-axis-v3",
                     lambda glyph, x=x, target_width=target_width: tuple(
                         tuple((px + x, py) for px, py in path)
                         for path in delimiter_sample_paths(
@@ -375,6 +445,14 @@ def measure_math(
         result = combine(
             em, [(content, left_width, 0)], rules, left_width + content.width + right_width
         )
+        if inspect and (left != "." or right != "."):
+            x = 0 if left != "." else left_width + content.width + clearance
+            span = widths["left" if left != "." else "right"]
+            a = span if left != "." else x - clearance
+            result = measured(result, dimension("delimiter_width_em", (x, top), (x + span, top),
+                                               em, "构件槽宽", "紧凑录制模式使用样本比例与笔宽约束"),
+                              dimension("delimiter_clearance_em", (a, 0), (a + clearance, 0),
+                                        em, "构件槽至内容"))
         return replace(result, diagnostics=(*result.diagnostics, *issues))
 
     def visit(node, em, display_style=False):
@@ -384,12 +462,17 @@ def measure_math(
             if node.value in {"∫", "∮", "∑", "∏"} and style.large_operator_scale != 1:
                 operator = symbol(node, em * style.large_operator_scale)
                 shift = style.axis_em * em * (style.large_operator_scale - 1)
-                return combine(em, [(operator, 0, shift)])
+                result = combine(em, [(operator, 0, shift)])
+                return measured(result, size_mark("large_operator_scale", 0, shift, em,
+                                                  em * style.large_operator_scale)) if inspect else result
+            if inspect and node.value in {"∫", "∮", "∑", "∏"}:
+                return measured(symbol(node, em), size_mark("large_operator_scale", 0, 0, em, em))
             return symbol(node, em)
         if node.kind == "Space":
             return empty(
                 em,
                 {
+                    "zero": 0,
                     "thin": 1 / 6,
                     "medium": 2 / 9,
                     "thick": 5 / 18,
@@ -409,6 +492,8 @@ def measure_math(
             )
             children = [visit(child, em * ratio) for child in node.children[1:]]
             roles = dict(node.attributes)
+            size_key = ("limits_scale" if operator.value in {"∫", "∮", "∑", "∏", "lim", "min", "max"}
+                        else "script_scale")
             sup = children[int(roles["sup"]) - 1] if "sup" in roles else None
             sub = children[int(roles["sub"]) - 1] if "sub" in roles else None
             # Edge-to-edge whitespace is automatic, separate from requested offsets.
@@ -430,7 +515,16 @@ def measure_math(
                         else base.descent + clearance + box.ascent
                     )
                     placements.append((box, (width - box.width) / 2, y))
-                return combine(em, placements, width=width)
+                result = combine(em, placements, width=width)
+                if inspect:
+                    for index, (box, x, y) in enumerate(placements[1:], 1):
+                        above = roles.get("sup") == str(index)
+                        a, b = ((-base.ascent, y + box.descent) if above
+                                else (base.descent, y - box.ascent))
+                        result = measured(result, size_mark(size_key, x, y, em, em * ratio),
+                                          dimension("limits_clearance_em", (width, a), (width, b),
+                                                    em, "上限" if above else "下限", "笔宽保护下限"))
+                return result
             base_ink = ink_bounds(base, stroke_width)
             sup_ink = ink_bounds(sup, stroke_width) if sup else (0, 0, 0, 0)
             sub_ink = ink_bounds(sub, stroke_width) if sub else (0, 0, 0, 0)
@@ -449,7 +543,14 @@ def measure_math(
                 # Position from ink, not advance width or a user-controlled vertical gap.
                 x = max(0, base_ink[2] + clearance - script_ink[0])
                 placements.append((box, x, y))
-            return combine(em, placements)
+            result = combine(em, placements)
+            if inspect:
+                for index, (_box, x, y) in enumerate(placements[1:], 1):
+                    key = "superscript_raise_em" if roles.get("sup") == str(index) else "subscript_drop_em"
+                    result = measured(result, size_mark(size_key, x, y, em, em * ratio),
+                                      dimension(key, (x, 0), (x, y), em, "基线位移",
+                                                "按字形边界与笔宽避碰后的位置"))
+            return result
         if node.kind == "Fraction":
             factor = 1 if dict(node.attributes).get("style") == "dfrac" else style.fraction_scale
             numerator, denominator = [tight_vertical(visit(child, em * factor)) for child in node.children]
@@ -472,23 +573,39 @@ def measure_math(
                     lines = paths
             upper = min(y for line in lines for _, y in line.points)
             lower = max(y for line in lines for _, y in line.points)
+            num_y = upper - radius - clearance - numerator.descent
+            den_y = lower + radius + clearance + denominator.ascent
             result = combine(
                 em,
                 [
                     (
                         numerator,
                         (width - numerator.width) / 2,
-                        upper - radius - clearance - numerator.descent,
+                        num_y,
                     ),
                     (
                         denominator,
                         (width - denominator.width) / 2,
-                        lower + radius + clearance + denominator.ascent,
+                        den_y,
                     ),
                 ],
                 lines,
                 width,
             )
+            if inspect:
+                note = "按分数线实际边界、字形和笔宽测量"
+                result = measured(
+                    result,
+                    size_mark("fraction_scale", (width - numerator.width) / 2, num_y, em,
+                              em * factor, r"\dfrac 保持当前层字号" if factor == 1 and
+                              dict(node.attributes).get("style") == "dfrac" else ""),
+                    dimension("fraction_clearance_em",
+                              (width, num_y + ink_bounds(numerator, stroke_width)[3]),
+                              (width, upper - radius), em, "分子至线", note),
+                    dimension("fraction_clearance_em", (width, lower + radius),
+                              (width, den_y + ink_bounds(denominator, stroke_width)[1]),
+                              em, "线至分母", note),
+                )
             return replace(result, diagnostics=(*result.diagnostics, *issues))
         if node.kind == "Radical":
             indexed = dict(node.attributes).get("indexed") == "true"
@@ -534,6 +651,13 @@ def measure_math(
             placements = [(degree, 0, -0.55 * content.ascent - degree.descent)] if degree else []
             placements.append((content, content_x, 0))
             result = combine(em, placements, lines, width)
+            if inspect:
+                # The bar endpoint defines the underside of the overbar.
+                bar_y = max(point for line in lines for point in line.points)[1] + radius
+                ink_top = ink_bounds(content, stroke_width)[1]
+                result = measured(result, dimension("radical_clearance_em", (width, bar_y),
+                                                    (width, ink_top), em, "顶线至内容",
+                                                    "按笔宽与内容边界测量"))
             return replace(result, diagnostics=(*result.diagnostics, *issues))
         if node.kind == "Delimited":
             attributes = dict(node.attributes)
@@ -547,6 +671,8 @@ def measure_math(
         if node.kind in {"EquationTag", "EquationReference"}:
             label_em = em * style.tag_scale if node.kind == "EquationTag" else em
             content = visit(node.children[0], label_em)
+            if inspect and node.kind == "EquationTag":
+                content = measured(content, size_mark("tag_scale", 0, 0, em, label_em))
             return (
                 delimit(node, content, label_em, "(", ")")
                 if dict(node.attributes).get("parentheses") == "true"
@@ -563,7 +689,10 @@ def measure_math(
                 if style.display_align == "left"
                 else min((width - content.width) / 2, tag_x - clearance - content.width)
             )
-            return combine(em, [(content, content_x, 0), (tag, tag_x, 0)], width=width)
+            result = combine(em, [(content, content_x, 0), (tag, tag_x, 0)], width=width)
+            return measured(result, dimension("tag_gap_em", (content_x + content.width, 0),
+                                              (tag_x, 0), em, "内容至编号",
+                                              "含笔宽保护及编号对齐")) if inspect else result
         if node.kind == "Alignment":
             attributes = dict(node.attributes)
             gathered = attributes["environment"] in {"gathered", "gather*", "gather"}
@@ -619,11 +748,14 @@ def measure_math(
                 if position == "b"
                 else -style.axis_em * em - height / 2
             )
-            placements, y = [], top
+            placements, y, dimensions = [], top, []
             for r, row in enumerate(rows):
                 x = content_x
                 for c, cell in enumerate(row):
                     if c and c % 2 == 0:
+                        if inspect and r == 0 and c == 2:
+                            dimensions.append(dimension("alignment_pair_gap_em", (x, y),
+                                                        (x + pair_gap, y), em, "等式组间距"))
                         x += pair_gap
                     x += leading[c]
                     offset = (
@@ -637,8 +769,15 @@ def measure_math(
                     x += widths[c]
                 if tags[r]:
                     placements.append((tags[r], width - tags[r].width, y + ascents[r]))
+                    if inspect and not any(d.key == "tag_gap_em" for d in dimensions):
+                        dimensions.append(dimension("tag_gap_em", (content_x + content_width, y),
+                            (width - tags[r].width, y), em, "内容至编号"))
                 y += ascents[r] + descents[r] + row_gap
+                if inspect and r == 0 and len(rows) > 1:
+                    dimensions.append(dimension("alignment_row_gap_em", (width, y - row_gap),
+                                                (width, y), em, "行框净间距"))
             content = combine(em, placements, width=width)
+            content = measured(content, *dimensions)
             return replace(
                 content,
                 ascent=max(content.ascent, -top),
@@ -649,26 +788,58 @@ def measure_math(
             placement, paths, width = accent_geometry(
                 node.value, content, em=em, style=style, pen=stroke_width
             )
-            return combine(
-                em,
-                [placement],
-                [rule(node, f"accent-{i}", path) for i, path in enumerate(paths)],
-                width,
-            )
+            lines = tuple(rule(node, f"accent-{i}", path) for i, path in enumerate(paths))
+            issues = ()
+            if node.value in {"bar", "overline", "underline"} and style.fraction_source == "sample":
+                (left, y), (right, _) = paths[0]
+
+                def accent_line(glyph):
+                    sampled_paths = fraction_paths(
+                        glyph, width=right - left + 2 * radius, axis=0, em=em, radius=radius
+                    )
+                    # Preserve waviness and place its closest ink edge at the
+                    # clearance established for the geometric construction.
+                    edge = (min if node.value == "underline" else max)(
+                        py for path in sampled_paths for _, py in path
+                    )
+                    return tuple(
+                        tuple((px + left - radius, py + y - edge) for px, py in path)
+                        for path in sampled_paths
+                    )
+
+                sampled_lines, issues = sampled(
+                    node, "accent-line", "−", "sample-minus-length-v1", accent_line
+                )
+                if sampled_lines is not None:
+                    lines = sampled_lines
+            result = combine(em, [placement], lines, width)
+            if inspect:
+                ys = [y for line in lines for _, y in line.points]
+                a, b = min(ys), max(ys)
+                _, top, _, bottom = ink_bounds(content, stroke_width)
+                below = node.value == "underline"
+                result = measured(result,
+                    dimension("accent_height_em", (width, a), (width, b), em, "构件高度"),
+                    dimension("accent_clearance_em", (width, bottom if below else top),
+                              (width, a - radius if below else b + radius), em, "标记至内容"))
+            return replace(result, diagnostics=(*result.diagnostics, *issues))
         if node.kind == "Array":
             rows = [
                 [visit(cell, em) for cell in row.children]
                 for row in node.children
                 if row.kind == "ArrayRow"
             ]
+            dimensions = []
             placements, lines, width, top, height = array_geometry(
-                node, rows, em=em, style=style, pen=stroke_width
+                node, rows, em=em, style=style, pen=stroke_width,
+                measure=(lambda key, a, b, label: dimensions.append(
+                    dimension(key, a, b, em, label))) if inspect else None,
             )
             content = combine(
                 em, placements, [rule(source, role, path) for source, role, path in lines], width
             )
             return replace(
-                content,
+                measured(content, *dimensions),
                 ascent=max(content.ascent, -top),
                 descent=max(content.descent, top + height),
             )
@@ -682,7 +853,9 @@ def measure_math(
             )
             content = visit(ordinary, em * style.small_matrix_scale)
             shift = (style.small_matrix_scale - 1) * style.axis_em * em
-            return combine(em, [(content, 0, shift)])
+            result = combine(em, [(content, 0, shift)])
+            return measured(result, size_mark("small_matrix_scale", 0, shift, em,
+                                              em * style.small_matrix_scale)) if inspect else result
         if node.kind == "Matrix":
             rows = [[visit(cell, em) for cell in row.children] for row in node.children]
             environment = dict(node.attributes)["environment"]
@@ -710,26 +883,43 @@ def measure_math(
                 ascent=height / 2 + style.axis_em * em,
                 descent=max(0, height / 2 - style.axis_em * em),
             )
+            if inspect:
+                if len(widths) > 1:
+                    content = measured(content, dimension("matrix_col_gap_em", (widths[0], 0),
+                                           (widths[0] + col_gap, 0), em, "列框净间距"))
+                if len(rows) > 1:
+                    row_bottom = placements[0][2] + descents[0]
+                    content = measured(content, dimension("matrix_row_gap_em",
+                        (content.width, row_bottom), (content.width, row_bottom + row_gap), em, "行框净间距"))
             left, right = node_delimiters(node)
             return delimit(node, content, em, left, right)
         if node.kind in {"Row", "Group", "Operator", "Text"}:
             x, ascent, descent, previous = 0, 0, 0, None
-            glyphs, rules, issues = [], [], []
+            glyphs, rules, issues, dimensions = [], [], [], []
             for child in node.children:
                 box = visit(child, em, display_style)
                 if node.kind == "Row" and child.kind != "Space":
-                    x += gap(previous, child.math_class, em)
+                    key = gap_key(previous, child.math_class)
+                    if key:
+                        advance = getattr(style, key) * em
+                        if inspect:
+                            dimensions.append(dimension(key, (x, 0), (x + advance, 0), em,
+                                                        "字框间的附加间距"))
+                        x += advance
                     previous = child.math_class
                 glyphs.extend(replace(g, x_mm=g.x_mm + x) for g in box.glyphs)
                 rules.extend(
                     replace(r, points=tuple((px + x, py) for px, py in r.points)) for r in box.rules
                 )
                 issues.extend(box.diagnostics)
+                if inspect:
+                    dimensions.extend(d.translated(x, 0) for d in box.dimensions)
                 x += box.width
                 ascent = max(ascent, box.ascent)
                 descent = max(descent, box.descent)
             return MathBox(
-                x, ascent, descent, style.axis_em * em, tuple(glyphs), tuple(rules), tuple(issues)
+                x, ascent, descent, style.axis_em * em, tuple(glyphs), tuple(rules), tuple(issues),
+                dimensions=tuple(dimensions),
             )
         occurrence = Occurrence(
             f"{owner}:unsupported:{node.span.start}:{node.span.end}", owner, node.span, node.kind
@@ -762,6 +952,12 @@ def measure_math(
         )
 
     box = visit(root, em, display)
+    if inspect:
+        box = measured(box,
+            MathDimension("em_mm", (0, 0), (0, -em), em, em, "公式字号"),
+            dimension("axis_em", (box.width, 0), (box.width, -box.axis), em, "基线至数学轴"))
+    if reference:
+        return box
     # A preview/export is useful before machine calibration, but this warning must
     # remain explicit; it is not evidence that the writer's math-axis is reviewed.
     return replace(

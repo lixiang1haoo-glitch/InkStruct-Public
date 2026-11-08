@@ -79,6 +79,25 @@ if case=='navigation':
     old=c.viewport_rect();i=c.page_at(old.top());fraction=(old.top()-c.page_rect(i).top())/c.page_rect(i).height()
     w.zoom.setCurrentIndex(2);app.processEvents();settle(c)
     assert abs(c.viewport_rect().top()-(c.page_rect(i).top()+fraction*c.page_rect(i).height()))<=2
+    vp=w.scroll.viewport();pos=QtCore.QPointF(180,200)
+    def wheel(delta, ctrl=True, widget=vp):
+        event=QtGui.QWheelEvent(pos,QtCore.QPointF(widget.mapToGlobal(pos.toPoint())),
+            QtCore.QPoint(),QtCore.QPoint(0,delta),QtCore.Qt.NoButton,
+            QtCore.Qt.ControlModifier if ctrl else QtCore.Qt.NoModifier,
+            QtCore.Qt.NoScrollPhase,False)
+        app.sendEvent(widget,event);app.processEvents()
+    def anchor():
+        at=c.viewport_rect().topLeft()+pos;index=c.page_at(at.y());page=c.page_rect(index)
+        return index,(at.x()-page.left())/page.width(),(at.y()-page.top())/page.height()
+    before=anchor()
+    wheel(60);assert w.zoom.currentText()=='150%'
+    wheel(60);assert w.zoom.currentText()=='200%'
+    after=anchor();assert before[0]==after[0] and max(abs(a-b) for a,b in zip(before[1:],after[1:]))<.004
+    wheel(120);assert w.zoom.currentText()=='200%' and anchor()==after
+    wheel(-120,False);assert w.zoom.currentText()=='200%' and anchor()!=after
+    wheel(-480);assert w.zoom.currentText()=='75%'
+    wheel(-120);assert w.zoom.currentText()=='75%'
+    wheel(120,widget=w.editor.viewport());assert w.zoom.currentText()=='75%'
     assert w.snapshot is s and w.revision==revision and w.buffer.raw==raw
     assert w.resolver.selection_records()==choices
     assert [page_svg(p) for p in plan_from_snapshot(s).pages]==svg

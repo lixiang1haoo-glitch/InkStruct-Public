@@ -4,7 +4,7 @@ import copy
 import threading
 from dataclasses import replace
 
-from PySide6 import QtCore, QtSvgWidgets, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from ..assets.resolver import AssetResolver
 from ..document.editing import SourceSession
@@ -66,7 +66,7 @@ class TemplateTrialDialog(QtWidgets.QDialog):
         self.summary = QtWidgets.QLabel(
             "正在使用当前文档的真实内容与冻结字体试排，可取消…"
             if editor
-            else "使用内置数字演示布局；不是当前文档验收。"
+            else "使用内置数字演示页面版式。"
         )
         self.summary.setWordWrap(True)
         col.addWidget(self.summary)
@@ -74,7 +74,9 @@ class TemplateTrialDialog(QtWidgets.QDialog):
         self.picker.currentIndexChanged.connect(self.show_page)
         col.addWidget(self.picker)
         splitter = QtWidgets.QSplitter()
-        self.preview = QtSvgWidgets.QSvgWidget()
+        from .template_viewport import FitSvgPreview
+
+        self.preview = FitSvgPreview()
         splitter.addWidget(self.preview)
         self.issues = QtWidgets.QTreeWidget()
         self.issues.setHeaderLabels(["级别", "问题"])
@@ -109,7 +111,7 @@ class TemplateTrialDialog(QtWidgets.QDialog):
         counts = report["severity_counts"]
         self.summary.setText(
             ("当前文档真实试排" if self.editor else "示例预览")
-            + f" · {len(self.snapshot.pages)} 页 · {counts.get('error', 0)} 项错误 · {counts.get('warning', 0)} 项提醒。纸面校准需实物核对。"
+            + f" · {len(self.snapshot.pages)} 页 · {counts.get('error', 0)} 项错误 · {counts.get('warning', 0)} 项提醒。"
         )
         for page in self.snapshot.pages:
             self.picker.addItem(f"第 {page.index + 1} 页 · {page.source_layout or '页面'}")
@@ -127,7 +129,7 @@ class TemplateTrialDialog(QtWidgets.QDialog):
         if self.snapshot and 0 <= index < len(self.snapshot.pages):
             from ..renderers.pages import page_svg
 
-            self.preview.load(
+            self.preview.show_svg(
                 page_svg(self.snapshot, index, debug=not self.snapshot.exportable).encode()
             )
 

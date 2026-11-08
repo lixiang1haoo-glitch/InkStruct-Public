@@ -34,6 +34,7 @@ def organize_workspace(w):
         return button
 
     file_menu = w.menuBar().addMenu("文件")
+    action(file_menu, "新建文档", w.new_document, QtGui.QKeySequence.StandardKey.New)
     action(file_menu, "打开项目…", w.open_project, QtGui.QKeySequence.StandardKey.Open)
     action(file_menu, "导入 Markdown / 文本…", w.open_text)
     action(file_menu, "保存项目", w.save_project, QtGui.QKeySequence.StandardKey.Save)
@@ -41,6 +42,9 @@ def organize_workspace(w):
     action(file_menu, "保存 Markdown / 文本…", w.save_text)
     file_menu.addSeparator()
     action(file_menu, "打开恢复副本…", w.open_recovery)
+    advanced = file_menu.addMenu("高级资源（仅当前文档）")
+    action(advanced, "选择生成字形目录…", w.choose_run)
+    action(advanced, "刷新当前外部资源", w.refresh_assets)
 
     # Native Edit actions route to the focused text control. Source input also has
     # an explicit paste button, independent of platform menu/shortcut dispatch.
@@ -50,6 +54,8 @@ def organize_workspace(w):
             target, (QtWidgets.QLineEdit, QtWidgets.QTextEdit, QtWidgets.QPlainTextEdit)
         ):
             target = w.editor
+        if target is w.editor:
+            w.workspace_views.focus_source()
         target.setFocus(QtCore.Qt.FocusReason.ShortcutFocusReason)
         getattr(target, method)()
 
@@ -63,7 +69,7 @@ def organize_workspace(w):
         ("全选", "selectAll", QtGui.QKeySequence.StandardKey.SelectAll),
     ):
         action(edit_menu, title, lambda m=method: edit(m), shortcut)
-    action(edit_menu, "聚焦 Markdown 源码", w.editor.setFocus, "Ctrl+1")
+    action(edit_menu, "聚焦 Markdown 源码", lambda: w.workspace_views.focus_source(), "Ctrl+1")
     toolbar.addStretch()
 
     # Keep backing controls owned but hidden. The unified dialog edits a draft,
@@ -74,7 +80,7 @@ def organize_workspace(w):
                 *w.flow_controls.values(), w.run_label, w.template_settings_button,
                 w.math_settings_button, w.code_settings_button, w.table_settings_button,
                 w.image_settings_button, w.footnote_settings_button]
-    controls.extend(buttons[title] for title in ('标题字号…', '选择字形目录…', '导入符号样本…', '刷新字形', '载入全部字'))
+    controls.extend(buttons[title] for title in ('标题字号…', '选择字形目录…', '刷新字形', '载入全部字'))
     for control in controls:
         control.setParent(storage)
     storage.hide()
@@ -102,15 +108,10 @@ def organize_workspace(w):
         return column
 
     diagnostics = tab("问题")
-    diagnostics.addWidget(w.diagnostic_picker)
-    font_warnings = QtWidgets.QPushButton("字体提示…")
-    font_warnings.setObjectName("font_usage_warnings")
-    font_warnings.setToolTip("查看当前文档实际使用字形的来源缺口与正斜体提示")
-    font_warnings.clicked.connect(w.show_font_warnings)
-    diagnostics.addWidget(font_warnings)
-    diagnostics.addWidget(w.repair_template_button)
-    diagnostics.addWidget(w.template_fit_button)
-    diagnostics.addStretch()
+    from .problems import ProblemsPanel
+    w.problems_panel = ProblemsPanel(w)
+    diagnostics.addWidget(w.problems_panel,1)
+    w.diagnostic_picker.setParent(storage)
     navigation = tab('正文定位')
     navigation.addWidget(w.block_picker)
     navigation.addStretch()
@@ -134,6 +135,8 @@ def organize_workspace(w):
     export_menu = QtWidgets.QMenu(export_button)
     # Keep the original page export button in the panel so its readiness guard
     # remains authoritative; mirror it when opening the export menu.
+    w.force_svg_action = action(export_menu, "强制导出 SVG…", w.force_machine_export.click)
+    export_menu.aboutToShow.connect(lambda: w.force_svg_action.setEnabled(w.force_machine_export.isEnabled()))
     page_action = action(export_menu, "导出参考页面…", w.page_export.click)
     export_menu.aboutToShow.connect(lambda: page_action.setEnabled(w.page_export.isEnabled()))
     action(export_menu, "导出评价 CSV…", w.export_csv)
@@ -141,6 +144,7 @@ def organize_workspace(w):
     export_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
     w.optimize.setParent(storage)
     w.page_export.setParent(storage)
+    w.force_machine_export.setParent(storage)
 
     split = QtWidgets.QSplitter()
     split.setObjectName("document_splitter")
@@ -158,7 +162,7 @@ def organize_workspace(w):
     paste.setToolTip("将剪贴板文字粘贴到光标处；可撤销")
 
     def paste_source():
-        w.editor.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+        w.workspace_views.focus_source()
         w.editor.paste()
 
     paste.clicked.connect(paste_source)
@@ -190,6 +194,10 @@ def organize_workspace(w):
     split.setSizes([480, 680])
     split.setStretchFactor(0, 4)
     split.setStretchFactor(1, 6)
+    from .workspace_views import WorkspaceViews
+    w.scroll.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+    w.workspace_views = WorkspaceViews(w, split, left, right)
+    toolbar.insertWidget(0, w.workspace_views.widget)
 
     review = QtWidgets.QDockWidget("字形评价", w)
     review.setObjectName("glyph_review_dock")
@@ -223,6 +231,8 @@ def organize_workspace(w):
     footer.addWidget(w.status, 1)
     problems = QtWidgets.QToolButton()
     problems.setText("查看问题")
+    problems.setAccessibleName("查看排版问题")
+    w.problems_button = problems
     problems.clicked.connect(lambda: reveal(0))
     footer.addWidget(problems)
     layout.addLayout(footer)
@@ -250,7 +260,11 @@ def organize_workspace(w):
     w.properties_tabs.addTab(glyph_scroll, "字符校正")
     from .template_content import TemplateContentPanel
     w.template_content_panel=TemplateContentPanel(w)
-    w.properties_tabs.addTab(w.template_content_panel,"文档资源")
+    resources_scroll = QtWidgets.QScrollArea()
+    resources_scroll.setWidgetResizable(True)
+    resources_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+    resources_scroll.setWidget(w.template_content_panel)
+    w.properties_tabs.addTab(resources_scroll,"文档资源")
     properties.setWidget(w.properties_tabs)
     w.element_properties_dock = properties
     w.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, properties)
@@ -263,4 +277,4 @@ def organize_workspace(w):
     review.hide()
     old.deleteLater()
     # Schedule after initial show so keyboard input works immediately on launch.
-    QtCore.QTimer.singleShot(0, w.editor.setFocus)
+    QtCore.QTimer.singleShot(0, w.workspace_views.focus_current)

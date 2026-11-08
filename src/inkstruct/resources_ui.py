@@ -1,4 +1,4 @@
-"""One management destination; settings and document pickers reuse its browsers."""
+"""Resource management entry points and the document font picker."""
 
 from pathlib import Path
 
@@ -6,17 +6,6 @@ from PySide6 import QtWidgets
 
 from .fonts.ui import FontLibrary
 from .resource_catalog import workspace_for
-
-
-class ResourceLibrary(QtWidgets.QTabWidget):
-    def __init__(self, editor, fonts, parent=None):
-        super().__init__(parent)
-        from .editor.template_library import TemplateLibrary
-        self.fonts = fonts
-        self.templates = TemplateLibrary(editor, self)
-        self.addTab(fonts, '字体')
-        self.addTab(self.templates, '模板')
-        self.setObjectName('font_and_template_library')
 
 
 class FontPicker(QtWidgets.QDialog):
@@ -66,22 +55,23 @@ class FontPicker(QtWidgets.QDialog):
 
 def open_management(editor, category='templates'):
     host = getattr(editor, 'settings_host', None)
-    if host and hasattr(host, 'resources'):
-        host.tabs.setCurrentIndex(2)
-        host.resources.setCurrentIndex(1 if category == 'templates' else 0)
+    if host and hasattr(host, 'template_library'):
+        host.tabs.setCurrentIndex(4 if category == 'templates' else 2)
         if category == 'templates':
-            host.resources.templates.refresh()
+            host.template_library.refresh()
         else:
             host.library.refresh()
         return
     dialog = QtWidgets.QDialog(editor)
-    dialog.setWindowTitle('字体与模板')
+    dialog.setWindowTitle('模板库' if category == 'templates' else '字体库')
     dialog.resize(1100, 760)
     col = QtWidgets.QVBoxLayout(dialog)
-    fonts = FontLibrary(workspace_for(editor) / 'fonts')
-    resources = ResourceLibrary(editor, fonts, dialog)
-    resources.setCurrentIndex(1 if category == 'templates' else 0)
-    fonts.use_requested.connect(lambda path: use_document_font(editor, path, dialog))
+    if category == 'templates':
+        from .editor.template_library import TemplateLibrary
+        resources = TemplateLibrary(editor, dialog)
+    else:
+        resources = FontLibrary(workspace_for(editor) / 'fonts')
+        resources.use_requested.connect(lambda path: use_document_font(editor, path, dialog))
     col.addWidget(resources)
     close = QtWidgets.QPushButton('关闭资源管理')
     close.clicked.connect(dialog.accept)

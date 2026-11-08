@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -29,6 +30,63 @@ def workspace_path():
     return Path(location) / "InkStruct" / "workspace"
 
 
+def startup_card(icon, message):
+    screen = QtGui.QGuiApplication.primaryScreen()
+    scale = screen.devicePixelRatio() if screen else 1
+    card = QtGui.QPixmap(round(344 * scale), round(148 * scale))
+    card.setDevicePixelRatio(scale)
+    card.fill(QtGui.QColor('#f4f8fd'))
+    painter = QtGui.QPainter(card)
+    icon.paint(painter, QtCore.QRect(28, 35, 72, 72))
+    font = painter.font()
+    font.setPointSize(19)
+    font.setBold(True)
+    painter.setFont(font)
+    painter.setPen(QtGui.QColor('#102748'))
+    painter.drawText(120, 68, 'InkStruct 墨构')
+    font.setBold(False)
+    font.setPointSize(11)
+    painter.setFont(font)
+    painter.drawText(120, 96, message)
+    painter.end()
+    return card
+
+
+def startup_splash(icon):
+    return QtWidgets.QSplashScreen(startup_card(icon, '正在启动…'))
+
+
+def show_startup_window(window, splash, icon):
+    editor = window.editor
+    if editor.mode != "markdown" or window.tabs.tabText(window.tabs.currentIndex()) != "排版":
+        window.show()
+        splash.close()
+        return
+
+    deadline = QtCore.QTimer(window)
+    deadline.setSingleShot(True)
+    deadline.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
+
+    def dismiss():
+        deadline.stop()
+        editor.canvas.first_page_painted.disconnect(page_painted)
+        splash.close()
+
+    def page_painted(snapshot):
+        if snapshot.revision == editor.revision and (
+            snapshot is editor.snapshot or editor.partial_kind == "startup-page"
+        ):
+            # Close after the paint handler returns to Qt.
+            deadline.start(0)
+
+    editor.canvas.first_page_painted.connect(page_painted)
+    deadline.timeout.connect(dismiss)
+    splash.setPixmap(startup_card(icon, '正在准备首页…'))
+    editor.begin_startup_preview()
+    deadline.start(500)
+    window.show()
+
+
 class InkStructWindow(QtWidgets.QMainWindow):
     def __init__(self, *, workspace=None, database=None):
         from .theme import use_light_theme
@@ -41,11 +99,11 @@ class InkStructWindow(QtWidgets.QMainWindow):
 
         self.workspace = Path(workspace) if workspace else workspace_path()
         self.workspace.mkdir(parents=True, exist_ok=True)
-        self.setWindowTitle(f"InkStruct 墨构 · {APP_VERSION}")
+        preview = " · Layout Preview" if os.environ.get("INKSTRUCT_LAYOUT_PREVIEW") == "1" else ""
+        self.setWindowTitle(f"InkStruct 墨构 · {APP_VERSION}" + preview)
         self.resize(1360, 900)
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setObjectName("inkstruct_modules")
-        self.setCentralWidget(self.tabs)
         database = Path(database) if database else database_path()
         self.collector = collector(
             ["InkStruct"], create_only=True, workspace=self.workspace, database=database
@@ -53,33 +111,32 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.generator = generator(
             ["InkStruct"], create_only=True, workspace=self.workspace, database=database
         )
-        self.generator.centralWidget().writer.clear()
-        self.generator.centralWidget().writer.setPlaceholderText('在采集页选择书写者，或填写已有 ID')
-        def choose_capture_writer(key):
-            workflow = self.generator.centralWidget()
-            if not workflow.busy:
-                workflow.writer.setText(key)
-        self.collector.writer_selected.connect(choose_capture_writer)
+        self.generator.centralWidget().writer.setText("")
+        self.collector.writer_selected.connect(self.generator.centralWidget().capture_writer_chosen)
         self.editor = MixedWindow()
         self.generator.centralWidget().current_document_provider = lambda: (
             self.editor.editor.toPlainText(), self.editor.flow,
             {'kind': 'current-document', 'document_id': self.editor.source_session.document_id,
              'revision': self.editor.source_session.revision})
-        self.generator.centralWidget().refresh()
+        self.generator.centralWidget().capture_root_provider = lambda: self.collector.output_root
+        self.generator.centralWidget().writer.reload("")
+        self.generator.centralWidget().refresh_sample_source()
         self.library = FontLibrary(self.workspace / "fonts")
+        self.library.capture_root_provider = lambda: self.collector.output_root
         self.editor.settings_host = self
-        from .resources_ui import ResourceLibrary
-        self.resources = ResourceLibrary(self.editor, self.library)
+        from .editor.template_library import TemplateLibrary
+        self.template_library = TemplateLibrary(self.editor)
         for title, widget in [
             ("采集", self.collector),
             ("生成", self.generator),
-            ("字体与模板", self.resources),
+            ("字体库", self.library),
             ("排版", self.editor),
+            ("模板库", self.template_library),
         ]:
             if isinstance(widget, QtWidgets.QMainWindow):
                 widget.setWindowFlags(QtCore.Qt.WindowType.Widget)
                 widget.menuBar().setNativeMenuBar(False)
-            if widget is self.editor:
+            if widget in (self.editor, self.template_library):
                 self.tabs.addTab(widget, title)
             else:
                 # Large native control/font hints must not enlarge every tab or the window.
@@ -98,7 +155,6 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.tabs.setCurrentIndex(3)
         from .settings_dialog import gear_button
         self.settings_button = gear_button(self, self.open_settings)
-        self.tabs.setCornerWidget(self.settings_button, QtCore.Qt.Corner.TopRightCorner)
         # The integrated application owns the only settings entry point.
         self.editor.settings_button.hide()
         self.editor.settings_shortcut.setEnabled(False)
@@ -120,15 +176,18 @@ class InkStructWindow(QtWidgets.QMainWindow):
             )
         )
         self.menuBar().addAction(about)
+        from .app_shell import install_shell, style_module_pages
+        style_module_pages(self)
+        install_shell(self, about)
         available = self.screen().availableGeometry()
         self.resize(min(1360, available.width() - 32), min(900, available.height() - 64))
         self.move(available.center() - self.rect().center())
 
-    def open_settings(self, *, category=None, target=None, reason=''):
+    def open_settings(self, *, category=None):
         from .settings_dialog import open_settings
         if category is None and self.tabs.currentIndex() == 0:
             category = 'capture'
-        return open_settings(self.editor, self.collector, self, category=category, target=target, reason=reason)
+        return open_settings(self.editor, self.collector, self, category=category)
 
     def use_font(self, path):
         try:
@@ -150,7 +209,6 @@ class InkStructWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.information(self, "字体操作进行中", "请等待当前字体操作完成。")
                 return
             self.tabs.setCurrentIndex(2)
-            self.resources.setCurrentIndex(0)
             self.library.prepare_publication(path, workflow.last_generated_writer or workflow.writer.text())
         else:
             QtWidgets.QMessageBox.information(
@@ -159,7 +217,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         workflow = self.generator.centralWidget()
-        if self.library.job or getattr(workflow, "busy", False):
+        if self.library.job or self.library.review_job or getattr(workflow, "busy", False):
             QtWidgets.QMessageBox.information(
                 self, "操作进行中", "请等待字体操作完成，或在生成页取消任务后再退出。"
             )
@@ -185,10 +243,15 @@ def main(argv=None):
     app.setOrganizationName("InkStruct")
     app.setApplicationVersion(APP_VERSION)
     app.setStyle("Fusion")
+    icon = QtGui.QIcon(str(Path(__file__).parent / 'editor/resources/inkstruct.svg'))
+    app.setWindowIcon(icon)
+    splash = startup_splash(icon)
+    splash.show()
+    app.processEvents()
     window = InkStructWindow(workspace=args.workspace)
     if args.font:
         window.use_font(args.font)
-    window.show()
+    show_startup_window(window, splash, icon)
     return app.exec()
 
 

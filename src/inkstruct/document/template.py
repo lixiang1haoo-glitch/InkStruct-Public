@@ -8,6 +8,8 @@ from hashlib import sha256
 from typing import ClassVar
 
 from .schema import PageProfile
+from .template_revision import SCHEMA as REVISION_SCHEMA
+from .template_revision import TemplateRevision
 from .template_validation import TemplateValidationError, converted
 
 
@@ -175,6 +177,7 @@ class PageTemplate:
     source_sha256: str = ""
     calibration: str = "unreviewed"
     schema_version: str = "inkstruct_page_template_v1"
+    revision: TemplateRevision | None = None
 
     def __post_init__(self):
         for key in ("first", "continuation"):
@@ -256,6 +259,23 @@ class PageTemplate:
 
 def template_from_record(value):
     """Version dispatch; v1 remains byte-for-byte unchanged on serialization."""
+    from dataclasses import replace
+
+    from .schema import digest
+
+    if value.get("schema_version") == REVISION_SCHEMA:
+        if (set(value) != {'schema_version', 'revision', 'template'}
+                or not isinstance(value['template'], dict) or not isinstance(value['revision'], dict)):
+            raise ValueError("无效模板修订封装")
+        metadata = TemplateRevision(**value['revision'])
+        inner = value['template']
+        if inner.get('schema_version') == REVISION_SCHEMA or digest(inner) != metadata.content_hash:
+            raise ValueError("模板修订与内容身份不一致")
+        return replace(template_from_record(inner), revision=metadata)
+    if 'revision' in value:
+        if value['revision'] is not None:
+            raise ValueError("模板修订必须使用独立封装")
+        value = {key: item for key, item in value.items() if key != 'revision'}
     if value.get("schema_version") == "inkstruct_page_template_v3":
         from .flow_template import FlowTemplate
         return FlowTemplate(**value)

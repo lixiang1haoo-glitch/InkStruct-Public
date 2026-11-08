@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
+from contextlib import nullcontext
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..assets.glyph_provider import GlyphProvider
+from ..assets.glyph_provider import GlyphProvider, is_han
 from ..assets.resolver import AssetResolver
 from ..assets.symbol_provider import SymbolProvider
 from ..document.editing import SourceSession
@@ -21,6 +23,8 @@ from ..document.schema import SourceSpan, digest, new_id
 from ..document.source import scalar_to_utf16, utf16_to_scalar
 from ..document.table_import import import_table_project
 from ..document.table_style import calibrate_tables
+from ..fonts.identity import release_identity
+from ..fonts.preview_candidates import PreviewCandidates, PreviewFontError
 from ..document.tables import table_model
 from ..layout.blocks import layout_markdown
 from ..layout.continuation import continuation_scope
@@ -44,6 +48,9 @@ from .wrapping import WrappingLayout
 
 
 def recovery_directory():
+    private = os.environ.get("INKSTRUCT_LAYOUT_PREVIEW_HOME")
+    if private:
+        return Path(private).resolve() / "editor_recovery"
     if getattr(sys, "frozen", False):
         location = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.GenericDataLocation)
         if not location:
@@ -53,7 +60,8 @@ def recovery_directory():
 
 
 def build_markdown(
-    session, revision, resolver, run, symbols, page, style, flow, cancelled, cache=None
+    session, revision, resolver, run, symbols, page, style, flow, cancelled, cache=None,
+    first_page=None,
 ):
     check_cancel(cancelled)
     source = source_key(session, flow.markdown_dialect)
@@ -72,11 +80,33 @@ def build_markdown(
     resources = cache.resources if cache is not None else None
     embedded = tuple(g for pool in resolver.pools.values() for g in pool)
     font_glyphs = ()
+    indexed = None
+    font_identity = resolver.font_identity
     if run and Path(run).suffix == ".inkfont":
-        from ..fonts.core import cached_font
+        from ..fonts.core import cached_font, verified_preview_font
         from ..symbol_capture import CHARACTERS
-        font = cached_font(Path(run))
-        font_glyphs = tuple(font.glyphs(set(visible) | set(CHARACTERS), reuse=embedded))
+        characters = set(visible) | set(CHARACTERS)
+        # Keep small documents on the existing resource path. Once a large
+        # document has indexed choices, keep that path for subsequent edits.
+        use_index = len(visible) >= 2048 or resolver.indexed is not None
+        verified = verified_preview_font(run) if use_index and not symbols else None
+        font = verified or cached_font(Path(run))
+        current_identity = release_identity(font.identity)
+        if font_identity is not None and font_identity != current_identity:
+            raise ValueError('已连接的字体文件版本发生变化，请重新连接原版本或确认更换字体。')
+        font_identity = current_identity
+        if verified:
+            deferred = {c for c in characters if is_han(c)}
+            # Embedded candidates from other sources can affect tie order or
+            # survive a release change. Keep their original eager merge.
+            deferred.difference_update(g.character for g in embedded
+                                       if getattr(g, "_preview_font_token", None) != font.preview_token)
+            if deferred:
+                indexed = PreviewCandidates(font, deferred,
+                                            cache.font_trajectories if cache is not None else None,
+                                            cancelled)
+                characters -= deferred
+        font_glyphs = tuple(font.glyphs(characters, reuse=embedded, cancelled=cancelled))
         generated = None
     else:
         generated = GlyphProvider.from_run(Path(run), visible, cache=resources) if run else None
@@ -90,19 +120,50 @@ def build_markdown(
         selections=resolver.selections.values(),
         embedded=(*embedded, *font_glyphs),
         builtin_numbers=True,
+        font_identity=font_identity,
+        indexed=indexed,
     )
-    key = layout_key(source, resolved, page, style, flow) if cache is not None else None
-    cached = cache.layouts.get(key) if cache is not None else None
+    full_cache = cache is not None and indexed is None
+    key = layout_key(source, resolved, page, style, flow) if full_cache else None
+    cached = cache.layouts.get(key) if full_cache else None
     if cached is None:
-        with (
-            measurement_scope(cache.measurements if cache is not None else None),
-            continuation_scope(cache.continuation if cache is not None else None),
-        ):
-            snapshot = layout_markdown(
-                document, resolved, page=page, style=style, flow=flow, cancelled=cancelled
-            )
+        preview_page = None
+        try:
+            with indexed.opened() if indexed else nullcontext():
+                if first_page and indexed:
+                    prefix = stable_han_prefix(document, flow)
+                    if prefix:
+                        selections = dict(resolved.selections)
+                        try:
+                            draft = layout_markdown(prefix, resolved, page=page,
+                                                    style=style, flow=flow, cancelled=cancelled)
+                        except DocumentLimitError:
+                            pass
+                        else:
+                            # Do not show a page that still contains the prefix's
+                            # last line. It may change when the paragraph continues.
+                            last = prefix.occurrences[-1].occurrence_id
+                            if any(f.occurrence_id == last for p in draft.pages[1:] for f in p.fragments):
+                                check_cancel(cancelled)
+                                preview_page = draft.pages[0]
+                                first_page(replace(draft, pages=draft.pages[:1]))
+                        finally:
+                            # Keep checked ink, but replay selection for the
+                            # complete document, including synthetic occurrences.
+                            resolved.selections = selections
+                with (
+                    measurement_scope(cache.measurements if cache is not None else None),
+                    continuation_scope(cache.continuation if cache is not None else None),
+                ):
+                    snapshot = layout_markdown(
+                        document, resolved, page=page, style=style, flow=flow, cancelled=cancelled
+                    )
+        except PreviewFontError as error:
+            raise ValueError(str(error)) from error
         check_cancel(cancelled)
-        if cache is not None:
+        if preview_page is not None and snapshot.pages and snapshot.pages[0] == preview_page:
+            snapshot = replace(snapshot, pages=(preview_page, *snapshot.pages[1:]))
+        if full_cache:
             after = layout_key(source, resolved, page, style, flow)
             cache.layouts.put(
                 (key, after),
@@ -114,6 +175,9 @@ def build_markdown(
         resolved.selections = {s.occurrence_id: s for s in cached.selections}
     check_cancel(cancelled)
     validate_snapshot(snapshot, cancelled=cancelled)
+    if indexed:
+        # The inspector may ask for another sample after this request ends.
+        indexed.cancelled = None
     lookup = {g.asset_id: g for pool in resolved.pools.values() for g in pool}
     return {
         "document": document,
@@ -124,18 +188,103 @@ def build_markdown(
     }
 
 
+def stable_han_prefix(document, flow):
+    """A plain single paragraph has no cross-page dependencies or trailing syntax."""
+    if (len(document.source) < 2048 or len(document.nodes) != 1 or document.diagnostics
+            or flow.glyph_corrections or flow.template_bindings
+            or (flow.template and not flow.named_fields)
+            or not all(is_han(c) for c in document.source)):
+        return None
+    paragraph = document.nodes[0]
+    if paragraph.kind != "paragraph" or len(paragraph.children) != 1:
+        return None
+    inline = paragraph.children[0]
+    if inline.kind != "inline" or len(inline.children) != 1:
+        return None
+    leaf = inline.children[0]
+    if leaf.kind != "text" or len(leaf.occurrences) != len(document.source):
+        return None
+    end = 1024
+    span = SourceSpan(0, end)
+    leaf = replace(leaf, span=span, occurrences=leaf.occurrences[:end], raw_content=document.source[:end])
+    inline = replace(inline, span=span, children=(leaf,))
+    paragraph = replace(paragraph, span=span, children=(inline,))
+    return replace(document, source=document.source[:end], nodes=(paragraph,))
+
+
+class MarkdownSignals(WorkerSignals):
+    first_page = QtCore.Signal(object)
+
+
+def startup_page(arguments, *, first_only=False):
+    """Build a display-only first page without opening the default font."""
+    flow = arguments["flow"]
+    template = flow.template
+    if (arguments["session"].source or not (arguments["run"] or arguments["symbols"])
+            or (template is not None and not flow.named_fields)):
+        return None
+    needs_ink = False
+    if template is not None:
+        first = template.layout(0)
+        needs_ink = any(frame.role == "page_number" for frame in first.frames)
+        if needs_ink:
+            paper = replace(first, frames=tuple(f for f in first.frames if f.role != "page_number"))
+            template = replace(template, layouts=tuple(
+                paper if layout.layout_id == first.layout_id else layout
+                for layout in template.layouts
+            ))
+            flow = replace(flow, template=template)
+        if first_only and template.kind == "custom":
+            flow = replace(flow, template=replace(
+                template, start_pages=(first.layout_id,), finish_cycle=False
+            ))
+    draft = build_markdown(**{**arguments, "run": "", "symbols": "", "flow": flow, "cache": None})
+    snapshot = draft["snapshot"]
+    if not snapshot.pages:
+        return None
+    page = snapshot.pages[0]
+    image = None
+    # TemplateBackground already verifies the PNG and caps its decoded size.
+    # A background-only page needs neither an SVG nor the raster process.
+    if (snapshot.exportable and page.background and not
+            (page.fragments or page.paint_ops or page.preview_ops or page.images)):
+        image = QtGui.QImage.fromData(page.background.png_bytes(), "PNG")
+        if image.isNull():
+            image = None
+    return (replace(snapshot, pages=(page,)),
+            "startup-paper" if needs_ink else "startup-page", image)
+
+
 class MarkdownWorker(QtCore.QRunnable):
-    def __init__(self, key, revision, arguments):
+    def __init__(self, key, revision, arguments, *, startup=False):
         super().__init__()
         self.key, self.revision, self.arguments = key, revision, arguments
-        self.signals = WorkerSignals()
+        self.signals = MarkdownSignals()
+        self.startup = startup
 
     def run(self):
         result = {"key": self.key, "revision": self.revision}
         try:
-            result.update(build_markdown(**self.arguments))
+            early = None
+            if self.startup:
+                try:
+                    early = startup_page(self.arguments)
+                except (ValueError, OSError, KeyError, TypeError):
+                    # Report any errors through the ordinary full preview.
+                    pass
+                if early is not None:
+                    check_cancel(self.arguments["cancelled"])
+                    self.signals.first_page.emit((self.key, self.revision, *early))
+            built = build_markdown(**self.arguments, first_page=lambda snapshot:
+                                   self.signals.first_page.emit((self.key, self.revision, snapshot)))
+            snapshot = built["snapshot"]
+            if early and snapshot.pages and early[0].pages[0] == snapshot.pages[0]:
+                built["snapshot"] = replace(snapshot, pages=(early[0].pages[0], *snapshot.pages[1:]))
+            result.update(built)
         except LayoutCancelled:
             pass
+        except DocumentLimitError as error:
+            result.update(error=str(error), limit=True)
         except Exception as error:  # noqa: BLE001 - transport worker errors to GUI
             result["error"] = str(error)
         self.signals.finished.emit(result)
@@ -167,11 +316,17 @@ class MixedWindow(ReviewWindow):
         super().__init__(source=source, run=run, parent=parent)
         self.timer.stop()
         self.source_session = SourceSession(source)
+        self.document_started = bool(source)
+        self.imported_image_edits = {}
         self.build_cache = MarkdownBuildCache()
         self.resolver = AssetResolver()
         self.asset_lookup = {}
+        self.partial_revision = None
+        self.partial_kind = ""
+        self.startup_layout_pending = False
+        self.startup_preview_key = None
         from ..global_defaults import GlobalDefaultsStore
-        defaults, defaults_warning = GlobalDefaultsStore().load()
+        defaults, defaults_warning = GlobalDefaultsStore().for_new_document()
         self.flow = defaults.flow
         self.page, self.loaded_style = defaults.page, defaults.style
         if run is None:
@@ -275,7 +430,6 @@ class MixedWindow(ReviewWindow):
         )
         self.dialect_picker.currentIndexChanged.connect(self.dialect_changed)
         row.addWidget(self.dialect_picker)
-        self.button("导入符号样本…", self.choose_symbols, row)
         self.button("撤销正文", lambda: self.source_history("undo"), row)
         self.button("重做正文", lambda: self.source_history("redo"), row)
         self.optimize = QtWidgets.QCheckBox("优化路径（自动允许反转）")
@@ -284,6 +438,8 @@ class MixedWindow(ReviewWindow):
         self.optimize.toggled.connect(self.export_preference_changed)
         self.optimize.hide()  # Saved document preference, edited by the export dialog.
         self.machine_export = self.button("导出写字机 SVG…", self.export_machine, row)
+        self.force_machine_export = self.button("强制导出 SVG…", self.export_machine_forced, row)
+        self.force_machine_export.setToolTip("仅导出已有有效笔迹，缺失处留空，并附问题清单；不宣称为完整成品。")
         self.button("打开恢复副本…", self.open_recovery, row)
         self.centralWidget().layout().insertLayout(2, row)
         settings = WrappingLayout()
@@ -475,6 +631,10 @@ class MixedWindow(ReviewWindow):
         stack = self.source_session._undo if direction == "undo" else self.source_session._redo
         edit = stack[-1] if stack else None
         if getattr(self.source_session, direction)():
+            transaction = self.imported_image_edits.get(id(edit))
+            if transaction:
+                _, old_images, new_images = transaction
+                self.flow = replace(self.flow, images=old_images if direction == "undo" else new_images)
             self._display_session()
             end = edit.start + len(edit.removed if direction == "undo" else edit.inserted)
             cursor = self.editor.textCursor()
@@ -487,12 +647,15 @@ class MixedWindow(ReviewWindow):
             self.schedule_layout()
 
     def _display_session(self):
+        syncing_selection = self._syncing
+        self._syncing = True
         self.source_syncing = True
         try:
             self.buffer = SourceBuffer(self.source_session.source)
             self.editor.setPlainText(self.buffer.display)
         finally:
             self.source_syncing = False
+            self._syncing = syncing_selection
 
     def replace_text(self, source):
         if not self.integrated:
@@ -560,7 +723,8 @@ class MixedWindow(ReviewWindow):
         from .math_settings import MathSettingsDialog
 
         dialog = MathSettingsDialog(
-            self.flow.math, self, resolver=self.resolver, stroke_width=self.style.stroke_width_mm
+            self.flow.math, self, resolver=self.resolver, stroke_width=self.style.stroke_width_mm,
+            font_path=self.run_path,
         )
         try:
             if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
@@ -655,26 +819,27 @@ class MixedWindow(ReviewWindow):
         self.resolver = AssetResolver()
         super().set_run(path)
 
-    def choose_symbols(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "导入一位书写者的符号样本", "", "样本 (*.zip)"
-        )
-        if path:
-            try:
-                samples = SymbolProvider.from_zip(Path(path))
-                flow = calibrate_tables(self.flow, samples)
-                self.symbol_path = str(Path(path).resolve())
-                self.flow = flow
-                self.resolver = AssetResolver()
-                self.mark_dirty()
-                self.schedule_layout()
-            except (ValueError, OSError) as error:
-                self.message_error(error)
-
     def schedule_layout(self):
+        self.startup_layout_pending = False
+        keep_startup = (self.integrated and self.startup_preview_key is not None
+                        and not self.source_session.source
+                        and self.startup_preview_key == self.startup_inputs())
+        if self.integrated and self.partial_revision is not None and not keep_startup:
+            self.partial_revision = None
+            self.partial_kind = ""
+            self.startup_preview_key = None
+            if self.snapshot:
+                self.canvas.load_page(self.snapshot, self.page_picker.value() - 1)
+            else:
+                self.canvas.clear_document()
+            self.page_picker.setEnabled(True)
         super().schedule_layout()
+        if keep_startup:
+            self.partial_revision = self.revision
+            self.canvas.load_page(replace(self.canvas.snapshot, revision=self.revision), 0)
         if self.integrated and self.mode == "markdown":
-            self.status.setText("正在更新 Markdown 分页预览…旧快照暂不可标记或导出")
+            if not keep_startup:
+                self.status.setText("正在更新 Markdown 分页预览…旧快照暂不可标记或导出")
             self.run_label.setText(
                 "汉字："
                 + (self.run_path or "项目内嵌资源")
@@ -684,6 +849,28 @@ class MixedWindow(ReviewWindow):
             if self.source_error:
                 self.timer.stop()
                 self.status.setText(self.source_error)
+
+    def begin_startup_preview(self):
+        self.startup_layout_pending = self.mode == "markdown" and not self.source_session.source
+        if self.startup_layout_pending and not self.source_error:
+            # Prepare the bounded, background-only PDF before scheduling the
+            # first font job. A show-time relayout must not put it behind I/O.
+            template = self.flow.template
+            if (template and self.flow.named_fields and template.layout(0).background
+                    and (self.run_path or self.symbol_path)):
+                try:
+                    draft = startup_page(self.build_arguments(), first_only=True)
+                except (ValueError, OSError, KeyError, TypeError):
+                    draft = None
+                if draft is not None and draft[2] is not None:
+                    self.startup_preview_key = self.startup_inputs()
+                    self.show_partial_page(*draft)
+                    self.startup_layout_pending = False
+            self.timer.start(0)
+
+    def startup_inputs(self):
+        return (self.source_session.document_id, self.mode, self.page, self.style,
+                self.flow, self.run_path, self.symbol_path)
 
     def build_arguments(self):
         return {
@@ -709,13 +896,47 @@ class MixedWindow(ReviewWindow):
         args = self.build_arguments()
         key = digest([self.revision, self.mode, self.source_session.document_id])
         self.current_key, self.cancelled = key, args["cancelled"]
-        self.worker = MarkdownWorker(key, self.revision, args)
+        self.worker = MarkdownWorker(key, self.revision, args, startup=self.startup_layout_pending)
+        self.startup_layout_pending = False
         self.worker.signals.finished.connect(self.publish)
+        self.worker.signals.first_page.connect(self.publish_first_page)
         self.pool.start(self.worker)
+
+    @QtCore.Slot(object)
+    def publish_first_page(self, result):
+        key, revision, snapshot, *kind = result
+        if self.closed or key != self.current_key or revision != self.revision or not self.worker:
+            return
+        self.show_partial_page(snapshot, *kind)
+
+    def show_partial_page(self, snapshot, kind="", startup_image=None):
+        self.partial_revision = snapshot.revision
+        self.partial_kind = kind
+        with QtCore.QSignalBlocker(self.page_picker):
+            self.page_picker.setRange(1, 1)
+            self.page_picker.setSuffix(" / … 页")
+        self.page_picker.setEnabled(False)
+        if startup_image is not None:
+            self.canvas.load_page(snapshot, 0, startup_image=startup_image)
+        else:
+            self.canvas.load_page(snapshot, 0)
+        self.status.setText({
+            "startup-paper": "正在加载首页内容 · 正在校验默认字体资源",
+            "startup-page": "首页预览 · 正在校验默认字体资源",
+        }.get(self.partial_kind, "仍在排版 · 已排定首页 · 总页数待定"))
 
     def publish(self, result):
         accepted = result["revision"] == self.revision and result["key"] == self.current_key
         if accepted and "resolver" in result:
+            if self.startup_preview_key is not None and self.partial_revision == self.revision:
+                early = self.canvas.snapshot.pages[0]
+                snapshot = result["snapshot"]
+                if snapshot.pages and snapshot.pages[0] == early:
+                    result["snapshot"] = replace(snapshot, pages=(early, *snapshot.pages[1:]))
+            self.startup_preview_key = None
+            self.partial_revision = None
+            self.partial_kind = ""
+            self.page_picker.setEnabled(True)
             self.resolver = result["resolver"]
             self.asset_lookup = result["asset_lookup"]
             self.markdown_document = result["document"]
@@ -723,53 +944,53 @@ class MixedWindow(ReviewWindow):
         if accepted and hasattr(self, 'element_inspector'):
             self.element_inspector.refresh()
             self.glyph_inspector.refresh()
-        if accepted and "snapshot" in result and self.mode == "markdown":
+        if accepted and "snapshot" in result:
             with QtCore.QSignalBlocker(self.block_picker):
                 self.block_picker.clear()
-                for root in self.markdown_document.nodes:
+                for root in (self.markdown_document.nodes if self.mode=="markdown" and self.markdown_document else ()):
                     for node in root.walk():
                         if node.kind in {"heading", "paragraph", "table", "html_block", "fence"}:
                             label = self.buffer.raw[node.span.start : node.span.end].replace(
                                 "\n", " "
                             )[:45]
                             self.block_picker.addItem(node.kind + " · " + label, node.span)
-            self.diagnostic_picker.clear()
-            for d in self.snapshot.diagnostics:
-                self.diagnostic_picker.addItem(d.code + " · " + d.message, d)
-                self.diagnostic_picker.setItemData(
-                    self.diagnostic_picker.count() - 1,
-                    d.code + " · " + d.message,
-                    QtCore.Qt.ToolTipRole,
-                )
-            if not self.snapshot.diagnostics:
-                self.diagnostic_picker.addItem("无诊断", None)
-            if self.current_font_warnings():
-                self.diagnostic_picker.addItem("字体来源/正斜体提示 · 在问题面板点击“字体提示”查看", None)
-                self.status.setText(self.status.text() + " · 有字体来源/类别提示")
+            with QtCore.QSignalBlocker(self.diagnostic_picker):
+                self.diagnostic_picker.clear()
+                for d in self.snapshot.diagnostics:
+                    self.diagnostic_picker.addItem(d.code+" · "+d.message,d)
+                if not self.snapshot.diagnostics:
+                    self.diagnostic_picker.addItem("无诊断",None)
+            self.problems_panel.refresh(self.snapshot,self.buffer.raw,
+                                        font_warnings=bool(self.current_font_warnings()),
+                                        notice=getattr(self,"project_migration_notice",""))
             self.update_diagnostic_action()
-            if any(d.code == 'template-body-no-progress' for d in self.snapshot.diagnostics):
-                self.status.setText(
-                    f"预览已停止：保留 {len(self.snapshot.pages)} 页已排内容；"
-                    "有对象无法放入正文框，此处及后续正文尚未排版。点击“查看问题”定位；成品导出不可用。"
-                )
+            errors=sum(len(g.diagnostics) for g in self.problems_panel.groups if g.severity=="error")
+            warnings=sum(max(1,len(g.diagnostics)) for g in self.problems_panel.groups if g.severity=="warning")
+            stopped=any(d.code=="template-body-no-progress" for d in self.snapshot.diagnostics)
+            state="预览已停止 · 后续正文尚未排版" if stopped else "预览已更新"
+            self.status.setText(f"{state} · {len(self.snapshot.pages)} 页 · {errors} 处需处理 · {warnings} 条提醒")
             if self.dirty:
                 self.recovery_timer.start()
-            if reference_image_export_scope(self.snapshot):
-                if not self.snapshot.exportable and can_export_with_image_omission(self.snapshot):
-                    self.status.setText(self.status.text().replace(
-                        "成品导出不可用；已有字形仍可检查。",
-                        "完整成品导出不可用；可确认跳过位图导出其余内容。"))
-                self.status.setText(self.status.text() + " · 含非 SVG 参考图片，导出 SVG 时将跳过图片并保留占位与图题")
+        elif accepted and "error" in result:
+            self.problems_panel.set_failure(result["error"],self.buffer.raw)
+            detail = result["error"] if result.get("limit") else "打开问题面板查看原因"
+            state = ("仅显示首页底图" if self.partial_kind == "startup-paper" else
+                     "仅显示首页" if self.partial_revision == self.revision else "预览未完成")
+            self.status.setText(f"{state} · {detail}")
 
     def set_ready(self, ready):
         super().set_ready(ready)
         if hasattr(self, "glyph_inspector"):
             self.glyph_inspector.set_ready(ready)
+        if hasattr(self, "element_inspector"):
+            self.element_inspector.set_ready(ready)
         if hasattr(self, "machine_export"):
             self.machine_export.setEnabled(
                 bool(ready and self.snapshot and can_export_with_image_omission(self.snapshot)
                      and self.export_job is None)
             )
+        if hasattr(self, "force_machine_export"):
+            self.force_machine_export.setEnabled(bool(ready and self.snapshot and self.export_job is None))
         self.update_diagnostic_action()
 
     def current_table(self):
@@ -890,6 +1111,8 @@ class MixedWindow(ReviewWindow):
     def navigate_span(self, span):
         if not isinstance(span, SourceSpan):
             return
+        if hasattr(self, "workspace_views"):
+            self.workspace_views.focus_source()
         cursor = self.editor.textCursor()
         cursor.setPosition(
             scalar_to_utf16(self.buffer.display, self.buffer.raw_to_display(span.start))
@@ -939,6 +1162,8 @@ class MixedWindow(ReviewWindow):
                 and getattr(diagnostic, "target", None)
             )
         )
+        if hasattr(self,"problems_panel"):
+            self.problems_panel.readiness_changed()
 
     def repair_template_diagnostic(self):
         self.update_diagnostic_action()
@@ -975,10 +1200,9 @@ class MixedWindow(ReviewWindow):
                             self.template_content_panel.edit(field_id=target.slot_id)
                         else:
                             self.navigate_span(diagnostic.span)
-                            from ..settings_dialog import open_settings
-                            # The report closes before entering the unified gear route.
                             dialog.hide()
-                            open_settings(self, category='templates', target=target, reason=diagnostic.message)
+                            from .template_manager import perform_template_action
+                            perform_template_action(self, "document", self.flow.template, target=target)
                     else:
                         self.navigate_span(diagnostic.span)
         finally:
@@ -1006,9 +1230,9 @@ class MixedWindow(ReviewWindow):
         finally:
             dialog.deleteLater()
 
-    def configure_svg_export(self, snapshot):
+    def configure_svg_export(self, snapshot, *, force=False):
         from .svg_export_dialog import SvgExportDialog
-        dialog = SvgExportDialog(len(snapshot.pages), self.optimize.isChecked(), self)
+        dialog = SvgExportDialog(len(snapshot.pages), self.optimize.isChecked(), self, force=force)
         try:
             if dialog.exec() == QtWidgets.QDialog.Accepted:
                 return dialog.options, dialog.optimize.isChecked()
@@ -1019,7 +1243,10 @@ class MixedWindow(ReviewWindow):
     def export_preference_changed(self, _value):
         self.export_preference_epoch += 1
 
-    def export_machine(self):
+    def export_machine_forced(self):
+        return self.export_machine(force=True)
+
+    def export_machine(self, *, force=False):
         if self.export_preparing:
             return
         if self.export_job is not None:
@@ -1029,24 +1256,24 @@ class MixedWindow(ReviewWindow):
             return
         self.export_preparing = True
         try:
-            self._configure_and_start_machine_export()
+            self._configure_and_start_machine_export(force=force)
         finally:
             self.export_preparing = False
 
-    def _configure_and_start_machine_export(self):
-        if self.current_font_warnings(pending_only=True) and not self.show_font_warnings():
+    def _configure_and_start_machine_export(self, *, force=False):
+        if not force and self.current_font_warnings(pending_only=True) and not self.show_font_warnings():
             return
-        if not self.snapshot or not self.canvas.isEnabled() or not can_export_with_image_omission(self.snapshot):
+        if not self.snapshot or not self.canvas.isEnabled() or (not force and not can_export_with_image_omission(self.snapshot)):
             return
         snapshot = self.snapshot
-        selected = self.configure_svg_export(snapshot)
+        selected = self.configure_svg_export(snapshot, force=True) if force else self.configure_svg_export(snapshot)
         if selected is None:
             return
         options, optimize = selected
         if self.snapshot is not snapshot or not self.canvas.isEnabled():
             return
         from ..plotter.options import prepare_export
-        scope = reference_image_export_scope(snapshot)
+        scope = None if options.force else reference_image_export_scope(snapshot)
         if scope:
             scope = {**scope, 'omitted_images': [i for i in scope['omitted_images'] if i['page_index'] in options.pages]}
             if not scope['omitted_images']:
@@ -1059,10 +1286,12 @@ class MixedWindow(ReviewWindow):
             # Freeze geometry, page selection, omissions and calibration before
             # the destination picker can process arbitrary GUI events.
             plan, export_scope = prepare_export(snapshot, self.markdown_document, self.flow, options)
+            if options.force:
+                export_scope["font_usage_warnings"] = self.current_font_warnings()
         except ValueError as error:
             self.message_error(error)
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "指定新的写字机输出文件夹")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "指定新的强制 SVG 输出文件夹" if options.force else "指定新的写字机输出文件夹")
         if path:
             from .export_job import ExportJob, ExportProgress
             job = ExportJob(plan, Path(path), optimize=optimize, route_cache=self.build_cache.routes,
@@ -1072,6 +1301,8 @@ class MixedWindow(ReviewWindow):
             job.source_session = self.source_session
             self.export_progress = ExportProgress(job, self)
             self.machine_export.setEnabled(False)
+            self.force_machine_export.setEnabled(False)
+            job.forced = options.force
             job.finished.connect(lambda: self.finish_machine_export(job, optimize, scope))
             self.export_progress.show()
             job.start()
@@ -1094,22 +1325,113 @@ class MixedWindow(ReviewWindow):
             if (self.source_session is job.source_session and self.source_session.document_id == job.plan.document_id
                     and self.export_preference_epoch == job.preference_epoch):
                 self.optimize.setChecked(optimize)
-            self.status.setText('已导出冻结排版的逐页写字机 SVG 和路径来源清单' +
+            self.status.setText(('已强制导出可用笔迹 SVG；缺失处留空，问题见 issues.txt / issues.json' if getattr(job, 'forced', False)
+                                 else '已导出冻结排版的逐页写字机 SVG 和路径来源清单') +
                                 (f"；已跳过 {len(scope['omitted_images'])} 处非 SVG 图片，保留占位与图题" if scope else '') +
                                 ('；并行不可用，已串行重算未完成页' if result['routing']['fallback'] else ''))
 
+    def new_document(self):
+        if self.editor.composing or not self.confirm_discard():
+            return
+        from ..global_defaults import GlobalDefaultsStore
+
+        defaults, warning = GlobalDefaultsStore().for_new_document()
+        self.source_session = SourceSession()
+        self.document_started = True
+        self.document_id = self.source_session.document_id
+        self.resolver = AssetResolver()
+        self.book = ReviewBook()
+        self.flow, self.page, self.loaded_style = defaults.flow, defaults.page, defaults.style
+        self.run_path, self.symbol_path, self.mode = defaults.run, defaults.symbols, defaults.mode
+        self.source_error = None
+        self.project_migration_notice = ""
+        self.session_path = self.session_hash = None
+        self.imported_image_edits.clear()
+        self.recovery_path = self.recovery_hash = None
+        self.recovery_pending = False
+        self.recovery_epoch += 1
+        self.recovery_timer.stop()
+        self.edit_generation += 1
+        self.dirty = False
+        self.snapshot = self.provider = self.selected_fragment = self.markdown_document = None
+        self.asset_lookup = {}
+        self.canvas.clear_document()
+        self.canvas.reviews = self.book.records
+        self.problems_panel.clear_document()
+        self.inspector.asset = None
+        self.inspector.update()
+        self.note.clear()
+        for picker in (self.block_picker, self.diagnostic_picker):
+            with QtCore.QSignalBlocker(picker):
+                picker.clear()
+        with QtCore.QSignalBlocker(self.page_picker):
+            self.page_picker.setRange(1, 1)
+            self.page_picker.setSuffix(" / 1 页")
+        self._display_session()
+        self._sync_document_controls(defaults.style)
+        self.optimize.setChecked(True)
+        self.update_mode_controls()
+        self.schedule_layout()
+        if warning:
+            self.status.setText(warning)
+
     def open_text(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "打开源码", "", "源码 (*.md *.txt);;所有文件 (*)"
+            self, "打开源码", "", "源码 (*.md *.markdown *.txt);;所有文件 (*)"
         )
         if path:
             try:
                 p = Path(path)
                 if p.stat().st_size > 2 * 1024 * 1024:
                     raise ValueError("源码超过 2 MiB")
-                self.replace_text(p.read_bytes().decode("utf-8"))
+                source = p.read_bytes().decode("utf-8-sig")
+                if p.suffix.lower() in {".md", ".markdown"} or self.mode == "markdown":
+                    self.import_markdown(source, p.parent)
+                else:
+                    self.replace_text(source)
             except (ValueError, OSError) as error:
                 self.message_error(error)
+
+    def import_markdown(self, source, root):
+        from ..document.images import import_local_images
+
+        document = parse_markdown(source, dialect=self.flow.markdown_dialect,
+                                  field_blocks=self.flow.named_fields)
+        references = {dict(node.attributes).get("src") for top in document.nodes
+                      for node in top.walk() if node.kind == "image"}
+        previous = self.flow.images
+        kept = tuple(image for image in previous if image.source not in references)
+        flow, issues = import_local_images(document, replace(self.flow, images=kept), root)
+        edit = self.source_session.apply(0, len(self.source_session.source), source)
+        self.flow = flow
+        self.source_error = None
+        if self.mode != "markdown":
+            self.mode = "markdown"
+            self.session_path = self.session_hash = None
+            with QtCore.QSignalBlocker(self.mode_picker):
+                self.mode_picker.setCurrentIndex(self.mode_picker.findData(self.mode))
+        if previous != flow.images:
+            # Keep image replacement reversible alongside the source edit.
+            history = self.source_session._undo
+            self.imported_image_edits = {id(edit): self.imported_image_edits[id(edit)]
+                                         for edit in history if id(edit) in self.imported_image_edits}
+            self.imported_image_edits[id(edit)] = (edit, previous, flow.images)
+        self.template_content_panel.source_edited()
+        self._display_session()
+        self.mark_dirty()
+        self.schedule_layout()
+        loaded = len(flow.images) - len(kept)
+        if issues:
+            message = QtWidgets.QMessageBox(self)
+            message.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+            message.setWindowTitle("Markdown 图片导入")
+            message.setText(f"已嵌入 {loaded} 个图片资源；{len(issues)} 处引用未导入。")
+            message.setDetailedText("\n".join(
+                f"{source[issue.span.start:issue.span.end]}\n{issue.message}" for issue in issues
+            ))
+            message.exec()
+        elif loaded:
+            self.status.setText(f"已嵌入 {loaded} 个图片资源，正在更新预览…")
 
     def save_text(self):
         if self.source_error:
@@ -1166,6 +1488,7 @@ class MixedWindow(ReviewWindow):
                 reviews=reviews,
             )
             self.session_path, self.session_hash = path, stamp
+            self.project_migration_notice = ""
             if generation == self.edit_generation:
                 self.resolver = result["resolver"]
                 self.dirty = False
@@ -1185,6 +1508,7 @@ class MixedWindow(ReviewWindow):
         self.canvas._process.prewarm()
         path = Path(path)
         legacy = path.suffix.lower() == ".inktable"
+        self.project_migration_notice = ""
         if path.suffix.lower() == ".inkreview":
             expected = file_hash(path)
             buffer, run, book, page, style = load_session(path)
@@ -1198,6 +1522,7 @@ class MixedWindow(ReviewWindow):
             self.session_hash = expected
         else:
             loaded = import_table_project(path) if legacy else load_package(path)
+            self.project_migration_notice = loaded.migration_notice
             reviews = [Review(**r) for r in loaded.reviews]
             if any(r.rating not in RATINGS for r in reviews):
                 raise ValueError("项目含未知评价类型")
@@ -1210,7 +1535,27 @@ class MixedWindow(ReviewWindow):
             self.session_hash = loaded.file_hash
         self.source_error = None
         self.loaded_style = style
+        self.imported_image_edits.clear()
         self._display_session()
+        self._sync_document_controls(style)
+        migrated = bool(self.project_migration_notice)
+        self.document_started = True
+        self.session_path = None if legacy or migrated else path
+        if legacy or migrated:
+            self.session_hash = None
+        self.recovery_path = self.recovery_hash = None
+        self.recovery_epoch += 1
+        self.recovery_timer.stop()
+        self.edit_generation += 1
+        self.dirty = False
+        self.update_mode_controls()
+        self.schedule_layout()
+        if legacy or migrated:
+            self.mark_dirty()
+        if migrated:
+            self.status.setText(self.project_migration_notice)
+
+    def _sync_document_controls(self, style):
         for c, v in (
             (self.em, style.em_mm),
             (self.line_height, style.line_height_mm),
@@ -1231,18 +1576,6 @@ class MixedWindow(ReviewWindow):
             self.dialect_picker.setCurrentIndex(
                 self.dialect_picker.findData(self.flow.markdown_dialect)
             )
-        self.session_path = None if legacy else path
-        if legacy:
-            self.session_hash = None
-        self.recovery_path = self.recovery_hash = None
-        self.recovery_epoch += 1
-        self.recovery_timer.stop()
-        self.edit_generation += 1
-        self.dirty = False
-        self.update_mode_controls()
-        self.schedule_layout()
-        if legacy:
-            self.mark_dirty()
 
     def open_project(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1270,6 +1603,7 @@ class MixedWindow(ReviewWindow):
             'resolver': AssetResolver(
                 embedded=tuple(g for pool in self.resolver.pools.values() for g in pool),
                 selections=tuple(self.resolver.selections.values()), seed=self.resolver.seed,
+                font_identity=self.resolver.font_identity,
             ),
             'page': self.page, 'style': self.style, 'flow': self.flow,
             'optimize': self.optimize.isChecked(), 'expected_hash': self.recovery_hash,

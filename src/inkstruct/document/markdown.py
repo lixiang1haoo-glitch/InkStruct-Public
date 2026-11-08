@@ -14,7 +14,7 @@ from .schema import Diagnostic, Occurrence, SourceSpan, digest
 from .source import clusters
 from .source_map import MappedText, parser_view
 
-DIALECT_VERSION = "inkstruct-markdown-v1/markdown-it-py-4.0.0"
+DIALECT_VERSION = "inkstruct-markdown-v1/markdown-it-py-4.0.0/break-commands-v2"
 
 
 @dataclass(frozen=True)
@@ -122,6 +122,8 @@ def parse_markdown(
                 continue
             span = source_span(token, stack[-1]["span"] if stack else fallback)
             kind = token.type.removesuffix("_open")
+            if "break_error" in token.meta:
+                diagnostics.append(Diagnostic("break-command-option", token.meta["break_error"], span))
             if "field_error" in token.meta:
                 diagnostics.append(Diagnostic("template-field-syntax", token.meta["field_error"], span))
             anchor = session.atom_ids[span.start] if span.start < len(session.atom_ids) else "eof"
@@ -224,9 +226,10 @@ def parse_markdown(
                                     mapped,
                                 )
                             )
-                elif token.type in {"softbreak", "hardbreak"} and span.start < span.end:
-                    identity = session.occurrence_id(span, role=token.type, text="\n")
-                    occurrences.append(Occurrence(identity, node_id, span, "\n"))
+                elif token.type in {"softbreak", "hardbreak", "break_hint"} and span.start < span.end:
+                    text = " " if token.type == "break_hint" else "\n"
+                    identity = session.occurrence_id(span, role=token.type, text=text)
+                    occurrences.append(Occurrence(identity, node_id, span, text))
                 if token.type in {"wiki_link", "wiki_embed"}:
                     if token.meta.get("obsidian_error"):
                         diagnostics.append(
@@ -291,6 +294,9 @@ def parse_markdown(
     nodes = resolve_equations(nodes, session, diagnostics)
     validate_nodes(nodes, cancelled=cancelled)
     check_cancel(cancelled)
+    from .break_commands import constrain_flow_breaks
+
+    nodes = constrain_flow_breaks(nodes, diagnostics, cancelled=cancelled)
     return MarkdownDocument(
         session.document_id,
         session.revision,

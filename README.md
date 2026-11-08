@@ -2,6 +2,17 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
+0.1.64 收紧设置、生成和采集页的短字段与滑块，长路径和搜索框随窗口伸展。见 [Windows 交付记录](docs/RELEASE_0_1_64_WINDOWS.md)。
+
+0.1.48：左侧常驻采集／生成／排版，底部依次为字体库、模板库及设置；名称与版本显示在系统标题栏。字体库提供精简列表、真实汉字／公式预览及保留草稿的试写，其他页面统一视觉层级，完整校验和旧文档冻结选样保持。见 [Windows 交付说明](docs/RELEASE_0_1_48_WINDOWS.md)。
+
+0.1.46：支持展开总量最多4 GiB的字体，保留单成员、点数及完整校验限制；生成页每字成品上限可选1–64份，默认4份，均衡使用不同完整部件和真实录制样本。生成方法仍为v6.2 exp，旧字体、文档与冻结选样不自动改变。见 [Windows 交付说明](docs/RELEASE_0_1_46_WINDOWS.md)。
+
+0.1.45：统一浅色控件和主操作，排版支持源码／并排／预览三种显示模式，属性栏明确对象、样本与作用范围。见 [Windows 交付记录](docs/RELEASE_0_1_45_WINDOWS.md)。
+
+0.1.41：合入独立排版更新，修复 LaTeX 单参数、全角点、hbar 合成、横线与括号伸缩，新增换行、物理分页和正文换框。见 [Windows 合并交付说明](docs/RELEASE_0_1_41_WINDOWS.md)。
+
+
 0.1.40：内置可核实版本的完整命名字表、显式缺口确认、一简多繁与地区成员查询；保留完整供体池及按字多进程。见 [Windows 交付记录](docs/RELEASE_0_1_40_WINDOWS.md)。
 
 0.1.38：SVG 后台导出、多页进程并发及串行回退；保留冻结快照、全部导出设置和用户数据。见 [Windows 交付记录](docs/RELEASE_0_1_38_WINDOWS.md)。
@@ -26,7 +37,7 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)：安装、桌面应用、完整 CLI、数据协议、训练与故障排查。
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：结构数据库、轨迹生成、笔顺对齐和模型架构。
 
-## InkStruct 0.1.40 集成应用
+## InkStruct 0.1.64 集成应用
 
 0.1.34：六辐星号由录制减号合成，比号复用冒号，公式圆圈复用中文句号；新字体保留来源与动态数据。页码向上为上一页、向下为下一页。见 [Windows 交付记录](docs/RELEASE_0_1_34_WINDOWS.md)。
 
@@ -52,7 +63,7 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 
 0.1.23 修正英文采集留白造成的疏散字距，字符校正预览显示真实邻字；旧文档保持原字距，可明确切换。见 [Windows 交付记录](docs/RELEASE_0_1_23_WINDOWS.md)。
 
-模板现分为简单模板与自定义模板，支持起始页组、多个循环布局、有序正文框和单份 Markdown 命名字段。制作在右上角齿轮，当前文档套用与表单填写在右侧“模板”。见 [模板使用说明](docs/TEMPLATE_SINGLE_FLOW.md) 和 [Windows 验收](docs/RELEASE_0_1_22_WINDOWS.md)。
+模板现分为简单模板与自定义模板，支持起始页组、多个循环布局、有序正文框和单份 Markdown 命名字段。制作与管理从左下“字体库 → 模板”进入，当前文档套用与表单填写在右侧“文档资源”。见 [模板使用说明](docs/TEMPLATE_SINGLE_FLOW.md) 和 [Windows 验收](docs/RELEASE_0_1_22_WINDOWS.md)。
 
 表格、图片设置全部陈列。排版预览点击字符，可在右侧“字符校正”调整位移和宽高，范围分为“仅此处”“本文同一样本”“本文同一字符的全部样本”；后两项可同时保存到字体包的新版本。见 [字符校正更新与验收](docs/RELEASE_0_1_20_WINDOWS.md)。
 
@@ -60,7 +71,9 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 
 齿轮保存本机全局默认，重启后保留并供新文档使用；已有项目保留原参数。排版右侧“元素属性”用于表格和图片的独立设置，可恢复沿用本文默认。公式设置按内容限定窗口最小宽度，无需横向滚动。详见 [0.1.16 Windows 验收](docs/RELEASE_0_1_16_WINDOWS.md)。
 
-统一应用将采集、生成、字体与模板和 Markdown 排版放在同一窗口，支持完整 `.inkfont` 的发布、导入与文档冻结。使用说明和验证边界见 [0.1.40 集成应用](docs/INKSTRUCT_0_1.md)。源码入口为 `inkstruct-app`，独立应用构建入口为 `packaging/build_inkstruct_app.py`。应用版本 0.1.40 与 Python 库版本 0.2.0 独立。生成页默认 **v6.2 exp（推荐）**，另可选 **v6.1 exp**、**v4 adaptive**；从采集样本统一导入、建档、生成并发布字体。独立 CLI 的默认仍为 v4 adaptive，研究训练入口不随用户应用提供。Windows 初始化、命令和实际验收结果见 [Windows 初始化记录](docs/WINDOWS_INITIALIZATION_20261015.md)。
+统一应用将采集、生成、字体与模板和 Markdown 排版放在同一窗口，支持完整 `.inkfont` 的发布、导入与文档冻结。使用说明和验证边界见 [0.1.64 集成应用](docs/INKSTRUCT_0_1.md)。源码入口为 `inkstruct-app`，独立应用构建入口为 `packaging/build_inkstruct_app.py`。应用版本 0.1.64 与 Python 库版本 0.2.0 独立。生成页默认 **v6.2 exp（推荐）**，另可选 **v6.1 exp**、**v4 adaptive**；从采集样本统一导入、建档、生成并发布字体。独立 CLI 的默认仍为 v4 adaptive，研究训练入口不随用户应用提供。Windows 初始化、命令和实际验收结果见 [Windows 初始化记录](docs/WINDOWS_INITIALIZATION_20261015.md)。
+
+新版4 GiB限制按ZIP成员展开总量计算，不按压缩文件大小计算；32 MiB单成员、每候选点数、来源和哈希等原检查保留，超限结果不会发布。字体格式不变，但旧2 GiB读者不能读取超过旧上限的包。同源user_001八份上限字体实测：全结构库＋其余字符约611 MB，简体支持字集＋相同其余字符约454 MB，压缩空间减少约25.7%；简体包展开量仍超过2 GiB，需新程序读取。详见[容量与简体对照](docs/FONT_CAPACITY_SIMPLIFIED_20261104.md)。这些为字体文件体积，不是应用安装包体积。
 
 ## 当前状态
 

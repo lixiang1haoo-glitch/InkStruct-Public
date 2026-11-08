@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from .schema import PageProfile, digest
 from .template import Region, TemplateBackground, TemplateRule, _numbers
+from .template_revision import TemplateRevision
 
 SCHEMA = "inkstruct_page_template_v3"
 FIELD_PROTOCOL = "inkstruct_named_fields_v1"
@@ -138,6 +139,7 @@ class FlowTemplate:
     calibration: str = "unreviewed"
     migration: tuple[tuple[str, str], ...] = ()
     schema_version: str = SCHEMA
+    revision: TemplateRevision | None = None
 
     def __post_init__(self):
         for key, cls in (("layouts", PageLayout), ("fields", NamedField)):

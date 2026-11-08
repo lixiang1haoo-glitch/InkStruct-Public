@@ -8,7 +8,7 @@ LABELS = {"auto": "沿用", "left": "左", "center": "中", "right": "右", "dec
 
 
 class TableSettingsDialog(QtWidgets.QDialog):
-    def __init__(self, flow, node_id=None, columns=None, parent=None, *, tables=None):
+    def __init__(self, flow, node_id=None, columns=None, parent=None, *, tables=None, scrollable=True):
         super().__init__(parent)
         self.flow, self.node_id, self.columns = flow, node_id, columns
         self.setWindowTitle("表格设置")
@@ -16,13 +16,16 @@ class TableSettingsDialog(QtWidgets.QDialog):
         self.setObjectName("table_settings_dialog")
         self.setStyleSheet('QCheckBox::indicator:unchecked {background: transparent; border: 1px solid #8995a5; border-radius: 2px;}')
         layout = QtWidgets.QVBoxLayout(self)
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
         content = QtWidgets.QWidget()
         form = QtWidgets.QFormLayout(content)
         form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, 1)
+        if scrollable:
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(content)
+            layout.addWidget(scroll, 1)
+        else:
+            layout.addWidget(content)
         self.scope = QtWidgets.QComboBox()
         self.scope.addItem("文档默认（已有独立设置的表格不变）", None)
         self.column_counts = {key: count for key, count, _ in (tables or [])}

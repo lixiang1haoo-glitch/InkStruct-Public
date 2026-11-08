@@ -1,3 +1,4 @@
+import os
 import sys
 import runpy
 from pathlib import Path
@@ -5,6 +6,8 @@ from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 root = Path(SPECPATH).parent
 app_version = runpy.run_path(str(root / 'src/inkstruct/fonts/__init__.py'))['APP_VERSION']
+layout_preview = os.environ.get('INKSTRUCT_BUILD_LAYOUT_PREVIEW') == '1'
+product_name = 'InkStruct Layout Preview' if layout_preview else 'InkStruct'
 
 def windows_version(executable):
     if sys.platform != 'win32':
@@ -18,9 +21,9 @@ def windows_version(executable):
         ffi=FixedFileInfo(filevers=version, prodvers=version, mask=0x3f,
                           flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
         kids=[StringFileInfo([StringTable('040904B0', [
-            StringStruct('FileDescription', 'InkStruct'),
+            StringStruct('FileDescription', product_name),
             StringStruct('FileVersion', app_version),
-            StringStruct('ProductName', 'InkStruct'),
+            StringStruct('ProductName', product_name),
             StringStruct('ProductVersion', app_version),
             StringStruct('InternalName', executable),
             StringStruct('OriginalFilename', executable + '.exe'),
@@ -36,6 +39,8 @@ hidden += ['PySide6.QtTest', 'handwriting_collector.ui', 'handwriting_collector.
            'handwriting_collector.storage', 'handwriting_collector.tasks',
            'handwriting_collector.line_tasks', 'handwriting_collector.exporter']
 data = [(str(root/'packaging/inkstruct_smoke.py'), '.'),
+        (str(root/'src/inkstruct/editor/resources'), 'inkstruct/editor/resources'),
+        (str(root/'packaging/inkstruct_layout_smoke.py'), '.'),
         (str(root/'artifacts/structures/characters.sqlite3'), 'data'),
         (str(kernel/'handwriting_collector'), 'collector_kernel/handwriting_collector'),
         (str(kernel/'handwriting_collector/assets'), 'handwriting_collector/assets'),
@@ -50,7 +55,8 @@ data += [(str(p), 'inkstruct') for p in (root/'src/inkstruct').glob('*.py')
          if p.stem not in ('train', 'model', 'dataset')]
 for package in ('inkstruct','numpy','Pillow','markdown-it-py','mdurl','PySide6','PySide6_Essentials','PySide6_Addons','shiboken6','matplotlib'):
     data += copy_metadata(package)
-a=Analysis([str(root/'packaging/inkstruct_launcher.py')],pathex=[str(root/'src'),str(kernel)],
+entry = root/'packaging'/('inkstruct_layout_launcher.py' if layout_preview else 'inkstruct_launcher.py')
+a=Analysis([str(entry)],pathex=[str(root/'src'),str(kernel),str(root/'packaging')],
     hiddenimports=hidden,datas=data,
     hooksconfig={"matplotlib": {"backends": []}},
     excludes=['inkstruct.train','inkstruct.model','inkstruct.dataset','torch','torchvision','h5py','lmdb','pytest','scipy','pandas'])
@@ -59,6 +65,7 @@ a.datas=[('inkstruct-smoke.py' if name=='inkstruct_smoke.py' else name,path,kind
 pyz=PYZ(a.pure)
 app_exe=EXE(pyz,a.scripts,[],exclude_binaries=True,name='InkStruct',console=False,
             version=windows_version('InkStruct'),
+            icon=str(root/'src/inkstruct/editor/resources/inkstruct.ico') if sys.platform=='win32' else None,
             target_arch='arm64' if sys.platform=='darwin' else None)
 tool=EXE(pyz,a.scripts,[],exclude_binaries=True,name='InkStructTool',console=True,
          version=windows_version('InkStructTool'),

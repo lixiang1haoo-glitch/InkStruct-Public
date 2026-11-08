@@ -10,6 +10,8 @@ from html import escape
 from pathlib import Path
 
 from .template import PageTemplate, Region, TemplateBackground, TemplateFace, template_from_record
+from .template_revision import SCHEMA as REVISION_SCHEMA
+from .template_revision import template_record
 from .template_validation import TemplateValidationError
 
 MAX_TEMPLATE_BYTES = 2 * 1024 * 1024
@@ -56,7 +58,7 @@ def new_template():
 
 
 def template_json(template):
-    return json.dumps(asdict(template), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    return json.dumps(template_record(template), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
 
 
 def parse_template(text):
@@ -80,7 +82,8 @@ def parse_template(text):
         raise TemplateValidationError("template-json-depth", "模板 JSON 嵌套过深") from error
     if not isinstance(data, dict):
         raise TypeError("模板必须是 JSON 对象")
-    if data.get('schema_version') != 'inkstruct_page_template_v3' and size>MAX_TEMPLATE_BYTES:
+    inner = data.get('template') if data.get('schema_version') == REVISION_SCHEMA else data
+    if isinstance(inner, dict) and inner.get('schema_version') != 'inkstruct_page_template_v3' and size>MAX_TEMPLATE_BYTES:
         raise ValueError("旧模板文件超过 2 MiB")
     return template_from_record(data)
 

@@ -1,5 +1,17 @@
 # InkStruct 文档中心
 
+团队成员可先查看 [GitHub 协作与环境准备](COLLABORATION.md)。
+
+当前主应用版本：[0.1.64](RELEASE_0_1_64_WINDOWS.md)，采用左侧导航、左下字体库、模板库及设置，保留4 GiB展开字体和可选同字成品数量。另见 [AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) 与 [换行/分页/换框](TEXT_FLOW_BREAK_COMMANDS.md)。
+
+历史交付：[0.1.45界面整理](RELEASE_0_1_45_WINDOWS.md)的验收与实验记录继续保留。
+
+前置开发验证（记录保留当时时态）：[每字成品数量与 user_001 全库验证](GENERATION_CANDIDATE_COUNT_FULL_20261104.md)，包含1–64份选择、八份上限实测和真实来源缺口；功能纳入0.1.46。
+
+前置容量对照：[字体4 GiB容量与简体字集体积对照](FONT_CAPACITY_SIMPLIFIED_20261104.md)，同源用户字体约611 MB降为454 MB，压缩体积减少约25.7%；超过旧2 GiB展开上限的新包需0.1.46或同策略源码读者。原实验报告不倒改为发布验收。
+
+本次接入真实供体多候选生成及制包，沿用字体格式和排版冻结选样。已核对 [两端对齐](LAYOUT_JUSTIFY_HAN_VARIATION.md) 与 [排版问题面板](LAYOUT_PROBLEMS.md) 的预览实现。
+
 0.1.40：内置可核实版本的完整命名字表、显式缺口确认、一简多繁与地区成员查询；保留完整供体池及按字多进程。见 [Windows 交付记录](RELEASE_0_1_40_WINDOWS.md)。
 
 0.1.38：SVG 后台导出、多页进程并发及串行回退；保留冻结快照、全部导出设置和用户数据。见 [Windows 交付记录](RELEASE_0_1_38_WINDOWS.md)。
