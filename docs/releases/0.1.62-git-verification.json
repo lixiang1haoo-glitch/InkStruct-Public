@@ -1,0 +1,72 @@
+{
+  "version": "0.1.62",
+  "commit": "380201ff0c77dca9d0eaed3fa49ef90b96d0893f",
+  "tag": "app-v0.1.62",
+  "published_archive": {
+    "version": "0.1.62",
+    "filename": "InkStruct-0.1.62-Windows-x64.zip",
+    "bytes": 133743177,
+    "members": 1680,
+    "sha256": "19984b3ee244ea1c0f8b79baa64a73ff5e39a515ae6ee911a7eca1f7c2ea0266"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 343,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 207,
+      "failed": 4,
+      "same_failures_as_baseline": true,
+      "failures": [
+        "test_resource_management_preserves_document[template-library]",
+        "test_resource_management_preserves_document[template-apply]",
+        "test_resource_management_preserves_document[template-revision]",
+        "test_resource_management_preserves_document[template-workflow]"
+      ]
+    },
+    "native": {
+      "platform": "Windows Qt",
+      "cancel_preserved_coverage": true,
+      "rule_edit_disabled_build_until_reviewed": true,
+      "reenabled_celsius": true,
+      "borrowed_target": "m",
+      "published_characters": 205,
+      "published_candidates": 1302,
+      "source_hashes_preserved": true,
+      "old_font_sha256": "31e52b9d65b58c81f7f33b3796a849696659d9563eb77ab2840f9c0d77eded85",
+      "document_sha256": "1ae58dd5e2e249dd2c9c3b558d99beca8f7efae6b7cc6530b8159e336ba2d731",
+      "frozen_selections": 5129
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "app_version": "0.1.62",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      },
+      "InkStructTool.exe": {
+        "app_version": "0.1.62",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      }
+    },
+    "frozen_candidates": {
+      "characters": 4,
+      "candidates": 16,
+      "worker_counts": [
+        1,
+        2
+      ],
+      "same_reopened_svg": true
+    }
+  },
+  "previous_archive": {
+    "version": "0.1.61",
+    "filename": "InkStruct-0.1.61-Windows-x64.zip",
+    "sha256": "748fafe96fe168daf6eabf55e6676d2fd030b00daa6938c3d5af3cf04045f324"
+  }
+}
