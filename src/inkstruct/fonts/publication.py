@@ -32,7 +32,7 @@ STATUS = {
 
 COVERAGE = {
     "generated": "生成字形", "recorded": "独立录制", "shared": "同形共用",
-    "reuse": "借用已有笔迹", "constructed": "规则合成",
+    "constructed": "规则合成",
 }
 
 
@@ -148,10 +148,17 @@ def candidate_coverage(records, provenance):
         else:
             group = symbol_group(char, record["letter_style"])
             kind = ("constructed" if "symbol_construction" in summary else
-                    "reuse" if "confirmed_reuse" in summary else
+                    "reuse" if "confirmed_reuse" in summary or "mapped_reuse" in summary else
                     "shared" if "shared_punctuation" in summary else "recorded")
         coverage[group, kind, char] += 1
     return coverage
+
+
+def display_coverage(coverage):
+    merged = Counter()
+    for (group, origin, char), count in coverage.items():
+        merged[group, "shared" if origin == "reuse" else origin, char] += count
+    return merged
 
 
 CONSTRUCTION_DETAILS = {
@@ -186,26 +193,26 @@ def rule_rows(coverage, groups, evidence, issues, has_symbols, rules=Publication
         if coverage[group, "recorded", target]:
             return "独立录制优先"
         if count := coverage[group, kind, target]:
-            return f"本次生效 · {count} 份候选"
+            return f"已共用 {count} 份" if kind in {"shared", "reuse"} else f"已合成 {count} 份"
         if not has_symbols:
             return "尚未选择扩展来源"
         reasons = dict.fromkeys(item["reason"] for item in issues
                                 if item["group"] == group and item["target"] == target)
-        return "；".join(reasons) if reasons else "缺少可用来源"
+        return "；".join(reasons) if reasons else "缺少可用供体"
 
     rows = []
     for full, half in SHARED_PUNCTUATION.items():
         group = symbol_group(full)
         key = "shared", full
-        enabled = key not in rules.disabled
+        enabled = rules.allows(key)
         active = [f"{target} ← {source} · {coverage[group, 'shared', target]} 份"
                   for target, source in ((full, half), (half, full)) if coverage[group, "shared", target]]
-        if not enabled:
+        if selected(group) and all(coverage[group, "recorded", c] for c in (full, half)):
+            result = "两边均有独立录制"
+        elif not enabled:
             result = "本次停用"
         elif active:
-            result = "本次生效 · " + "；".join(active)
-        elif selected(group) and all(coverage[group, "recorded", c] for c in (full, half)):
-            result = "两边均有独立录制"
+            result = "已共用 · " + "；".join(active)
         else:
             result = outcome(group, full if not coverage[group, "recorded", full] else half, "shared")
         rows.append(RuleRow(key, "同形共用", f"{full} ↔ {half}", "任一侧的有效独立录制", "—", enabled, result))
@@ -213,20 +220,17 @@ def rule_rows(coverage, groups, evidence, issues, has_symbols, rules=Publication
     for group, target, source in reuse_options():
         key = group, target
         confirmed = key in evidence.confirmed
-        enabled = confirmed and key not in rules.disabled
+        enabled = rules.allows(key, confirmed=confirmed)
         label = "英文斜体" if group == "latin_italic" else "希腊字母"
         result = outcome(group, target, "reuse")
-        if confirmed and not enabled and not coverage[group, "recorded", target]:
+        if not enabled and not coverage[group, "recorded", target]:
             result = "本次停用"
-        elif not confirmed and selected(group) and not coverage[group, "recorded", target]:
-            if has_symbols:
-                result = "待选用供体" if evidence.donors.get(source) else "没有可用的正体供体"
-        donor_status = "本次已选用" if key in selected_donors else "采集任务已确认" if confirmed else "未选用"
-        rows.append(RuleRow(key, "借用已有笔迹", f"{target}（{label}）", f"{source}（英文正体）",
+        donor_status = "本次指定" if key in selected_donors else "采集任务已指定" if confirmed else "自动选择"
+        rows.append(RuleRow(key, "同形共用", f"{target}（{label}）", f"{source}（英文正体）",
                             donor_status, enabled, result, source))
     for target, sources in CONSTRUCTION_SOURCES.items():
         key = "constructed", target
-        enabled = key not in rules.disabled
+        enabled = rules.allows(key)
         result = outcome(symbol_group(target), target, "constructed")
         if not enabled and not coverage[symbol_group(target), "recorded", target]:
             result = "本次停用"

@@ -385,7 +385,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
         append(t, m, s, value, sha(raw), style if latin(t["character"]) else "not_applicable")
         for target in shared_characters(t["character"]):
             full = target if target in SHARED_PUNCTUATION else t["character"]
-            if target in direct or ("shared", full) in rules.disabled:
+            if target in direct or not rules.allows(("shared", full)):
                 continue
             sharing = {"policy": POLICY, "source_character": t["character"],
                        "source_sample_id": value["sample_id"], "source_sha256": sha(raw)}
@@ -402,31 +402,48 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
     choices = {choice.target: choice for choice in rules.donors}
     if choices.keys() - mappings.keys() or len(choices) != len(rules.donors):
         raise ValueError("本次选用的笔迹供体不在规则目录内")
+    upright = {}
+    for sid, (raw, value) in by_id.items():
+        char = value["character"]
+        if latin(char) and value.get("variant", {}).get("letter_style") == "upright":
+            upright.setdefault(char, []).append(sid)
     if evidence is not None:
-        for sid, (raw, value) in by_id.items():
-            char = value["character"]
-            if not latin(char) or value.get("variant", {}).get("letter_style") != "upright":
-                continue
-            try:
-                prepare(sid)
-            except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
-                continue
-            evidence.donors.setdefault(char, {})[sid] = (sha(raw), value)
+        for char, ids in upright.items():
+            for sid in ids:
+                try:
+                    prepare(sid)
+                except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                    continue
+                raw, value = by_id[sid]
+                evidence.donors.setdefault(char, {})[sid] = (sha(raw), value)
+
+    def target_styles(group):
+        return ("italic", "italic") if group == "latin_italic" else ("not_applicable", "unspecified")
+
+    def emit(target, target_style, metadata, marker, policy, sid, raw, value, shape):
+        t, m, s = shape
+        sharing = {**metadata, "policy": policy, "source_sample_id": sid, "source_sha256": sha(raw)}
+        scope = ("user-confirmed reuse of recorded upright ink" if marker == "confirmed_reuse"
+                 else "enabled whitelist mapping of recorded upright ink")
+        append({**t, "character": target}, m,
+               {**s, marker: sharing, "evidence_scope": scope + "; no independent target recording or synthetic slant"},
+               {marker: sharing, "original_sample": value},
+               sha(encoded([policy, sha(raw), target, target_style])), target_style)
 
     reuse_records = [item for item in declarations(symbols, writer)
                      if (item["group"], item["target"]) not in choices]
     reuse_records.extend({"group": group, "target": target, "source": mappings[group, target],
                           "source_style": "upright", "sample_ids": [choice.sample_id], "confirmed": True}
                          for (group, target), choice in choices.items())
+    confirmed = {(item["group"], item["target"]) for item in reuse_records}
+    if evidence is not None:
+        evidence.confirmed.update(confirmed)
     for reuse in reuse_records:
         group, target = reuse["group"], reuse["target"]
         rule = group, target
-        if evidence is not None:
-            evidence.confirmed.add(rule)
-        if not selected(group) or rule in rules.disabled:
+        if not selected(group) or not rules.allows(rule, confirmed=True):
             continue
-        target_style = "italic" if group == "latin_italic" else "not_applicable"
-        capture_style = "italic" if group == "latin_italic" else "unspecified"
+        target_style, capture_style = target_styles(group)
         if (target, capture_style) in styles:
             continue
         sources = []
@@ -445,13 +462,24 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
                 reject(group, target, str(error), source=sid)
                 break
         else:
-            for sid, raw, value, (t, m, s) in sources:
-                sharing = {**reuse, "policy": REUSE_POLICY, "source_sample_id": sid, "source_sha256": sha(raw)}
-                append({**t, "character": target}, m,
-                       {**s, "confirmed_reuse": sharing,
-                        "evidence_scope": "user-confirmed reuse of recorded upright ink; no independent target recording or synthetic slant"},
-                       {"confirmed_reuse": sharing, "original_sample": value},
-                       sha(encoded([REUSE_POLICY, sha(raw), target, target_style])), target_style)
+            for sid, raw, value, shape in sources:
+                emit(target, target_style, reuse, "confirmed_reuse", REUSE_POLICY, sid, raw, value, shape)
+
+    for (group, target), source in mappings.items():
+        key = group, target
+        if key in confirmed or not selected(group) or not rules.allows(key):
+            continue
+        target_style, capture_style = target_styles(group)
+        if (target, capture_style) in styles:
+            continue
+        for sid in upright.get(source, ()):
+            try:
+                shape = prepare(sid)
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                continue
+            raw, value = by_id[sid]
+            metadata = {"group": group, "target": target, "source": source, "source_style": "upright"}
+            emit(target, target_style, metadata, "mapped_reuse", "mapped-symbol-share-v1", sid, raw, value, shape)
 
 
 def build_font(
@@ -501,7 +529,7 @@ def build_font(
                 "source_summary_hash": semantic_hash(s),
                 "letter_style": letter_style,
                 "style_evidence": "explicit-construction" if 'symbol_construction' in s else
-                "confirmed-reuse" if 'confirmed_reuse' in s else "capture-declared"
+                "confirmed-reuse" if 'confirmed_reuse' in s else "mapped-reuse" if 'mapped_reuse' in s else "capture-declared"
                 if letter_style in ("upright", "italic")
                 else "unknown",
                 "enabled": True,

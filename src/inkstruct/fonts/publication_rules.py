@@ -4,6 +4,11 @@ from dataclasses import dataclass, field
 
 
 RuleKey = tuple[str, str]
+SHARED_FAMILIES = {
+    "shared": "全角与半角",
+    "latin_italic": "英文正体与斜体",
+    "greek": "拉丁正体与希腊大写",
+}
 
 
 @dataclass(frozen=True)
@@ -17,6 +22,15 @@ class DonorChoice:
 class PublicationRules:
     disabled: frozenset[RuleKey] = frozenset()
     donors: tuple[DonorChoice, ...] = ()
+    enabled: frozenset[RuleKey] = frozenset()
+    families: tuple[tuple[str, bool], ...] = ()
+
+    def allows(self, key: RuleKey, *, confirmed=False):
+        if key in self.disabled:
+            return False
+        if key in self.enabled:
+            return True
+        return dict(self.families).get(key[0], key[0] in {"shared", "constructed"} or confirmed)
 
 
 @dataclass

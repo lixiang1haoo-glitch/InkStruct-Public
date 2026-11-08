@@ -111,8 +111,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.generator = generator(
             ["InkStruct"], create_only=True, workspace=self.workspace, database=database
         )
-        self.generator.centralWidget().writer.clear()
-        self.generator.centralWidget().writer.setPlaceholderText('在采集页选择书写者，或填写已有 ID')
+        self.generator.centralWidget().writer.setText("")
         self.collector.writer_selected.connect(self.generator.centralWidget().capture_writer_chosen)
         self.editor = MixedWindow()
         self.generator.centralWidget().current_document_provider = lambda: (
@@ -120,6 +119,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
             {'kind': 'current-document', 'document_id': self.editor.source_session.document_id,
              'revision': self.editor.source_session.revision})
         self.generator.centralWidget().capture_root_provider = lambda: self.collector.output_root
+        self.generator.centralWidget().writer.reload("")
         self.generator.centralWidget().refresh_sample_source()
         self.library = FontLibrary(self.workspace / "fonts")
         self.library.capture_root_provider = lambda: self.collector.output_root

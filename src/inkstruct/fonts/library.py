@@ -121,6 +121,7 @@ def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stam
             write(log, {"status": status, "writer": writer, "name": name, "run": str(run or ""),
                         "symbols": str(symbols or ""), "groups": sorted(groups), "timings_s": timings,
                         "expected": rows(expected), "disabled_rules": sorted(rules.disabled),
+                        "enabled_rules": sorted(rules.enabled), "rule_families": dict(rules.families),
                         "borrowed_donors": [{"target": choice.target, "sample_id": choice.sample_id,
                                              "sha256": choice.sha256} for choice in rules.donors], **details})
         except OSError:

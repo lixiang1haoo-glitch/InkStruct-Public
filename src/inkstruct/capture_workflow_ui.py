@@ -17,16 +17,25 @@ from .capture_management import (
 class WriterPicker(QtWidgets.QComboBox):
     textChanged = QtCore.Signal(str)
 
-    def __init__(self, catalog, selected='', parent=None):
+    def __init__(self, catalog, selected='', parent=None, *, allow_external=False):
         super().__init__(parent)
         self.catalog = catalog
+        self.allow_external = allow_external
         self.setObjectName('capture_writer_picker')
         self.setMinimumContentsLength(16)
         self.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        if allow_external:
+            self.setEditable(True)
+            self.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+            self.setCompleter(None)
+            self.lineEdit().setPlaceholderText('请选择书写者，或输入外部作者 ID')
         self.reload(selected)
-        self.currentIndexChanged.connect(lambda _: self.textChanged.emit(self.text()))
+        signal = self.currentTextChanged if allow_external else self.currentIndexChanged
+        signal.connect(lambda _: self.textChanged.emit(self.text()))
 
     def text(self):
+        if self.allow_external and (self.currentIndex() < 0 or self.currentText() != self.itemText(self.currentIndex())):
+            return self.currentText()
         return self.currentData() or ''
 
     def showPopup(self):
@@ -34,18 +43,29 @@ class WriterPicker(QtWidgets.QComboBox):
         super().showPopup()
 
     def setText(self, value):
-        self.setCurrentIndex(max(0, self.findData(value)))
+        index = self.findData(value)
+        if self.allow_external and (index < 0 or not value):
+            with QtCore.QSignalBlocker(self):
+                self.setCurrentIndex(-1)
+                self.setEditText(value)
+            self.textChanged.emit(value)
+        else:
+            self.setCurrentIndex(max(0, index))
 
     def reload(self, selected=''):
         with QtCore.QSignalBlocker(self):
             self.clear()
+            catalog = self.catalog() if callable(self.catalog) else self.catalog
             try:
-                writers = self.catalog.writers()
+                writers = catalog.writers()
+                self.setToolTip('')
                 self.setEnabled(True)
-            except (OSError, ValueError) as error:
+            except (OSError, ValueError, ImportError) as error:
                 self.addItem('采集管理记录需要修复', '')
-                self.setToolTip(str(error) + '\n' + str(self.catalog.index))
-                self.setEnabled(False)
+                self.setToolTip(str(error) + '\n' + str(catalog.index))
+                self.setEnabled(self.allow_external)
+                if self.allow_external:
+                    self.setText(selected)
                 return
             self.addItem('请选择书写者…', '')
             for key, item in sorted(writers.items(), key=lambda pair: (pair[1]['name'], pair[0])):

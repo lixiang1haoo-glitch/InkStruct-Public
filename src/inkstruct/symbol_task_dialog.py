@@ -104,7 +104,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             button = QtWidgets.QPushButton(title)
             button.clicked.connect(lambda _, v=checked: self.select_all(v))
             row.addWidget(button)
-        self.reuse_button = QtWidgets.QPushButton('选择借用供体…')
+        self.reuse_button = QtWidgets.QPushButton('指定共用供体…')
         self.reuse_button.clicked.connect(self.configure_reuse)
         row.addWidget(self.reuse_button)
         layout.addLayout(row)
@@ -263,7 +263,7 @@ class ReuseDialog(QtWidgets.QDialog):
     def __init__(self, available, selected, parent=None):
         super().__init__(parent)
         self.available = available
-        self.setWindowTitle('选择借用供体')
+        self.setWindowTitle('指定共用供体')
         self.setStyleSheet('QListView::indicator:unchecked { background: transparent; border: 1px solid #8995a5; border-radius: 2px; }')
         self.resize(800, 540)
         layout = QtWidgets.QVBoxLayout(self)

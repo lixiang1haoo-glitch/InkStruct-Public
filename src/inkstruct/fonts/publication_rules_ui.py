@@ -3,7 +3,7 @@
 from PySide6 import QtCore, QtWidgets
 
 from ..symbol_review_dialog import InkPreview
-from .publication_rules import DonorChoice, PublicationRules
+from .publication_rules import DonorChoice, PublicationRules, SHARED_FAMILIES
 
 
 class PublicationRulesDialog(QtWidgets.QDialog):
@@ -14,10 +14,12 @@ class PublicationRulesDialog(QtWidgets.QDialog):
         self.rows = rows
         self.evidence = evidence
         self.disabled = set(settings.disabled)
+        self.enabled = set(settings.enabled)
+        self.families = dict(settings.families)
         self.donors = {choice.target: choice for choice in settings.donors}
         layout = QtWidgets.QVBoxLayout(self)
-        note = QtWidgets.QLabel("逐项决定本次是否启用。借用已有笔迹需先选用供体，已在采集任务中确认的供体可沿用。"
-                                "应用后自动重新核对清单。设置仅用于当前制包窗口。")
+        note = QtWidgets.QLabel("同形共用启用后自动补缺，独立录制优先。可整组启停，也可展开逐项覆盖。"
+                                "已有指定供体优先，只有想指定某份笔迹时才需打开预览。设置仅用于当前制包窗口。")
         note.setWordWrap(True)
         layout.addWidget(note)
         search = QtWidgets.QLineEdit()
@@ -25,30 +27,37 @@ class PublicationRulesDialog(QtWidgets.QDialog):
         layout.addWidget(search)
         self.table = table = QtWidgets.QTreeWidget()
         table.setObjectName("publication_rule_table")
-        table.setRootIsDecorated(False)
-        table.setHeaderLabels(["本次启用", "规则类型", "目标字符", "依赖来源", "供体确认", "已核对结果"])
+        table.setHeaderLabels(["本次启用", "规则类型", "目标字符", "依赖来源", "供体选择", "已核对结果"])
         for column in range(5):
             table.header().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         table.header().setSectionResizeMode(5, QtWidgets.QHeaderView.ResizeMode.Stretch)
         layout.addWidget(table, 1)
+        self.groups = {}
+        for key, label in SHARED_FAMILIES.items():
+            group = QtWidgets.QTreeWidgetItem(table, ["", "同形共用", label])
+            group.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
+            group.setFlags(group.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+            self.groups[key] = group
+        construction = QtWidgets.QTreeWidgetItem(table, ["", "规则合成"])
+        self.items = {}
         for index, row in enumerate(rows):
-            item = QtWidgets.QTreeWidgetItem(table, ["", row.kind, row.target, row.source, row.donor_status, row.outcome])
+            parent = self.groups.get(row.key[0], construction)
+            item = QtWidgets.QTreeWidgetItem(parent, ["", row.kind, row.target, row.source, row.donor_status, row.outcome])
+            self.items[row.key] = item
             item.setData(0, QtCore.Qt.ItemDataRole.UserRole, index)
             item.setToolTip(5, row.outcome)
             if row.key[0] == "shared":
                 full, _, half = row.target.split()
                 item.setToolTip(2, f"全角 {full} U+{ord(full):04X} ↔ 半角 {half} U+{ord(half):04X}")
-            if row.donor_character and row.key not in evidence.confirmed:
-                item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsUserCheckable)
-                item.setText(0, "—" if row.outcome == "独立录制优先" else "先选供体")
-            else:
-                item.setCheckState(0, QtCore.Qt.Checked if row.enabled else QtCore.Qt.Unchecked)
+            item.setCheckState(0, QtCore.Qt.Checked if row.enabled else QtCore.Qt.Unchecked)
+        for key in self.groups:
+            self.update_group_check(key)
         search.textChanged.connect(self.filter_rows)
         table.itemChanged.connect(self.rule_toggled)
         table.currentItemChanged.connect(self.update_donor_button)
 
         actions = QtWidgets.QHBoxLayout()
-        self.donor_button = QtWidgets.QPushButton("预览并选用供体…")
+        self.donor_button = QtWidgets.QPushButton("预览并指定供体…")
         self.donor_button.setObjectName("publication_choose_donor")
         self.donor_button.clicked.connect(self.choose_donor)
         actions.addWidget(self.donor_button)
@@ -63,24 +72,56 @@ class PublicationRulesDialog(QtWidgets.QDialog):
         self.update_donor_button()
 
     def row(self, item):
-        return self.rows[item.data(0, QtCore.Qt.ItemDataRole.UserRole)]
+        index = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        return self.rows[index] if isinstance(index, int) else None
 
     def filter_rows(self, value):
+        query = value.strip()
         for i in range(self.table.topLevelItemCount()):
-            item = self.table.topLevelItem(i)
-            content = " ".join(item.text(column) for column in range(6))
-            item.setHidden(value.strip() not in content)
+            group = self.table.topLevelItem(i)
+            parent_match = any(query in group.text(column) for column in (1, 2))
+            visible = 0
+            for j in range(group.childCount()):
+                item = group.child(j)
+                content = " ".join(item.text(column) for column in range(6))
+                shown = parent_match or query in content
+                item.setHidden(not shown)
+                visible += shown
+            group.setHidden(not visible)
+            if query and visible:
+                group.setExpanded(True)
         self.update_donor_button()
+
+    def update_group_check(self, key):
+        group = self.groups.get(key)
+        if group is None:
+            return
+        states = {group.child(i).checkState(0) for i in range(group.childCount())}
+        state = states.pop() if len(states) == 1 else QtCore.Qt.PartiallyChecked
+        with QtCore.QSignalBlocker(self.table):
+            group.setCheckState(0, state)
 
     def rule_toggled(self, item, column):
         if column != 0:
             return
-        key = self.row(item).key
-        if item.checkState(0) == QtCore.Qt.Checked:
-            self.disabled.discard(key)
-        else:
-            self.disabled.add(key)
-        self.pending_result(item)
+        data = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        checked = item.checkState(0) == QtCore.Qt.Checked
+        if data in self.groups:
+            self.families[data] = checked
+            with QtCore.QSignalBlocker(self.table):
+                for i in range(item.childCount()):
+                    child = item.child(i)
+                    key = self.row(child).key
+                    self.enabled.discard(key)
+                    self.disabled.discard(key)
+                    child.setCheckState(0, QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
+                    self.pending_result(child)
+        elif (row := self.row(item)) is not None:
+            on, off = (self.enabled, self.disabled) if checked else (self.disabled, self.enabled)
+            on.add(row.key)
+            off.discard(row.key)
+            self.update_group_check(row.key[0])
+            self.pending_result(item)
 
     @staticmethod
     def pending_result(item):
@@ -89,15 +130,16 @@ class PublicationRulesDialog(QtWidgets.QDialog):
 
     def update_donor_button(self, *_):
         item = self.table.currentItem()
-        self.donor_button.setEnabled(bool(item and not item.isHidden()
-                                          and self.evidence.donors.get(self.row(item).donor_character)))
+        row = self.row(item) if item is not None else None
+        self.donor_button.setEnabled(bool(row and not item.isHidden()
+                                          and self.evidence.donors.get(row.donor_character)))
 
     def choose_donor(self):
         item = self.table.currentItem()
         if item is None:
             return
         row = self.row(item)
-        samples = self.evidence.donors.get(row.donor_character)
+        samples = self.evidence.donors.get(row.donor_character) if row else None
         if not samples:
             return
         dialog = QtWidgets.QDialog(self)
@@ -123,7 +165,7 @@ class PublicationRulesDialog(QtWidgets.QDialog):
         choices.currentIndexChanged.connect(show_ink)
         show_ink()
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("选用此供体并启用")
+        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText("指定此供体并启用")
         buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("取消")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -135,12 +177,15 @@ class PublicationRulesDialog(QtWidgets.QDialog):
             return
         self.donors[row.key] = DonorChoice(row.key, sid, samples[sid][0])
         self.disabled.discard(row.key)
+        self.enabled.add(row.key)
         with QtCore.QSignalBlocker(self.table):
             item.setText(0, "")
             item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(0, QtCore.Qt.Checked)
-            item.setText(4, "本次已选用")
+            item.setText(4, "本次指定")
             self.pending_result(item)
+        self.update_group_check(row.key[0])
 
     def settings(self):
-        return PublicationRules(frozenset(self.disabled), tuple(self.donors[key] for key in sorted(self.donors)))
+        return PublicationRules(frozenset(self.disabled), tuple(self.donors[key] for key in sorted(self.donors)),
+                                frozenset(self.enabled), tuple(sorted(self.families.items())))

@@ -4,6 +4,7 @@ import sys
 import threading
 import traceback
 from datetime import datetime
+from importlib.util import find_spec
 from pathlib import Path
 
 from .generation_workflow import METHODS, GenerationWorkflow, identity, resources
@@ -20,6 +21,16 @@ def _qt():
 def main(argv=None, *, create_only=False, workspace=None, database=None):
     QtCore, QtWidgets = _qt()
     from .generation_progress_ui import GenerationProgress
+
+    if find_spec("handwriting_collector") is None:
+        from .collector import _collector_source
+
+        try:
+            source = _collector_source()
+        except RuntimeError:
+            pass  # The editable author picker still accepts an external ID.
+        else:
+            sys.path.insert(0, str(source))
 
     root = Path(workspace) if workspace else resources()
     db = Path(database) if database else resources() / "artifacts/structures/characters.sqlite3"
@@ -83,7 +94,11 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             form = QtWidgets.QFormLayout()
             source_layout.addLayout(form)
             layout.addWidget(source_group)
-            self.writer = QtWidgets.QLineEdit("user_001")
+            from .capture_management import CaptureCatalog
+            from .capture_workflow_ui import WriterPicker
+
+            self.writer = WriterPicker(lambda: CaptureCatalog(self.capture_root_provider()
+                if self.capture_root_provider else root / "capture"), "user_001", allow_external=True)
             self.writer.setObjectName("writer")
             self.samples = QtWidgets.QLineEdit()
             self.samples.setObjectName("sample_directory")
@@ -246,7 +261,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             if self.busy:
                 self.pending_capture_writer = writer
             else:
-                self.writer.setText(writer)
+                self.writer.reload(writer)
+                self.writer_changed()
 
         def writer_changed(self):
             if self.manual_samples and self.capture_root_provider and not Path(self.samples.text().strip()).is_dir():
@@ -377,7 +393,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             ready = service.readiness(*self.values())
             self.refresh_sample_summary()
             foreign = self.sample_status and self.sample_status.get("foreign")
-            status = "请选择属于当前书写者的样本目录。" if foreign else ready["message"]
+            status = ("请选择书写者。" if not self.writer.text().strip() else
+                      "请选择属于当前书写者的样本目录。" if foreign else ready["message"])
             if ready["start"] and self.sample_status and self.sample_status.get("changed") and not foreign:
                 status = "开始生成时会先更新样本并建档。"
             self.status.setText("正在处理，请稍候…" if self.busy else self.generation_error or status)

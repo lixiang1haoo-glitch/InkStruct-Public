@@ -10,7 +10,7 @@ from ..symbol_catalog import SYMBOL_GROUPS, character_preview
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
-from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, generated_batches, publication_stamp,
+from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, display_coverage, generated_batches, publication_stamp,
                           require_publication_stamp, review_selection, rule_rows)
 from .publication_rules import PublicationRules
 
@@ -142,7 +142,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", self.kind)
         self.contents = QtWidgets.QTreeWidget()
-        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "借用已有笔迹", "规则合成", "未通过校验"])
+        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
         self.contents.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         for column in range(1, self.contents.columnCount()):
@@ -375,11 +375,11 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def show_publication_coverage(self, result):
         from collections import Counter, defaultdict
 
-        coverage, issues = result["coverage"], result["issues"]
+        coverage, issues = display_coverage(result["coverage"]), result["issues"]
         by_group = defaultdict(dict)
         for (group, kind, char), count in coverage.items():
             by_group[group].setdefault(char, Counter())[kind] += count
-        origins = ("recorded", "shared", "reuse", "constructed")
+        origins = ("recorded", "shared", "constructed")
 
         def details(row, label, characters):
             chars = list(characters)
@@ -398,7 +398,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 available = by_group[key]
                 if key == "han":
                     row.setText(0, "汉字")
-                    row.setText(5, "制包时核验" if checked else "—")
+                    row.setText(4, "制包时核验" if checked else "—")
                     batch = result["batch"]
                     if batch:
                         if checked:
@@ -420,7 +420,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                     counts = [v[kind] for v in available.values() if v[kind]]
                     row.setText(col, f"{len(counts)} / {sum(counts)}" if checked else "—")
                 invalid = [item for item in group_issues if item.get("invalid")]
-                row.setText(5, f"{len({item['target'] for item in invalid})} / {len(invalid)}" if invalid else "—")
+                row.setText(4, f"{len({item['target'] for item in invalid})} / {len(invalid)}" if invalid else "—")
                 for char in members:
                     counts = available.get(char, Counter())
                     problems = by_char[char]
@@ -728,7 +728,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                                   package_kind=kind, groups=groups, stamp=stamp, expected=expected,
                                   progress=progress, rules=rules)
             stats = result["verification"]
-            actual, difference = result["coverage"], result["difference"]
+            actual, difference = display_coverage(result["coverage"]), result["difference"]
             lines = [f"字体已验证并入库 · {stats['characters']} 字，{stats['candidates']} 份候选"]
             for origin, label in COVERAGE.items():
                 counts = [(key[2], count) for key, count in actual.items() if key[1] == origin]

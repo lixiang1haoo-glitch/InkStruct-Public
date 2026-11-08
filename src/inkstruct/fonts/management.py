@@ -27,7 +27,7 @@ def summarize(path):
     title, detail = entry(font)
     counts = {key: len({r['character'] for r in font.records if group(r) == key and r['enabled']})
               for key in GROUPS[1:]}
-    origins = Counter('合成/复用' if ('symbol_construction' in s or 'confirmed_reuse' in s or 'shared_punctuation' in s)
+    origins = Counter('合成/复用' if any(key in s for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
                       else '独立录制' if s.get('source_kind') == 'recorded' else '生成'
                       for s in font.provenance.values())
     return {'stamp': list(fingerprint(path)), 'manifest': {k: font.manifest.get(k) for k in
@@ -93,7 +93,7 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0, *, 
     sample_count = 0
     if chosen:
         summary = chosen.font_core['summary']
-        origin = ('由录制笔迹合成/复用' if any(key in summary for key in ('symbol_construction', 'confirmed_reuse', 'shared_punctuation'))
+        origin = ('由录制笔迹合成/复用' if any(key in summary for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
                   else '独立录制' if summary['source_kind'] == 'recorded' else '生成字形')
         sample_count = len(glyphs[selected_char])
         source = f'{selected_char} · U+{ord(selected_char):04X} · 样本 {sample % sample_count + 1}/{sample_count}\n{group(chosen.font_core["record"])} · {origin}\n候选 {chosen.sample_id}\n来源状态：{summary["author_source_status"]} · 评价：{summary["review_status"]}'

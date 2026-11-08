@@ -74,8 +74,10 @@ class GenerationWorkflow:
 
     @staticmethod
     def validate_writer(writer):
-        if not re.fullmatch(r"[\w-]{1,64}", writer, re.UNICODE):
-            raise ValueError("作者 ID 请使用 1–64 个文字、数字、下划线或连字符。")
+        from .capture_management import valid_writer
+
+        if not valid_writer(writer) and not re.fullmatch(r"[\w-]{1,64}", writer, re.UNICODE):
+            raise ValueError("请选择有效的书写者，或填写已有作者 ID。")
 
     def state(self, writer, source):
         path = self.state_path(writer, source)

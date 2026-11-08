@@ -251,8 +251,8 @@ def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_pat
     rules = {row.key: row for row in review["rules"]}
     assert rules["constructed", "℃"].enabled and rules["constructed", "℃"].outcome == "缺少可用的英文正体 C"
     borrowed = rules["latin_italic", "A"]
-    assert borrowed.enabled and borrowed.donor_status == "采集任务已确认" and "1 份候选" in borrowed.outcome
-    assert rules["shared", "，"].outcome.startswith("本次生效")
+    assert borrowed.enabled and borrowed.donor_status == "采集任务已指定" and borrowed.outcome == "已共用 1 份"
+    assert rules["shared", "，"].outcome.startswith("已共用")
 
     root = tmp_path / "fonts"
     root.mkdir()
@@ -414,3 +414,44 @@ def test_publication_rules_toggle_and_bind_a_previewed_donor(tmp_path, archive):
     changed = review_selection(*args, groups, rules=rules)
     assert not changed["coverage"]["latin_italic", "reuse", "B"]
     assert any(item["target"] == "B" and "笔迹已变化" in item["reason"] for item in changed["issues"])
+
+
+def test_mapping_families_share_only_when_enabled_and_keep_designated_priority(tmp_path):
+    from inkstruct.fonts.library import publish_font
+    from inkstruct.fonts.publication import display_coverage, publication_stamp, review_selection
+    from inkstruct.fonts.publication_rules import PublicationRules
+
+    root = tmp_path / "collection"
+    samples = root / "samples" / "fixture"
+    captured(samples)
+    captured(samples, "A", sid="other-A")
+    captured(samples, "B", sid="source-B")
+    captured(samples, "B", "italic", "direct-B")
+    captured(samples, "C", sid="source-C")
+    captured(samples, "N", sid="source-N")
+    save_config(root, [declaration("greek", "Α")])
+    args = "fixture", "", str(root), "family mapping"
+    groups = {"latin_italic", "greek"}
+    defaults = review_selection(*args, groups)["coverage"]
+    assert defaults["greek", "reuse", "Α"] == 1
+    assert not defaults["latin_italic", "reuse", "A"] and not defaults["greek", "reuse", "Ν"]
+    rules = PublicationRules(disabled=frozenset({("latin_italic", "C")}),
+                             families=(("greek", True), ("latin_italic", True)))
+    coverage = review_selection(*args, groups, rules=rules)["coverage"]
+    assert coverage["greek", "reuse", "Α"] == 1
+    assert coverage["greek", "reuse", "Ν"] == 1
+    assert coverage["latin_italic", "reuse", "A"] == 2
+    assert coverage["latin_italic", "recorded", "B"] == 1
+    assert not coverage["latin_italic", "reuse", "B"] and not coverage["latin_italic", "reuse", "C"]
+    assert display_coverage(coverage)["latin_italic", "shared", "A"] == 2
+    result = publish_font(tmp_path / "fonts", writer=args[0], run="", symbols=root, name=args[3],
+                          package_kind="user", groups=groups, stamp=publication_stamp(*args[:3]),
+                          expected=coverage, progress=lambda _: None, rules=rules)
+    assert result["coverage"] == coverage and not result["difference"]
+    font = FontPackage(result["path"], verify_all=True)
+    summaries = list(font.provenance.values())
+    assert any(s.get("mapped_reuse", {}).get("source_sample_id") == "other-A" for s in summaries)
+    assert any(s.get("confirmed_reuse", {}).get("source_sample_id") == "source-A" for s in summaries)
+    override = PublicationRules(enabled=frozenset({("latin_italic", "C")}), families=(("greek", False),))
+    switched = review_selection(*args, groups, rules=override)["coverage"]
+    assert not switched["greek", "reuse", "Α"] and switched["latin_italic", "reuse", "C"] == 1

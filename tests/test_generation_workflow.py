@@ -236,6 +236,14 @@ app = QtWidgets.QApplication([])
 w = main(["test"], create_only=True, workspace=root, database=root/"db")
 f = w.centralWidget()
 f.capture_root_provider = lambda: root
+from inkstruct.capture_management import CaptureCatalog
+from inkstruct.generation_workflow import write
+catalog = CaptureCatalog(root)
+state = catalog.read()
+state["writers"]["alice"] = {"name": "甲"}
+write(catalog.index, state)
+f.writer.reload()
+assert f.writer.isEditable() and f.writer.findData("bob") >= 0
 entered, release = Event(), Event()
 
 def scan(self, writer, source, method, previous):
@@ -246,9 +254,10 @@ def scan(self, writer, source, method, previous):
             "donors": 2, "foreign": [], "changed": False}
 
 with patch.object(GenerationWorkflow, "sample_status", scan):
-    f.writer.setText("alice")
+    f.writer.setCurrentIndex(f.writer.findData("alice"))
+    assert f.writer.text() == "alice" and "甲" in f.writer.currentText()
     assert entered.wait(2)
-    f.writer.setText("bob")
+    f.writer.setCurrentIndex(f.writer.findData("bob"))
     assert f.sample_status is None
     assert Path(f.samples.text()) == root / "samples" / "bob"
     release.set()
@@ -258,6 +267,8 @@ with patch.object(GenerationWorkflow, "sample_status", scan):
         time.sleep(.01)
     assert f.sample_status["imported"] == 7
     assert "bob" in f.sample_summary.text() and "alice" not in f.sample_summary.text()
+    f.writer.setText("external.id")
+    assert f.writer.text() == "external.id" and f.writer.findData("external.id") == -1
 QtCore.QThreadPool.globalInstance().waitForDone()
 '''
     result = subprocess.run([sys.executable, '-X', 'utf8', '-c', code, str(tmp_path)],
