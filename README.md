@@ -1,5 +1,24 @@
 # InkStruct（墨构）
 
+0.1.59 显示作者样本的导入与建档状态，待制包清单随勾选计算覆盖，字体包通过完整验证后才加入字体库。见 [Windows 交付记录](docs/RELEASE_0_1_59_WINDOWS.md)。
+
+0.1.48：左侧常驻采集／生成／排版，底部依次为字体库、模板库及设置；名称与版本显示在系统标题栏。字体库提供精简列表、真实汉字／公式预览及保留草稿的试写，其他页面统一视觉层级，完整校验和旧文档冻结选样保持。见 [Windows 交付说明](docs/RELEASE_0_1_48_WINDOWS.md)。
+
+0.1.46：支持展开总量最多4 GiB的字体，保留单成员、点数及完整校验限制；生成页每字成品上限可选1–64份，默认4份，均衡使用不同完整部件和真实录制样本。生成方法仍为v6.2 exp，旧字体、文档与冻结选样不自动改变。见 [Windows 交付说明](docs/RELEASE_0_1_46_WINDOWS.md)。
+
+0.1.45：统一浅色控件和主操作，排版支持源码／并排／预览三种显示模式，属性栏明确对象、样本与作用范围。见 [Windows 交付记录](docs/RELEASE_0_1_45_WINDOWS.md)。
+
+0.1.41：合入独立排版更新，修复 LaTeX 单参数、全角点、hbar 合成、横线与括号伸缩，新增换行、物理分页和正文换框。见 [Windows 合并交付说明](docs/RELEASE_0_1_41_WINDOWS.md)。
+
+
+0.1.40：内置可核实版本的完整命名字表、显式缺口确认、一简多繁与地区成员查询；保留完整供体池及按字多进程。见 [Windows 交付记录](docs/RELEASE_0_1_40_WINDOWS.md)。
+
+0.1.38：SVG 后台导出、多页进程并发及串行回退；保留冻结快照、全部导出设置和用户数据。见 [Windows 交付记录](docs/RELEASE_0_1_38_WINDOWS.md)。
+
+0.1.36：SVG 比例校正先严格校验原始排版，再同步缩放输出坐标、画布尺寸与 viewBox，笔宽不变；原文档与预览不变。见 [Windows 交付记录](docs/RELEASE_0_1_36_WINDOWS.md)。
+
+0.1.35：第三个标签页统一为“字体与模板”，提供真实笔迹预览、字符与样本检查、来源版本、模板缩略图与库内副本。“用于当前文档”先确认实际适配影响；新文档默认独立设置，移出资源可恢复。见 [Windows 交付记录](docs/RELEASE_0_1_35_WINDOWS.md)。
+
 InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生成项目。名称中的 **Ink** 表示用户墨迹与书写风格，**Struct** 表示项目用标准结构约束内容正确性。
 
 核心生成层级为：
@@ -15,6 +34,44 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 - [`docs/PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md)：项目定位、核心原理、系统组成与适用边界。
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)：安装、桌面应用、完整 CLI、数据协议、训练与故障排查。
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：结构数据库、轨迹生成、笔顺对齐和模型架构。
+
+## InkStruct 0.1.59 集成应用
+
+0.1.34：六辐星号由录制减号合成，比号复用冒号，公式圆圈复用中文句号；新字体保留来源与动态数据。页码向上为上一页、向下为下一页。见 [Windows 交付记录](docs/RELEASE_0_1_34_WINDOWS.md)。
+
+0.1.33：CPU 预览缓存与预取优化；齿轮“预览绘制”可选 GPU，失败自动回退 CPU，下次启动生效。新增 ℃／–／～ 的明确字形合成规则。SVG 导出弹窗统一页码、表格内容、路径优化、横纵比例校正及文本框边界定位短线。见 [Windows 交付记录](docs/RELEASE_0_1_33_WINDOWS.md)。
+
+0.1.32：新增 v6.2 exp，先检查竖弯钩与止部关键笔兼容性，再重试合格来源；保留 v6.1 exp 和 v4 adaptive。现有字体、样本及文档冻结资源不自动改写。user_001 验证合并字体仅更新“孔”“正”；“孔”末笔无合格作者来源，明确保留参考缺口。 见 [Windows 交付记录](docs/RELEASE_0_1_32_WINDOWS.md)。
+
+0.1.31：修复紧凑公式中数字“1”占位过窄的问题，参照表格数字规则保留最小占位并居中补白；不缩放字形、不改变表格普通数字规则及冻结选样。见 [Windows 交付记录](docs/RELEASE_0_1_31_WINDOWS.md)。
+
+0.1.30：新文档公式按真实笔迹紧凑排列，减少运算符、分式与根式净距；根号和伸缩括号默认使用录制字形缩放。保留字号、上下标比例、数学轴与冻结选样，旧文档不自动重排。见 [Windows 交付记录](docs/RELEASE_0_1_30_WINDOWS.md)。
+
+0.1.29：新文档标点按实际笔迹宽度紧凑排列，中英文均不预留半字或整字空位；路径优化默认开启。旧文档保留已保存的间距和优化选项，公式、代码规则及冻结选样不变。见 [Windows 交付记录](docs/RELEASE_0_1_29_WINDOWS.md)。
+
+0.1.28：修复模板中不可容纳对象清空整份预览的问题，保留已排正文和脚注，明确提示停止及未排范围；资源目录采用独立有界容量以支持较大字体文档重开，保留全部校验。见 [Windows 交付记录](docs/RELEASE_0_1_28_WINDOWS.md)。
+
+0.1.27：新文档分数线默认使用字体中的数学减号 `−` 横向拉伸，保留笔迹纵向起伏。旧文档保持原来源；缺少减号仍报错。见 [Windows 交付记录](docs/RELEASE_0_1_27_WINDOWS.md)。
+
+0.1.26 扩展 SVG 的明确跳过范围：已载入位图和缺失的本地 PNG/JPEG 引用均可在确认后跳过，分别显示数量并提供文件名详情。缺失错误保留，未知类型、缺失 SVG、非法资源及其他错误仍阻断。见 [Windows 交付记录](docs/RELEASE_0_1_26_WINDOWS.md)。
+
+0.1.25 含非 SVG 参考图片时可在提示后导出其余内容，保留图片占位和图题，并记录跳过清单；缺字、公式错误及越框仍阻止导出。见 [Windows 交付记录](docs/RELEASE_0_1_25_WINDOWS.md)。
+
+0.1.24 将图片默认改为高 60 mm、宽度按原图比例计算，默认页移除宽度设置；支持公式直接包含汉字及汉字上下标。见 [Windows 交付记录](docs/RELEASE_0_1_24_WINDOWS.md)。
+
+0.1.23 修正英文采集留白造成的疏散字距，字符校正预览显示真实邻字；旧文档保持原字距，可明确切换。见 [Windows 交付记录](docs/RELEASE_0_1_23_WINDOWS.md)。
+
+模板现分为简单模板与自定义模板，支持起始页组、多个循环布局、有序正文框和单份 Markdown 命名字段。制作与管理从左下“字体库 → 模板”进入，当前文档套用与表单填写在右侧“文档资源”。见 [模板使用说明](docs/TEMPLATE_SINGLE_FLOW.md) 和 [Windows 验收](docs/RELEASE_0_1_22_WINDOWS.md)。
+
+表格、图片设置全部陈列。排版预览点击字符，可在右侧“字符校正”调整位移和宽高，范围分为“仅此处”“本文同一样本”“本文同一字符的全部样本”；后两项可同时保存到字体包的新版本。见 [字符校正更新与验收](docs/RELEASE_0_1_20_WINDOWS.md)。
+
+完整字体导入使用最多四个进程完整校验，保留阶段进度；参数禁用滚轮改值，正文设置全部展开，公式预览默认开启辅助线；见 [字体导入性能验收](docs/RELEASE_0_1_18_WINDOWS.md)。
+
+齿轮保存本机全局默认，重启后保留并供新文档使用；已有项目保留原参数。排版右侧“元素属性”用于表格和图片的独立设置，可恢复沿用本文默认。公式设置按内容限定窗口最小宽度，无需横向滚动。详见 [0.1.16 Windows 验收](docs/RELEASE_0_1_16_WINDOWS.md)。
+
+统一应用将采集、生成、字体与模板和 Markdown 排版放在同一窗口，支持完整 `.inkfont` 的发布、导入与文档冻结。使用说明和验证边界见 [0.1.59 集成应用](docs/INKSTRUCT_0_1.md)。源码入口为 `inkstruct-app`，独立应用构建入口为 `packaging/build_inkstruct_app.py`。应用版本 0.1.59 与 Python 库版本 0.2.0 独立。生成页默认 **v6.2 exp（推荐）**，另可选 **v6.1 exp**、**v4 adaptive**；从采集样本统一导入、建档、生成并发布字体。独立 CLI 的默认仍为 v4 adaptive，研究训练入口不随用户应用提供。Windows 初始化、命令和实际验收结果见 [Windows 初始化记录](docs/WINDOWS_INITIALIZATION_20261015.md)。
+
+新版4 GiB限制按ZIP成员展开总量计算，不按压缩文件大小计算；32 MiB单成员、每候选点数、来源和哈希等原检查保留，超限结果不会发布。字体格式不变，但旧2 GiB读者不能读取超过旧上限的包。同源user_001八份上限字体实测：全结构库＋其余字符约611 MB，简体支持字集＋相同其余字符约454 MB，压缩空间减少约25.7%；简体包展开量仍超过2 GiB，需新程序读取。详见[容量与简体对照](docs/FONT_CAPACITY_SIMPLIFIED_20261104.md)。这些为字体文件体积，不是应用安装包体积。
 
 ## 当前状态
 
@@ -35,10 +92,10 @@ macOS 可执行 `bash scripts/setup_macos.sh` 安装 CPU、桌面和开发环境
 Windows PowerShell：
 
 ```powershell
-py -3.12 -m venv .venv
+python -m venv .venv  # 先确认 python 为 Python 3.13 x64
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pip install -e . --no-deps
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop,dev]" "pyinstaller>=6,<7"
+.\.venv\Scripts\python.exe -m inkstruct.application --workspace workspaces\windows
 ```
 
 如果需要运行测试和代码检查，可改为安装开发依赖：
@@ -53,7 +110,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[train]"
 ```
 
-仓库内的 `requirements.lock` 记录了当前 Windows/CUDA 环境的完整版本。CUDA 版本的 PyTorch 应按本机驱动和官方安装说明选择，不建议盲目跨机器复用。
+仓库内的 `requirements.lock` 和 `requirements.txt` 属于历史研究环境；桌面启动不要用它们安装整套环境。桌面 extras 包含生成必需的 Matplotlib，不需要 CUDA 或 PyTorch。
 
 ## 快速使用
 
@@ -82,6 +139,8 @@ py -3.12 -m venv .venv
 
 ## 采集器与生成器
 
+采集界面提供“单字任务采集”和“字母与符号”两页。点击“创建任务”，勾选英文正体、英文斜体、数字、运算符、希腊字母等类别并设置份数（默认 5）。允许不同笔数，保存原始轨迹和混排参考度量。[使用与构建说明](docs/SYMBOL_CAPTURE.md)。
+
 两个桌面应用已经分离：
 
 - 双击 `run_inkstruct_collector.cmd` 启动采集器；它负责书写、标准笔画数校验、重录提示，
@@ -95,6 +154,18 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\inkstruct.exe collector
 .\.venv\Scripts\inkstruct.exe generator
 ```
+
+## 数字表格排版
+
+双击 `run_inkstruct_table.command`（Windows 为 `.cmd`）启动 HTML 数字表格排版，支持合并单元格与物理尺寸设置，导出子元素仅为 path、路径指令仅 M/L 的写字机 SVG。[使用说明](docs/TABLE_EDITOR.md)。
+
+## Markdown 混排与字形检查
+
+双击 `run_inkstruct_editor.command`（Windows 为 `.cmd`），进入左侧 Markdown 编辑、右侧分页预览。当前支持正文、标题、列表、引用、基本强调和一般表格，表格与图片可设置文档默认及每个元素的个性化参数，导入旧 `.inktable`、保存可移植 `.inkdoc`，并导出全文写字机 SVG。详见 [Markdown 混排编辑器](docs/MARKDOWN_MIXED_EDITOR.md)。
+
+窗口可切回纯文本模式，支持点字放大、好/不好/待复核标记、备注、筛选、检查项目保存及评价 CSV 导出。同一字形的重复字共享评价，新版本字形不会误套旧评价。旧 `.inkreview` 打开后自动使用纯文本模式。详见 [纯文本检查应用](docs/TEXT_REVIEW_APP.md)。
+
+生成器的“页面预览…”入口仍只读查看纯文本页面并导出 SVG/PNG。重复字、空白和原始换行保留；缺字或溢出阻止正式导出。公式、模板和页面拖拽尚未接入混排编辑器，阶段范围见 [混排实施记录](docs/MARKDOWN_MIXED_LAYOUT_PROGRESS_20261013.md)。初始方案评审见 [排版计划评审及构建记录](docs/PAGE_LAYOUT_PROGRESS_20261009.md)。
 
 ## 推荐、检查与评测
 

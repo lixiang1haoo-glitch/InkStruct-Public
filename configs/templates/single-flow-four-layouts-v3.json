@@ -1,0 +1,446 @@
+{
+  "name": "命名字段与四布局循环示例",
+  "kind": "custom",
+  "width_mm": 210,
+  "height_mm": 297,
+  "margins_mm": [
+    20,
+    20,
+    20,
+    20
+  ],
+  "layouts": [
+    {
+      "layout_id": "layout-1",
+      "label": "循环布局 1",
+      "frames": [
+        {
+          "frame_id": "body-1",
+          "label": "正文框 1",
+          "region": {
+            "name": "body-1",
+            "x_mm": 20,
+            "y_mm": 70,
+            "width_mm": 170,
+            "height_mm": 200
+          },
+          "role": "body",
+          "order": 1,
+          "field_id": ""
+        },
+        {
+          "frame_id": "name",
+          "label": "姓名框",
+          "region": {
+            "name": "name",
+            "x_mm": 20,
+            "y_mm": 20,
+            "width_mm": 60,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "name"
+        },
+        {
+          "frame_id": "student",
+          "label": "学号框",
+          "region": {
+            "name": "student",
+            "x_mm": 100,
+            "y_mm": 20,
+            "width_mm": 90,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "student_id"
+        },
+        {
+          "frame_id": "experiment",
+          "label": "实验名称框",
+          "region": {
+            "name": "experiment",
+            "x_mm": 20,
+            "y_mm": 40,
+            "width_mm": 170,
+            "height_mm": 20
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "experiment_title"
+        },
+        {
+          "frame_id": "page-number",
+          "label": "页码",
+          "region": {
+            "name": "page-number",
+            "x_mm": 175,
+            "y_mm": 280,
+            "width_mm": 15,
+            "height_mm": 10
+          },
+          "role": "page_number",
+          "order": 1,
+          "field_id": ""
+        }
+      ],
+      "rules": [
+        {
+          "name": "bottom",
+          "points": [
+            [
+              20,
+              275
+            ],
+            [
+              190,
+              275
+            ]
+          ],
+          "width_mm": 0.3
+        }
+      ],
+      "background": null,
+      "source_page": null,
+      "source_sha256": "",
+      "source_size_mm": null
+    },
+    {
+      "layout_id": "layout-2",
+      "label": "循环布局 2",
+      "frames": [
+        {
+          "frame_id": "body-1",
+          "label": "正文框 1",
+          "region": {
+            "name": "body-1",
+            "x_mm": 20,
+            "y_mm": 70,
+            "width_mm": 80,
+            "height_mm": 200
+          },
+          "role": "body",
+          "order": 1,
+          "field_id": ""
+        },
+        {
+          "frame_id": "body-2",
+          "label": "正文框 2",
+          "region": {
+            "name": "body-2",
+            "x_mm": 110,
+            "y_mm": 70,
+            "width_mm": 80,
+            "height_mm": 200
+          },
+          "role": "body",
+          "order": 2,
+          "field_id": ""
+        },
+        {
+          "frame_id": "name",
+          "label": "姓名框",
+          "region": {
+            "name": "name",
+            "x_mm": 20,
+            "y_mm": 20,
+            "width_mm": 60,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "name"
+        },
+        {
+          "frame_id": "student",
+          "label": "学号框",
+          "region": {
+            "name": "student",
+            "x_mm": 100,
+            "y_mm": 20,
+            "width_mm": 90,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "student_id"
+        },
+        {
+          "frame_id": "experiment",
+          "label": "实验名称框",
+          "region": {
+            "name": "experiment",
+            "x_mm": 20,
+            "y_mm": 40,
+            "width_mm": 170,
+            "height_mm": 20
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "experiment_title"
+        },
+        {
+          "frame_id": "page-number",
+          "label": "页码",
+          "region": {
+            "name": "page-number",
+            "x_mm": 175,
+            "y_mm": 280,
+            "width_mm": 15,
+            "height_mm": 10
+          },
+          "role": "page_number",
+          "order": 1,
+          "field_id": ""
+        }
+      ],
+      "rules": [
+        {
+          "name": "bottom",
+          "points": [
+            [
+              20,
+              275
+            ],
+            [
+              190,
+              275
+            ]
+          ],
+          "width_mm": 0.3
+        }
+      ],
+      "background": null,
+      "source_page": null,
+      "source_sha256": "",
+      "source_size_mm": null
+    },
+    {
+      "layout_id": "layout-3",
+      "label": "循环布局 3",
+      "frames": [
+        {
+          "frame_id": "body-1",
+          "label": "正文框 1",
+          "region": {
+            "name": "body-1",
+            "x_mm": 20,
+            "y_mm": 70,
+            "width_mm": 170,
+            "height_mm": 200
+          },
+          "role": "body",
+          "order": 1,
+          "field_id": ""
+        },
+        {
+          "frame_id": "name",
+          "label": "姓名框",
+          "region": {
+            "name": "name",
+            "x_mm": 20,
+            "y_mm": 20,
+            "width_mm": 60,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "name"
+        },
+        {
+          "frame_id": "student",
+          "label": "学号框",
+          "region": {
+            "name": "student",
+            "x_mm": 100,
+            "y_mm": 20,
+            "width_mm": 90,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "student_id"
+        },
+        {
+          "frame_id": "experiment",
+          "label": "实验名称框",
+          "region": {
+            "name": "experiment",
+            "x_mm": 20,
+            "y_mm": 40,
+            "width_mm": 170,
+            "height_mm": 20
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "experiment_title"
+        },
+        {
+          "frame_id": "page-number",
+          "label": "页码",
+          "region": {
+            "name": "page-number",
+            "x_mm": 175,
+            "y_mm": 280,
+            "width_mm": 15,
+            "height_mm": 10
+          },
+          "role": "page_number",
+          "order": 1,
+          "field_id": ""
+        }
+      ],
+      "rules": [
+        {
+          "name": "bottom",
+          "points": [
+            [
+              20,
+              275
+            ],
+            [
+              190,
+              275
+            ]
+          ],
+          "width_mm": 0.3
+        }
+      ],
+      "background": null,
+      "source_page": null,
+      "source_sha256": "",
+      "source_size_mm": null
+    },
+    {
+      "layout_id": "layout-4",
+      "label": "循环布局 4",
+      "frames": [
+        {
+          "frame_id": "body-1",
+          "label": "正文框 1",
+          "region": {
+            "name": "body-1",
+            "x_mm": 20,
+            "y_mm": 70,
+            "width_mm": 170,
+            "height_mm": 200
+          },
+          "role": "body",
+          "order": 1,
+          "field_id": ""
+        },
+        {
+          "frame_id": "name",
+          "label": "姓名框",
+          "region": {
+            "name": "name",
+            "x_mm": 20,
+            "y_mm": 20,
+            "width_mm": 60,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "name"
+        },
+        {
+          "frame_id": "student",
+          "label": "学号框",
+          "region": {
+            "name": "student",
+            "x_mm": 100,
+            "y_mm": 20,
+            "width_mm": 90,
+            "height_mm": 15
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "student_id"
+        },
+        {
+          "frame_id": "experiment",
+          "label": "实验名称框",
+          "region": {
+            "name": "experiment",
+            "x_mm": 20,
+            "y_mm": 40,
+            "width_mm": 170,
+            "height_mm": 20
+          },
+          "role": "field",
+          "order": 1,
+          "field_id": "experiment_title"
+        },
+        {
+          "frame_id": "page-number",
+          "label": "页码",
+          "region": {
+            "name": "page-number",
+            "x_mm": 175,
+            "y_mm": 280,
+            "width_mm": 15,
+            "height_mm": 10
+          },
+          "role": "page_number",
+          "order": 1,
+          "field_id": ""
+        }
+      ],
+      "rules": [
+        {
+          "name": "bottom",
+          "points": [
+            [
+              20,
+              275
+            ],
+            [
+              190,
+              275
+            ]
+          ],
+          "width_mm": 0.3
+        }
+      ],
+      "background": null,
+      "source_page": null,
+      "source_sha256": "",
+      "source_size_mm": null
+    }
+  ],
+  "start_pages": [],
+  "loop_pages": [
+    "layout-1",
+    "layout-2",
+    "layout-3",
+    "layout-4"
+  ],
+  "finish_cycle": false,
+  "fields": [
+    {
+      "field_id": "name",
+      "label": "姓名",
+      "required": true,
+      "value_type": "text"
+    },
+    {
+      "field_id": "student_id",
+      "label": "学号",
+      "required": true,
+      "value_type": "number"
+    },
+    {
+      "field_id": "experiment_title",
+      "label": "实验名称",
+      "required": true,
+      "value_type": "markdown"
+    }
+  ],
+  "mode": "preprinted",
+  "offset_x_mm": 0,
+  "offset_y_mm": 0,
+  "calibration": "unreviewed",
+  "migration": [],
+  "schema_version": "inkstruct_page_template_v3"
+}

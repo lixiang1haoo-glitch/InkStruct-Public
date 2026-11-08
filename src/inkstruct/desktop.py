@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import sys
 import threading
 import traceback
+from datetime import datetime
 from pathlib import Path
 
-from .cli import PROJECT_ROOT
+from .generation_workflow import METHODS, GenerationWorkflow, identity, resources
 
 
 def _qt():
@@ -17,346 +17,580 @@ def _qt():
     return QtCore, QtWidgets
 
 
-def main(argv: list[str] | None = None) -> int:
-    arguments = list(argv or sys.argv)
-    smoke_test = "--smoke-test" in arguments
+def main(argv=None, *, create_only=False, workspace=None, database=None):
     QtCore, QtWidgets = _qt()
-    QApplication = QtWidgets.QApplication
-    QMainWindow = QtWidgets.QMainWindow
-    QWidget = QtWidgets.QWidget
-    QObject = QtCore.QObject
-    QRunnable = QtCore.QRunnable
-    Signal = QtCore.Signal
-    Slot = QtCore.Slot
+    from .generation_progress_ui import GenerationProgress
 
-    class WorkerSignals(QObject):
-        finished = Signal(object)
-        failed = Signal(str)
+    root = Path(workspace) if workspace else resources()
+    db = Path(database) if database else resources() / "artifacts/structures/characters.sqlite3"
+    service = GenerationWorkflow(root, db)
+    arguments = list(argv or sys.argv)
 
-    class Worker(QRunnable):
+    class Signals(QtCore.QObject):
+        finished = QtCore.Signal(object)
+        failed = QtCore.Signal(str)
+
+    class Worker(QtCore.QRunnable):
         def __init__(self, function):
             super().__init__()
-            self.function = function
-            self.signals = WorkerSignals()
+            self.function, self.signals = function, Signals()
 
-        @Slot()
+        @QtCore.Slot()
         def run(self):
             try:
                 self.signals.finished.emit(self.function())
-            except Exception:  # noqa: BLE001 - background boundary reports all failures
-                self.signals.failed.emit(traceback.format_exc())
+            except Exception as error:  # noqa: BLE001 - worker boundary, traceback only in diagnostic file
+                folder = root / "generation" / "errors"
+                folder.mkdir(parents=True, exist_ok=True)
+                path = folder / (identity() + ".log")
+                path.write_text(traceback.format_exc(), encoding='utf-8')
+                message = str(error).splitlines()[0] or type(error).__name__
+                self.signals.failed.emit(message + "\n诊断记录：" + str(path))
 
-    class WorkflowWidget(QWidget):
-        generation_progress = Signal(object)
+    class WorkflowWidget(QtWidgets.QWidget):
+        generation_progress = QtCore.Signal(object)
+        publish_requested = QtCore.Signal()
 
         def __init__(self):
             super().__init__()
+            from .generation_variants import DEFAULT_CANDIDATES, MAX_CANDIDATES
+
             self.pool = QtCore.QThreadPool.globalInstance()
             self.cancel_event = threading.Event()
-            self.buttons = []
+            self.busy = False
+            self.last_generated_run = None
+            self.last_generated_writer = None
+            self.target_manifest = None
+            self.current_document_provider = None
+            self.capture_root_provider = None
+            self.manual_samples = False
+            self.sample_scan = None
+            self.sample_status = None
+            self.sample_request = None
+            self.sample_revision = 0
+            self.pending_capture_writer = None
             layout = QtWidgets.QVBoxLayout(self)
-            explanation = QtWidgets.QLabel(
-                "风格生成流程：导入已采集的单字 JSON → 建立风格档案 → 生成个性化轨迹"
-            )
-            explanation.setWordWrap(True)
-            layout.addWidget(explanation)
+            title = QtWidgets.QLabel("生成字形")
+            title.setProperty("inkRole", "title")
+            layout.addWidget(title)
+            source_group = QtWidgets.QGroupBox("1 · 准备作者样本")
+            source_layout = QtWidgets.QVBoxLayout(source_group)
             form = QtWidgets.QFormLayout()
+            source_layout.addLayout(form)
+            layout.addWidget(source_group)
             self.writer = QtWidgets.QLineEdit("user_001")
             self.writer.setObjectName("writer")
             self.samples = QtWidgets.QLineEdit()
+            self.samples.setObjectName("sample_directory")
+            self.samples.setPlaceholderText("选择该作者的汉字采集目录")
+            self.browse = QtWidgets.QPushButton("选择…")
+            self.browse.clicked.connect(self.choose_samples)
+            row = QtWidgets.QHBoxLayout()
+            row.addWidget(self.samples)
+            row.addWidget(self.browse)
+            self.follow_samples = QtWidgets.QPushButton("跟随采集目录")
+            self.follow_samples.clicked.connect(self.use_capture_samples)
+            row.addWidget(self.follow_samples)
+            self.sample_summary = QtWidgets.QLabel()
+            self.sample_summary.setWordWrap(True)
+            self.sample_summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            self.sample_summary.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.sample_notice = QtWidgets.QLabel()
+            self.sample_notice.setWordWrap(True)
+            self.sample_notice.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            self.sample_notice.setStyleSheet("font-weight: bold;")
+            self.sample_notice.hide()
+            self.method = QtWidgets.QComboBox()
+            self.method.setObjectName("generation_method")
+            for key, label in METHODS.items():
+                self.method.addItem(label, key)
+            info = QtWidgets.QLabel("ⓘ")
+            info.setToolTip("v6.2 exp：增加竖弯钩、止部关键笔语义准入与不兼容来源重试，保留真实原笔迹。\n"
+                "作者来源完整的字可按所选上限保留多份真实供体候选，制作字体后按出现位置稳定选样。\n"
+                "v6.1 exp：参考修正、完整部件、受限关键笔替换及作者单笔回退；保留完整来源轨迹与缺口。\n"
+                "沿用跨字生成规则，排除同字供体；未通过来源筛选处保留参考替代并警告。\n"
+                "v4 adaptive：固定自适应融合配置；没有可靠逐笔来源记录时按来源未知提示。\n"
+                "建档会自动准备所选方法需要的档案。更换方法后若未建档，请先建档。\n"
+                "每次操作创建新批次；采集目录有新增内容时请重新导入。")
+            method_row = QtWidgets.QHBoxLayout()
+            method_row.addWidget(self.method, 1)
+            method_row.addWidget(info)
             self.text = QtWidgets.QLineEdit("中国书法")
             self.text.setObjectName("generation_text")
-            self.generate_all = QtWidgets.QCheckBox("生成全部支持字符（可断点续跑）")
-            self.component_mode = QtWidgets.QComboBox()
-            self.component_mode.addItem("自适应融合（推荐）", "adaptive")
-            self.component_mode.addItem("关闭部件层（A/B 基线）", "off")
-            self.component_mode.addItem("仅部件笔画（诊断）", "stroke")
-            self.component_mode.addItem("仅部件布局（诊断）", "layout")
-            self.component_mode.addItem("完整部件替换（诊断）", "full")
-            self.component_strength = QtWidgets.QDoubleSpinBox()
-            self.component_strength.setRange(0.0, 1.5)
-            self.component_strength.setSingleStep(0.1)
-            self.component_strength.setValue(1.0)
-            self.trajectory_mode = QtWidgets.QComboBox()
-            self.trajectory_mode.setObjectName("trajectory_mode")
-            self.trajectory_mode.addItem("现有平滑路径（默认）", "legacy")
-            self.trajectory_mode.addItem("完整原始部件（实验）", "source-raw")
-            self.trajectory_mode.addItem("保护折钩的轻量简化（实验）", "source-simplified")
-            self.source_profile = QtWidgets.QLineEdit()
-            self.source_profile.setObjectName("source_profile")
-            self.source_profile.setPlaceholderText("选择同一作者的高保真副档案")
-            self.source_browse = QtWidgets.QPushButton("选择档案…")
-            self.source_browse.clicked.connect(self.choose_source_profile)
-            source_row = QtWidgets.QHBoxLayout()
-            source_row.addWidget(self.source_profile)
-            source_row.addWidget(self.source_browse)
-            self.source_nested = QtWidgets.QCheckBox("允许识别嵌套部件（敫、多；实验）")
-            self.source_observed = QtWidgets.QCheckBox("优先保留已采集原稿（同字重建；实验）")
-            self.source_observed.setObjectName("source_observed")
-            self.reviewed_geometry = QtWidgets.QCheckBox("使用已复核的局部几何修正（实验）")
-            self.reviewed_geometry.setObjectName("reviewed_geometry")
-            self.reviewed_geometry.toggled.connect(self.change_trajectory_mode)
-            self.trajectory_mode.currentIndexChanged.connect(self.change_trajectory_mode)
-            self.change_trajectory_mode()
-            sample_row = QtWidgets.QHBoxLayout()
-            sample_row.addWidget(self.samples)
-            browse = QtWidgets.QPushButton("选择…")
-            browse.clicked.connect(self.choose_samples)
-            sample_row.addWidget(browse)
-            form.addRow("用户 ID", self.writer)
-            form.addRow("单字 JSON 目录", sample_row)
-            form.addRow("生成内容", self.text)
-            form.addRow("批量模式", self.generate_all)
-            form.addRow("部件生成", self.component_mode)
-            form.addRow("部件强度", self.component_strength)
-            form.addRow("轨迹路径", self.trajectory_mode)
-            form.addRow("高保真副档案", source_row)
-            form.addRow("部件范围", self.source_nested)
-            form.addRow("已采集字", self.source_observed)
-            form.addRow("几何修正", self.reviewed_geometry)
-            layout.addLayout(form)
+            self.text.setMaxLength(4_000_000)  # imported lists must never be silently truncated by QLineEdit
+            self.generate_all = QtWidgets.QCheckBox("生成结构库全部汉字")
+            self.generate_all.setToolTip("按本版结构库生成全部汉字。可能耗时较长；可取消，已完成字形仍保留。再次生成会创建新批次。")
+            form.addRow("作者", self.writer)
+            form.addRow("样本目录", row)
+            form.addRow("样本与档案", self.sample_summary)
+            form.addRow("", self.sample_notice)
+            form.addRow("生成方式", method_row)
+            prepare_actions = QtWidgets.QHBoxLayout()
+            source_layout.addLayout(prepare_actions)
+            generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
+            generation_layout = QtWidgets.QVBoxLayout(generation_group)
+            generation_form = QtWidgets.QFormLayout()
+            generation_form.addRow("生成内容", self.text)
+            target_actions = QtWidgets.QHBoxLayout()
+            self.target_builtin_button = QtWidgets.QPushButton('内置简繁字表…')
+            self.target_builtin_button.clicked.connect(self.choose_builtin_targets)
+            self.target_file_button = QtWidgets.QPushButton('导入字表…')
+            self.target_document_button = QtWidgets.QPushButton('从文档提取汉字…')
+            self.target_current_button = QtWidgets.QPushButton('从当前排版提取')
+            self.target_current_button.setEnabled(False)
+            self.target_file_button.clicked.connect(self.choose_target_file)
+            self.target_document_button.clicked.connect(self.choose_target_document)
+            self.target_current_button.clicked.connect(self.choose_current_document)
+            for button in (self.target_builtin_button, self.target_file_button, self.target_document_button, self.target_current_button):
+                target_actions.addWidget(button)
+            generation_form.addRow('', target_actions)
+            generation_form.addRow("", self.generate_all)
+            self.parallelism = QtWidgets.QComboBox()
+            self.parallelism.setObjectName('generation_parallelism')
+            for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
+                self.parallelism.addItem(label, key)
+            self.parallelism.setToolTip('按汉字分配任务，每个进程复用完整档案。并发受 CPU 和可用内存限制；进程不可用时保留完成结果并串行恢复。v4 使用串行。')
+            generation_form.addRow('计算方式', self.parallelism)
+            self.candidate_preferences = QtCore.QSettings("InkStruct", "Generation")
+            self.candidate_default = DEFAULT_CANDIDATES
+            self.candidate_limit = QtWidgets.QSpinBox()
+            self.candidate_limit.setObjectName("generation_candidate_limit")
+            self.candidate_limit.setAccessibleName("每字成品上限")
+            self.candidate_limit.setRange(1, MAX_CANDIDATES)
+            self.candidate_limit.setSuffix(" 份")
+            self.candidate_limit.setValue(self.preferred_candidate_limit())
+            self.candidate_limit.setToolTip(
+                "仅用于 v6.2 exp，数量包含原主字形。实际份数取决于真实来源和完整检查；"
+                "增加上限会增加尝试次数、生成时间和包体。"
+            )
+            generation_form.addRow("每字成品上限", self.candidate_limit)
+            self.candidate_hint = QtWidgets.QLabel()
+            self.candidate_hint.setWordWrap(True)
+            generation_form.addRow("", self.candidate_hint)
+            self.target_summary = QtWidgets.QLabel('直接输入汉字，或导入 UTF-8 TXT / CSV 字表；保留首次出现顺序。')
+            self.target_summary.setWordWrap(True)
+            generation_form.addRow('', self.target_summary)
+            generation_layout.addLayout(generation_form)
+            layout.addWidget(generation_group)
+            self.status = QtWidgets.QLabel()
+            self.status.setWordWrap(True)
+            generation_layout.addWidget(self.status)
             actions = QtWidgets.QHBoxLayout()
-            for label, function in [
-                ("1. 导入", self.do_import),
-                ("2. 建档", self.do_profile),
-                ("高保真副档案", self.do_source_profile),
-                ("3. 生成", self.do_generate),
-            ]:
-                button = QtWidgets.QPushButton(label)
-                if label == "3. 生成":
-                    button.setObjectName("generate_button")
+            self.buttons = []
+            for name, attr, function in [("更新样本并建档", "update_button", self.do_update),
+                                         ("导入样本", "import_button", self.do_import),
+                                         ("建立档案", "profile_button", self.do_profile),
+                                         ("开始生成", "generate_button", self.do_generate)]:
+                button = QtWidgets.QPushButton(name)
+                button.setObjectName(attr)
+                if attr in ("generate_button", "update_button"):
+                    button.setProperty("inkRole", "primary")
                 button.clicked.connect(function)
+                setattr(self, attr, button)
+                (actions if attr == "generate_button" else prepare_actions).addWidget(button)
                 self.buttons.append(button)
-                actions.addWidget(button)
-            layout.addLayout(actions)
-            self.cancel_button = QtWidgets.QPushButton("取消当前批量生成")
-            self.cancel_button.setEnabled(False)
+            self.cancel_button = QtWidgets.QPushButton("取消生成")
             self.cancel_button.clicked.connect(self.cancel_generation)
-            layout.addWidget(self.cancel_button)
+            self.cancel_button.setEnabled(False)
+            actions.addWidget(self.cancel_button)
+            generation_layout.addLayout(actions)
+            self.progress_panel = GenerationProgress(self)
+            generation_layout.addWidget(self.progress_panel)
+            result_group = QtWidgets.QGroupBox("3 · 生成结果")
+            result_layout = QtWidgets.QHBoxLayout(result_group)
+            self.result_summary = QtWidgets.QLabel("尚无生成结果")
+            self.result_summary.setWordWrap(True)
+            result_layout.addWidget(self.result_summary, 1)
+            self.publish_button = QtWidgets.QPushButton("制作字体…")
+            self.publish_button.setObjectName("generation_to_font_library")
+            self.publish_button.setProperty("inkRole", "primary")
+            self.publish_button.setToolTip("将最近完成的生成批次带入字体库，命名并制作字体包")
+            self.publish_button.clicked.connect(self.publish_requested.emit)
+            self.publish_button.setVisible(create_only)
+            result_layout.addWidget(self.publish_button)
+            layout.addWidget(result_group)
+            details = QtWidgets.QToolButton()
+            details.setText("运行记录")
+            details.setCheckable(True)
+            details.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+            details.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            layout.addWidget(details)
             self.log = QtWidgets.QPlainTextEdit()
             self.log.setReadOnly(True)
+            self.log.document().setMaximumBlockCount(1000)
             layout.addWidget(self.log, 1)
+            self.log.hide()
+            details.toggled.connect(self.log.setVisible)
+            details.toggled.connect(lambda checked: details.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow if checked else QtCore.Qt.ArrowType.RightArrow))
+            layout.addStretch()
             self.generation_progress.connect(self.show_generation_progress)
+            self.writer.textChanged.connect(self.writer_changed)
+            self.samples.textChanged.connect(self.manual_sample_source)
+            self.text.textChanged.connect(self.refresh)
+            self.method.currentIndexChanged.connect(self.refresh_sample_source)
+            self.candidate_limit.valueChanged.connect(self.remember_candidate_limit)
+            self.generate_all.toggled.connect(self.refresh)
+            self.text.textEdited.connect(self.invalidate_targets)
+            self.sample_timer = QtCore.QTimer(self, interval=3500)
+            self.sample_timer.timeout.connect(self.poll_samples)
+            self.sample_timer.start()
+            self.refresh()
 
+        def use_capture_samples(self):
+            self.manual_samples = False
+            self.refresh_sample_source()
+
+        def manual_sample_source(self):
+            self.manual_samples = bool(self.samples.text().strip())
+            self.refresh_sample_source()
+
+        def capture_writer_chosen(self, writer):
+            if self.busy:
+                self.pending_capture_writer = writer
+            else:
+                self.writer.setText(writer)
+
+        def writer_changed(self):
+            if self.manual_samples and self.capture_root_provider and not Path(self.samples.text().strip()).is_dir():
+                self.manual_samples = False
+            self.refresh_sample_source()
+
+        def refresh_sample_source(self, *_):
+            from .capture_management import valid_writer
+
+            if not self.manual_samples and self.capture_root_provider:
+                writer = self.writer.text().strip()
+                target = Path(self.capture_root_provider()) / "samples" / writer
+                with QtCore.QSignalBlocker(self.samples):
+                    self.samples.setText(str(target.resolve()) if valid_writer(writer) else "")
+            values = self.values()
+            if values != self.sample_request:
+                self.sample_request = values
+                self.sample_status = None
+                self.sample_revision += 1
+            self.refresh()
+            self.scan_sample_source()
+
+        def poll_samples(self):
+            if self.isVisible() and not self.busy:
+                self.refresh_sample_source()
+
+        def showEvent(self, event):
+            super().showEvent(event)
+            self.refresh_sample_source()
+
+        def scan_sample_source(self):
+            if self.sample_scan or self.busy or not self.sample_request:
+                return
+            writer, source, method = values = self.sample_request
+            if not writer or not source or not Path(source).is_dir():
+                return
+            previous = self.sample_status
+            revision = self.sample_revision
+
+            def scan():
+                try:
+                    return revision, service.sample_status(writer, source, method, previous)
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    return revision, {"error": str(error)}
+
+            self.sample_scan = Worker(scan)
+            self.sample_scan.signals.finished.connect(self.samples_scanned)
+            self.sample_scan.signals.failed.connect(self.sample_scan_failed)
+            self.pool.start(self.sample_scan)
+
+        def samples_scanned(self, response):
+            self.sample_scan = None
+            revision, result = response
+            if revision == self.sample_revision and not self.busy:
+                self.sample_status = result
+                self.refresh()
+            elif not self.busy:
+                self.scan_sample_source()
+
+        def sample_scan_failed(self, message):
+            self.sample_scan = None
+            self.log.appendPlainText(message)
+
+        def refresh_sample_summary(self):
+            writer, source, _ = self.values()
+            origin = "手选目录" if self.manual_samples else "自动跟随采集目录"
+            status = self.sample_status or {}
+            path = status.get("path") or (str(Path(source).resolve()) if source else "未选择")
+            line = f"书写者 {writer or '未选择'} · {origin} · {path}"
+            notices = []
+            if "error" in status:
+                line += "\n核对失败：" + status["error"]
+            elif status:
+                at = status["imported_at"]
+                at = datetime.fromisoformat(at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if at else "尚未导入"
+                donors = status["donors"]
+                line += f"\n上次导入 {at} · 成功导入 {status['imported']} 份 · 有效供体 {donors if donors is not None else '—'}"
+                if status["foreign"]:
+                    notices.append("作者归属不符：目录包含 " + "、".join(status["foreign"]))
+                if status["changed"]:
+                    notices.append("有样本变化尚未纳入当前档案。使用「更新样本并建档」纳入变化。")
+            elif source:
+                line += "\n" + ("正在核对样本归属与导入记录…" if Path(source).is_dir() else "样本目录不存在")
+            self.sample_summary.setText(line)
+            self.sample_summary.setToolTip("\n".join(status.get("records", ())))
+            self.sample_notice.setText("\n".join(notices))
+            self.sample_notice.setVisible(bool(notices))
+
+        def resume_sample_status(self):
+            writer, self.pending_capture_writer = self.pending_capture_writer, None
+            if writer is not None:
+                self.writer.setText(writer)
+            self.refresh_sample_source()
+
+        def values(self):
+            return self.writer.text().strip(), self.samples.text().strip(), self.method.currentData()
+
+        def preferred_candidate_limit(self):
             try:
-                import torch
+                value = int(self.candidate_preferences.value("candidate_limit", self.candidate_default))
+            except (TypeError, ValueError, OverflowError):
+                return self.candidate_default
+            if not self.candidate_limit.minimum() <= value <= self.candidate_limit.maximum():
+                return self.candidate_default
+            return value
 
-                gpu = (
-                    torch.cuda.get_device_name(0)
-                    if torch.cuda.is_available()
-                    else "不可用；确定性生成可用，训练和神经生成不可用"
+        def remember_candidate_limit(self, value):
+            if self.method.currentData() == "v62":
+                self.candidate_preferences.setValue("candidate_limit", value)
+            self.update_candidate_hint()
+
+        def update_candidate_hint(self):
+            from .generation_variants import candidate_attempt_limit
+
+            if self.method.currentData() != "v62":
+                self.candidate_hint.setText("当前生成方式只保留 1 份主字形；多份成品上限仅用于 v6.2 exp。")
+            elif self.candidate_limit.value() == 1:
+                self.candidate_hint.setText("数量包含原主字形；选择 1 份时不尝试额外成品。")
+            else:
+                attempts = candidate_attempt_limit(self.candidate_limit.value())
+                self.candidate_hint.setText(
+                    f"数量包含原主字形；每字最多 {attempts} 次方案尝试，不足时保留实际合格份数。"
                 )
-            except (ImportError, RuntimeError):
-                gpu = "PyTorch 未安装；确定性生成可用，训练和神经生成不可用"
-            layout.addWidget(QtWidgets.QLabel(f"CUDA：{gpu}"))
 
-        def change_trajectory_mode(self):
-            active = self.trajectory_mode.currentData() != "legacy"
-            for widget in (self.source_profile, self.source_browse, self.source_nested, self.source_observed):
-                widget.setEnabled(active)
-            locked = active or self.reviewed_geometry.isChecked()
-            self.component_mode.setEnabled(not locked)
-            self.component_strength.setEnabled(not locked)
-            if locked:
-                self.component_mode.setCurrentIndex(0)
-                self.component_strength.setValue(1.)
+        def refresh(self):
+            self.publish_button.setEnabled(bool(self.last_generated_run) and not self.busy)
+            ready = service.readiness(*self.values())
+            self.refresh_sample_summary()
+            checked = self.sample_status and not (self.sample_status.get("foreign") or self.sample_status.get("error"))
+            self.update_button.setEnabled(bool(checked and ready["import"] and not self.busy))
+            self.status.setText("正在处理，请稍候…" if self.busy else ready["message"])
+            for kind in ("import", "profile", "generate"):
+                enabled = ready[kind] and not self.busy
+                if kind == "import":
+                    enabled = enabled and checked
+                if kind == "generate":
+                    enabled = enabled and (self.generate_all.isChecked() or bool(self.text.text().strip()))
+                getattr(self, kind + "_button").setEnabled(bool(enabled))
+            for widget in (self.writer, self.samples, self.browse, self.follow_samples, self.method, self.generate_all):
+                widget.setEnabled(not self.busy)
+            self.text.setEnabled(not self.busy and not self.generate_all.isChecked())
+            for widget in (self.target_builtin_button, self.target_file_button, self.target_document_button):
+                widget.setEnabled(not self.busy and not self.generate_all.isChecked())
+            self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy and not self.generate_all.isChecked())
+            self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
+            multiple = self.method.currentData() == "v62"
+            with QtCore.QSignalBlocker(self.candidate_limit):
+                self.candidate_limit.setValue(self.preferred_candidate_limit() if multiple else 1)
+            self.candidate_limit.setEnabled(multiple and not self.busy)
+            self.update_candidate_hint()
 
-        def choose_source_profile(self):
-            selected, _ = QtWidgets.QFileDialog.getOpenFileName(self, "选择高保真副档案", "", "JSON (*.json)")
-            if selected:
-                self.source_profile.setText(selected)
+        def invalidate_targets(self):
+            self.target_manifest = None
+            self.target_summary.setText('已编辑为自定义字表；开始前会检查全部目标，不支持字符不会静默跳过。')
+
+        def load_targets(self, function):
+            def run():
+                from .structures import StructureRepository
+                manifest = function(StructureRepository(db).characters())
+                return {'message': f"已准备字表：{len(manifest['requested'])} 个去重目标。", 'target_manifest': manifest}
+            self.submit(run)
+
+        def choose_target_file(self):
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(self, '导入 UTF-8 自定义字表', '', '字表 (*.txt *.csv)')
+            if path:
+                def read(supported):
+                    from .generation_targets import read_target_file, target_manifest
+                    text, origin = read_target_file(path)
+                    return target_manifest(text, supported, source=origin)
+                self.load_targets(read)
+
+        def choose_builtin_targets(self):
+            # Resource/database errors use the same visible diagnostic boundary
+            # as other target imports. Do not alter current targets on cancel.
+            from .character_sets_ui import CharacterSetsDialog
+            from .structures import StructureRepository
+            try:
+                dialog = CharacterSetsDialog(StructureRepository(db).characters(), self)
+                if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+                    self.completed({'message': '已确认内置字表及结构库缺口。',
+                                    'target_manifest': dialog.result_manifest})
+            except Exception as error:
+                self.failed(str(error))
+
+        def choose_target_document(self):
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(self, '从文档提取汉字（不改文档）', '', '文档 (*.md *.markdown *.inkdoc)')
+            if path:
+                from .generation_targets import extract_file
+                self.load_targets(lambda supported: extract_file(path, supported))
+
+        def choose_current_document(self):
+            if self.current_document_provider:
+                # Capture source and immutable flow on the GUI thread before background parsing.
+                source, flow, identity = self.current_document_provider()
+                from .generation_targets import extract_document
+                self.load_targets(lambda supported: extract_document(source, supported, flow=flow, identity=identity))
 
         def choose_samples(self):
-            selected = QtWidgets.QFileDialog.getExistingDirectory(self, "选择单字 JSON 目录")
+            from .capture_management import valid_writer
+
+            value = self.samples.text().strip()
+            initial = Path(value) if value and Path(value).is_dir() else None
+            if initial is None and self.capture_root_provider:
+                capture = Path(self.capture_root_provider())
+                samples = capture / "samples"
+                writer = self.writer.text().strip()
+                if valid_writer(writer) and (samples / writer).is_dir():
+                    initial = samples / writer
+                else:
+                    initial = samples if samples.is_dir() else capture
+            selected = QtWidgets.QFileDialog.getExistingDirectory(
+                self, "选择汉字采集样本目录", str(initial) if initial else ""
+            )
             if selected:
                 self.samples.setText(selected)
 
         def submit(self, function, *, cancellable=False):
-            for button in self.buttons:
-                button.setEnabled(False)
+            if self.busy:
+                return
+            self.busy = True
+            self.sample_revision += 1
+            self.refresh()
             self.cancel_button.setEnabled(cancellable)
-            worker = Worker(function)
-            worker.signals.finished.connect(self.completed)
-            worker.signals.failed.connect(self.failed)
-            self.pool.start(worker)
+            self.worker = Worker(function)
+            self.worker.signals.finished.connect(self.completed)
+            self.worker.signals.failed.connect(self.failed)
+            self.pool.start(self.worker)
 
         def completed(self, value):
-            if "source_profile" in value:
-                self.source_profile.setText(value["source_profile"])
-            if "source_components" in value:
-                summary = value["source_components"]
-                status = "已取消" if value["status"] == "cancelled" else "生成结束"
-                self.log.appendPlainText(f"实验{status}：{value['completed_count']} 字；失败 {value['failed_count']}；采用真实部件 {summary['characters_with_source_components']} 字。")
-                for failure in value.get("failed", []):
-                    self.log.appendPlainText(f"{failure['character']}：生成失败，{failure['reason']}")
-                for character, row in summary["by_character"].items():
-                    donors = "、".join(dict.fromkeys(d["source_character"] for d in row["donors"])) or "无，保留原结果"
-                    if row.get("observed_reconstruction", {}).get("used"):
-                        self.log.appendPlainText(f"{character}：保留已采集整字原稿（同字重建，不计作跨字泛化）。")
-                    low = "、".join(row["low_A_confidence_stroke_ids"]) or "无"
-                    self.log.appendPlainText(f"{character}：真实部件 {row['accepted_component_count']}；来源 {donors}；局部复核项 {row['geometry_warning_count']}；原 A 最低分 {row['minimum_A_stroke_confidence']:.3f}，低分笔画 {low}")
-                self.log.appendPlainText("置信度沿用原 A，未校准为新轨迹质量；请结合逐笔来源和几何复核。")
-                self.log.appendPlainText(f"完整轨迹、供体和回退原因：{value['output']}")
-            elif "geometry_repairs" not in value:
-                self.log.appendPlainText(json.dumps(value, ensure_ascii=False, indent=2))
-            if "geometry_repairs" in value:
-                changed = "、".join(value["geometry_repairs"]["changed_characters"]) or "无"
-                self.log.appendPlainText(f"已复核几何修正：{changed}；完成 {value['completed_count']} 字，失败 {value['failed_count']}。")
-                for character, record in value["geometry_repairs"]["by_character"].items():
-                    for event in record["events"]:
-                        self.log.appendPlainText(f"{character}：{event['kind']} · {'已修正' if event['applied'] else event.get('reason', '未应用')}")
-                self.log.appendPlainText(f"修正来源、拒绝原因与逐笔结果：{value['output']}")
+            self.busy = False
+            if "output" in value:
+                self.progress_panel.finish(result=value)
+                self.status.show()
+            self.log.appendPlainText(value["message"])
+            if 'target_manifest' in value:
+                manifest = value['target_manifest']
+                self.target_manifest = manifest
+                self.text.setText(''.join(manifest['requested']))
+                unsupported = ('；不支持 ' + str(len(manifest['unsupported'])) + ' 项：' +
+                               ' '.join(manifest['unsupported'][:40]) + ('…' if len(manifest['unsupported']) > 40 else '')) if manifest['unsupported'] else ''
+                diagnostics = f"；原文档有 {len(manifest['diagnostics'])} 项解析/字段诊断，未修改原文" if manifest['diagnostics'] else ''
+                self.target_summary.setText(f"去重目标 {len(manifest['requested'])} 字{unsupported}{diagnostics}。仅改变输出目标，仍使用完整作者供体池。")
+                origin = manifest['source']
+                if origin.get('kind') == 'builtin-character-sets':
+                    missing = origin['unsupported_in_structure_library']
+                    self.target_summary.setText('；'.join(e['title'] for e in origin['sets']) +
+                        f"。实际目标 {len(manifest['requested'])} 字；已明确排除结构库不支持的 {len(missing)} 字，完整清单随任务保存。供体池保持完整。")
+                self.target_summary.setToolTip(str(manifest['source']))
+            if "output" in value:
+                if value["completed_count"]:
+                    self.last_generated_run = value["output"]
+                    self.last_generated_writer = value["writer"]
+                    self.result_summary.setText(value["message"])
+                    self.result_summary.setToolTip("结果目录：" + value["output"])
+                else:
+                    self.result_summary.setText("本次没有完成的字形。" + (
+                        "仍可制作上次成功结果的字体。" if self.last_generated_run else ""))
+                self.log.appendPlainText("结果目录：" + value["output"])
+                if value.get("status") == "cancelled":
+                    self.log.appendPlainText("已取消；已完成字形保留，未完成部分未发布。")
+                execution = value.get('execution', {})
+                if execution:
+                    self.log.appendPlainText(f"计算工作者：{execution['workers']}；目标与来源身份见结果 protocol.json。")
+                    if execution.get('fallback'):
+                        self.log.appendPlainText('已串行恢复；进程诊断：' + execution['fallback'])
+                if value.get("warning_characters"):
+                    self.log.appendPlainText("含参考替代：" + "".join(value["warning_characters"]) + "。可继续使用，在字体提示中查看具体缺口。")
+                for item in value.get("failed", []):
+                    self.log.appendPlainText(f"{item['character']}：{item['reason']}")
+            for key in ("report", "profile"):
+                if key in value:
+                    self.log.appendPlainText("详细记录：" + value[key])
             self.cancel_button.setEnabled(False)
-            for button in self.buttons:
-                button.setEnabled(True)
+            if "report" in value or "profile" in value:
+                self.sample_status = None
+            self.resume_sample_status()
 
         def failed(self, message):
-            self.log.appendPlainText(message)
+            self.busy = False
+            self.progress_panel.finish()
+            self.status.show()
+            self.log.appendPlainText("操作未完成：" + message)
             self.cancel_button.setEnabled(False)
-            for button in self.buttons:
-                button.setEnabled(True)
-            QtWidgets.QMessageBox.critical(self, "InkStruct 操作失败", message.splitlines()[-1])
+            self.resume_sample_status()
+            self.status.setText("操作未完成：" + message.splitlines()[0])
+
+        def show_generation_progress(self, value):
+            self.progress_panel.record(value)
 
         def cancel_generation(self):
             self.cancel_event.set()
             self.cancel_button.setEnabled(False)
-            self.log.appendPlainText("已请求取消；当前字符写入完成后停止。")
-
-        def show_generation_progress(self, value):
-            self.log.appendPlainText(
-                f"生成进度：{value['completed_count']}/{value['requested_count']}，"
-                f"失败 {value['failed_count']}，当前 {value['character']}"
-            )
+            self.progress_panel.cancelling()
+            self.log.appendPlainText("已请求取消；停止投递任务，保留已校验完成结果。串行计算将在当前字结束后停止。")
 
         def do_import(self):
-            from .samples import import_samples
+            values = self.values()
+            self.submit(lambda: service.import_samples(*values))
 
-            source, writer = Path(self.samples.text()), self.writer.text().strip()
-            self.submit(
-                lambda: import_samples(source, writer, PROJECT_ROOT / "artifacts" / "samples")
-            )
+        def do_update(self):
+            values = self.values()
+            self.submit(lambda: service.update_samples(*values))
 
         def do_profile(self):
-            from .profile import build_profile
-            from .structures import StructureRepository
-
-            writer = self.writer.text().strip()
-
-            def work():
-                profile, path = build_profile(
-                    writer,
-                    PROJECT_ROOT / "artifacts" / "samples" / writer / "index.jsonl",
-                    StructureRepository(
-                        PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
-                    ),
-                    PROJECT_ROOT / "profiles",
-                )
-                return {
-                    "profile": str(path),
-                    "samples": profile.sample_count,
-                    "characters": profile.character_count,
-                    "prototypes": len(profile.prototypes),
-                    "component_layouts": len(profile.component_layouts),
-                    "character_layouts": len(profile.character_layouts),
-                    "component_strokes": len(profile.component_strokes),
-                    "component_relations": len(profile.component_relations),
-                    "component_trajectories": len(profile.component_trajectories),
-                    "character_component_trajectories": len(
-                        profile.character_component_trajectories
-                    ),
-                }
-
-            self.submit(work)
-
-        def do_source_profile(self):
-            from datetime import UTC, datetime
-            from uuid import uuid4
-
-            from .profile import build_profile
-            from .structures import StructureRepository
-
-            writer = self.writer.text().strip()
-            identity = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
-
-            def work():
-                profile, path = build_profile(writer,
-                    PROJECT_ROOT / "artifacts" / "samples" / writer / "index.jsonl",
-                    StructureRepository(PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"),
-                    PROJECT_ROOT / "profiles" / "source_runs" / identity,
-                    retain_source_trajectories=True)
-                return {"source_profile": str(path), "retained_captures": len(profile.source_trajectories),
-                        "note": "独立副档案已保存；原有风格档案保持不变。"}
-
-            self.submit(work)
+            values = self.values()
+            self.submit(lambda: service.build_profile(*values))
 
         def do_generate(self):
-            from .generate import generate_run
-            from .structures import StructureRepository
-
-            writer, text = self.writer.text().strip(), self.text.text()
-            all_supported = self.generate_all.isChecked()
-            component_mode = self.component_mode.currentData()
-            component_strength = self.component_strength.value()
-            trajectory_mode = self.trajectory_mode.currentData()
-            source_active = trajectory_mode != "legacy"
-            source_profile = Path(self.source_profile.text().strip()) if source_active and self.source_profile.text().strip() else None
-            source_nested = self.source_nested.isChecked() if source_active else False
-            source_observed = self.source_observed.isChecked() if source_active else False
-            reviewed_geometry = self.reviewed_geometry.isChecked()
+            if self.busy:
+                return
+            values, text, full = self.values(), self.text.text(), self.generate_all.isChecked()
+            workers = self.parallelism.currentData()
+            candidate_limit = self.candidate_limit.value() if values[2] == "v62" else 1
+            targets = self.target_manifest
+            if targets and ''.join(targets['requested']) != text:
+                targets = None
             self.cancel_event.clear()
+            self.progress_panel.start()
+            self.status.hide()
+            self.submit(lambda: service.generate(*values, text, all_supported=full,
+                workers=workers, targets=targets, candidate_limit=candidate_limit,
+                progress=self.generation_progress.emit, cancelled=self.cancel_event.is_set), cancellable=True)
 
-            def work():
-                repository = StructureRepository(
-                    PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
-                )
-                result, output = generate_run(
-                    writer,
-                    repository.characters() if all_supported else list(text),
-                    repository,
-                    PROJECT_ROOT / "profiles" / writer / "profile.json",
-                    output_root=(PROJECT_ROOT / "outputs" / "geometry_experiments" if reviewed_geometry else
-                                 PROJECT_ROOT / "outputs" / "source_experiments" if source_active else PROJECT_ROOT / "outputs"),
-                    trajectory_mode=trajectory_mode,
-                    source_profile_path=source_profile,
-                    source_nested_views=source_nested,
-                    source_observed=source_observed,
-                    reviewed_geometry=reviewed_geometry,
-                    component_conditioning=component_mode,
-                    component_strength=component_strength,
-                    progress_callback=self.generation_progress.emit,
-                    cancelled=self.cancel_event.is_set,
-                )
-                return {**result, "output": str(output)}
-
-            self.submit(work, cancellable=True)
-
-    class GeneratorWindow(QMainWindow):
+    class GeneratorWindow(QtWidgets.QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("InkStruct 墨构 · 个性化风格生成器")
-            self.resize(1000, 720)
+            self.setWindowTitle("InkStruct 墨构 · 字形生成")
+            self.resize(900, 620)
             self.setCentralWidget(WorkflowWidget())
 
-    application = QApplication.instance() or QApplication(arguments)
-    application.setStyle("Fusion")
-    application.setOrganizationName("InkStruct")
-    application.setApplicationName("InkStruct Generator")
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(arguments)
+    if create_only:
+        return GeneratorWindow()
+    app.setStyle("Fusion")
+    app.setOrganizationName("InkStruct")
+    app.setApplicationName("InkStruct Generator")
     window = GeneratorWindow()
     window.show()
-    if smoke_test:
-        def finish_smoke_test():
-            screenshot = next(
-                (value.split("=", 1)[1] for value in arguments
-                 if value.startswith("--smoke-screenshot=")), None,
-            )
-            if screenshot:
-                target = Path(screenshot)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                window.grab().save(str(target))
-            application.quit()
-
-        QtCore.QTimer.singleShot(300, finish_smoke_test)
-    return application.exec()
+    if "--smoke-test" in arguments:
+        QtCore.QTimer.singleShot(300, app.quit)
+    return app.exec()
 
 
 if __name__ == "__main__":

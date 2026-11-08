@@ -25,7 +25,7 @@ class CorrectedStructureRepository:
     """
     def __init__(self, base, graphics_path, dictionary_path, config_path):
         self.base, self.path = base, base.path
-        config = json.loads(Path(config_path).read_text())
+        config = json.loads(Path(config_path).read_text(encoding='utf-8'))
         if config['policy'] != POLICY:
             raise ValueError('unsupported structure correction policy')
         self.config = config
@@ -34,7 +34,7 @@ class CorrectedStructureRepository:
                 raise ValueError('upstream source hash mismatch')
         if base.content_sha256() != config['database_content_sha256']:
             raise ValueError('base structure database differs from frozen source')
-        with Path(graphics_path).open() as stream:
+        with Path(graphics_path).open(encoding='utf-8') as stream:
             self.graphics = {r['character']: r for r in map(json.loads, stream)}
         self.outline_rules = {(r['character'], r['stroke_id']): r for r in config['outline_repairs']}
         self.identity = {'policy': POLICY, 'config_sha256': sha256_file(Path(config_path)),

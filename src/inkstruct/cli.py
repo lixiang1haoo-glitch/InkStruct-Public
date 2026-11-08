@@ -67,6 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version="InkStruct 0.2.0")
     groups = parser.add_subparsers(dest="group", required=True)
 
+    from .document.cli import add_document_parser
+    add_document_parser(groups)
+
     structures = groups.add_parser(
         "structures", help="build and inspect the character graph database"
     )
@@ -241,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
     args, forwarded = parser.parse_known_args(argv)
     if forwarded and args.group not in {"train", "experiment", "collector", "generator", "desktop"}:
         parser.error("unrecognized arguments: " + " ".join(forwarded))
+    if args.group == "document":
+        from .document.cli import run_document_command
+        code, report = run_document_command(args)
+        _emit(report)
+        return code
     if args.group == "structures" and args.command == "build":
         report = build_database(
             args.graphics,

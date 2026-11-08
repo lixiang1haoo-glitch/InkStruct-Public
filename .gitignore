@@ -1,5 +1,7 @@
 __pycache__
 .venv/
+.venv-gpu-experiment/
+workspaces/
 .env
 .env.*
 !.env.example
@@ -25,3 +27,15 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Keep generated data private while tracking the packaged collector kernel.
+!/artifacts/
+/artifacts/*
+!/artifacts/external/
+/artifacts/external/*
+!/artifacts/external/data_collection/
+/artifacts/external/data_collection/*
+!/artifacts/external/data_collection/handwriting_collector/
+!/artifacts/external/data_collection/README.md
+!/artifacts/external/data_collection/CHANGELOG.md
+!/artifacts/external/data_collection/requirements.txt

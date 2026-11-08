@@ -1,0 +1,27 @@
+{
+  "schema": "inkstruct-performance-fixtures-v1",
+  "profile": "Default A4 / body 6 mm / line 9 mm / builtin numeric; table 160 / 8 / 3.8 / 0.3 mm",
+  "fixtures": [
+    {
+      "path": "01-pages.md",
+      "pages": 1,
+      "repetitions": 2,
+      "scalars": 344,
+      "sha256": "728d1ede9f73369b3b190a96d43ff4e43e2f0d856462f3734bc9d60c07ab38fc"
+    },
+    {
+      "path": "10-pages.md",
+      "pages": 10,
+      "repetitions": 22,
+      "scalars": 3784,
+      "sha256": "2e91b854821344ef9081406cfb9fe6744eb7f89dfacbd72124d5172921b26438"
+    },
+    {
+      "path": "50-pages.md",
+      "pages": 50,
+      "repetitions": 111,
+      "scalars": 19092,
+      "sha256": "d8cba649bb2d094b213721aa00c9568b46eef9a1558355e712d9c8553dea3aba"
+    }
+  ]
+}

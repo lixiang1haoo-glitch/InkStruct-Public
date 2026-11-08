@@ -1,0 +1,23 @@
+{
+  "name": "简单模板",
+  "kind": "simple",
+  "width_mm": 210,
+  "height_mm": 297,
+  "margins_mm": [
+    20,
+    20,
+    20,
+    20
+  ],
+  "layouts": [],
+  "start_pages": [],
+  "loop_pages": [],
+  "finish_cycle": false,
+  "fields": [],
+  "mode": "preprinted",
+  "offset_x_mm": 0,
+  "offset_y_mm": 0,
+  "calibration": "unreviewed",
+  "migration": [],
+  "schema_version": "inkstruct_page_template_v3"
+}

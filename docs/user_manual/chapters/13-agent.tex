@@ -1,0 +1,55 @@
+\chapter{Agent 协作与可复用交接}\label{ch:agent}
+本附录供希望让 Agent 设计模板、检查缺口或批量导出的用户阅读。普通编辑不需要使用命令行。Agent 应从已保存项目和明确模板开始，使用应用的同一套校验规则。
+
+\section{给 Agent 的任务信息}
+可以提供以下要求：纸张实际宽高；预印纸还是空白纸；首页和续页可写区域；哪些字段固定、必填或每页重复；字号、表宽和行高要求；现有项目和资源；期望交付模板、项目、预览还是机器 SVG。
+
+可使用这样的任务描述：
+\begin{quote}
+为这份已保存项目设计一个通用记录单模板。纸张 A4，预印模式；首页保留两个固定填写区，剩余内容自动续页。请先列出字段与源码块的映射，再完成绑定和实际内容试排，交付模板 JSON、新项目、预览及适配报告。保留原项目和原始资源。
+\end{quote}
+不要把“参考某张学校表单”自动理解为软件必须内置那所学校的栏目。模板可以依据参考材料设计，但应保存成独立可复用配置。
+
+\section{命令入口约定}
+以下示例以已安装环境的 \code{inkstruct} 命令为例。仓库用户从自己的虚拟环境调用该程序；macOS 独立包可使用下面的前缀替代命令名：
+\par\noindent\begin{minipage}{\linewidth}
+\begin{Source}
+"/实际位置/InkStructEditor.app/Contents/MacOS/InkStructTool" --inkstruct-cli
+\end{Source}
+\end{minipage}\par\medskip
+示例中的文件名代表用户实际文件；输出文件或目录应尚不存在。命令运行成功后仍要查看报告，不只依据退出状态判断机器可写。
+
+\section{模板设计与内容绑定的顺序}
+\par\noindent\begin{minipage}{\linewidth}
+\begin{Source}
+inkstruct document template new --output layout.json
+inkstruct document template validate layout.json
+inkstruct document template preview layout.json --output layout-preview
+inkstruct document template inspect-slots layout.json
+inkstruct document template inspect-content report.inkdoc --template layout.json
+\end{Source}
+\end{minipage}\par\medskip
+新建模板后，Agent 修改 JSON 副本并再次校验。几何预览只展示区域和辅助文字，不能当作机器 SVG。使用语义字段时，从 \code{inspect-content} 输出提取 \code{slot_request} 草稿，填入实际字段与本次返回的源码块编号，另存为请求文件。
+
+\par\noindent\begin{minipage}{\linewidth}
+\begin{Source}
+inkstruct document template bind report.inkdoc --template layout.json --bindings request.json --output bound.inkdoc
+inkstruct document template validate-document bound.inkdoc
+inkstruct document render bound.inkdoc --plotter --optimize-paths --output machine-output
+\end{Source}
+\end{minipage}\par\medskip
+请求中的项目哈希与节点编号来自同一次检查，不能猜测。绑定请求会\textbf{全部替换}已有绑定，要保留的项也必须列出；未列出的块返回正文流。项目在检查后发生变化，应重新读取并生成请求。
+
+没有语义字段的模板可使用返回的普通 \code{binding_request}。两种请求不能随意拼接字段。存在错误时先修正，再保存新项目；不可书写的位图即使内容适配通过，也仍不能机器导出。
+
+\section{检查补采需求}
+\par\noindent\begin{minipage}{\linewidth}
+\begin{Source}
+inkstruct document resources report.inkdoc --capture-csv missing-symbols.csv
+\end{Source}
+\end{minipage}\par\medskip
+原生项目继承内嵌资源与公式构件来源。报告分开列出可采集符号、汉字和其他不支持缺口，符号 CSV 每字 5 次。这个命令只读检查资源，不修改项目，也不验证纸面几何或根号能否识别。补充资源后需重新试排。
+
+\section{交付与复核}
+Agent 应交付修改后的模板 JSON、新 \code{.inkdoc}、当前预览及适配报告；要求机器输出时另附逐页 SVG 和清单。说明仍缺的资源、校准状态及没有完成的验证。输入项目、原始样本和参考 PDF 保留不变。
+

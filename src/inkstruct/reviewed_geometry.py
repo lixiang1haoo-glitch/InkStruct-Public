@@ -25,7 +25,7 @@ def geometry_identity(glyph):
 class ReviewedGeometryProcessor:
     def __init__(self, baseline, repository, config_path, graphics_path, dictionary_path):
         self.baseline, self.repository = baseline, repository
-        self.config = json.loads(Path(config_path).read_text())
+        self.config = json.loads(Path(config_path).read_text(encoding='utf-8'))
         if self.config['policy'] != REVIEWED_POLICY:
             raise ValueError('unsupported reviewed geometry policy')
         self.identity = {'policy': REVIEWED_POLICY, 'config_sha256': sha256_file(Path(config_path)),
@@ -35,7 +35,7 @@ class ReviewedGeometryProcessor:
         targets = {r['character'] for r in self.config['outlines']}
         def records(path):
             found = {}
-            with Path(path).open() as stream:
+            with Path(path).open(encoding='utf-8') as stream:
                 for line in stream:
                     record = json.loads(line)
                     if record['character'] in targets:
