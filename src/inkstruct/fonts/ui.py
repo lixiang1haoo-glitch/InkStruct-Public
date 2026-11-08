@@ -405,7 +405,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 catalog = SYMBOL_GROUPS[key][1] if key in SYMBOL_GROUPS else ""
                 known = self.available_members.get(key, set()) | set(available) | set(by_char)
                 members = tuple(dict.fromkeys((*catalog, *sorted(known))))
-                row.setText(0, GROUPS[key] + (" · " + character_preview(members, 12) if members else ""))
+                row.setText(0, GROUPS[key] + (" · " + character_preview(key, members) if members else ""))
                 row.setToolTip(0, " ".join(members))
                 for col, kind in enumerate(origins, 1):
                     counts = [v[kind] for v in available.values() if v[kind]]

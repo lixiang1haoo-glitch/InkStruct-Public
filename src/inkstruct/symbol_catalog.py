@@ -17,6 +17,15 @@ SYMBOL_GROUPS = {
     "operators": ("数学符号", "+−×÷=≠≈≡±∓<>≤≥∞∑∏∫∮√∂∇∈∉∋⊂⊃⊆⊇∪∩∅∀∃¬∧∨⇒⇔→←↔↑↓∝∠⊥∥·⋅/*∗∶∘ℏ", "unspecified"),
 }
 
+PREVIEWS = {
+    "latin_upright": "A B C … Z / a b c … z",
+    "latin_italic": "A B C … Z / a b c … z",
+    "greek": "Α Β Γ … Ω / α β γ … ω",
+    "brackets": "() [] {} 【】 《》 〈〉 「」 『』 | …",
+    "punctuation": ", . ? ! 。 、 “ ” - – — … ～",
+    "operators": "+ − × ÷ = ∑ ∫ √ ∈ ∗ ℏ …",
+}
+
 
 def symbol_group(character, style="unspecified"):
     if len(character) != 1:
@@ -32,5 +41,5 @@ def capture_groups():
             for key, (label, characters, style) in SYMBOL_GROUPS.items()}
 
 
-def character_preview(characters, limit=16):
-    return " ".join(characters[:limit]) + (" …" if len(characters) > limit else "")
+def character_preview(group, characters, limit=12):
+    return PREVIEWS.get(group) or (" ".join(characters[:limit]) + (" …" if len(characters) > limit else ""))

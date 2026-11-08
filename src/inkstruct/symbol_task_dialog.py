@@ -71,7 +71,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             self.groups[key] = check
             header.addWidget(check)
             members = SYMBOL_GROUPS[key][1]
-            preview = QtWidgets.QLabel(character_preview(members, 12))
+            preview = QtWidgets.QLabel(character_preview(key, members))
             preview.setTextFormat(QtCore.Qt.TextFormat.PlainText)
             preview.setToolTip(" ".join(members) + "\n同形的全角和半角字符只录一项。")
             header.addWidget(preview, 1)
