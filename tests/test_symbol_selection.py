@@ -248,10 +248,11 @@ def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_pat
     assert expected["latin_italic", "reuse", "A"] == 1
     assert not any(key[2] == "℃" for key in expected)
     assert any(item["target"] == "℃" and "C" in item["reason"] for item in review["issues"])
-    assert ("规则合成", "℃", "句号 。与英文正体 C", "已启用", "缺少可用的英文正体 C") in review["rules"]
-    assert any(row[:2] == ("确认复用", "A（英文斜体）") and row[3:] == ("已确认", "本次生效 · 1 份候选")
-               for row in review["rules"])
-    assert any(row[:2] == ("同形共用", "， ↔ ,") and row[4].startswith("本次生效") for row in review["rules"])
+    rules = {row.key: row for row in review["rules"]}
+    assert rules["constructed", "℃"].enabled and rules["constructed", "℃"].outcome == "缺少可用的英文正体 C"
+    borrowed = rules["latin_italic", "A"]
+    assert borrowed.enabled and borrowed.donor_status == "采集任务已确认" and "1 份候选" in borrowed.outcome
+    assert rules["shared", "，"].outcome.startswith("本次生效")
 
     root = tmp_path / "fonts"
     root.mkdir()
@@ -314,13 +315,13 @@ def test_auto_review_discards_stale_failures_and_keeps_group_choices(app, tmp_pa
     entered, release = Event(), Event()
     real_review = ui.review_selection
 
-    def review(writer, run, symbols, name, groups):
+    def review(writer, run, symbols, name, groups, **kwargs):
         if name == "迟到的旧请求":
             entered.set()
             if not release.wait(5):
                 raise ValueError("test did not release the worker")
             raise ValueError("过期错误")
-        return real_review(writer, run, symbols, name, groups)
+        return real_review(writer, run, symbols, name, groups, **kwargs)
 
     def wait(predicate):
         end = monotonic() + 5
@@ -361,3 +362,55 @@ def test_auto_review_discards_stale_failures_and_keeps_group_choices(app, tmp_pa
     assert "punctuation" not in library.review_groups
     library.publication.reject()
     QtCore.QThreadPool.globalInstance().waitForDone()
+
+
+@pytest.mark.parametrize("archive", [False, True])
+def test_publication_rules_toggle_and_bind_a_previewed_donor(tmp_path, archive):
+    from inkstruct.fonts.library import publish_font
+    from inkstruct.fonts.publication import publication_stamp, review_selection
+    from inkstruct.fonts.publication_rules import DonorChoice, PublicationRules
+
+    root = tmp_path / "collection"
+    samples = root / "samples" / "fixture"
+    captured(samples)
+    donor = captured(samples, "B", sid="source-B")
+    captured(samples, "C", sid="source-C")
+    captured(samples, ",", "unspecified", "comma")
+    captured(samples, "。", "unspecified", "stop")
+    save_config(root, [declaration("greek", "Α")])
+    state = next(root.rglob("state.json"))
+    before = state.read_bytes()
+    source = tmp_path / "collection.zip" if archive else root
+
+    def update_zip():
+        if archive:
+            with zipfile.ZipFile(source, "w") as package:
+                for path in root.rglob("*.json"):
+                    package.write(path, path.relative_to(root).as_posix())
+
+    update_zip()
+    groups = {"latin_upright", "latin_italic", "greek", "punctuation", "units"}
+    args = ("fixture", "", str(source), "rule choices")
+    baseline = review_selection(*args, groups)
+    assert {"，", "℃", "Α"} <= {key[2] for key in baseline["coverage"]}
+    digest, ink = baseline["rule_evidence"].donors["B"]["source-B"]
+    assert ink["character"] == "B"
+    rules = PublicationRules(frozenset({("shared", "，"), ("constructed", "℃"), ("greek", "Α")}),
+                             (DonorChoice(("latin_italic", "B"), "source-B", digest),))
+    review = review_selection(*args, groups, rules=rules)
+    expected = review["coverage"]
+    assert not {"，", "℃", "Α"} & {key[2] for key in expected}
+    assert expected["latin_italic", "reuse", "B"] == 1
+    result = publish_font(tmp_path / "fonts", writer=args[0], run="", symbols=source, name=args[3],
+                          package_kind="user", groups=groups, stamp=publication_stamp(*args[:3]),
+                          expected=expected, progress=lambda _: None, rules=rules)
+    assert not result["difference"] and result["coverage"] == expected
+    font = FontPackage(result["path"], verify_all=True)
+    borrowed = next(s["confirmed_reuse"] for s in font.provenance.values() if "confirmed_reuse" in s)
+    assert borrowed["source_sample_id"] == "source-B" and borrowed["source_sha256"] == digest
+    assert state.read_bytes() == before
+    donor.write_bytes(donor.read_bytes() + b"\n")
+    update_zip()
+    changed = review_selection(*args, groups, rules=rules)
+    assert not changed["coverage"]["latin_italic", "reuse", "B"]
+    assert any(item["target"] == "B" and "笔迹已变化" in item["reason"] for item in changed["issues"])

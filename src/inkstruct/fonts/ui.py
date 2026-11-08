@@ -12,6 +12,7 @@ from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
 from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, generated_batches, publication_stamp,
                           require_publication_stamp, review_selection, rule_rows)
+from .publication_rules import PublicationRules
 
 
 class Signals(QtCore.QObject):
@@ -46,6 +47,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.review_revision = 0
         self.attempted_review = None
         self.group_choices = {}
+        self.rule_settings = PublicationRules()
         self.watch_job = None
         self.review_stamp = None
         self.review_result = None
@@ -99,7 +101,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.publication.setModal(True)
         self.publication.resize(940, 700)
         publication_layout = QtWidgets.QVBoxLayout(self.publication)
-        hint = QtWidgets.QLabel("选择书写者、汉字批次及扩展来源后，清单会自动核对。请勾选要入包的类别并查看缺字。已确认的复用从含任务配置的采集目录或 ZIP 读取。")
+        hint = QtWidgets.QLabel("选择书写者、汉字批次及扩展来源后，清单会自动核对。请勾选要入包的类别并查看缺字。可在规则窗口决定本次启用和供体。")
         hint.setWordWrap(True)
         publication_layout.addWidget(hint)
         group = QtWidgets.QGroupBox("按书写者汇总的待制包清单")
@@ -140,7 +142,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", self.kind)
         self.contents = QtWidgets.QTreeWidget()
-        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "确认复用", "规则合成", "未通过校验"])
+        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "借用已有笔迹", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
         self.contents.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         for column in range(1, self.contents.columnCount()):
@@ -176,9 +178,10 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         layout.addWidget(self.progress)
         self.progress.setWordWrap(True)
         self.writer.textChanged.connect(self.author_chosen)
-        for field in (self.name, self.run, self.symbols):
+        for field in (self.name, self.run):
             field.textChanged.connect(self.invalidate_publication)
-        self.publication.finished.connect(lambda _: self.invalidate_publication())
+        self.symbols.textChanged.connect(self.reset_publication_rules)
+        self.publication.finished.connect(self.reset_publication_rules)
         self.review_timer = QtCore.QTimer(self, interval=150, singleShot=True)
         self.review_timer.timeout.connect(self.recalculate_publication)
         self.watch_timer = QtCore.QTimer(self, interval=1800)
@@ -226,6 +229,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         if writer == self.publication_author:
             return
         self.publication_author = writer
+        self.rule_settings = PublicationRules()
         self.group_choices.clear()
         self.run.clear()
         self.symbols.clear()
@@ -263,6 +267,10 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         return (valid_writer(writer) and bool(run or symbols)
                 and (not run or Path(run).is_dir()) and (not symbols or Path(symbols).exists()))
 
+    def reset_publication_rules(self, *_):
+        self.rule_settings = PublicationRules()
+        self.invalidate_publication()
+
     def invalidate_publication(self, *_):
         self.review_revision += 1
         self.review = self.review_stamp = self.review_result = self.review_groups = None
@@ -287,6 +295,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         revision = self.attempted_review = self.review_revision
         reviewed_stamp = self.review_stamp
         groups = self.selected_publication_groups() if self.review is not None else None
+        rules = self.rule_settings
 
         def work(_):
             stamp = reviewed_stamp
@@ -294,7 +303,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 if stamp is None:
                     stamp = publication_stamp(writer, run, symbols)
                 require_publication_stamp(writer, run, symbols, stamp)
-                result = review_selection(writer, run, symbols, name, groups)
+                result = review_selection(writer, run, symbols, name, groups, rules=rules)
                 require_publication_stamp(writer, run, symbols, stamp)
                 return revision, inputs, stamp, groups, result, "", False
             except Exception as error:  # Carry the request identity with failures too.
@@ -431,40 +440,25 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def show_publication_rules(self):
         if not self.review_result:
             return
-        dialog = QtWidgets.QDialog(self.publication)
-        dialog.setWindowTitle("复用与合成规则")
-        dialog.resize(950, 610)
-        layout = QtWidgets.QVBoxLayout(dialog)
-        note = QtWidgets.QLabel("规则设置与本次结果分别显示。同形共用和规则合成按固定目录启用，"
-                                "确认复用在采集任务中逐项确认。")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        search = QtWidgets.QLineEdit()
-        search.setPlaceholderText("按字符、规则类型或结果筛选")
-        layout.addWidget(search)
-        table = QtWidgets.QTreeWidget()
-        table.setRootIsDecorated(False)
-        table.setHeaderLabels(["规则类型", "目标字符", "依赖来源", "规则设置", "本次结果"])
-        for column in range(4):
-            table.header().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        table.header().setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(table)
+        from .publication_rules_ui import PublicationRulesDialog
+
+        revision = self.review_revision
         result = self.review_result
-        rows = rule_rows(result["coverage"], self.review_groups, result["confirmed"],
-                         result["issues"], bool(self.symbols.text().strip()))
-        for row in rows:
-            item = QtWidgets.QTreeWidgetItem(table, row)
-            item.setToolTip(4, row[4])
-
-        def filter_rows(value):
-            for i, row in enumerate(rows):
-                table.topLevelItem(i).setHidden(value.strip().casefold() not in " ".join(row).casefold())
-
-        search.textChanged.connect(filter_rows)
-        close = QtWidgets.QPushButton("关闭")
-        close.clicked.connect(dialog.accept)
-        layout.addWidget(close)
-        dialog.exec()
+        evidence = result["rule_evidence"]
+        rows = rule_rows(result["coverage"], self.review_groups, evidence, result["issues"],
+                         bool(self.symbols.text().strip()), self.rule_settings)
+        dialog = PublicationRulesDialog(rows, evidence, self.rule_settings, self.publication)
+        accepted = dialog.exec() == QtWidgets.QDialog.Accepted
+        settings = dialog.settings()
+        dialog.deleteLater()
+        if not accepted:
+            return
+        if revision != self.review_revision:
+            self.publication_progress.setText("来源已变化。请重新打开规则窗口核对供体。")
+            return
+        if settings != self.rule_settings:
+            self.rule_settings = settings
+            self.invalidate_publication()
 
     def publication_groups_changed(self, item, column):
         if column != 0 or item.parent() is not None:
@@ -727,11 +721,12 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         writer, run, symbols, name = inputs
         kind, stamp = self.kind.currentData(), self.review_stamp
         groups, expected = self.review_groups, self.review_result["coverage"]
+        rules = self.rule_settings
 
         def work(progress):
             result = publish_font(self.root, writer=writer, run=run, symbols=symbols, name=name,
                                   package_kind=kind, groups=groups, stamp=stamp, expected=expected,
-                                  progress=progress)
+                                  progress=progress, rules=rules)
             stats = result["verification"]
             actual, difference = result["coverage"], result["difference"]
             lines = [f"字体已验证并入库 · {stats['characters']} 字，{stats['candidates']} 份候选"]

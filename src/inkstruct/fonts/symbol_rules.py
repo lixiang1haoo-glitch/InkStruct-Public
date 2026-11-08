@@ -30,7 +30,7 @@ def _bounds(strokes):
             max(p['x'] for p in points), max(p['y'] for p in points))
 
 
-def constructions(records, load, *, diagnostics=None, skip_invalid=False):
+def constructions(records, load, *, diagnostics=None, skip_invalid=False, disabled=frozenset()):
     """Yield (trajectory, metrics, source summary, deterministic construction key)."""
     pools = {}
     for r in records:
@@ -66,7 +66,7 @@ def constructions(records, load, *, diagnostics=None, skip_invalid=False):
         summary['evidence_scope'] = 'explicit reuse/extraction of recorded ink; not an independent target recording'
         return t, m, summary
 
-    if '–' not in pools:
+    if '–' not in pools and '–' not in disabled:
         minus = sources('−')
         if not minus:
             report('–', '缺少可用的数学减号 −')
@@ -74,7 +74,7 @@ def constructions(records, load, *, diagnostics=None, skip_invalid=False):
             original = load(r)[0]
             t, m, s = subset(r, '–', list(range(1, len(original['strokes']) + 1)), 'en-dash-from-minus')
             yield t, m, s, semantic_hash(s['symbol_construction'])
-    if '～' not in pools:
+    if '～' not in pools and '～' not in disabled:
         approximate = sources('≈')
         if not approximate:
             report('～', '缺少可用的双笔约等号 ≈')
@@ -96,7 +96,7 @@ def constructions(records, load, *, diagnostics=None, skip_invalid=False):
                     p['y'] += dy
                 s['symbol_construction']['translation_em'] = [0, dy]
                 yield t, m, s, semantic_hash(s['symbol_construction'])
-    if '℃' not in pools:
+    if '℃' not in pools and '℃' not in disabled:
         circles = sources('。')
         capitals = [r for r in sources('C') if r['letter_style'] == 'upright']
         if not circles:
@@ -156,8 +156,9 @@ def constructions(records, load, *, diagnostics=None, skip_invalid=False):
             m = {**lm, 'advance': lc + transforms[1][2] + 0.08}
             yield t, m, summary, semantic_hash(summary['symbol_construction'])
 
-    yield from _recorded_math_constructions(records, load, diagnostics)
-    yield from _recorded_hbar_constructions(records, load, diagnostics)
+    yield from _recorded_math_constructions(records, load, diagnostics, disabled=disabled)
+    if 'ℏ' not in disabled:
+        yield from _recorded_hbar_constructions(records, load, diagnostics)
 
 
 def _compose_recorded(target, records, affines, rule, axis, *, load, **details):
@@ -220,7 +221,7 @@ def _compose_recorded(target, records, affines, rule, axis, *, load, **details):
     yield trajectory, metrics, summary, semantic_hash([target, construction])
 
 
-def _recorded_math_constructions(records, load, diagnostics):
+def _recorded_math_constructions(records, load, diagnostics, *, disabled=frozenset()):
     """Bounded, deterministic transforms of complete recorded ink, never ideal shapes.
 
     New rules have their own policy identity; existing v1 constructions and old
@@ -260,11 +261,12 @@ def _recorded_math_constructions(records, load, diagnostics):
     def compose(target, records, affines, rule, axis, **details):
         return _compose_recorded(target, records, affines, rule, axis, load=load, **details)
 
-    star_targets = [target for target in ('*', '∗') if target not in pools]
+    star_targets = [target for target in ('*', '∗') if target not in pools and target not in disabled]
     if star_targets:
-        minus = eligible('−', '*/∗', single=True)
+        target_label = '/'.join(star_targets)
+        minus = eligible('−', target_label, single=True)
         if not minus:
-            report('*/∗', 'no-qualified-minus-source')
+            report(target_label, 'no-qualified-minus-source')
         for i in range(len(minus)):
             chosen = [minus[(i + j) % len(minus)] for j in range(3)]
             axis = load(chosen[0])[2].get('capture_guides', {}).get('math_axis_em', .25)
@@ -291,7 +293,7 @@ def _recorded_math_constructions(records, load, diagnostics):
                                    shared_geometry_targets=['*', '∗'])
 
     for target, alternatives, height in (('∶', ('：', ':'), .36), ('∘', ('。',), .18)):
-        if target in pools:
+        if target in pools or target in disabled:
             continue
         chosen = []
         for char in alternatives:

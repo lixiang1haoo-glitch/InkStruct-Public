@@ -89,11 +89,14 @@ def import_font(source, root, progress=lambda message: None, *, workers=None):
     }
 
 
-def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stamp, expected, progress):
+def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stamp, expected, progress, rules=None):
     """Build and fully verify on the library volume before creating its visible entry."""
     from ..generation_workflow import identity, write
     from .importer import build_font
     from .publication import candidate_coverage, require_publication_stamp
+    from .publication_rules import PublicationRules
+
+    rules = rules or PublicationRules()
 
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -115,9 +118,11 @@ def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stam
 
     def record(status, **details):
         try:
-            write(log, {"status": status, "writer": writer, "name": name, "run": run,
-                        "symbols": symbols, "groups": sorted(groups), "timings_s": timings,
-                        "expected": rows(expected), **details})
+            write(log, {"status": status, "writer": writer, "name": name, "run": str(run or ""),
+                        "symbols": str(symbols or ""), "groups": sorted(groups), "timings_s": timings,
+                        "expected": rows(expected), "disabled_rules": sorted(rules.disabled),
+                        "borrowed_donors": [{"target": choice.target, "sample_id": choice.sample_id,
+                                             "sha256": choice.sha256} for choice in rules.donors], **details})
         except OSError:
             return ""
         return str(log)
@@ -131,7 +136,7 @@ def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stam
             selected_symbols = symbols if groups - {"han"} else None
             build_font(staged, writer=writer, name=name, run=run if "han" in groups else None,
                        symbols=selected_symbols, symbol_groups=groups if symbols else None,
-                       package_kind=package_kind, phase=phase, diagnostics=diagnostics,
+                       package_kind=package_kind, phase=phase, diagnostics=diagnostics, rules=rules,
                        progress=lambda message: progress("准备字形 · " + message))
             phase("完整验证")
             font = FontPackage(staged, verify_all=False)

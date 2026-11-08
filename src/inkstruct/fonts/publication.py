@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from ..punctuation import SHARED_PUNCTUATION
 from ..symbol_catalog import SYMBOL_GROUPS, symbol_group
+from .publication_rules import PublicationRules, RuleEvidence, RuleRow
 
 
 GROUPS = {
@@ -31,7 +32,7 @@ STATUS = {
 
 COVERAGE = {
     "generated": "生成字形", "recorded": "独立录制", "shared": "同形共用",
-    "reuse": "已确认复用", "constructed": "规则合成",
+    "reuse": "借用已有笔迹", "constructed": "规则合成",
 }
 
 
@@ -173,7 +174,7 @@ CONSTRUCTION_SOURCES = {
 }
 
 
-def rule_rows(coverage, groups, confirmed, issues, has_symbols):
+def rule_rows(coverage, groups, evidence, issues, has_symbols, rules=PublicationRules()):
     from ..symbol_reuse import reuse_options
 
     def selected(group):
@@ -195,30 +196,45 @@ def rule_rows(coverage, groups, confirmed, issues, has_symbols):
     rows = []
     for full, half in SHARED_PUNCTUATION.items():
         group = symbol_group(full)
+        key = "shared", full
+        enabled = key not in rules.disabled
         active = [f"{target} ← {source} · {coverage[group, 'shared', target]} 份"
                   for target, source in ((full, half), (half, full)) if coverage[group, "shared", target]]
-        if active:
+        if not enabled:
+            result = "本次停用"
+        elif active:
             result = "本次生效 · " + "；".join(active)
         elif selected(group) and all(coverage[group, "recorded", c] for c in (full, half)):
             result = "两边均有独立录制"
         else:
             result = outcome(group, full if not coverage[group, "recorded", full] else half, "shared")
-        rows.append(("同形共用", f"{full} ↔ {half}", "任一侧的有效独立录制", "已启用", result))
+        rows.append(RuleRow(key, "同形共用", f"{full} ↔ {half}", "任一侧的有效独立录制", "—", enabled, result))
+    selected_donors = {choice.target for choice in rules.donors}
     for group, target, source in reuse_options():
-        enabled = (group, target) in confirmed
+        key = group, target
+        confirmed = key in evidence.confirmed
+        enabled = confirmed and key not in rules.disabled
         label = "英文斜体" if group == "latin_italic" else "希腊字母"
         result = outcome(group, target, "reuse")
-        if not enabled and selected(group) and not coverage[group, "recorded", target]:
-            result = "待逐项确认" if has_symbols else "尚未选择扩展来源"
-        rows.append(("确认复用", f"{target}（{label}）", f"{source}（英文正体）",
-                     "已确认" if enabled else "未确认", result))
+        if confirmed and not enabled and not coverage[group, "recorded", target]:
+            result = "本次停用"
+        elif not confirmed and selected(group) and not coverage[group, "recorded", target]:
+            if has_symbols:
+                result = "待选用供体" if evidence.donors.get(source) else "没有可用的正体供体"
+        donor_status = "本次已选用" if key in selected_donors else "采集任务已确认" if confirmed else "未选用"
+        rows.append(RuleRow(key, "借用已有笔迹", f"{target}（{label}）", f"{source}（英文正体）",
+                            donor_status, enabled, result, source))
     for target, sources in CONSTRUCTION_SOURCES.items():
-        rows.append(("规则合成", target, sources, "已启用",
-                     outcome(symbol_group(target), target, "constructed")))
+        key = "constructed", target
+        enabled = key not in rules.disabled
+        result = outcome(symbol_group(target), target, "constructed")
+        if not enabled and not coverage[symbol_group(target), "recorded", target]:
+            result = "本次停用"
+        rows.append(RuleRow(key, "规则合成", target, sources, "—", enabled, result))
     return rows
 
 
-def review_selection(writer, run, symbols, name, groups=None):
+def review_selection(writer, run, symbols, name, groups=None, *, rules=PublicationRules()):
     from ..capture_management import valid_writer
     from ..generation_variants import MAX_CANDIDATES
     from .importer import _read, build_font
@@ -229,9 +245,10 @@ def review_selection(writer, run, symbols, name, groups=None):
     if batch and (not batch["characters"] or batch["status"] in {"running", "preparing", "failed"}):
         raise ValueError("该批次没有可入包的已完成字形，或仍在生成")
     diagnostics = []
-    confirmed = set()
+    evidence = RuleEvidence()
     records, provenance = build_font(None, writer=writer, name=name, symbols=symbols,
-                                     symbol_groups=groups, diagnostics=diagnostics, confirmed_rules=confirmed)
+                                     symbol_groups=groups, diagnostics=diagnostics,
+                                     rules=rules, rule_evidence=evidence)
     coverage = candidate_coverage(records, provenance)
     if batch and (groups is None or "han" in groups):
         for char in batch["characters"]:
@@ -254,9 +271,8 @@ def review_selection(writer, run, symbols, name, groups=None):
             if item["reason"] == "no-qualified-recorded-source":
                 reason += "（冒号 : / ：）" if char == "∶" else "（中文句号 。）"
             issues.append({**item, "group": group, "target": char, "reason": reason})
-    return {"coverage": coverage, "issues": issues, "batch": batch,
-            "confirmed": confirmed,
-            "rules": rule_rows(coverage, groups, confirmed, issues, bool(symbols))}
+    return {"coverage": coverage, "issues": issues, "batch": batch, "rule_evidence": evidence,
+            "rules": rule_rows(coverage, groups, evidence, issues, bool(symbols), rules)}
 
 
 def publication_inventory(writer, run, symbols):

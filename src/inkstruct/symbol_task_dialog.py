@@ -56,7 +56,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             self.repeats.hide()
             form.addRow('每个字符目标份数', QtWidgets.QLabel('按导入字表；空值默认 5 份'))
         layout.addLayout(form)
-        hint = QtWidgets.QLabel('自由组合类别，展开后逐字勾选。只补已有样本不足的份数。未勾选的斜体不自动复用；复用须查看已有笔迹并确认。中英文逗号、问号、括号等共用一次录制。')
+        hint = QtWidgets.QLabel('自由组合类别，展开后逐字勾选。只补已有样本不足的份数。未勾选的斜体不自动复用；复用须选用已有笔迹供体。中英文逗号、问号、括号等共用一次录制。')
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.groups, self.characters, self.panels = {}, {}, {}
@@ -104,7 +104,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             button = QtWidgets.QPushButton(title)
             button.clicked.connect(lambda _, v=checked: self.select_all(v))
             row.addWidget(button)
-        self.reuse_button = QtWidgets.QPushButton('确认复用…')
+        self.reuse_button = QtWidgets.QPushButton('选择借用供体…')
         self.reuse_button.clicked.connect(self.configure_reuse)
         row.addWidget(self.reuse_button)
         layout.addLayout(row)
@@ -263,7 +263,7 @@ class ReuseDialog(QtWidgets.QDialog):
     def __init__(self, available, selected, parent=None):
         super().__init__(parent)
         self.available = available
-        self.setWindowTitle('查看已有笔迹，逐项确认复用')
+        self.setWindowTitle('选择借用供体')
         self.setStyleSheet('QListView::indicator:unchecked { background: transparent; border: 1px solid #8995a5; border-radius: 2px; }')
         self.resize(800, 540)
         layout = QtWidgets.QVBoxLayout(self)
@@ -311,7 +311,7 @@ class ReuseDialog(QtWidgets.QDialog):
         if first == -1:
             layout.addWidget(QtWidgets.QLabel('此作者尚无可复用的英文正体样本。请先录制所需正体字符。'))
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText('确认所勾选的复用关系')
+        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText('确认选用所勾选的供体')
         buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText('取消')
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

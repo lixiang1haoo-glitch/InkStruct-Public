@@ -13,6 +13,7 @@ from pathlib import Path
 from ..assets.glyph_provider import GlyphMetrics, adapt_glyph
 from ..assets.symbol_provider import DEFAULT_SYMBOL_PROFILE, adapt_symbol
 from ..punctuation import CHINESE_PUNCTUATION, POLICY, SHARED_PUNCTUATION, shared_characters
+from .publication_rules import PublicationRules
 from .core import (
     FEATURES,
     FORMAT,
@@ -330,8 +331,8 @@ def make_symbol(raw, value):
     return t, metrics, summary
 
 
-def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rules):
-    from ..symbol_reuse import REUSE_POLICY, declarations
+def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidence):
+    from ..symbol_reuse import REUSE_POLICY, declarations, reuse_options
     from .publication import symbol_group, symbol_input
 
     def selected(group):
@@ -383,7 +384,8 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rule
     for raw, value, style, t, m, s in recorded:
         append(t, m, s, value, sha(raw), style if latin(t["character"]) else "not_applicable")
         for target in shared_characters(t["character"]):
-            if target in direct:
+            full = target if target in SHARED_PUNCTUATION else t["character"]
+            if target in direct or ("shared", full) in rules.disabled:
                 continue
             sharing = {"policy": POLICY, "source_character": t["character"],
                        "source_sample_id": value["sample_id"], "source_sha256": sha(raw)}
@@ -396,11 +398,32 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rule
                    {"shared_punctuation": sharing, "original_sample": value},
                    sha(encoded([POLICY, sha(raw), target])))
 
-    for reuse in declarations(symbols, writer):
+    mappings = {(group, target): source for group, target, source in reuse_options()}
+    choices = {choice.target: choice for choice in rules.donors}
+    if choices.keys() - mappings.keys() or len(choices) != len(rules.donors):
+        raise ValueError("本次选用的笔迹供体不在规则目录内")
+    if evidence is not None:
+        for sid, (raw, value) in by_id.items():
+            char = value["character"]
+            if not latin(char) or value.get("variant", {}).get("letter_style") != "upright":
+                continue
+            try:
+                prepare(sid)
+            except (ValueError, TypeError, KeyError, OverflowError, AttributeError):
+                continue
+            evidence.donors.setdefault(char, {})[sid] = (sha(raw), value)
+
+    reuse_records = [item for item in declarations(symbols, writer)
+                     if (item["group"], item["target"]) not in choices]
+    reuse_records.extend({"group": group, "target": target, "source": mappings[group, target],
+                          "source_style": "upright", "sample_ids": [choice.sample_id], "confirmed": True}
+                         for (group, target), choice in choices.items())
+    for reuse in reuse_records:
         group, target = reuse["group"], reuse["target"]
-        if confirmed_rules is not None:
-            confirmed_rules.add((group, target))
-        if not selected(group):
+        rule = group, target
+        if evidence is not None:
+            evidence.confirmed.add(rule)
+        if not selected(group) or rule in rules.disabled:
             continue
         target_style = "italic" if group == "latin_italic" else "not_applicable"
         capture_style = "italic" if group == "latin_italic" else "unspecified"
@@ -410,8 +433,10 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rule
         for sid in reuse["sample_ids"]:
             try:
                 if sid not in by_id:
-                    raise ValueError("复用来源样本已缺失或已重录，请重新确认复用：" + target)
+                    raise ValueError("借用来源已缺失或已重录，请重新选择供体：" + target)
                 raw, value = by_id[sid]
+                if rule in choices and sha(raw) != choices[rule].sha256:
+                    raise ValueError("借用来源笔迹已变化，请重新选择供体：" + target)
                 if (value["character"] != reuse["source"]
                         or value.get("variant", {}).get("letter_style") != reuse["source_style"]):
                     raise ValueError("复用来源身份或写法不匹配")
@@ -431,7 +456,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rule
 
 def build_font(
     output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
-    symbol_groups=None, diagnostics=None, phase=None, confirmed_rules=None,
+    symbol_groups=None, diagnostics=None, phase=None, rules=PublicationRules(), rule_evidence=None,
 ):
     """Prepare the same candidates for review (output=None) or for packaging."""
     from .publication import symbol_group
@@ -512,7 +537,7 @@ def build_font(
                 )
                 protocol_record = protocol
         if symbols:
-            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, confirmed_rules)
+            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, rules, rule_evidence)
         from .symbol_rules import POLICY as CONSTRUCTION_POLICY
         from .symbol_rules import constructions
 
@@ -522,8 +547,9 @@ def build_font(
             trajectory = trajectories[path] if preview else decode(members[path].read_bytes())
             return trajectory, metrics[cid], provenance[cid]
 
+        disabled = {target for kind, target in rules.disabled if kind == "constructed"}
         for t, m, s, key in constructions(candidates, load_candidate, diagnostics=diagnostics,
-                                          skip_invalid=diagnostics is not None):
+                                          skip_invalid=diagnostics is not None, disabled=disabled):
             style = s['symbol_construction'].get('base_letter_style', 'not_applicable')
             if symbol_groups is not None and symbol_group(t['character'], style) not in symbol_groups:
                 continue
