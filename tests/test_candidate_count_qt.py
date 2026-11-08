@@ -18,7 +18,7 @@ from inkstruct.generation_variants import DEFAULT_CANDIDATES, MAX_CANDIDATES
 from inkstruct.generation_workflow import GenerationWorkflow
 
 GenerationWorkflow.readiness = lambda *args: {
-    'import': True, 'profile': True, 'generate': True, 'message': 'private fixture ready'}
+    'start': True, 'message': 'private fixture ready'}
 calls = []
 def generate(*args, **kwargs):
     calls.append((args, kwargs))
@@ -63,6 +63,8 @@ else:
         assert '只保留 1 份' in f.candidate_hint.text()
     f.method.setCurrentIndex(f.method.findData('v62'))
     assert count.isEnabled() and count.value() == 8
+    from inkstruct.generation_targets import target_manifest
+    f.completed({'message':'已选字表','target_manifest':target_manifest('孔正','孔正')})
     pending = []
     f.submit = lambda function, **kwargs: pending.append(function)
     f.do_generate()

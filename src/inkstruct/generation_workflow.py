@@ -257,14 +257,15 @@ class GenerationWorkflow:
             raise ValueError('当前只有 v6.2 exp 支持同字多候选，其他方法每字保留一份。')
         self.require("start" if preparation is not None else "generate", writer, source, method)
         repository = StructureRepository(self.database)
-        from .generation_targets import target_manifest, validate_targets
+        from .generation_targets import structure_targets, target_manifest, validate_targets
         supported = repository.characters()
-        manifest = target_manifest(''.join(supported) if all_supported else text, supported,
-                                   source={'kind': 'all-supported'} if all_supported else None)
+        manifest = structure_targets(supported) if all_supported else target_manifest(text, supported)
         if targets is not None and not all_supported:
             if targets.get('source', {}).get('kind') == 'builtin-character-sets':
                 from .character_sets import CharacterSets
                 CharacterSets().validate(targets, supported)
+            if targets.get('source', {}).get('kind') == 'all-supported' and targets != structure_targets(supported):
+                raise ValueError('结构库完整字表已变化，请重新选择内置字表')
             validate_targets(targets)
             if targets['requested'] != manifest['requested']:
                 raise ValueError('字表已改变，请重新确认生成目标')

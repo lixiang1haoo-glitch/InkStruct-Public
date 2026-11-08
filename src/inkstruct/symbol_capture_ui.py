@@ -365,11 +365,14 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             if item:
                 info = symbol_info(item.character)
                 from .punctuation import capture_label
-                style = {'upright': ' · 英文正体', 'italic': ' · 英文斜体'}.get(item_letter_style(self.task, item), '')
-                italic = 'italic' if item_letter_style(self.task, item) == 'italic' else 'normal'
+                from .symbol_catalog import SYMBOL_GROUPS, symbol_group
+                style = item_letter_style(self.task, item)
+                key = symbol_group(item.character, style)
+                label = SYMBOL_GROUPS[key][0] if key in SYMBOL_GROUPS else "英文 · 写法未标注"
+                italic = 'italic' if style == 'italic' else 'normal'
                 self.target_label.setStyleSheet(f'font-size: 88px; font-weight: 600; font-style: {italic};')
                 self.identity_label.setText(
-                    f"{capture_label(item.character)} · {info['category']}{style} · {info['codepoint']} · {info['unicode_name']}\n"
+                    f"{capture_label(item.character)} · {label} · {info['codepoint']} · {info['unicode_name']}\n"
                     f"当前 {len(self.canvas.trajectory.strokes)} 笔 · 笔数不限"
                 )
             else:

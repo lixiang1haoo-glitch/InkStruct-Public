@@ -12,6 +12,7 @@ from threading import Event
 
 from PySide6 import QtCore, QtGui, QtWidgets, QtTest
 from inkstruct.desktop import main
+from inkstruct.generation_targets import target_manifest
 from inkstruct.generation_workflow import GenerationWorkflow
 from inkstruct.theme import use_light_theme
 
@@ -46,7 +47,8 @@ window.resize(940, 840)
 window.show()
 page = window.centralWidget()
 page.writer.setText("示例书写者")
-page.text.setText("孔正明木林森山水春秋")
+targets = "孔正明木林森山水春秋"
+page.completed({"message": "已选字表", "target_manifest": target_manifest(targets, targets)})
 panel = page.progress_panel
 button = QtCore.Qt.MouseButton.LeftButton
 assert panel.isHidden()

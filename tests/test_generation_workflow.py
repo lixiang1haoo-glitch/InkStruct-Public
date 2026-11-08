@@ -193,6 +193,7 @@ from pathlib import Path
 import sys,time
 from PySide6 import QtCore, QtWidgets
 from inkstruct.desktop import main
+from inkstruct.generation_targets import target_manifest
 app=QtWidgets.QApplication([])
 w=main(['check'], create_only=True, workspace=Path(sys.argv[1]), database=Path(sys.argv[1])/'no-db')
 f=w.centralWidget()
@@ -200,6 +201,7 @@ assert f.method.count()==3 and f.method.currentData()=='v62'
 assert not f.generate_button.isEnabled()
 assert not hasattr(f,'trajectory_mode') and not hasattr(f,'source_profile')
 assert 'CUDA' not in ''.join(x.text() for x in f.findChildren(QtWidgets.QLabel))
+f.completed({'message':'已选字表','target_manifest':target_manifest('孔正','孔正')})
 f.do_generate()
 end=time.monotonic()+5
 while f.busy and time.monotonic()<end:

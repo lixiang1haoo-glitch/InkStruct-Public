@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 from .punctuation import capture_character
-from .symbol_tasks import CUSTOM_PREFIX, source_configuration
+from .symbol_tasks import CUSTOM_PREFIXES, source_configuration
 
 GREEK_SIMILAR = dict(zip('ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ', 'ABEZHIKMNOPTYX', strict=True))
 REUSE_POLICY = 'confirmed-symbol-reuse-v1'
@@ -67,6 +67,6 @@ def _declarations(payloads, writer):
                 or value.get('writer_id') != writer):
             continue
         source = value.get('source', '')
-        if source.startswith(CUSTOM_PREFIX):
+        if source.startswith(CUSTOM_PREFIXES):
             for record in source_configuration(source)['reuse']:
                 yield validate_reuse(record)

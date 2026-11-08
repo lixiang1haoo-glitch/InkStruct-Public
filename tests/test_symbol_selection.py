@@ -20,7 +20,7 @@ from inkstruct.fonts.importer import build_font
 from inkstruct.layout.blocks import layout_markdown
 from inkstruct.symbol_reuse import inventory
 from inkstruct.symbol_task_dialog import ReuseDialog, SymbolTaskDialog
-from inkstruct.symbol_tasks import CUSTOM_PREFIX, item_letter_style
+from inkstruct.symbol_tasks import CUSTOM_PREFIX, LEGACY_CUSTOM_PREFIX, item_letter_style
 
 
 @pytest.fixture
@@ -63,6 +63,26 @@ def test_individual_selection_no_presets_and_backward_task_styles(app):
     assert item_letter_style(task, task.items[-1]) == 'unspecified'
     assert not json.loads(source[len(CUSTOM_PREFIX):])['reuse']
     dialog.reject()
+
+
+def test_legacy_task_indices_and_reuse_are_preserved_by_new_catalog(tmp_path):
+    from inkstruct.fonts.publication import symbol_group
+    from inkstruct.symbol_reuse import declarations
+
+    source = LEGACY_CUSTOM_PREFIX + json.dumps({
+        'groups': ['operators', 'chinese_punctuation', 'latin_italic', 'punctuation'],
+        'reuse': [declaration()],
+    })
+    task = CollectionTask.create('old', source, 'fixture', [('-', 1, 0), ('【', 1, 1), ('B', 1, 2), ('%', 1, 3)])
+    repo = TaskRepository(tmp_path)
+    repo.save(task)
+    restored = repo.load(repo.path_for(task.task_id))
+    assert restored.to_dict() == task.to_dict()
+    assert [item_letter_style(restored, item) for item in restored.items] == [
+        'unspecified', 'unspecified', 'italic', 'unspecified']
+    assert list(declarations(tmp_path, 'fixture')) == [declaration()]
+    assert [symbol_group(c) for c in '-−【％℃ℏ§'] == [
+        'punctuation', 'operators', 'brackets', 'units', 'units', 'operators', 'other']
 
 
 def test_confirm_cancel_preview_and_only_missing_counts(app, tmp_path):
@@ -217,7 +237,7 @@ def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_pat
     captured(samples, ",", "unspecified", "comma")
     save_config(source, [declaration(), declaration("greek", "Α", ids=["missing"])])
     args = ("fixture", "", str(source), "same-name")
-    groups = {"latin_upright", "latin_italic", "chinese_punctuation", "punctuation", symbol_group("℃"), "greek"}
+    groups = {"latin_upright", "latin_italic", "punctuation", symbol_group("℃"), "greek"}
     all_coverage = review_selection(*args, groups)
     assert any(key[1:] == ("constructed", "℃") for key in all_coverage["coverage"])
     assert all_coverage["coverage"]["punctuation", "shared", "，"] == 1
@@ -228,6 +248,10 @@ def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_pat
     assert expected["latin_italic", "reuse", "A"] == 1
     assert not any(key[2] == "℃" for key in expected)
     assert any(item["target"] == "℃" and "C" in item["reason"] for item in review["issues"])
+    assert ("规则合成", "℃", "句号 。与英文正体 C", "已启用", "缺少可用的英文正体 C") in review["rules"]
+    assert any(row[:2] == ("确认复用", "A（英文斜体）") and row[3:] == ("已确认", "本次生效 · 1 份候选")
+               for row in review["rules"])
+    assert any(row[:2] == ("同形共用", "， ↔ ,") and row[4].startswith("本次生效") for row in review["rules"])
 
     root = tmp_path / "fonts"
     root.mkdir()

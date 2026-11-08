@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .punctuation import CHINESE_PUNCTUATION, SHARED_PUNCTUATION, capture_character
+from .symbol_catalog import SYMBOL_GROUPS, symbol_group
 
 CATALOG = {
     "数字": string.digits,
@@ -27,7 +28,8 @@ CATALOG = {
     "中英共用标点": ''.join(SHARED_PUNCTUATION),
     "英文引号": '\"\'',
 }
-CHARACTERS = "".join(CATALOG.values())
+CHARACTERS = "".join(dict.fromkeys("".join(CATALOG.values()) +
+                                   "".join(chars for _, chars, _ in SYMBOL_GROUPS.values())))
 CAPTURE_CHARACTERS = ''.join(dict.fromkeys(capture_character(c) for c in CHARACTERS))
 FRAME = {
     "version": "symbol_guides_v1",
@@ -56,9 +58,10 @@ def scaled_frame(percent: int = 100) -> dict:
 
 
 def symbol_info(character: str) -> dict:
-    group = next((k for k, v in CATALOG.items() if character in v and len(character) == 1), None)
-    if group is None:
+    key = symbol_group(character)
+    if key == "other":
         raise ValueError(f"不支持的单字符：{character!r}；请选择字母与符号字表中的字符")
+    group = SYMBOL_GROUPS[key][0] if key in SYMBOL_GROUPS else "英文字母"
     math_class = "ordinary"
     if character in "+−-×÷±∓∪∩∧∨·⋅":
         math_class = "binary"

@@ -6,11 +6,12 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from ..symbol_catalog import SYMBOL_GROUPS, character_preview
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
 from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, generated_batches, publication_stamp,
-                          require_publication_stamp, review_selection)
+                          require_publication_stamp, review_selection, rule_rows)
 
 
 class Signals(QtCore.QObject):
@@ -139,7 +140,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", self.kind)
         self.contents = QtWidgets.QTreeWidget()
-        self.contents.setHeaderLabels(["加入 / 类别", "独立录制", "中英文共用", "已确认复用", "规则合成", "未通过校验"])
+        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "确认复用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
         self.contents.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         for column in range(1, self.contents.columnCount()):
@@ -148,7 +149,12 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         form.addRow(self.contents)
         self.coverage_summary = QtWidgets.QLabel("列中数字为字符数 / 候选份数。展开类别查看字符与诊断。")
         self.coverage_summary.setWordWrap(True)
-        form.addRow(self.coverage_summary)
+        coverage_row = QtWidgets.QHBoxLayout()
+        coverage_row.addWidget(self.coverage_summary, 1)
+        self.rules_button = QtWidgets.QPushButton("复用与合成规则…")
+        self.rules_button.clicked.connect(self.show_publication_rules)
+        coverage_row.addWidget(self.rules_button)
+        form.addRow(coverage_row)
         b = QtWidgets.QPushButton("制作并加入字体库")
         self.build_button = b
         b.setProperty("inkRole", "primary")
@@ -334,13 +340,16 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
 
     def create_publication_rows(self, result):
         available = {group for group, _, _ in result["coverage"]}
+        self.available_members = {}
+        for group, _, char in result["coverage"]:
+            self.available_members.setdefault(group, set()).add(char)
         invalid = {item["group"] for item in result["issues"] if item.get("invalid")}
         with QtCore.QSignalBlocker(self.contents):
             self.contents.clear()
             for key, label in {"han": "汉字", **GROUPS}.items():
                 row = QtWidgets.QTreeWidgetItem(self.contents, [label])
                 row.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
-                if key in available or key in invalid:
+                if key in available or key in invalid or (key in SYMBOL_GROUPS and self.symbols.text().strip()):
                     checked = self.group_choices.get(key, key in available and key not in invalid)
                     row.setCheckState(0, QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
                 else:
@@ -355,17 +364,21 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.batch_summary.setVisible(external)
 
     def show_publication_coverage(self, result):
-        from ..symbol_tasks import TASK_GROUPS
+        from collections import Counter, defaultdict
 
         coverage, issues = result["coverage"], result["issues"]
+        by_group = defaultdict(dict)
+        for (group, kind, char), count in coverage.items():
+            by_group[group].setdefault(char, Counter())[kind] += count
+        origins = ("recorded", "shared", "reuse", "constructed")
 
         def details(row, label, characters):
-            chars = sorted(set(characters))
+            chars = list(characters)
             for i in range(0, len(chars), 24):
-                text = " ".join(chars[i:i + 24])
-                child = QtWidgets.QTreeWidgetItem(row, [label + " · " + text])
+                text = label + " · " + " ".join(chars[i:i + 24])
+                child = QtWidgets.QTreeWidgetItem(row, [text])
                 child.setFirstColumnSpanned(True)
-                child.setToolTip(0, label + " · " + text)
+                child.setToolTip(0, text)
 
         with QtCore.QSignalBlocker(self.contents):
             for i in range(self.contents.topLevelItemCount()):
@@ -373,37 +386,85 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 key = row.data(0, QtCore.Qt.ItemDataRole.UserRole)
                 row.takeChildren()
                 checked = key in self.review_groups
-                for column, kind in enumerate(("recorded", "shared", "reuse", "constructed"), 1):
-                    counts = {char: value for (group, origin, char), value in coverage.items()
-                              if group == key and origin == kind}
-                    row.setText(column, f"{len(counts)} / {sum(counts.values())}" if checked else "—")
-                    details(row, COVERAGE[kind], counts)
-                group_issues = [item for item in issues if item["group"] == key]
-                if not checked:
-                    group_issues = self.unselected_issues.get(key, [])
+                available = by_group[key]
+                if key == "han":
+                    row.setText(0, "汉字")
+                    row.setText(5, "制包时核验" if checked else "—")
+                    batch = result["batch"]
+                    if batch:
+                        if checked:
+                            row.setText(0, f"汉字 · 生成 {len(available)} 字 / {sum(v['generated'] for v in available.values())} 份")
+                        details(row, "已完成范围", batch["characters"])
+                        details(row, "失败", [item["character"] for item in batch["failed"]])
+                        details(row, "未完成", batch["pending"])
+                    continue
+                group_issues = [item for item in issues if item["group"] == key] if checked else self.unselected_issues.get(key, [])
+                by_char = defaultdict(list)
+                for item in group_issues:
+                    by_char[item["target"]].append(item)
+                catalog = SYMBOL_GROUPS[key][1] if key in SYMBOL_GROUPS else ""
+                known = self.available_members.get(key, set()) | set(available) | set(by_char)
+                members = tuple(dict.fromkeys((*catalog, *sorted(known))))
+                row.setText(0, GROUPS[key] + (" · " + character_preview(members, 12) if members else ""))
+                row.setToolTip(0, " ".join(members))
+                for col, kind in enumerate(origins, 1):
+                    counts = [v[kind] for v in available.values() if v[kind]]
+                    row.setText(col, f"{len(counts)} / {sum(counts)}" if checked else "—")
                 invalid = [item for item in group_issues if item.get("invalid")]
                 row.setText(5, f"{len({item['target'] for item in invalid})} / {len(invalid)}" if invalid else "—")
-                for item in group_issues:
-                    text = f"{item['target']} · {item['reason']}"
-                    if item.get("source"):
-                        text += f" · {item['source']}"
-                    child = QtWidgets.QTreeWidgetItem(row, [text])
-                    child.setFirstColumnSpanned(True)
-                    child.setToolTip(0, text)
-                covered = {char for group, _, char in coverage if group == key}
-                if checked and key in TASK_GROUPS:
-                    details(row, "缺字", set(TASK_GROUPS[key][1]) - covered)
-                if key == "han" and result["batch"]:
-                    batch = result["batch"]
-                    generated = sum(v for k, v in coverage.items() if k[0] == "han")
-                    row.setText(0, f"汉字 · 生成 {len(covered)} 字 / {generated} 份" if checked else "汉字")
-                    row.setText(1, "—")
-                    row.setText(5, "制包时核验" if checked else "—")
-                    details(row, "已完成范围", batch["characters"])
-                    details(row, "失败", [item["character"] for item in batch["failed"]])
-                    details(row, "未完成", batch["pending"])
+                for char in members:
+                    counts = available.get(char, Counter())
+                    problems = by_char[char]
+                    failed = sum(bool(item.get("invalid")) for item in problems)
+                    selectable = row.flags() & QtCore.Qt.ItemFlag.ItemIsUserCheckable
+                    status = ("未勾选" if not checked and selectable else f"可入包 · {sum(counts.values())} 份"
+                              if counts else "未通过校验" if failed else "缺失")
+                    child = QtWidgets.QTreeWidgetItem(row, [f"{char} · U+{ord(char):04X} · {status}",
+                        *(str(counts[k]) if counts[k] else "—" for k in origins), str(failed) if failed else "—"])
+                    if problems:
+                        child.setToolTip(0, "\n".join(item["reason"] +
+                            (f" · {item['source']}" if item.get("source") else "") for item in problems))
         chars = len({key[2] for key in coverage})
-        self.coverage_summary.setText(f"预计入包 {chars} 字 · {sum(coverage.values())} 份候选。列中为字符数 / 份数。展开查看缺字和来源诊断。")
+        self.coverage_summary.setText(f"预计入包 {chars} 个字符 · {sum(coverage.values())} 份候选。"
+                                      "类别行显示字符数 / 候选份数，展开可查看每个字符。")
+
+    def show_publication_rules(self):
+        if not self.review_result:
+            return
+        dialog = QtWidgets.QDialog(self.publication)
+        dialog.setWindowTitle("复用与合成规则")
+        dialog.resize(950, 610)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        note = QtWidgets.QLabel("规则设置与本次结果分别显示。同形共用和规则合成按固定目录启用，"
+                                "确认复用在采集任务中逐项确认。")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        search = QtWidgets.QLineEdit()
+        search.setPlaceholderText("按字符、规则类型或结果筛选")
+        layout.addWidget(search)
+        table = QtWidgets.QTreeWidget()
+        table.setRootIsDecorated(False)
+        table.setHeaderLabels(["规则类型", "目标字符", "依赖来源", "规则设置", "本次结果"])
+        for column in range(4):
+            table.header().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        table.header().setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(table)
+        result = self.review_result
+        rows = rule_rows(result["coverage"], self.review_groups, result["confirmed"],
+                         result["issues"], bool(self.symbols.text().strip()))
+        for row in rows:
+            item = QtWidgets.QTreeWidgetItem(table, row)
+            item.setToolTip(4, row[4])
+
+        def filter_rows(value):
+            for i, row in enumerate(rows):
+                table.topLevelItem(i).setHidden(value.strip().casefold() not in " ".join(row).casefold())
+
+        search.textChanged.connect(filter_rows)
+        close = QtWidgets.QPushButton("关闭")
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close)
+        dialog.exec()
 
     def publication_groups_changed(self, item, column):
         if column != 0 or item.parent() is not None:
@@ -474,6 +535,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         idle = self.job is None and self.review_job is None
         self.build_button.setEnabled(idle and self.review_result is not None and bool(self.name.text().strip())
                                      and bool(self.review_result["coverage"]))
+        self.rules_button.setEnabled(idle and self.review_result is not None)
         self.publication_fields.setEnabled(self.job is None)
         self.contents.setEnabled(self.review is not None and self.job is None)
 

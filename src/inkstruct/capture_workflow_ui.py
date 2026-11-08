@@ -514,7 +514,7 @@ class CaptureLifecycleMixin:
         from handwriting_collector.tasks import CollectionTask, TaskRepository
 
         from .resource_catalog import atomic_json
-        from .symbol_tasks import CUSTOM_PREFIX, source_configuration
+        from .symbol_tasks import CUSTOM_PREFIXES, source_configuration
         repository = TaskRepository(entry['root'])
         if action == 'rename':
             name, ok = QtWidgets.QInputDialog.getText(self, '修改任务名称', '新名称：', text=entry['task'].name)
@@ -566,10 +566,11 @@ class CaptureLifecycleMixin:
             key = item.character, item.source_index
             counts[key] = counts.get(key, 0) + 1
         source = entry['task'].source
-        if source.startswith(CUSTOM_PREFIX):
+        if source.startswith(CUSTOM_PREFIXES):
             config = source_configuration(source)
             config['reuse'] = []
-            source = CUSTOM_PREFIX + json.dumps(config, separators=(',', ':'))
+            prefix = next(prefix for prefix in CUSTOM_PREFIXES if source.startswith(prefix))
+            source = prefix + json.dumps(config, separators=(',', ':'))
         task = CollectionTask.create(name.text().strip(), source, picker.text(), [(c,n,index) for (c,index),n in counts.items()])
         path = repository.path_for(task.task_id)
         path.parent.mkdir(parents=True, exist_ok=False)

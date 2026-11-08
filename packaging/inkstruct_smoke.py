@@ -1177,7 +1177,16 @@ def main():
     assert not workflow.generate_button.isEnabled()
     workflow.writer.setText(args.writer)
     workflow.samples.setText(str(args.samples))
-    workflow.text.setText("人物理羝羚而铜伯攣盼⺼")
+    target_text = "人物理羝羚而铜伯攣盼⺼"
+    target_file = out / "generation-targets.txt"
+    target_file.write_text(target_text, encoding="utf-8")
+    picker = QtWidgets.QFileDialog.getOpenFileName
+    try:
+        QtWidgets.QFileDialog.getOpenFileName = lambda *args: (str(target_file), "")
+        workflow.target_file_button.click()
+        wait(lambda: not workflow.busy and workflow.target_manifest is not None)
+    finally:
+        QtWidgets.QFileDialog.getOpenFileName = picker
     from inkstruct.assets.resolver import AssetResolver
     from inkstruct.document.editing import SourceSession
     generation_reports = {}
@@ -1206,7 +1215,7 @@ def main():
         font = FontPackage(made)
         assert font.verify()["characters"] == 11
         resolver = AssetResolver(embedded=font.glyphs())
-        result = layout_markdown(parse_markdown(SourceSession(workflow.text.text())), resolver)
+        result = layout_markdown(parse_markdown(SourceSession(target_text)), resolver)
         assert result.plotter_exportable, result.diagnostics
         generation_reports[method] = {"run": str(run), "font": font.verify(), "layout": True,
                                       "warnings": resolver.usage_warnings()}

@@ -3,27 +3,15 @@
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
-from unicodedata import category
-
-from ..punctuation import capture_character
-from ..symbol_tasks import TASK_GROUPS
+from ..punctuation import SHARED_PUNCTUATION
+from ..symbol_catalog import SYMBOL_GROUPS, symbol_group
 
 
 GROUPS = {
-    **{key: label for key, (label, _, _) in TASK_GROUPS.items()},
-    "latin_unspecified": "英文（旧录制，未注明正斜体）",
-    "other": "其他扩展字符",
+    **{key: label for key, (label, _, _) in SYMBOL_GROUPS.items()},
+    "latin_unspecified": "英文 · 写法未标注",
+    "other": "未归类的已有字符",
 }
-
-
-def symbol_group(character, style="unspecified"):
-    character = capture_character(character)
-    for key, (_, characters, declared_style) in TASK_GROUPS.items():
-        if character in characters and (declared_style == "unspecified" or style == declared_style):
-            return key
-    if character in TASK_GROUPS["latin_upright"][1]:
-        return "latin_unspecified"
-    return "punctuation" if category(character).startswith("P") else "other"
 
 
 def symbol_input(path, writer):
@@ -42,7 +30,7 @@ STATUS = {
 }
 
 COVERAGE = {
-    "generated": "生成字形", "recorded": "独立录制", "shared": "中英文共用",
+    "generated": "生成字形", "recorded": "独立录制", "shared": "同形共用",
     "reuse": "已确认复用", "constructed": "规则合成",
 }
 
@@ -173,6 +161,62 @@ CONSTRUCTION_DETAILS = {
     "minus-has-no-horizontal-extent": "减号没有水平长度",
 }
 
+CONSTRUCTION_SOURCES = {
+    "–": "数学减号 −",
+    "～": "双笔约等号 ≈（取其中一笔）",
+    "℃": "句号 。与英文正体 C",
+    "*": "单笔数学减号 −",
+    "∗": "单笔数学减号 −",
+    "∶": "全角冒号 ：或半角冒号 :",
+    "∘": "句号 。",
+    "ℏ": "录制小写 h 与单笔 − 或 -",
+}
+
+
+def rule_rows(coverage, groups, confirmed, issues, has_symbols):
+    from ..symbol_reuse import reuse_options
+
+    def selected(group):
+        return groups is None or group in groups
+
+    def outcome(group, target, kind):
+        if not selected(group):
+            return "目标类别未勾选"
+        if coverage[group, "recorded", target]:
+            return "独立录制优先"
+        if count := coverage[group, kind, target]:
+            return f"本次生效 · {count} 份候选"
+        if not has_symbols:
+            return "尚未选择扩展来源"
+        reasons = dict.fromkeys(item["reason"] for item in issues
+                                if item["group"] == group and item["target"] == target)
+        return "；".join(reasons) if reasons else "缺少可用来源"
+
+    rows = []
+    for full, half in SHARED_PUNCTUATION.items():
+        group = symbol_group(full)
+        active = [f"{target} ← {source} · {coverage[group, 'shared', target]} 份"
+                  for target, source in ((full, half), (half, full)) if coverage[group, "shared", target]]
+        if active:
+            result = "本次生效 · " + "；".join(active)
+        elif selected(group) and all(coverage[group, "recorded", c] for c in (full, half)):
+            result = "两边均有独立录制"
+        else:
+            result = outcome(group, full if not coverage[group, "recorded", full] else half, "shared")
+        rows.append(("同形共用", f"{full} ↔ {half}", "任一侧的有效独立录制", "已启用", result))
+    for group, target, source in reuse_options():
+        enabled = (group, target) in confirmed
+        label = "英文斜体" if group == "latin_italic" else "希腊字母"
+        result = outcome(group, target, "reuse")
+        if not enabled and selected(group) and not coverage[group, "recorded", target]:
+            result = "待逐项确认" if has_symbols else "尚未选择扩展来源"
+        rows.append(("确认复用", f"{target}（{label}）", f"{source}（英文正体）",
+                     "已确认" if enabled else "未确认", result))
+    for target, sources in CONSTRUCTION_SOURCES.items():
+        rows.append(("规则合成", target, sources, "已启用",
+                     outcome(symbol_group(target), target, "constructed")))
+    return rows
+
 
 def review_selection(writer, run, symbols, name, groups=None):
     from ..capture_management import valid_writer
@@ -185,8 +229,9 @@ def review_selection(writer, run, symbols, name, groups=None):
     if batch and (not batch["characters"] or batch["status"] in {"running", "preparing", "failed"}):
         raise ValueError("该批次没有可入包的已完成字形，或仍在生成")
     diagnostics = []
+    confirmed = set()
     records, provenance = build_font(None, writer=writer, name=name, symbols=symbols,
-                                     symbol_groups=groups, diagnostics=diagnostics)
+                                     symbol_groups=groups, diagnostics=diagnostics, confirmed_rules=confirmed)
     coverage = candidate_coverage(records, provenance)
     if batch and (groups is None or "han" in groups):
         for char in batch["characters"]:
@@ -209,7 +254,9 @@ def review_selection(writer, run, symbols, name, groups=None):
             if item["reason"] == "no-qualified-recorded-source":
                 reason += "（冒号 : / ：）" if char == "∶" else "（中文句号 。）"
             issues.append({**item, "group": group, "target": char, "reason": reason})
-    return {"coverage": coverage, "issues": issues, "batch": batch}
+    return {"coverage": coverage, "issues": issues, "batch": batch,
+            "confirmed": confirmed,
+            "rules": rule_rows(coverage, groups, confirmed, issues, bool(symbols))}
 
 
 def publication_inventory(writer, run, symbols):

@@ -330,7 +330,7 @@ def make_symbol(raw, value):
     return t, metrics, summary
 
 
-def _append_symbols(writer, symbols, groups, append, diagnostics):
+def _append_symbols(writer, symbols, groups, append, diagnostics, confirmed_rules):
     from ..symbol_reuse import REUSE_POLICY, declarations
     from .publication import symbol_group, symbol_input
 
@@ -398,6 +398,8 @@ def _append_symbols(writer, symbols, groups, append, diagnostics):
 
     for reuse in declarations(symbols, writer):
         group, target = reuse["group"], reuse["target"]
+        if confirmed_rules is not None:
+            confirmed_rules.add((group, target))
         if not selected(group):
             continue
         target_style = "italic" if group == "latin_italic" else "not_applicable"
@@ -429,7 +431,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics):
 
 def build_font(
     output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
-    symbol_groups=None, diagnostics=None, phase=None,
+    symbol_groups=None, diagnostics=None, phase=None, confirmed_rules=None,
 ):
     """Prepare the same candidates for review (output=None) or for packaging."""
     from .publication import symbol_group
@@ -510,7 +512,7 @@ def build_font(
                 )
                 protocol_record = protocol
         if symbols:
-            _append_symbols(writer, symbols, symbol_groups, append, diagnostics)
+            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, confirmed_rules)
         from .symbol_rules import POLICY as CONSTRUCTION_POLICY
         from .symbol_rules import constructions
 

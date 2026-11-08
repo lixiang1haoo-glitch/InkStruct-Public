@@ -119,11 +119,6 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             method_row = QtWidgets.QHBoxLayout()
             method_row.addWidget(self.method, 1)
             method_row.addWidget(info)
-            self.text = QtWidgets.QLineEdit("中国书法")
-            self.text.setObjectName("generation_text")
-            self.text.setMaxLength(4_000_000)  # imported lists must never be silently truncated by QLineEdit
-            self.generate_all = QtWidgets.QCheckBox("生成结构库全部汉字")
-            self.generate_all.setToolTip("按本版结构库生成全部汉字。可能耗时较长；可取消，已完成字形仍保留。再次生成会创建新批次。")
             form.addRow("作者", self.writer)
             form.addRow("样本目录", row)
             form.addRow("样本与档案", self.sample_summary)
@@ -132,9 +127,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
             generation_layout = QtWidgets.QVBoxLayout(generation_group)
             generation_form = QtWidgets.QFormLayout()
-            generation_form.addRow("生成内容", self.text)
             target_actions = QtWidgets.QHBoxLayout()
-            self.target_builtin_button = QtWidgets.QPushButton('内置简繁字表…')
+            self.target_builtin_button = QtWidgets.QPushButton('内置字表…')
             self.target_builtin_button.clicked.connect(self.choose_builtin_targets)
             self.target_file_button = QtWidgets.QPushButton('导入字表…')
             self.target_document_button = QtWidgets.QPushButton('从文档提取汉字…')
@@ -145,8 +139,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_current_button.clicked.connect(self.choose_current_document)
             for button in (self.target_builtin_button, self.target_file_button, self.target_document_button, self.target_current_button):
                 target_actions.addWidget(button)
-            generation_form.addRow('', target_actions)
-            generation_form.addRow("", self.generate_all)
+            generation_form.addRow('生成内容', target_actions)
             self.parallelism = QtWidgets.QComboBox()
             self.parallelism.setObjectName('generation_parallelism')
             for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
@@ -169,9 +162,15 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.candidate_hint = QtWidgets.QLabel()
             self.candidate_hint.setWordWrap(True)
             generation_form.addRow("", self.candidate_hint)
-            self.target_summary = QtWidgets.QLabel('直接输入汉字，或导入 UTF-8 TXT / CSV 字表；保留首次出现顺序。')
+            self.target_summary = QtWidgets.QLabel('尚未选择生成内容。自定义字表可导入 UTF-8 TXT 或 CSV。')
             self.target_summary.setWordWrap(True)
-            generation_form.addRow('', self.target_summary)
+            self.target_summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            summary_row = QtWidgets.QHBoxLayout()
+            summary_row.addWidget(self.target_summary, 1)
+            self.target_details_button = QtWidgets.QPushButton("查看清单…")
+            self.target_details_button.clicked.connect(self.show_target_details)
+            summary_row.addWidget(self.target_details_button)
+            generation_form.addRow('', summary_row)
             generation_layout.addLayout(generation_form)
             layout.addWidget(generation_group)
             self.status = QtWidgets.QLabel()
@@ -228,11 +227,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.generation_preparation.connect(self.show_generation_preparation)
             self.writer.textChanged.connect(self.writer_changed)
             self.samples.textChanged.connect(self.manual_sample_source)
-            self.text.textChanged.connect(self.refresh)
             self.method.currentIndexChanged.connect(self.refresh_sample_source)
             self.candidate_limit.valueChanged.connect(self.remember_candidate_limit)
-            self.generate_all.toggled.connect(self.refresh)
-            self.text.textEdited.connect(self.invalidate_targets)
             self.sample_timer = QtCore.QTimer(self, interval=3500)
             self.sample_timer.timeout.connect(self.poll_samples)
             self.sample_timer.start()
@@ -385,14 +381,15 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             if ready["start"] and self.sample_status and self.sample_status.get("changed") and not foreign:
                 status = "开始生成时会先更新样本并建档。"
             self.status.setText("正在处理，请稍候…" if self.busy else self.generation_error or status)
+            targets = self.target_manifest or {}
             self.generate_button.setEnabled(ready["start"] and not foreign and not self.busy
-                and (self.generate_all.isChecked() or bool(self.text.text().strip())))
-            for widget in (self.writer, self.samples, self.browse, self.follow_samples, self.method, self.generate_all):
+                and bool(targets.get("requested")) and not targets["unsupported"])
+            self.target_details_button.setEnabled(bool(targets) and not self.busy)
+            for widget in (self.writer, self.samples, self.browse, self.follow_samples, self.method):
                 widget.setEnabled(not self.busy)
-            self.text.setEnabled(not self.busy and not self.generate_all.isChecked())
             for widget in (self.target_builtin_button, self.target_file_button, self.target_document_button):
-                widget.setEnabled(not self.busy and not self.generate_all.isChecked())
-            self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy and not self.generate_all.isChecked())
+                widget.setEnabled(not self.busy)
+            self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy)
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
             multiple = self.method.currentData() == "v62"
             with QtCore.QSignalBlocker(self.candidate_limit):
@@ -400,11 +397,31 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.candidate_limit.setEnabled(multiple and not self.busy)
             self.update_candidate_hint()
 
-        def invalidate_targets(self):
-            self.generation_error = ""
-            self.target_manifest = None
-            self.target_summary.setText('已编辑为自定义字表；开始前会检查全部目标，不支持字符不会静默跳过。')
-            self.refresh()
+        def show_target_details(self):
+            manifest = self.target_manifest
+            if manifest is None:
+                return
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("生成目标清单")
+            dialog.resize(760, 500)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            summary = QtWidgets.QLabel(self.target_summary.text())
+            summary.setWordWrap(True)
+            summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            layout.addWidget(summary)
+            details = QtWidgets.QPlainTextEdit()
+            details.setReadOnly(True)
+            origin = manifest["source"]
+            missing = origin.get("unsupported_in_structure_library", manifest["unsupported"])
+            requested = origin.get("complete_requested", manifest["requested"])
+            details.setPlainText("实际目标\n" + "".join(manifest["requested"])
+                + ("\n\n结构库不支持\n" + " ".join(f"{c} (U+{ord(c):04X})" if len(c) == 1 else c for c in missing) if missing else "")
+                + ("\n\n原字表完整范围\n" + "".join(requested) if requested != manifest["requested"] else ""))
+            layout.addWidget(details)
+            close = QtWidgets.QPushButton("关闭")
+            close.clicked.connect(dialog.accept)
+            layout.addWidget(close)
+            dialog.exec()
 
         def load_targets(self, function):
             def run():
@@ -491,17 +508,22 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 self.generation_error = ""
                 manifest = value['target_manifest']
                 self.target_manifest = manifest
-                self.text.setText(''.join(manifest['requested']))
-                unsupported = ('；不支持 ' + str(len(manifest['unsupported'])) + ' 项：' +
-                               ' '.join(manifest['unsupported'][:40]) + ('…' if len(manifest['unsupported']) > 40 else '')) if manifest['unsupported'] else ''
-                diagnostics = f"；原文档有 {len(manifest['diagnostics'])} 项解析/字段诊断，未修改原文" if manifest['diagnostics'] else ''
-                self.target_summary.setText(f"去重目标 {len(manifest['requested'])} 字{unsupported}{diagnostics}。仅改变输出目标，仍使用完整作者供体池。")
-                origin = manifest['source']
-                if origin.get('kind') == 'builtin-character-sets':
-                    missing = origin['unsupported_in_structure_library']
-                    self.target_summary.setText('；'.join(e['title'] for e in origin['sets']) +
-                        f"。实际目标 {len(manifest['requested'])} 字；已明确排除结构库不支持的 {len(missing)} 字，完整清单随任务保存。供体池保持完整。")
-                self.target_summary.setToolTip(str(manifest['source']))
+                origin = manifest["source"]
+                kind = origin["kind"]
+                identity = origin.get("identity") or {}
+                title = {"all-supported": "结构库全部汉字",
+                         "custom-file": Path(origin.get("path", "")).name or "导入字表",
+                         "document": Path(identity["path"]).name if identity.get("path") else "从当前排版提取"}.get(kind, "所选字表")
+                missing = manifest["unsupported"]
+                if kind == "builtin-character-sets":
+                    title = "、".join(e["title"] for e in origin["sets"])
+                    missing = origin["unsupported_in_structure_library"]
+                note = ""
+                if missing:
+                    note = (f" · {len(missing)} 项不受支持，不能生成" if manifest["unsupported"]
+                            else f" · 已确认排除 {len(missing)} 项")
+                self.target_summary.setText(f"{title} · 目标 {len(manifest['requested'])} 字{note}")
+                self.target_summary.setToolTip(str(origin.get("path") or identity.get("path") or ""))
             if "output" in value:
                 if value["completed_count"]:
                     self.last_generated_run = value["output"]
@@ -585,19 +607,19 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
         def do_generate(self):
             if self.busy:
                 return
-            values, text, full = self.values(), self.text.text(), self.generate_all.isChecked()
+            targets = self.target_manifest
+            if not targets or not targets["requested"] or targets["unsupported"]:
+                return
+            values, text = self.values(), "".join(targets["requested"])
             workers = self.parallelism.currentData()
             candidate_limit = self.candidate_limit.value() if values[2] == "v62" else 1
-            targets = self.target_manifest
-            if targets and ''.join(targets['requested']) != text:
-                targets = None
             self.cancel_event.clear()
             self.generation_active = True
             self.generation_error = ""
             self.generation_stage = "核对目标"
             self.progress_panel.start()
             self.status.hide()
-            self.submit(lambda: service.generate(*values, text, all_supported=full,
+            self.submit(lambda: service.generate(*values, text,
                 workers=workers, targets=targets, candidate_limit=candidate_limit,
                 progress=self.generation_progress.emit, preparation=self.generation_preparation.emit,
                 cancelled=self.cancel_event.is_set), cancellable=True)
