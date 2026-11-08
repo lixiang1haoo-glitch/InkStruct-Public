@@ -8,7 +8,8 @@ root = Path(SPECPATH).parent
 hidden = ['PySide6.QtTest']
 for package in ('editor', 'document', 'layout', 'math', 'assets', 'scene', 'renderers', 'plotter'):
     hidden += collect_submodules('inkstruct.' + package)
-data = [(str(root / 'packaging/editor_offline/smoke.py'), '.')]
+data = [(str(root / 'packaging/editor_offline/smoke.py'), '.'),
+        (str(root / 'src/inkstruct/editor/resources'), 'inkstruct/editor/resources')]
 # Preserve metadata and licenses; self-check records exact installed versions.
 for package in ('inkstruct', 'numpy', 'Pillow', 'markdown-it-py', 'mdurl', 'PySide6', 'PySide6_Essentials', 'PySide6_Addons', 'shiboken6'):
     data += copy_metadata(package)

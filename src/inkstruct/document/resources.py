@@ -19,6 +19,9 @@ def construction_requirements(document, style):
                 specs = []
                 if node.kind == "Fraction" and style.fraction_source == "sample":
                     specs.append(("fraction", "−", node.span))
+                if (node.kind == "Accent" and node.value in {"bar", "overline", "underline"}
+                        and style.fraction_source == "sample"):
+                    specs.append(("accent-line", "−", node.span))
                 if node.kind == "Radical" and style.radical_source == "sample":
                     specs.append(("radical", "√", node.span))
                 if style.delimiter_source == "sample":

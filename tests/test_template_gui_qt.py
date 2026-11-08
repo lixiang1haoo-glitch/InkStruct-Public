@@ -16,7 +16,7 @@ from inkstruct.document.template import Region
 from inkstruct.document.styles import FlowStyle
 from inkstruct.editor.flow_template_designer import FlowTemplateDesigner
 from inkstruct.editor.template_content import TemplateContentDialog
-from inkstruct.editor.template_manager import TemplatePicker,remember_template,TemplateManagerPage,perform_template_action
+from inkstruct.editor.template_manager import TemplatePicker,remember_template,perform_template_action
 from inkstruct.editor.mixed import MixedWindow
 from inkstruct.settings_dialog import SettingsDialog
 from inkstruct.document.package import save_package,load_package
@@ -71,7 +71,7 @@ if scenario=='workbench':
     QtTest.QTest.mouseRelease(d.canvas,QtCore.Qt.LeftButton,pos=enlarged)
     assert d.selected_frame().region.width_mm>104 and d.selected_frame().region.height_mm>54
     d.history(False);assert d.selected_frame().region==r
-    loop=d.page_tree.topLevelItem(1);d.page_tree.setCurrentItem(loop.child(1));d.tree_move(-1)
+    loop=d.page_tree.topLevelItem(0);d.page_tree.setCurrentItem(loop.child(1));d.tree_move(-1)
     assert d.template.loop_pages==('two','one')
     d.history(False);assert d.template.loop_pages==t.loop_pages
     d.field_list.setCurrentRow(0)
@@ -80,6 +80,31 @@ if scenario=='workbench':
     QtCore.QTimer.singleShot(10,rename_field);d.declare_field(False)
     assert d.template.fields[0].field_id=='name' and d.template.fields[0].label=='姓名显示名'
     d.reject();assert before==(w.source_session.source,w.source_session.atom_ids,w.resolver.selection_records(),w.flow,w.style,w.page)
+    shared=FlowTemplateDesigner(replace(t,start_pages=('one','one','two')),editor=w)
+    assert shared.tree_data()==('one','start_pages',0)
+    shared.page_tree.setCurrentItem(shared.page_tree.topLevelItem(0).child(1))
+    assert shared.tree_data()==('one','start_pages',1)
+    shared.refresh();assert shared.tree_data()==('one','start_pages',1)
+    assert shared.tree_move(1) and shared.tree_data()==('one','start_pages',2)
+    shared.tree_remove()
+    assert shared.template.start_pages==('one','two') and shared.template.loop_pages==t.loop_pages
+    shared.page_tree.setCurrentItem(shared.page_tree.topLevelItem(0).child(0))
+    shared.select_frame('f')
+    declaration=NamedField('new_field','新字段')
+    shared.ask_field=lambda _candidate: declaration
+    picker=QtWidgets.QInputDialog.getItem
+    QtWidgets.QInputDialog.getItem=lambda *args: ('新建字段…',True)
+    checkpoint=len(shared.undo_stack)
+    shared.create_frame('field',(70,12,30,18))
+    assert len(shared.undo_stack)==checkpoint+1
+    assert [f.field_id for f in shared.current_layout().frames if f.role=='field']==['name','new_field']
+    shared.history(False)
+    assert shared.template.fields==t.fields and shared.current_layout().frames==t.layouts[0].frames
+    shared.ask_field=lambda _candidate: None
+    shared.create_frame('field',(70,12,30,18))
+    assert shared.template.fields==t.fields and shared.current_layout().frames==t.layouts[0].frames
+    QtWidgets.QInputDialog.getItem=picker
+    shared.reject();shared.deleteLater()
     precise=replace(FlowTemplate(),width_mm=210.123456789,margins_mm=(20.123456789,20,20,20))
     simple=FlowTemplateDesigner(precise);simple.show();app.processEvents()
     assert not simple.left_panel.isVisible() and not simple.property_tabs.isTabVisible(1)
@@ -127,13 +152,10 @@ elif scenario=='form':
     QtWidgets.QMessageBox.question=question;pending.deleteLater()
     d.deleteLater()
 elif scenario=='scopes_history':
-    s=SettingsDialog(w,category='paper');s.show();app.processEvents()
-    assert not any('当前文档' in b.text() for b in s.pages['paper'].findChildren(QtWidgets.QPushButton))
-    s.select('templates');assert not isinstance(s.pages['templates'],TemplateManagerPage)
-    assert any(b.text()=='打开模板库' for b in s.pages['templates'].findChildren(QtWidgets.QPushButton))
-    assert not s.buttons.isVisible() and s.close_management.isVisible()
-    s.request_template_action('document',t)
-    assert s.result()==20 and s.requested_template_action==('document',t)
+    s=SettingsDialog(w);s.show();app.processEvents()
+    assert not {'templates','paper','font'} & s.items.keys()
+    assert not any(b.text()=='打开模板库' for b in s.findChildren(QtWidgets.QPushButton))
+    assert s.buttons.isVisible()
     assert before==(w.source_session.source,w.source_session.atom_ids,w.resolver.selection_records(),w.flow,w.style,w.page)
     def cancel():
         modal=app.activeModalWidget();assert isinstance(modal,FlowTemplateDesigner)
@@ -157,23 +179,18 @@ elif scenario=='trial':
     assert before==(w.source_session.source,w.source_session.atom_ids,w.resolver.selection_records(),w.flow,w.style,w.page)
     d.reject();d.deleteLater()
     cancelled=TemplateTrialDialog(t,w);cancelled.reject();QtCore.QThreadPool.globalInstance().waitForDone();cancelled.deleteLater()
-elif scenario=='manager_departure':
+elif scenario=='ordinary_default':
     from inkstruct.global_defaults import GlobalDefaultsStore
-    s=SettingsDialog(w,category='body');s.pages['body'].style.controls['em_mm'].setValue(7)
-    s.select('templates');original_question=QtWidgets.QMessageBox.question
-    original_defaults=GlobalDefaultsStore().load()[0]
-    QtWidgets.QMessageBox.question=lambda *a,**kw:QtWidgets.QMessageBox.Cancel
-    s.request_template_action('document',t);assert s.requested_template_action is None
-    assert GlobalDefaultsStore().load()[0]==original_defaults and w.flow==before[3]
-    QtWidgets.QMessageBox.question=lambda *a,**kw:QtWidgets.QMessageBox.Discard
-    s.request_template_action('document',t);assert s.result()==20
-    assert GlobalDefaultsStore().load()[0]==original_defaults and w.flow==before[3]
-    s.deleteLater()
-    s=SettingsDialog(w,category='body');s.pages['body'].style.controls['em_mm'].setValue(7)
-    QtWidgets.QMessageBox.question=lambda *a,**kw:QtWidgets.QMessageBox.Save
-    s.request_template_action('reusable',t)
-    assert GlobalDefaultsStore().load()[0].style.em_mm==7 and w.flow==before[3] and w.style==before[4]
-    QtWidgets.QMessageBox.question=original_question;s.deleteLater()
+    from inkstruct.editor.template_library import TemplateLibrary
+    lib=TemplateLibrary(w)
+    assert lib.selected()['builtin']
+    store=GlobalDefaultsStore()
+    ordinary=store.ordinary_template()
+    changed=store.save_ordinary(ordinary,replace(ordinary,width_mm=205,margins_mm=(10,15,20,25)))
+    lib.refresh();assert lib.template==changed
+    assert GlobalDefaultsStore().for_new_document()[0].flow.template==changed
+    assert w.flow==before[3] and w.style==before[4]
+    lib.deleteLater()
 elif scenario=='catalog_save':
     from inkstruct.document.template_authoring import template_json
     native_store=QtCore.QSettings(QtCore.QSettings.NativeFormat,QtCore.QSettings.UserScope,'InkStruct','TemplateCatalog')
@@ -206,7 +223,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
 @pytest.mark.parametrize(
     "scenario",
-    ["workbench", "form", "scopes_history", "trial", "manager_departure", "catalog_save"],
+    ["workbench", "form", "scopes_history", "trial", "ordinary_default", "catalog_save"],
 )
 def test_template_gui_transactions(tmp_path, dpi, scenario):
     result = subprocess.run(

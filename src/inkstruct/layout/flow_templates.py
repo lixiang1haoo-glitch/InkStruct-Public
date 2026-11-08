@@ -30,15 +30,6 @@ def layout_flow_template(document, resolver, *, page, style, flow, cancelled=Non
                 SourceSpan(0, 0),
             )
         )
-    if template.calibration == "unreviewed":
-        diagnostics.append(
-            Diagnostic(
-                "template-calibration-unreviewed",
-                "模板尚未完成实体纸面校准。",
-                SourceSpan(0, 0),
-                "warning",
-            )
-        )
     inner = replace(flow, template=None, template_bindings=(), glyph_corrections=())
     cursor = RegionCursor(template)
     try:

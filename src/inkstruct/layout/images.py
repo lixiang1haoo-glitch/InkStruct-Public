@@ -36,6 +36,7 @@ def measure_image(block, resolver, style, flow, width, cancelled):
         footnote_style=flow.footnote,
         latin_spacing=flow.latin_spacing,
         punctuation_spacing=flow.punctuation_spacing,
+        han_variation=flow.han_variation,
     )
     lines = break_lines(boxes, iw, cancelled=cancelled) if boxes else []
     metrics = []

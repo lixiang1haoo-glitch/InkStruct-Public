@@ -3,6 +3,7 @@
 import io
 import json
 import subprocess
+import sys
 import zipfile
 from collections import Counter
 from dataclasses import replace
@@ -207,7 +208,7 @@ def test_cli_inspection_resources_and_render_use_only_visible_labels(tmp_path):
     )
     for mode in ("inspect", "resources"):
         p = subprocess.run(
-            [".venv/bin/inkstruct", "document", mode, str(source), "--dialect", "obsidian"],
+            [sys.executable, "-m", "inkstruct.cli", "document", mode, str(source), "--dialect", "obsidian"],
             capture_output=True,
             check=False,
             text=True,
@@ -221,7 +222,7 @@ def test_cli_inspection_resources_and_render_use_only_visible_labels(tmp_path):
     output = tmp_path / "out"
     native = tmp_path / "labels.inkdoc"
     args = [
-        ".venv/bin/inkstruct",
+        sys.executable, "-m", "inkstruct.cli",
         "document",
         "render",
         str(source),
@@ -240,7 +241,7 @@ def test_cli_inspection_resources_and_render_use_only_visible_labels(tmp_path):
     assert load_package(native).flow.markdown_dialect == "obsidian"
     p = subprocess.run(
         [
-            ".venv/bin/inkstruct",
+            sys.executable, "-m", "inkstruct.cli",
             "document",
             "render",
             str(native),

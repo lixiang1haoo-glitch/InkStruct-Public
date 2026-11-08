@@ -176,15 +176,15 @@ def test_import_preserves_row_counts_and_separates_latin_styles():
 
 
 def test_chinese_punctuation_task_and_shared_import():
-    from inkstruct.punctuation import CHINESE_PUNCTUATION
+    from inkstruct.symbol_tasks import TASK_GROUPS
     from inkstruct.symbol_task_dialog import SymbolTaskDialog
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     dialog = SymbolTaskDialog('user_001')
     dialog.select_all(False)
-    dialog.groups['chinese_punctuation'].setChecked(True)
+    dialog.groups['punctuation'].setChecked(True)
     _, entries = dialog.plan()
-    assert ''.join(c for c, _, _ in entries) == CHINESE_PUNCTUATION
-    assert sum(n for _, n, _ in entries) == 90
+    assert ''.join(c for c, _, _ in entries) == TASK_GROUPS['punctuation'][1]
+    assert sum(n for _, n, _ in entries) == 5 * len(entries)
     dialog.reject()
     dialog = SymbolTaskDialog('user_001', imported=[('，', 5, 0), (',', 5, 1), ('（', 3, 2)])
     _, entries = dialog.plan()

@@ -25,7 +25,7 @@ VERSION = "1.0"
 PROVIDER = "inkfont-core-v1"
 FEATURES = ["centerline-em-v1", "candidate-pools-v1", "latin-style-pools-v1"]
 MAX_MEMBER = 32 * 1024**2
-MAX_TOTAL = 2 * 1024**3
+MAX_TOTAL = 4 * 1024**3
 MAX_POINTS = 100_000
 
 
@@ -279,6 +279,9 @@ def resolved_candidate(record, trajectory, metrics, summary, identity, *, _reuse
         PROVIDER,
     )
     object.__setattr__(glyph, '_validated_font_core', raw)
+    object.__setattr__(glyph, '_font_metadata', {
+        "identity": identity, "record": record, "summary": summary,
+    })
     return glyph
 
 
@@ -388,7 +391,9 @@ class FontPackage:
             raise ValueError("字体成员损坏：" + name)
         return raw
 
-    def glyphs(self, characters=None, *, reuse=()):
+    def glyphs(self, characters=None, *, reuse=(), cancelled=None):
+        from ..document.cancellation import check_cancel
+
         if self.fingerprint != (self.path.stat().st_size, self.path.stat().st_mtime_ns):
             raise ValueError("字体文件已变化，请重新导入")
         chars = set(self.pools) if characters is None else set(characters)
@@ -396,6 +401,7 @@ class FontPackage:
         with zipfile.ZipFile(self.path) as z:
             for char in sorted(chars):
                 for r in self.pools.get(char, ()):
+                    check_cancel(cancelled)
                     t = decode(self._checked(z, r["file"]))
                     cid = r["candidate_id"]
                     yield resolved_candidate(
@@ -463,6 +469,8 @@ def write_archive(path, members, manifest):
     path = Path(path)
     if path.exists():
         raise FileExistsError(path)
+    if len(members) + 1 > 100_000:
+        raise ValueError("字体成员过多")
     path.parent.mkdir(parents=True, exist_ok=True)
     m = dict(manifest)
     m["members"] = {}
@@ -470,10 +478,14 @@ def write_archive(path, members, manifest):
     os.close(fd)
     try:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            total = 0
             for name, value in sorted(members.items()):
                 raw = value.read_bytes() if isinstance(value, Path) else value
                 if len(raw) > MAX_MEMBER:
                     raise ValueError("字体成员超限：" + name)
+                total += len(raw)
+                if total > MAX_TOTAL:
+                    raise ValueError("字体展开大小超限")
                 z.writestr(name, raw)
                 m["members"][name] = {"sha256": sha(raw), "bytes": len(raw)}
             m["core_members"] = {
@@ -481,7 +493,12 @@ def write_archive(path, members, manifest):
             }
             m["core_hash"] = core_digest(m)
             m["content_hash"] = sha(encoded({k: v for k, v in m.items() if k != "content_hash"}))
-            z.writestr("manifest.json", encoded(m))
+            raw_manifest = encoded(m)
+            if len(raw_manifest) > MAX_MEMBER:
+                raise ValueError("字体成员超限：manifest.json")
+            if total + len(raw_manifest) > MAX_TOTAL:
+                raise ValueError("字体展开大小超限")
+            z.writestr("manifest.json", raw_manifest)
         # Never overwrite an existing publication, even if another process won the race.
         os.link(tmp, path)
         return m
@@ -520,11 +537,31 @@ from functools import lru_cache
 
 
 @lru_cache(maxsize=2)
-def _cached_font(path, size, modified):
-    return FontPackage(path)
+def _cached_font(path, stamp):
+    font = FontPackage(path)
+    font.preview_token = path, stamp, font.manifest["core_hash"]
+    return font
 
 
 def cached_font(path):
     path = Path(path).resolve()
     stat = path.stat()
-    return _cached_font(str(path), stat.st_size, stat.st_mtime_ns)
+    stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    return _cached_font(str(path), stamp)
+
+
+def verified_preview_font(path):
+    """Only an unchanged, fully verified library file may defer member reads."""
+    from ..resource_catalog import FontMetadata
+    from .library import fingerprint
+
+    path = Path(path).resolve()
+    stamp = fingerprint(path)
+    try:
+        entry = FontMetadata(path.parent).read().get(path.name, {})
+    except (ValueError, OSError, TypeError):
+        return None
+    if entry.get("verified_stamp") != list(stamp):
+        return None
+    font = cached_font(path)
+    return font if font.preview_token[1] == stamp else None

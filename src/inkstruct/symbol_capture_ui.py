@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
+from .capture_controls import canvas_slider_row
 from .capture_workflow_ui import CaptureLifecycleMixin
 from .symbol_capture import (
     FRAME,
@@ -109,23 +110,18 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             explanation.setWordWrap(True)
             root.addWidget(explanation)
             self.canvas = SymbolCanvas()
-            size_row = QtWidgets.QHBoxLayout()
-            size_row.addWidget(QtWidgets.QLabel("画布大小"))
-            self.canvas_size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+            size_row, self.canvas_size_slider, self.canvas_size_label = canvas_slider_row(
+                "画布大小", "标点与扩展画布大小", "先保存或重写当前笔迹，再调整画布大小"
+            )
             self.canvas_size_slider.setObjectName("symbolCanvasSizeSlider")
-            self.canvas_size_slider.setAccessibleName("符号画布大小")
             self.canvas_size_slider.setRange(10, 30)  # 50%–150%, in 5% steps.
             self.canvas_size_slider.setPageStep(2)
-            self.canvas_size_slider.setToolTip("先保存或重写当前笔迹，再调整画布大小")
             try:
                 percent = int(self.canvas_settings.value("canvas_percent", 100))
                 scaled_frame(percent)
             except (TypeError, ValueError, OverflowError):
                 percent = 100
             self.canvas_size_slider.setValue(percent // 5)
-            size_row.addWidget(self.canvas_size_slider, 1)
-            self.canvas_size_label = QtWidgets.QLabel()
-            size_row.addWidget(self.canvas_size_label)
             root.addLayout(size_row)
             self.canvas_scroll = QtWidgets.QScrollArea()
             self.canvas_scroll.setWidget(self.canvas)
@@ -163,7 +159,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             self.canvas.set_canvas_percent(percent)
             self.canvas_scroll.setMinimumHeight(min(335, self.canvas.height() + 15))
             self.canvas_size_label.setText(
-                f"{percent}% · {self.canvas.width()} × {self.canvas.height()}"
+                f"{percent}% · {self.canvas.width()} × {self.canvas.height()} px"
             )
 
         def _change_canvas_size(self, value):
@@ -369,11 +365,14 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             if item:
                 info = symbol_info(item.character)
                 from .punctuation import capture_label
-                style = {'upright': ' · 英文正体', 'italic': ' · 英文斜体'}.get(item_letter_style(self.task, item), '')
-                italic = 'italic' if item_letter_style(self.task, item) == 'italic' else 'normal'
+                from .symbol_catalog import SYMBOL_GROUPS, symbol_group
+                style = item_letter_style(self.task, item)
+                key = symbol_group(item.character, style)
+                label = SYMBOL_GROUPS[key][0] if key in SYMBOL_GROUPS else "英文 · 写法未标注"
+                italic = 'italic' if style == 'italic' else 'normal'
                 self.target_label.setStyleSheet(f'font-size: 88px; font-weight: 600; font-style: {italic};')
                 self.identity_label.setText(
-                    f"{capture_label(item.character)} · {info['category']}{style} · {info['codepoint']} · {info['unicode_name']}\n"
+                    f"{capture_label(item.character)} · {label} · {info['codepoint']} · {info['unicode_name']}\n"
                     f"当前 {len(self.canvas.trajectory.strokes)} 笔 · 笔数不限"
                 )
             else:

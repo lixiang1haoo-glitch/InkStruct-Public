@@ -42,7 +42,7 @@ from PySide6 import QtCore,QtGui,QtWidgets
 from inkstruct.document.flow_template import FlowTemplate,NamedField,PageLayout,TextFrame
 from inkstruct.document.template import Region
 from inkstruct.editor.flow_template_designer import FlowTemplateDesigner
-from inkstruct.editor.flow_template_pdf import PdfPagesDialog
+from inkstruct.editor.flow_template_pdf import PdfPagesDialog,imported_template
 from inkstruct.editor.template_content import TemplateContentDialog
 from inkstruct.document.markdown import parse_markdown
 from inkstruct.document.styles import FlowStyle
@@ -88,13 +88,32 @@ content.reject();content.deleteLater()
 empty=FlowTemplate(kind='custom',layouts=(PageLayout('empty','空布局'),),loop_pages=('empty',))
 pdf=PdfPagesDialog(root/'reference.pdf',empty)
 pdf.show();wait(lambda:pdf.count==4 and not pdf.pdf.pending)
+assert not pdf.adopt.isChecked() and pdf.mode.currentData()=='append'
+pdf.adopt.setChecked(True);pdf.mode.setCurrentIndex(pdf.mode.findData('replace'))
 pdf.pages.setText('1-4');pdf.start_render()
 wait(lambda:pdf.candidate is not None or pdf.pdf.closed)
 assert pdf.candidate is not None,pdf.error.text()
 candidate=pdf.candidate
 assert abs(candidate.width_mm-120)<.001
+assert '替换整个页组' in pdf.impact.toPlainText() and '空布局' in pdf.impact.toPlainText()
 assert [p.source_page for p in candidate.layouts[1:]]==[1,2,3,4]
 assert len({p.background.sha256 for p in candidate.layouts[1:]})==4
+starter=empty.layouts[0]
+appended=imported_template(empty,pdf.results[:2],pdf.source_hash,initial_blank=starter)
+assert appended.width_mm==empty.width_mm and appended.loop_pages[0]=='empty'
+assert [p.source_page for p in appended.layouts[1:]]==[1,2]
+cleared=imported_template(empty,pdf.results[:2],pdf.source_hash,mode='replace',initial_blank=starter)
+assert len(cleared.layouts)==2
+kept=imported_template(replace(empty,start_pages=('empty',)),pdf.results[:2],pdf.source_hash,
+                       mode='replace',initial_blank=starter)
+assert kept.layouts[0]==starter
+modified=replace(empty,layouts=(replace(starter,label='手工编辑的版式'),))
+preserved=imported_template(modified,pdf.results[:2],pdf.source_hash,mode='replace',initial_blank=starter)
+assert preserved.layouts[0]==modified.layouts[0]
+from inkstruct.editor.resource_apply import template_changes
+revised=replace(candidate,loop_pages=tuple(reversed(candidate.loop_pages)),offset_x_mm=1,
+    layouts=(*candidate.layouts[:1],replace(candidate.layouts[1],background=None),*candidate.layouts[2:]))
+assert {'页组顺序','整份模板偏移','页面底图'} <= {c[0] for c in template_changes(candidate,revised)}
 from inkstruct.layout.blocks import layout_markdown
 from inkstruct.assets.resolver import AssetResolver
 cycle=replace(candidate,layouts=(candidate.layouts[0],*(replace(p,frames=(replace(p.frames[0],region=replace(p.frames[0].region,height_mm=10)),)) for p in candidate.layouts[1:])))
@@ -158,13 +177,9 @@ assert loaded.session.atom_ids==w.source_session.atom_ids
 
 # Global defaults carry layout only; current-document content remains reachable.
 settings=SettingsDialog(w)
-settings.select('paper')
-paper=settings.pages['paper']
-assert not any('当前文档' in b.text() for b in paper.findChildren(QtWidgets.QPushButton))
-settings.select('templates')
-assert any('打开模板库' in b.text() for b in settings.pages['templates'].findChildren(QtWidgets.QPushButton))
-assert not any('编辑当前文档布局' in b.text() for b in settings.pages['templates'].findChildren(QtWidgets.QPushButton))
-assert any('编辑本文布局' in b.text() for b in w.template_content_panel.findChildren(QtWidgets.QPushButton))
+assert not {'templates','paper','font'} & settings.items.keys()
+assert not any('打开模板库' in b.text() for b in settings.findChildren(QtWidgets.QPushButton))
+assert any('编辑本文页面版式' in b.text() for b in w.template_content_panel.findChildren(QtWidgets.QPushButton))
 assert not settings.buttons.isVisible()
 before_current=(w.flow,w.style,w.page,w.source_session.atom_ids)
 def cancel_current_layout():
@@ -177,16 +192,19 @@ QtCore.QTimer.singleShot(10,cancel_current_layout)
 from inkstruct.editor.template_manager import perform_template_action
 perform_template_action(w,'document',t)
 assert before_current==(w.flow,w.style,w.page,w.source_session.atom_ids)
-paper.template.set_template(candidate)
-settings.apply_current.setChecked(False)
-assert settings.apply(),settings.error.text()
+from inkstruct.editor.template_library import TemplateLibrary
+from inkstruct.document.template_authoring import template_json
+lib=TemplateLibrary(w);template_path=root/'default-template.json'
+template_path.write_text(template_json(candidate),encoding='utf-8')
+lib.import_path(template_path);lib.set_default();assert lib.template.name==candidate.name
 assert w.flow.template==t and page_svg(w.snapshot,0)==first
 settings.reject()
 from inkstruct.global_defaults import GlobalDefaultsStore
 defaults,warning=GlobalDefaultsStore().load()
-assert warning is None and defaults.flow.template==candidate
+assert warning is None and replace(defaults.flow.template,revision=None)==replace(candidate,revision=None)
 w.dirty=False;w.recovery_timer.stop();w.close()
-for dialog in (d,pdf,cancel,settings):dialog.deleteLater()
+QtCore.QThreadPool.globalInstance().waitForDone()
+for dialog in (d,pdf,cancel,settings,lib):dialog.deleteLater()
 app.processEvents()
 """
 

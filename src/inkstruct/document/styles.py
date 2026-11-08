@@ -8,7 +8,8 @@ from .code_style import CodeStyle
 from .flow_template import FlowTemplate
 from .footnote_style import FootnoteStyle
 from .glyph_corrections import GlyphCorrection
-from .images import ImageStyle, RasterResource
+from .han_variation import HanVariation
+from .images import MAX_IMAGE_CATALOG_BYTES, MAX_IMAGE_RESOURCES, ImageStyle, RasterResource
 from .line_svg import SCHEMA as SVG_SCHEMA
 from .line_svg import LineSvgResource
 from .table_style import TableStyle
@@ -38,18 +39,30 @@ class FlowStyle:
     glyph_corrections: tuple[GlyphCorrection, ...] = ()
     latin_spacing: str = "capture"
     punctuation_spacing: str = "capture"
+    paragraph_align: str = "left"
+    han_variation: HanVariation = field(default_factory=HanVariation)
 
     def __post_init__(self):
-        versions = {"inkstruct_flow_style_v1", "inkstruct_flow_style_v2", "inkstruct_flow_style_v3", "inkstruct_flow_style_v4"}
+        versions = {"inkstruct_flow_style_v1", "inkstruct_flow_style_v2", "inkstruct_flow_style_v3", "inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}
+        if self.schema_version not in versions:
+            raise ValueError("Unsupported flow style version")
+        if self.paragraph_align not in {"left", "justify"}:
+            raise ValueError("Unknown paragraph alignment")
+        if isinstance(self.han_variation, dict):
+            object.__setattr__(self, "han_variation", HanVariation(**self.han_variation))
+        if not isinstance(self.han_variation, HanVariation):
+            raise ValueError("Invalid Chinese variation configuration")  # noqa: TRY004 - serialized configuration
+        if self.paragraph_align != "left" or self.han_variation != HanVariation():
+            object.__setattr__(self, "schema_version", "inkstruct_flow_style_v5")
         if self.punctuation_spacing not in {"capture", "handwriting"}:
             raise ValueError("Unknown punctuation spacing policy")
         if self.schema_version not in versions:
             raise ValueError("Unsupported flow style version")
-        if self.punctuation_spacing != "capture":
+        if self.punctuation_spacing != "capture" and self.schema_version != "inkstruct_flow_style_v5":
             object.__setattr__(self, "schema_version", "inkstruct_flow_style_v4")
         if self.latin_spacing not in {"capture", "handwriting"}:
             raise ValueError("Unknown Latin spacing policy")
-        if self.latin_spacing != "capture" and self.schema_version != "inkstruct_flow_style_v4":
+        if self.latin_spacing != "capture" and self.schema_version not in {"inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
             object.__setattr__(self, "schema_version", "inkstruct_flow_style_v3")
         corrections = tuple(GlyphCorrection(**v) if isinstance(v, dict) else v
                             for v in self.glyph_corrections)
@@ -69,7 +82,7 @@ class FlowStyle:
             else v
             for v in self.images
         )
-        if len(images) > 64 or any(
+        if len(images) > MAX_IMAGE_RESOURCES or any(
             not isinstance(v, (RasterResource, LineSvgResource)) for v in images
         ):
             raise ValueError("Invalid image catalog")
@@ -77,7 +90,7 @@ class FlowStyle:
             raise ValueError("Duplicate image source")
         if (
             sum(len(v.original_base64) + len(getattr(v, "png_base64", "")) for v in images)
-            > 128_000_000
+            > MAX_IMAGE_CATALOG_BYTES
         ):
             raise ValueError("Image catalog exceeds its 128 MB encoded-data budget")
         object.__setattr__(self, "images", images)

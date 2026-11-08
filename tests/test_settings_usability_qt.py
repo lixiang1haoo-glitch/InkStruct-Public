@@ -22,7 +22,7 @@ w=MixedWindow();w.timer.stop();w.show()
 d=SettingsDialog(w,category='body');d.resize(d.minimumWidth(),650);d.show();app.processEvents()
 body=d.pages['body'];scroll=body.parentWidget().parentWidget()
 assert not body.findChildren(QtWidgets.QToolButton)
-for control in [*body.flow.controls.values(),*body.headings,body.preview]:
+for control in [*body.flow.controls.values(),*body.headings]:
     assert not control.isHidden()
     ancestor=control.parentWidget()
     while ancestor is not body:
@@ -58,7 +58,7 @@ assert math.guides.isChecked() and math.preview.show_guides
 for retired in math.findChildren(QtWidgets.QScrollArea,'retired_math_scroll'):
     assert retired.isHidden()
     assert not any(bar.isVisible() for bar in retired.findChildren(QtWidgets.QScrollBar))
-assert math.structure_choice.isVisible()
+assert math.categories.isVisible()
 math.guides.setChecked(False);assert not math.preview.show_guides
 math.guides.setChecked(True);assert math.preview.show_guides
 before=math.controls['em_mm'].value();wheel(math.controls['em_mm'])

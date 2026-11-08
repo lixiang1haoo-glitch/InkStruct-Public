@@ -19,7 +19,9 @@ class ElementInspector(QtWidgets.QWidget):
         self.pages = {}
         self.syncing = False
         column = QtWidgets.QVBoxLayout(self)
-        column.addWidget(label("当前文档 · 表格与图片属性"))
+        self.context = label("未选择表格或图片")
+        self.context.setObjectName("inspector_context")
+        column.addWidget(self.context)
         self.selector = QtWidgets.QComboBox()
         self.selector.setAccessibleName("选中的表格或图片")
         self.selector.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -34,6 +36,7 @@ class ElementInspector(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()
         self.revert = QtWidgets.QPushButton("取消未应用修改")
         self.apply_button = QtWidgets.QPushButton("应用元素属性")
+        self.apply_button.setProperty("inkRole", "primary")
         row.addWidget(self.revert)
         row.addWidget(self.apply_button)
         column.addLayout(row)
@@ -58,8 +61,7 @@ class ElementInspector(QtWidgets.QWidget):
         ready = bool(
             document and document.source == w.source_session.source and w.canvas.isEnabled()
         )
-        self.apply_button.setEnabled(ready)
-        self.use_defaults.setEnabled(ready)
+        self.set_ready(ready)
         if not ready:
             return
         selected = self.selector.currentData()
@@ -101,6 +103,15 @@ class ElementInspector(QtWidgets.QWidget):
         self.select_item()
         self.cursor_changed()
 
+    def set_ready(self, ready):
+        self.apply_button.setEnabled(ready)
+        self.use_defaults.setEnabled(ready)
+        self.revert.setEnabled(ready)
+        self.selector.setEnabled(ready)
+        self.stack.setEnabled(ready)
+        if not ready:
+            self.context.setText("预览正在更新，暂不可编辑元素属性。")
+
     def clear_pages(self):
         for page in self.pages.values():
             self.stack.removeWidget(page)
@@ -110,22 +121,40 @@ class ElementInspector(QtWidgets.QWidget):
 
     def select_item(self):
         key = self.selector.currentData()
-        if not self.document:
+        if (not self.document or self.document.source != self.editor.source_session.source
+                or not self.editor.canvas.isEnabled()):
             return
         node = next(
             (n for root in self.document.nodes for n in root.walk() if n.node_id == key), None
         )
         if node is None:
             self.stack.setCurrentWidget(self.empty)
+            self.context.setText("未选择表格或图片")
             return
         if node.kind not in self.pages:
             page = ElementPage(node.kind, self.document, self.flow)
             page.scope.hide()
+            page.status.hide()
+            page.custom.toggled.connect(self.update_context)
             self.pages[node.kind] = page
             self.stack.addWidget(page)
         page = self.pages[node.kind]
         page.scope.setCurrentIndex(page.scope.findData(key))
         self.stack.setCurrentWidget(page)
+        self.update_context()
+
+    def update_context(self, *_):
+        page = self.stack.currentWidget()
+        if (page is self.empty or not self.editor.canvas.isEnabled()
+                or self.document.source != self.editor.source_session.source):
+            return
+        key = self.selector.currentData()
+        number = next((i for i, node in enumerate(page.nodes, 1) if node.node_id == key), None)
+        if number is None:
+            return
+        title = "表格" if page.kind == "table" else "图片"
+        scope = "本文独立设置" if page.independent.get(key) else "沿用本文默认"
+        self.context.setText(f"{title} {number} · {scope}")
 
     def cursor_changed(self):
         w = self.editor
@@ -146,7 +175,8 @@ class ElementInspector(QtWidgets.QWidget):
             self.selector.setCurrentIndex(self.selector.findData(node.node_id))
 
     def navigate_selected(self):
-        if not self.document:
+        if (not self.document or self.document.source != self.editor.source_session.source
+                or not self.editor.canvas.isEnabled()):
             return
         key = self.selector.currentData()
         node = next(
@@ -230,7 +260,7 @@ class ElementInspector(QtWidgets.QWidget):
                 raise ValueError("当前字体包文档需要 Markdown 模式，请先调整全局默认。")
             apply_to_document(self.editor, defaults)
             self.error.setStyleSheet("color: #236747;")
-            self.error.setText("默认排版参数已用于本文；独立设置和字体保留。")
+            self.error.setText("默认排版参数已用于本文；当前模板、纸张、独立设置和字体保留。")
         except (ValueError, TypeError) as error:
             self.error.setStyleSheet("color: #b43d3d;")
             self.error.setText(str(error))

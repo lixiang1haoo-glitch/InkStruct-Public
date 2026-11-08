@@ -6,10 +6,14 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from ..symbol_catalog import SYMBOL_GROUPS, character_preview
+from ..ui_behavior import compact_field
 from .core import FontPackage, to_user
-from .importer import build_font
-from .library import entry, fingerprint, import_font
+from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
+from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, display_coverage, generated_batches, publication_stamp,
+                          require_publication_stamp, review_selection, rule_rows)
+from .publication_rules import PublicationRules
 
 
 class Signals(QtCore.QObject):
@@ -39,17 +43,30 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.job = None
+        self.review_job = None
+        self.review = None
+        self.review_revision = 0
+        self.attempted_review = None
+        self.group_choices = {}
+        self.rule_settings = PublicationRules()
+        self.watch_job = None
+        self.review_stamp = None
+        self.review_result = None
+        self.review_groups = None
+        self.capture_root_provider = None
         self.last_result = None
         self.font_entries = {}
         layout = QtWidgets.QVBoxLayout(self)
         heading = QtWidgets.QHBoxLayout()
         title = QtWidgets.QLabel("我的字体")
-        title.setStyleSheet("font-size: 20px; font-weight: 600")
+        title.setProperty("inkRole", "title")
         heading.addWidget(title)
         heading.addStretch()
         self.import_button = QtWidgets.QPushButton("导入字体…")
+        self.import_button.setObjectName("font_import")
         self.import_button.clicked.connect(self.import_font)
         self.create_button = QtWidgets.QPushButton("制作字体…")
+        self.create_button.setObjectName("font_create")
         self.create_button.clicked.connect(self.open_publication)
         heading.addWidget(self.import_button)
         heading.addWidget(self.create_button)
@@ -76,41 +93,74 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             actions.addWidget(b)
             self.buttons.append(b)
             self.selection_buttons.append(b)
+        self.use_button = self.selection_buttons[0]
+        self.use_button.setObjectName("font_use_document")
+        self.use_button.setToolTip("先检查对当前文档的影响，再确认应用；不会自动重选旧文档的字形。")
         actions.addStretch()
         self.publication = QtWidgets.QDialog(self)
-        self.publication.setWindowTitle("制作字体")
+        self.publication.setWindowTitle("制作字体包")
         self.publication.setModal(True)
-        self.publication.resize(620, 380)
+        self.publication.resize(940, 700)
         publication_layout = QtWidgets.QVBoxLayout(self.publication)
-        hint = QtWidgets.QLabel("将完成的字形与可选符号样本封装为字体，不会重新生成字形。中英文共用标点无需分别补采。使用已确认的斜体／希腊字符复用时，请选择包含 tasks 和 samples 的完整 symbol_collection 目录或 ZIP；仅选择 samples 不含复用配置。")
+        hint = QtWidgets.QLabel("选择书写者、汉字批次及扩展来源后，清单会自动核对。请勾选要入包的类别并查看缺字。可在规则窗口决定本次启用和供体。")
         hint.setWordWrap(True)
         publication_layout.addWidget(hint)
-        group = QtWidgets.QGroupBox("字体信息与内容")
+        group = QtWidgets.QGroupBox("按书写者汇总的待制包清单")
         publication_layout.addWidget(group)
         self.publication_fields = group
         form = QtWidgets.QFormLayout(group)
-        self.writer = QtWidgets.QLineEdit()
+        self.author = QtWidgets.QComboBox()
+        self.author.setEditable(True)
+        self.author.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.writer = self.author.lineEdit()
+        self.writer.setPlaceholderText("选择采集书写者，或输入外部样本的作者 ID")
+        self.publication_author = ""
         self.name = QtWidgets.QLineEdit("我的手写体")
         self.run = QtWidgets.QLineEdit()
         self.symbols = QtWidgets.QLineEdit()
-        form.addRow("书写者 ID", self.writer)
-        form.addRow("字体名称", self.name)
+        form.addRow("书写者 ID", compact_field(self.author, maximum=340))
+        form.addRow("字体名称", compact_field(self.name, maximum=340))
+        self.batches = QtWidgets.QComboBox()
+        self.batches.activated.connect(lambda: self.run.setText(self.batches.currentData() or ""))
+        self.run.textChanged.connect(self.sync_publication_batch)
+        form.addRow("本地汉字批次", self.batches)
+        self.batch_summary = QtWidgets.QLabel()
+        self.batch_summary.setWordWrap(True)
+        form.addRow(self.batch_summary)
+        self.batch_summary.hide()
         for label, field, kind in [
-            ("生成结果", self.run, "dir"),
-            ("符号样本 ZIP / 目录", self.symbols, "symbol"),
+            ("汉字生成目录", self.run, "dir"),
+            ("标点与扩展来源", self.symbols, "symbol"),
         ]:
             row = QtWidgets.QHBoxLayout()
             row.addWidget(field)
-            b = QtWidgets.QPushButton("选择…")
+            b = QtWidgets.QPushButton("添加标点与扩展样本…" if kind == "symbol" else "选择外部批次…")
             row.addWidget(b)
             b.clicked.connect(lambda checked=False, f=field, k=kind: self.choose(f, k))
             form.addRow(label, row)
         self.kind = QtWidgets.QComboBox()
         self.kind.addItem("用户版 · 用于排版与分享", "user")
         self.kind.addItem("开发者版 · 附来源详情", "developer")
-        form.addRow("包类型", self.kind)
+        form.addRow("包类型", compact_field(self.kind))
+        self.contents = QtWidgets.QTreeWidget()
+        self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "规则合成", "未通过校验"])
+        self.contents.setMinimumHeight(140)
+        self.contents.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        for column in range(1, self.contents.columnCount()):
+            self.contents.header().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.contents.itemChanged.connect(self.publication_groups_changed)
+        form.addRow(self.contents)
+        self.coverage_summary = QtWidgets.QLabel("列中数字为字符数 / 候选份数。展开类别查看字符与诊断。")
+        self.coverage_summary.setWordWrap(True)
+        coverage_row = QtWidgets.QHBoxLayout()
+        coverage_row.addWidget(self.coverage_summary, 1)
+        self.rules_button = QtWidgets.QPushButton("复用与合成规则…")
+        self.rules_button.clicked.connect(self.show_publication_rules)
+        coverage_row.addWidget(self.rules_button)
+        form.addRow(coverage_row)
         b = QtWidgets.QPushButton("制作并加入字体库")
         self.build_button = b
+        b.setProperty("inkRole", "primary")
         b.clicked.connect(self.build)
         form.addRow(b)
         self.buttons.append(b)
@@ -128,8 +178,16 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.progress = QtWidgets.QLabel("")
         layout.addWidget(self.progress)
         self.progress.setWordWrap(True)
-        for field in (self.writer, self.name, self.run, self.symbols):
-            field.textChanged.connect(self.update_actions)
+        self.writer.textChanged.connect(self.author_chosen)
+        for field in (self.name, self.run):
+            field.textChanged.connect(self.invalidate_publication)
+        self.symbols.textChanged.connect(self.reset_publication_rules)
+        self.publication.finished.connect(self.reset_publication_rules)
+        self.review_timer = QtCore.QTimer(self, interval=150, singleShot=True)
+        self.review_timer.timeout.connect(self.recalculate_publication)
+        self.watch_timer = QtCore.QTimer(self, interval=1800)
+        self.watch_timer.timeout.connect(self.watch_publication)
+        self.watch_timer.start()
         self.list.currentItemChanged.connect(self.describe)
         self.setup_management()
         self.refresh()
@@ -137,22 +195,313 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def open_publication(self):
         if self.job:
             return
+        from ..capture_management import CaptureCatalog
+        current = self.writer.text()
+        with QtCore.QSignalBlocker(self.author), QtCore.QSignalBlocker(self.writer):
+            self.author.clear()
+            if self.capture_root_provider:
+                try:
+                    writers = CaptureCatalog(self.capture_root_provider()).writers()
+                    self.author.addItems(sorted(writers))
+                except (ValueError, OSError) as error:
+                    self.set_progress(str(error))
+            self.author.setEditText(current)
+        self.author_chosen()
+        self.refresh_publication_batches()
         self.publication.show()
         self.publication.raise_()
-        self.name.setFocus()
-        self.name.selectAll()
+        self.invalidate_publication()
+        (self.name if current else self.writer).setFocus()
 
     def prepare_publication(self, run, writer):
         if self.job:
             return False
-        # Do not accidentally attach another author's symbol samples.
-        if self.writer.text().strip() != writer:
-            self.symbols.clear()
         self.writer.setText(writer)
+        self.author_chosen()
         self.run.setText(str(run))
         self.name.setText(writer + " 手写体")
         self.open_publication()
         return True
+
+    def author_chosen(self, *_):
+        from ..capture_management import valid_writer
+
+        writer = self.writer.text().strip()
+        if writer == self.publication_author:
+            return
+        self.publication_author = writer
+        self.rule_settings = PublicationRules()
+        self.group_choices.clear()
+        self.run.clear()
+        self.symbols.clear()
+        self.refresh_publication_batches()
+        if valid_writer(writer):
+            if self.capture_root_provider:
+                root = Path(self.capture_root_provider()) / "symbol_collection"
+                if (root / "samples" / writer).is_dir():
+                    self.symbols.setText(str(root))
+        self.invalidate_publication()
+
+    def refresh_publication_batches(self):
+        from ..capture_management import valid_writer
+
+        writer = self.writer.text().strip()
+        with QtCore.QSignalBlocker(self.batches):
+            self.batches.clear()
+            self.batches.addItem("未选本地批次", "")
+            if valid_writer(writer):
+                for label, path in generated_batches(self.root.parent / "generation" / "outputs", writer):
+                    self.batches.addItem(label, str(path))
+        self.sync_publication_batch(self.run.text())
+
+    def sync_publication_batch(self, path):
+        with QtCore.QSignalBlocker(self.batches):
+            self.batches.setCurrentIndex(max(0, self.batches.findData(path)))
+
+    def publication_inputs(self):
+        return tuple(field.text().strip() for field in (self.writer, self.run, self.symbols, self.name))
+
+    def publication_ready(self):
+        from ..capture_management import valid_writer
+
+        writer, run, symbols, _ = self.publication_inputs()
+        return (valid_writer(writer) and bool(run or symbols)
+                and (not run or Path(run).is_dir()) and (not symbols or Path(symbols).exists()))
+
+    def reset_publication_rules(self, *_):
+        self.rule_settings = PublicationRules()
+        self.invalidate_publication()
+
+    def invalidate_publication(self, *_):
+        self.review_revision += 1
+        self.review = self.review_stamp = self.review_result = self.review_groups = None
+        with QtCore.QSignalBlocker(self.contents):
+            self.contents.clear()
+        self.batch_summary.clear()
+        self.batch_summary.hide()
+        self.review_timer.stop()
+        if self.publication.isVisible():
+            self.publication_progress.clear()
+            self.coverage_summary.setText("等待核对当前来源…" if self.publication_ready()
+                                          else "选择书写者和可用的汉字批次或扩展来源。")
+            self.review_timer.start()
+        self.update_actions()
+
+    def recalculate_publication(self):
+        if (not self.publication.isVisible() or not self.publication_ready() or self.job
+                or self.review_job or self.attempted_review == self.review_revision):
+            return
+        inputs = self.publication_inputs()
+        writer, run, symbols, name = inputs
+        revision = self.attempted_review = self.review_revision
+        reviewed_stamp = self.review_stamp
+        groups = self.selected_publication_groups() if self.review is not None else None
+        rules = self.rule_settings
+
+        def work(_):
+            stamp = reviewed_stamp
+            try:
+                if stamp is None:
+                    stamp = publication_stamp(writer, run, symbols)
+                require_publication_stamp(writer, run, symbols, stamp)
+                result = review_selection(writer, run, symbols, name, groups, rules=rules)
+                require_publication_stamp(writer, run, symbols, stamp)
+                return revision, inputs, stamp, groups, result, "", False
+            except Exception as error:  # Carry the request identity with failures too.
+                return revision, inputs, stamp, groups, None, str(error), isinstance(error, PublicationInputsChanged)
+
+        job = self.review_job = Job(work)
+        job.signals.completed.connect(self.publication_reviewed)
+        self.coverage_summary.setText("正在按勾选计算覆盖…" if groups is not None else "正在核对作者、来源与可用字符…")
+        self.update_actions()
+        QtCore.QThreadPool.globalInstance().start(job)
+
+    def publication_reviewed(self, response):
+        self.review_job = None
+        revision, inputs, stamp, groups, result, error, changed = response
+        if revision != self.review_revision or inputs != self.publication_inputs():
+            self.update_actions()
+            self.review_timer.start()
+            return
+        if changed:
+            self.invalidate_publication()
+            return
+        self.review_stamp = stamp
+        if result is None:
+            self.coverage_summary.setText("清单核对失败：" + error)
+            self.update_actions()
+            return
+        self.review = inputs
+        if groups is None:
+            self.unselected_issues = {}
+            for item in result["issues"]:
+                self.unselected_issues.setdefault(item["group"], []).append(item)
+            self.create_publication_rows(result)
+            groups = self.selected_publication_groups()
+            all_groups = {key[0] for key in result["coverage"]}
+            if groups != all_groups:
+                self.review_revision += 1
+                self.recalculate_publication()
+                return
+        self.review_groups, self.review_result = groups, result
+        self.show_publication_coverage(result)
+        self.publication_progress.setText("已核对当前勾选。汉字来源与包完整性在制包时核验。")
+        self.update_actions()
+
+    def create_publication_rows(self, result):
+        available = {group for group, _, _ in result["coverage"]}
+        self.available_members = {}
+        for group, _, char in result["coverage"]:
+            self.available_members.setdefault(group, set()).add(char)
+        invalid = {item["group"] for item in result["issues"] if item.get("invalid")}
+        with QtCore.QSignalBlocker(self.contents):
+            self.contents.clear()
+            for key, label in {"han": "汉字", **GROUPS}.items():
+                row = QtWidgets.QTreeWidgetItem(self.contents, [label])
+                row.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
+                if key in available or key in invalid or (key in SYMBOL_GROUPS and self.symbols.text().strip()):
+                    checked = self.group_choices.get(key, key in available and key not in invalid)
+                    row.setCheckState(0, QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
+                else:
+                    row.setFlags(row.flags() & ~QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                if key == "han":
+                    row.setToolTip(0, self.run.text())
+                else:
+                    row.setToolTip(0, self.symbols.text())
+        batch = result["batch"]
+        external = batch is not None and self.batches.currentIndex() == 0
+        self.batch_summary.setText(batch_label(batch) if external else "")
+        self.batch_summary.setVisible(external)
+
+    def show_publication_coverage(self, result):
+        from collections import Counter, defaultdict
+
+        coverage, issues = display_coverage(result["coverage"]), result["issues"]
+        by_group = defaultdict(dict)
+        for (group, kind, char), count in coverage.items():
+            by_group[group].setdefault(char, Counter())[kind] += count
+        origins = ("recorded", "shared", "constructed")
+
+        def details(row, label, characters):
+            chars = list(characters)
+            for i in range(0, len(chars), 24):
+                text = label + " · " + " ".join(chars[i:i + 24])
+                child = QtWidgets.QTreeWidgetItem(row, [text])
+                child.setFirstColumnSpanned(True)
+                child.setToolTip(0, text)
+
+        with QtCore.QSignalBlocker(self.contents):
+            for i in range(self.contents.topLevelItemCount()):
+                row = self.contents.topLevelItem(i)
+                key = row.data(0, QtCore.Qt.ItemDataRole.UserRole)
+                row.takeChildren()
+                checked = key in self.review_groups
+                available = by_group[key]
+                if key == "han":
+                    row.setText(0, "汉字")
+                    row.setText(4, "制包时核验" if checked else "—")
+                    batch = result["batch"]
+                    if batch:
+                        if checked:
+                            row.setText(0, f"汉字 · 生成 {len(available)} 字 / {sum(v['generated'] for v in available.values())} 份")
+                        details(row, "已完成范围", batch["characters"])
+                        details(row, "失败", [item["character"] for item in batch["failed"]])
+                        details(row, "未完成", batch["pending"])
+                    continue
+                group_issues = [item for item in issues if item["group"] == key] if checked else self.unselected_issues.get(key, [])
+                by_char = defaultdict(list)
+                for item in group_issues:
+                    by_char[item["target"]].append(item)
+                catalog = SYMBOL_GROUPS[key][1] if key in SYMBOL_GROUPS else ""
+                known = self.available_members.get(key, set()) | set(available) | set(by_char)
+                members = tuple(dict.fromkeys((*catalog, *sorted(known))))
+                row.setText(0, GROUPS[key] + (" · " + character_preview(key, members) if members else ""))
+                row.setToolTip(0, " ".join(members))
+                for col, kind in enumerate(origins, 1):
+                    counts = [v[kind] for v in available.values() if v[kind]]
+                    row.setText(col, f"{len(counts)} / {sum(counts)}" if checked else "—")
+                invalid = [item for item in group_issues if item.get("invalid")]
+                row.setText(4, f"{len({item['target'] for item in invalid})} / {len(invalid)}" if invalid else "—")
+                for char in members:
+                    counts = available.get(char, Counter())
+                    problems = by_char[char]
+                    failed = sum(bool(item.get("invalid")) for item in problems)
+                    selectable = row.flags() & QtCore.Qt.ItemFlag.ItemIsUserCheckable
+                    status = ("未勾选" if not checked and selectable else f"可入包 · {sum(counts.values())} 份"
+                              if counts else "未通过校验" if failed else "缺失")
+                    child = QtWidgets.QTreeWidgetItem(row, [f"{char} · U+{ord(char):04X} · {status}",
+                        *(str(counts[k]) if counts[k] else "—" for k in origins), str(failed) if failed else "—"])
+                    if problems:
+                        child.setToolTip(0, "\n".join(item["reason"] +
+                            (f" · {item['source']}" if item.get("source") else "") for item in problems))
+        chars = len({key[2] for key in coverage})
+        self.coverage_summary.setText(f"预计入包 {chars} 个字符 · {sum(coverage.values())} 份候选。"
+                                      "类别行显示字符数 / 候选份数，展开可查看每个字符。")
+
+    def show_publication_rules(self):
+        if not self.review_result:
+            return
+        from .publication_rules_ui import PublicationRulesDialog
+
+        revision = self.review_revision
+        result = self.review_result
+        evidence = result["rule_evidence"]
+        rows = rule_rows(result["coverage"], self.review_groups, evidence, result["issues"],
+                         bool(self.symbols.text().strip()), self.rule_settings)
+        dialog = PublicationRulesDialog(rows, evidence, self.rule_settings, self.publication)
+        accepted = dialog.exec() == QtWidgets.QDialog.Accepted
+        settings = dialog.settings()
+        dialog.deleteLater()
+        if not accepted:
+            return
+        if revision != self.review_revision:
+            self.publication_progress.setText("来源已变化。请重新打开规则窗口核对供体。")
+            return
+        if settings != self.rule_settings:
+            self.rule_settings = settings
+            self.invalidate_publication()
+
+    def publication_groups_changed(self, item, column):
+        if column != 0 or item.parent() is not None:
+            return
+        key = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        self.group_choices[key] = item.checkState(0) == QtCore.Qt.Checked
+        self.review_revision += 1
+        self.review_result = None
+        self.coverage_summary.setText("正在按勾选重新计算字符数与候选份数…")
+        self.update_actions()
+        self.review_timer.start()
+
+    def watch_publication(self):
+        if not self.publication.isVisible() or self.job or self.review_job or self.watch_job:
+            return
+        if self.review_stamp is None:
+            self.recalculate_publication()
+            return
+        stamp, inputs = self.review_stamp, self.publication_inputs()
+
+        def work(_):
+            try:
+                require_publication_stamp(*inputs[:3], stamp)
+                return stamp, True
+            except (ValueError, OSError):
+                return stamp, False
+
+        self.watch_job = Job(work)
+        self.watch_job.signals.completed.connect(self.publication_watched)
+        QtCore.QThreadPool.globalInstance().start(self.watch_job)
+
+    def publication_watched(self, result):
+        self.watch_job = None
+        stamp, valid = result
+        if not valid and self.review_stamp is stamp:
+            self.invalidate_publication()
+            self.publication_progress.setText("来源已变化，正在重新核对清单…")
+
+    def selected_publication_groups(self):
+        return {row.data(0, QtCore.Qt.ItemDataRole.UserRole)
+                for i in range(self.contents.topLevelItemCount())
+                if (row := self.contents.topLevelItem(i)).checkState(0) == QtCore.Qt.Checked}
 
     def update_actions(self):
         for button in self.buttons:
@@ -167,12 +516,23 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                     button.setEnabled(False)
         if hasattr(self, 'more_button'):
             self.more_button.setEnabled(self.job is None)
-        run, symbols = self.run.text().strip(), self.symbols.text().strip()
-        inputs_ready = bool(run or symbols) and (not run or Path(run).is_dir()) and (
-            not symbols or Path(symbols).exists())
-        self.build_button.setEnabled(self.job is None and bool(self.writer.text().strip())
-            and bool(self.name.text().strip()) and inputs_ready)
+            self.folder_action.setEnabled(self.job is None and selected)
+            self.rename_action.setEnabled(self.job is None and selected)
+            self.archive_action.setEnabled(self.job is None and selected)
+        # Keep one main action; the same browser also serves the font picker.
+        for button, primary in ((self.import_button, not self.use_button.isEnabled()),
+                                (self.use_button, self.use_button.isEnabled())):
+            role = 'primary' if primary else ''
+            if button.property('inkRole') != role:
+                button.setProperty('inkRole', role)
+                button.style().unpolish(button)
+                button.style().polish(button)
+        idle = self.job is None and self.review_job is None
+        self.build_button.setEnabled(idle and self.review_result is not None and bool(self.name.text().strip())
+                                     and bool(self.review_result["coverage"]))
+        self.rules_button.setEnabled(idle and self.review_result is not None)
         self.publication_fields.setEnabled(self.job is None)
+        self.contents.setEnabled(self.review is not None and self.job is None)
 
     def set_progress(self, message):
         self.progress.setText(message)
@@ -250,6 +610,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
 
     def failed(self, message):
         self.job = None
+        if "请重新核对待制包清单" in message:
+            self.invalidate_publication()
         self.update_actions()
         self.set_progress("未完成：" + message)
         QtWidgets.QMessageBox.warning(self, "字体操作未完成", message)
@@ -270,24 +632,24 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                        if Path(name).name == name and name.endswith('.inkfont')}
             for p in sorted(paths):
                 try:
-                    title, _ = self.describe_font(p)
+                    full_title, _ = self.describe_font(p)
                     present.add(str(p))
                     data = self.catalog.get(p.name, {})
                     summary = self.metadata_for(p)
-                    prefix = data.get('alias')
-                    if prefix and summary:
-                        title = prefix + ' · ' + summary['manifest']['writer_alias']
-                    if summary:
-                        title += '\n内容版本 ' + summary['manifest']['font_version']
+                    title = data.get('alias') or (summary['manifest']['name'] if summary else p.stem)
+                    if data.get('error'):
+                        title += ' · 不可读取'
                     if data.get('archived'):
                         title += ' · 已移出'
                     if defaults.run and str(p.resolve()) == str(Path(defaults.run).resolve()):
                         title += ' · 新文档默认'
                     item = QtWidgets.QListWidgetItem(title)
+                    item.setToolTip(full_title + ('\n内容版本 ' + summary['manifest']['font_version'] if summary else '') + '\n' + str(p))
                     item.setData(QtCore.Qt.ItemDataRole.UserRole, str(p))
                     self.list.addItem(item)
                 except (ValueError, OSError, KeyError) as error:
-                    item = QtWidgets.QListWidgetItem(p.name + '\n不可读取：' + str(error))
+                    item = QtWidgets.QListWidgetItem(p.stem + ' · 不可读取')
+                    item.setToolTip(str(p) + '\n' + str(error))
                     item.setData(QtCore.Qt.ItemDataRole.UserRole, str(p))
                     self.list.addItem(item)
             if self.list.count():
@@ -325,21 +687,20 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         try:
             path = self.selected()
             if getattr(self, '_inspection_path', None) != str(path):
+                self.clear_font_details()
                 self._inspection_path = str(path)
-                self.ink_preview.load(b'<svg xmlns="http://www.w3.org/2000/svg"/>')
-                self.sample_count.clear()
-                self.version_info.clear()
-                self.version_list.clear()
-                self.file_info.clear()
-                self.character_preview.load(b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+            error = self.catalog.get(path.name, {}).get('error')
+            if error:
+                raise ValueError(error)
             self.detail.setText(self.describe_font(self.selected())[1])
+            self.detail_stack.setCurrentWidget(self.details_tabs)
             self.update_management(self.selected())
         except (ValueError, OSError, KeyError) as error:
-            self.detail.setText(('资源不可读取，记录保留：' + str(error)) if self.list.currentItem() else
-                                '还没有字体。可导入字体包，或从已完成的生成结果制作字体。')
-            if hasattr(self, 'ink_preview'):
-                self.inspection_epoch += 1
-                self.ink_preview.load(b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+            self.clear_font_details()
+            if self.list.currentItem():
+                self.show_font_message('字体暂不可读取', str(error) + '\n原文件和管理记录保留，可从“更多操作”刷新列表后重试。')
+            else:
+                self.show_unselected_font()
         self.update_actions()
 
     def import_font(self):
@@ -355,30 +716,35 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.submit(work)
 
     def build(self):
-        writer = self.writer.text().strip()
-        name = self.name.text().strip()
-        run = self.run.text().strip()
-        symbols = self.symbols.text().strip()
-        kind = self.kind.currentData()
-        if not writer or not name:
-            return self.failed("请填写书写者和字体名称")
-        import uuid
-
-        path = self.root / (str(uuid.uuid4()) + ".inkfont")
+        inputs = self.publication_inputs()
+        if not self.build_button.isEnabled() or self.review != inputs or self.review_groups != self.selected_publication_groups():
+            return
+        writer, run, symbols, name = inputs
+        kind, stamp = self.kind.currentData(), self.review_stamp
+        groups, expected = self.review_groups, self.review_result["coverage"]
+        rules = self.rule_settings
 
         def work(progress):
-            build_font(
-                path,
-                writer=writer,
-                name=name,
-                run=run or None,
-                symbols=symbols or None,
-                package_kind=kind,
-                progress=progress,
-            )
-            font = FontPackage(path, verify_all=False)
-            stats = font.verify(progress=progress)
-            return {"path": str(path), "published": True, "entry": (fingerprint(path), *entry(font)), "message": f"字体已发布并验证 · {stats['characters']} 字，{stats['candidates']} 份候选"}
+            result = publish_font(self.root, writer=writer, run=run, symbols=symbols, name=name,
+                                  package_kind=kind, groups=groups, stamp=stamp, expected=expected,
+                                  progress=progress, rules=rules)
+            stats = result["verification"]
+            actual, difference = display_coverage(result["coverage"]), result["difference"]
+            lines = [f"字体已验证并入库 · {stats['characters']} 字，{stats['candidates']} 份候选"]
+            for origin, label in COVERAGE.items():
+                counts = [(key[2], count) for key, count in actual.items() if key[1] == origin]
+                if counts:
+                    lines.append(f"{label} {len({char for char, _ in counts})} 字 / {sum(n for _, n in counts)} 份")
+            if difference:
+                changes = "、".join(f"{char} {delta:+} 份" for (_, _, char), delta in sorted(difference.items())[:24])
+                lines.append("与待制包清单的差异 · " + changes + ("…" if len(difference) > 24 else ""))
+            else:
+                lines.append("实际覆盖与待制包清单一致。")
+            lines.append(" · ".join(f"{label} {seconds:.2f} 秒" for label, seconds in result["timings"].items()))
+            if result["log"]:
+                lines.append("入包明细与阶段记录：" + result["log"])
+            result["message"] = "\n".join(lines)
+            return result
 
         self.submit(work)
 

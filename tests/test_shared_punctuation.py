@@ -31,7 +31,7 @@ def test_collection_canonicalization_and_distinct_shapes(tmp_path):
     assert len(CHARACTERS)==len(set(CHARACTERS))
     assert set(CAPTURE_CHARACTERS)=={capture_character(c) for c in CHARACTERS}
     _, entries = task_plan(TASK_GROUPS)
-    assert len(entries)==260 and sum(n for _, n, _ in entries)==1300
+    assert len(entries)==268 and sum(n for _, n, _ in entries)==1340
     assert not any(c in SHARED_PUNCTUATION for c, _, _ in entries)
     assert set(CHINESE_PUNCTUATION)<={c for c, _, _ in entries}
     assert symbol_info('（')['math_class_hint']=='open'

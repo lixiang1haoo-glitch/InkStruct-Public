@@ -60,6 +60,12 @@ class ResolvedGlyph:
         return json.loads(self.original_json) if self.provider_version == "inkfont-core-v1" else None
 
     @property
+    def font_metadata(self):
+        if "_font_metadata" in self.__dict__:
+            return self._font_metadata
+        return self.font_core
+
+    @property
     def math_axis_em(self):
         """Read recorded metadata, never infer an axis from shape or defaults."""
         if self.font_core is not None:
@@ -79,12 +85,14 @@ class ResolvedGlyph:
 
     @property
     def layout_bounds(self):
-        frame = self.font_core.get("summary", {}).get("optical_layout_frame") if self.font_core else None
+        metadata = self.font_metadata
+        frame = metadata["summary"].get("optical_layout_frame") if metadata else None
         return tuple(frame["bounds"]) if frame else self.bounds
 
     @property
     def layout_metrics(self):
-        frame = self.font_core.get("summary", {}).get("optical_layout_frame") if self.font_core else None
+        metadata = self.font_metadata
+        frame = metadata["summary"].get("optical_layout_frame") if metadata else None
         return GlyphMetrics(**frame["metrics"]) if frame else self.metrics
 
     @cached_property

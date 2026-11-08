@@ -15,6 +15,7 @@ from markdown_it.rules_block.table import escapedSplit, getLine, table
 from markdown_it.rules_inline.state_inline import StateInline
 
 from ._math_mapping import block_math, inline_math
+from .break_commands import block_flow_break, inline_break
 from .cancellation import check_cancel
 from .footnotes import footnote_definition, footnote_reference
 from .schema import SourceSpan
@@ -142,6 +143,10 @@ class LocatedBlockParser(ParserBlock):
         super().__init__()
         self.ruler.at("table", bounded_table)
         self.ruler.at("code", located_code)
+        self.ruler.before(
+            "fence", "flow_break", block_flow_break,
+            {"alt": ["paragraph", "reference", "blockquote", "list"]},
+        )
         self.ruler.before(
             "reference",
             "footnote_definition",
@@ -305,6 +310,7 @@ def instrument_rule(rule):
 class LocatedInlineParser(ParserInline):
     def __init__(self):
         super().__init__()
+        self.ruler.before("escape", "break_command", inline_break)
         self.ruler.before("escape", "math_inline", inline_math)
         self.ruler.before("link", "footnote_reference", footnote_reference)
         for entry in self.ruler.__rules__:

@@ -5,9 +5,11 @@ import re
 from PySide6 import QtCore, QtWidgets
 
 from .punctuation import capture_character, capture_label
+from .symbol_catalog import SYMBOL_GROUPS, character_preview
 from .symbol_reuse import inventory, reuse_options, validate_reuse
 from .symbol_review_dialog import InkPreview
 from .symbol_tasks import CUSTOM_PREFIX, TASK_GROUPS, imported_entries
+from .ui_behavior import compact_field
 
 
 class SymbolTaskDialog(QtWidgets.QDialog):
@@ -39,9 +41,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         self.repeats.setValue(5)
         self.repeats.setSuffix(' 份')
         self.repeats.setObjectName('task_repeats')
-        form.addRow('任务名称', self.name)
+        form.addRow('任务名称', compact_field(self.name, maximum=340))
         if catalog is None:
-            form.addRow('书写者 ID', self.writer)
+            form.addRow('书写者 ID', compact_field(self.writer, maximum=340))
         else:
             row = QtWidgets.QHBoxLayout()
             row.addWidget(self.writer, 1)
@@ -50,27 +52,30 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             row.addWidget(create)
             form.addRow('书写者', row)
         if imported is None:
-            form.addRow('每个字符目标份数', self.repeats)
+            form.addRow('每个字符目标份数', compact_field(self.repeats))
         else:
             self.repeats.hide()
             form.addRow('每个字符目标份数', QtWidgets.QLabel('按导入字表；空值默认 5 份'))
         layout.addLayout(form)
-        hint = QtWidgets.QLabel('自由组合类别，展开后逐字勾选。只补已有样本不足的份数。未勾选的斜体不自动复用；复用须查看已有笔迹并确认。中英文逗号、问号、括号等共用一次录制。')
+        hint = QtWidgets.QLabel('自由组合类别，展开后逐字勾选。只补已有样本不足的份数。未勾选的斜体不自动复用；复用须选用已有笔迹供体。中英文逗号、问号、括号等共用一次录制。')
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.groups, self.characters, self.panels = {}, {}, {}
         body = QtWidgets.QWidget()
         body_layout = QtWidgets.QVBoxLayout(body)
-        order = ('chinese_punctuation', 'punctuation', 'brackets', 'digits',
-                 'latin_upright', 'latin_italic', 'operators', 'greek', 'greek_variants')
-        for key in order:
+        for key in TASK_GROUPS:
             label, characters, _ = TASK_GROUPS[key]
             header = QtWidgets.QHBoxLayout()
-            check = QtWidgets.QCheckBox(f'{label}（{len(characters)} 字符）')
+            check = QtWidgets.QCheckBox(f'{label}（{len(characters)} 个采集项）')
             check.setObjectName('task_group_' + key)
             check.toggled.connect(lambda checked, g=key: self.select_group(g, checked))
             self.groups[key] = check
             header.addWidget(check)
+            members = SYMBOL_GROUPS[key][1]
+            preview = QtWidgets.QLabel(character_preview(key, members))
+            preview.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            preview.setToolTip(" ".join(members) + "\n同形的全角和半角字符只录一项。")
+            header.addWidget(preview, 1)
             button = QtWidgets.QPushButton('展开逐字选择')
             button.setMaximumWidth(150)
             header.addWidget(button)
@@ -100,7 +105,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             button = QtWidgets.QPushButton(title)
             button.clicked.connect(lambda _, v=checked: self.select_all(v))
             row.addWidget(button)
-        self.reuse_button = QtWidgets.QPushButton('查看笔迹并配置复用…')
+        self.reuse_button = QtWidgets.QPushButton('指定共用供体…')
         self.reuse_button.clicked.connect(self.configure_reuse)
         row.addWidget(self.reuse_button)
         layout.addLayout(row)
@@ -259,11 +264,12 @@ class ReuseDialog(QtWidgets.QDialog):
     def __init__(self, available, selected, parent=None):
         super().__init__(parent)
         self.available = available
-        self.setWindowTitle('查看已有笔迹，逐项确认复用')
+        self.setWindowTitle('指定共用供体')
         self.setStyleSheet('QListView::indicator:unchecked { background: transparent; border: 1px solid #8995a5; border-radius: 2px; }')
         self.resize(800, 540)
         layout = QtWidgets.QVBoxLayout(self)
-        note = QtWidgets.QLabel('勾选即确认目标字符采用右侧英文正体笔迹；不做倾斜变换。仅提供已有来源的项目，未录正体须先采集。希腊字符保留自身 Unicode 身份。来源被重录后须重新确认。')
+        note = QtWidgets.QLabel('逐项确认目标字符采用右侧英文正体笔迹，保留目标编码和原始笔迹。'
+                                '缺少正体来源的规则仍会列出。已确认的来源变化后须重新确认。')
         note.setWordWrap(True)
         layout.addWidget(note)
         row = QtWidgets.QHBoxLayout()
@@ -271,15 +277,19 @@ class ReuseDialog(QtWidgets.QDialog):
         self.records = []
         for group, target, source in reuse_options():
             samples = available.get((source, 'upright'), {})
-            if not samples:
-                continue
+            previous = selected.get((group, target))
+            valid_previous = previous and set(previous['sample_ids']) <= set(samples)
             record = {'group': group, 'target': target, 'source': source, 'source_style': 'upright',
-                      'sample_ids': sorted(samples), 'confirmed': True}
+                      'sample_ids': previous['sample_ids'] if valid_previous else sorted(samples), 'confirmed': True}
             self.records.append(record)
             label = '英文斜体' if group == 'latin_italic' else '希腊字母'
-            item = QtWidgets.QListWidgetItem(f'{target}（{label}）← {source}（英文正体，{len(samples)} 份）')
-            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
-            item.setCheckState(QtCore.Qt.Checked if (group, target) in selected else QtCore.Qt.Unchecked)
+            status = '缺少录制来源' if not samples else '来源已变化，须重新确认' if previous and not valid_previous else f'{len(record["sample_ids"])} 份可用'
+            item = QtWidgets.QListWidgetItem(f'{target}（{label}）← {source}（英文正体） · {status}')
+            if samples:
+                item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+                item.setCheckState(QtCore.Qt.Checked if valid_previous else QtCore.Qt.Unchecked)
+            else:
+                item.setFlags(item.flags() & ~QtCore.Qt.ItemIsUserCheckable)
             self.list.addItem(item)
         row.addWidget(self.list, 1)
         right = QtWidgets.QVBoxLayout()
@@ -297,12 +307,12 @@ class ReuseDialog(QtWidgets.QDialog):
         layout.addLayout(selection)
         self.list.currentRowChanged.connect(self.show_source)
         self.specimens.currentIndexChanged.connect(self.show_specimen)
-        if self.records:
-            self.list.setCurrentRow(0)
-        else:
+        first = next((index for index, record in enumerate(self.records) if record['sample_ids']), -1)
+        self.list.setCurrentRow(first)
+        if first == -1:
             layout.addWidget(QtWidgets.QLabel('此作者尚无可复用的英文正体样本。请先录制所需正体字符。'))
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText('确认所勾选的复用关系')
+        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText('确认选用所勾选的供体')
         buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText('取消')
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -323,8 +333,9 @@ class ReuseDialog(QtWidgets.QDialog):
 
     def confirmed(self):
         return {(r['group'], r['target']): r for index, r in enumerate(self.records)
-                if self.list.item(index).checkState() == QtCore.Qt.Checked}
+                if r['sample_ids'] and self.list.item(index).checkState() == QtCore.Qt.Checked}
 
     def select_all(self, checked):
-        for i in range(self.list.count()):
-            self.list.item(i).setCheckState(QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
+        for i, record in enumerate(self.records):
+            if record['sample_ids']:
+                self.list.item(i).setCheckState(QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)

@@ -1,7 +1,10 @@
 """Headless integrated check; never claims native focus or tablet validation."""
 
 import argparse
+import hashlib
 import json
+import os
+import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -242,7 +245,7 @@ def verify_punctuation_spacing(editor, out, wait):
     save_package(path, editor.source_session, editor.resolver, editor.page, editor.style,
                  flow=editor.flow, optimize=editor.optimize.isChecked())
     loaded = load_package(path)
-    assert loaded.optimize and loaded.flow.schema_version == 'inkstruct_flow_style_v4'
+    assert loaded.optimize and loaded.flow.schema_version in {'inkstruct_flow_style_v4', 'inkstruct_flow_style_v5'}
     reopened = layout_markdown(parse_markdown(loaded.session), loaded.resolver,
                                page=loaded.page, style=loaded.style, flow=loaded.flow)
     assert loaded.resolver.selection_records() == choices
@@ -588,8 +591,8 @@ def verify_flow_templates(editor,out,wait):
 def verify_generation(w, out, wait, profile_path):
     """Real archived source, production engines and actual frozen spawn children."""
     import gzip
+
     from inkstruct.application import database_path
-    from inkstruct.generation_targets import extract_document
     from inkstruct.generation_workflow import generate_v61
     from inkstruct.samples import sha256_file
     from inkstruct.structures import StructureRepository
@@ -598,9 +601,10 @@ def verify_generation(w, out, wait, profile_path):
     characters = list('孔正址兄礼烧止怔歪羊群')
     # Load the actual shipped catalogue, require omission review, then exercise
     # the real complete-set task with bounded cancellation (no full-library run).
+    import threading
+
     from inkstruct.character_sets import CharacterSets
     from inkstruct.character_sets_ui import CharacterSetsDialog
-    import threading
     catalog = CharacterSets()
     available = StructureRepository(database_path()).characters()
     dialog = CharacterSetsDialog(available, widget)
@@ -691,19 +695,294 @@ def verify_generation(w, out, wait, profile_path):
             'mode': 'automated real widget handlers; not optical/native focus acceptance'}
 
 
+def verify_workspace_views(window):
+    from inkstruct.document.schema import SourceSpan
+
+    editor = window.editor
+    views = editor.workspace_views
+    original_mode = views.mode
+    frozen = editor.snapshot
+    source = editor.source_session.identity_record()
+    choices = editor.resolver.selection_records()
+    flow, page, style = editor.flow, editor.page, editor.style
+    for mode in ("source", "split", "preview"):
+        views.buttons[mode].click()
+        QtWidgets.QApplication.processEvents()
+        assert views.mode == mode
+        assert views.source_pane.isHidden() == (mode == "preview")
+        assert views.preview_pane.isHidden() == (mode == "source")
+        assert editor.snapshot is frozen and not editor.worker and not editor.timer.isActive()
+        assert editor.source_session.identity_record() == source
+        assert editor.resolver.selection_records() == choices
+        assert (editor.flow, editor.page, editor.style) == (flow, page, style)
+    editor.navigate_span(SourceSpan(0, 1))
+    assert views.mode == "split" and editor.editor.isVisible()
+    views.set_mode(original_mode)
+    assert editor.element_inspector.context.objectName() == "inspector_context"
+    assert editor.glyph_inspector.impact.objectName() == "inspector_scope"
+    return {"three_modes": True, "same_snapshot_source_and_choices": True,
+            "source_navigation_reveals_pane": True, "context_summary_available": True}
+
+
+def verify_real_candidates(out, profile_path, writer):
+    import gzip
+
+    from inkstruct.application import database_path
+    from inkstruct.assets.resolver import AssetResolver
+    from inkstruct.document.editing import SourceSession
+    from inkstruct.document.schema import PageProfile, StyleProfile
+    from inkstruct.fonts.importer import build_font
+    from inkstruct.generation_workflow import generate_v61
+    from inkstruct.samples import sha256_file
+    from inkstruct.structures import StructureRepository
+
+    profile = {"path": str(profile_path), "sha256": sha256_file(profile_path)}
+    characters = list("嘤喳啜哮")
+    authority = None
+    runs = []
+    for workers in (1, 2):
+        dest = out / f"candidates-{workers}"
+        result = generate_v61(dest, writer, characters, StructureRepository(database_path()), profile,
+                              None, lambda: False, semantic=True, workers=workers, candidate_limit=4)
+        assert result["completed_count"] == len(characters) and not result["failed_count"], result
+        assert result["variant_character_count"] >= 2 and result["candidate_count"] > len(characters)
+        assert result["execution"]["fallback"] is None
+        payloads = [json.loads(gzip.decompress((dest / writer / f"{ord(c):04X}.json.gz").read_bytes()))
+                    for c in characters]
+        if authority is None:
+            authority = payloads
+        else:
+            assert authority == payloads
+        runs.append(result)
+    font_path = out / "multi-candidate.inkfont"
+    build_font(font_path, writer=writer, name="frozen candidate acceptance", run=out / "candidates-1")
+    font = FontPackage(font_path)
+    verification = font.verify()
+    assert verification["candidates"] == runs[0]["candidate_count"]
+    resolver = AssetResolver(embedded=font.glyphs())
+    multi = [c for c in characters if len(font.pools[c]) > 1]
+    source = SourceSession("\n\n".join(c * 48 for c in multi[:2]))
+    page, style = PageProfile(145, 95, 10), StyleProfile()
+    before = layout_markdown(parse_markdown(source), resolver, page=page, style=style)
+    assert before.plotter_exportable
+    choices = resolver.selection_records()
+    assert all(len({r["sample_id"] for r in choices if r["character"] == c}) > 1 for c in multi[:2])
+    save_package(out / "multi-candidate.inkdoc", source, resolver, page, style)
+    restored = load_package(out / "multi-candidate.inkdoc")
+    after = layout_markdown(parse_markdown(restored.session), restored.resolver,
+                            page=restored.page, style=restored.style)
+    assert after == before and restored.resolver.selection_records() == choices
+    for label, snapshot in (("svg-before", before), ("svg-after", after)):
+        export_plan(plan_from_snapshot(snapshot), out / label)
+    first = {p.name: p.read_bytes() for p in (out / "svg-before").glob("*.svg")}
+    assert first and first == {p.name: p.read_bytes() for p in (out / "svg-after").glob("*.svg")}
+    return {"runs": runs, "font": verification, "frozen_choices": len(choices),
+            "source_profile_sha256": profile["sha256"], "same_reopened_svg": True}
+
+
+def verify_large_fonts(window, out, wait, paths):
+    """Exercise real large archives without regeneration or unrelated fixtures."""
+    import zipfile
+    from dataclasses import replace
+
+    from inkstruct.document.schema import PageProfile, StyleProfile
+    from inkstruct.fonts.core import MAX_MEMBER, MAX_TOTAL
+    from inkstruct.fonts.parallel_verify import verify_font
+    from inkstruct.renderers.pages import page_svg
+
+    started = time.perf_counter()
+    log = out / 'large-font-progress.jsonl'
+
+    def emit(stage, **value):
+        record = {'elapsed_s': time.perf_counter() - started, 'stage': stage, **value}
+        with log.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, ensure_ascii=False) + '\n')
+        if sys.stdout is not None:
+            print(json.dumps(record, ensure_ascii=False), flush=True)
+
+    def digest(path):
+        with Path(path).open('rb') as stream:
+            return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+    def svg_geometry(folder):
+        keys = {'d', 'points', 'x1', 'x2', 'y1', 'y2', 'x', 'y', 'width', 'height',
+                'transform', 'stroke-width'}
+        return {p.name: sorted((node.tag, tuple(sorted((k, v) for k, v in node.attrib.items()
+                                                      if k in keys)))
+                               for node in ET.fromstring(p.read_bytes()).iter())
+                for p in folder.glob('*.svg')}
+
+    workflow = window.generator.centralWidget()
+    count = workflow.candidate_limit
+    assert workflow.method.currentData() == 'v62' and count.minimum() == 1 and count.maximum() == 64
+    window.tabs.setCurrentIndex(1)
+    for value, attempts in ((8, 32), (64, 256)):
+        count.setValue(value)
+        assert count.value() == value and str(attempts) in workflow.candidate_hint.text()
+    workflow.busy = True
+    workflow.refresh()
+    assert not count.isEnabled() and count.value() == 64
+    workflow.busy = False
+    workflow.refresh()
+    for method in ('v61', 'v4'):
+        workflow.method.setCurrentIndex(workflow.method.findData(method))
+        assert count.value() == 1 and not count.isEnabled()
+    workflow.method.setCurrentIndex(workflow.method.findData('v62'))
+    assert count.value() == 64 and count.isEnabled()
+    window.generator.grab().save(str(out / 'candidate-64.png'))
+    count.setValue(8)
+    workflow.candidate_preferences.sync()
+    emit('candidate-controls', counts=[8, 64], attempt_limits=[32, 256],
+         fixed_methods=['v61', 'v4'], busy_lock=True, generation_started=False)
+
+    checked = []
+    for index, path in enumerate(paths, 1):
+        before = time.perf_counter()
+        original_sha = digest(path)
+        font = FontPackage(path, verify_all=False)
+        metadata_s = time.perf_counter() - before
+        with zipfile.ZipFile(path) as archive:
+            sizes = {item.filename: item.file_size for item in archive.infolist()}
+        checked.append((font, {'path': str(path), 'input_sha256': original_sha,
+            'metadata_load_with_input_hash_s': metadata_s, 'raw_bytes': sum(sizes.values()),
+            'metadata_bytes': {name: sizes[name] for name in ('manifest.json', 'index.json', 'metrics.json', 'provenance.json')}}))
+        emit('metadata', font=index, candidates=len(font.records), raw_bytes=sum(sizes.values()))
+    authority = max((font for font, _ in checked), key=lambda f: len(f.records))
+    subset = min((font for font, _ in checked), key=lambda f: len(f.records))
+    assert authority.manifest['font_id'] == subset.manifest['font_id']
+    assert authority.manifest['name'] == subset.manifest['name']
+    lookup = {r['candidate_id']: r for r in authority.records}
+    for record in subset.records:
+        cid = record['candidate_id']
+        assert lookup[cid] == record
+        assert authority.metrics[cid] == subset.metrics[cid]
+        assert authority.provenance[cid] == subset.provenance[cid]
+
+    # Deliberately limited to characters present in both supplied real fonts.
+    # Short symbol paragraphs avoid the unrelated repeated-punctuation boundary
+    # failure retained in the capacity experiment's first fixture.
+    text = '\n\n'.join([*[c * 48 for c in '嘤沐果'], 'ABC123', 'A℃B', 'A～B', 'A∶B',
+        'A∗B', 'AℏB', 'A．B', 'αβγ', r'$1+2=3,\quad A\circ B,\quad\hbar$',
+        r'$\alpha+\beta=\gamma$'])
+    (out / 'large-font-fixture.md').write_text(text, 'utf-8')
+    required = set('嘤沐果ABC123℃～∶∗ℏ．αβγ∘+=,')
+    assert all(required <= set(font.pools) for font, _ in checked)
+    editor = window.editor
+    common_choices = common_svg = None
+    results = []
+    for index, (font, report) in enumerate(checked, 1):
+        folder = out / f'large-font-{index}'
+        folder.mkdir()
+        last_progress = 0.0
+
+        def verification_progress(message, font_index=index):
+            nonlocal last_progress
+            if time.perf_counter() - last_progress >= 15:
+                emit('verify-progress', font=font_index, message=message)
+                last_progress = time.perf_counter()
+
+        telemetry = {}
+        before = time.perf_counter()
+        report['verification'] = verify_font(font, workers=4, progress=verification_progress, telemetry=telemetry)
+        report['verification_s'] = time.perf_counter() - before
+        report['verification_runtime'] = telemetry
+        assert telemetry['workers'] == 4 and len(telemetry['worker_pids']) > 1
+        emit('verified', font=index, **report['verification'], wall_s=report['verification_s'])
+        editor.flow = replace(editor.flow, template=None, template_bindings=(), glyph_corrections=(),
+                              images=(), image_overrides=())
+        editor.page, editor.loaded_style = PageProfile(145, 95, 10), StyleProfile()
+        before = time.perf_counter()
+        window.use_font(font.path)
+        report['use_font_sync_s'] = time.perf_counter() - before
+        if editor.editor.toPlainText() != text:
+            editor.editor.setPlainText(text)
+        wait(lambda: editor.snapshot and any(f.text == 'α' for f in editor.snapshot.fragments)
+             and not editor.worker and not editor.timer.isActive() and editor.canvas.isEnabled(), 300)
+        snapshot = editor.snapshot
+        assert snapshot.plotter_exportable, snapshot.diagnostics
+        report['diagnostics'] = [asdict(d) for d in snapshot.diagnostics]
+        (folder / 'diagnostics.json').write_text(json.dumps(report['diagnostics'], ensure_ascii=False, indent=2), 'utf-8')
+        for number in dict.fromkeys((1, len(snapshot.pages))):
+            editor.page_picker.setValue(number)
+            wait(lambda: editor.canvas.viewport_ready(), 60)
+            assert not editor.canvas._errors, editor.canvas._errors
+            window.grab().save(str(folder / f'preview-page-{number}.png'))
+        choices = editor.resolver.selection_records()
+        report['usage_warnings'] = editor.resolver.usage_warnings()
+        report['selected_candidates'] = {c: len({r['sample_id'] for r in choices if r['character'] == c}) for c in '嘤沐果'}
+        selected = [(r['occurrence_id'], r['character'], r['sample_id']) for r in choices]
+        if common_choices is None:
+            common_choices = selected
+        else:
+            assert selected == common_choices
+        path = folder / 'mixed.inkdoc'
+        save_package(path, editor.source_session, editor.resolver, editor.page, editor.style,
+                     flow=editor.flow, optimize=editor.optimize.isChecked())
+        restored = load_package(path)
+        reopened = layout_markdown(parse_markdown(restored.session), restored.resolver,
+            page=restored.page, style=restored.style, flow=restored.flow)
+        assert choices == restored.resolver.selection_records()
+        assert editor.source_session.atom_ids == restored.session.atom_ids
+        assert [page_svg(snapshot, i) for i in range(len(snapshot.pages))] == [
+            page_svg(reopened, i) for i in range(len(reopened.pages))]
+        for label, value in (('before', snapshot), ('after', reopened)):
+            export_plan(plan_from_snapshot(value), folder / f'svg-{label}', optimize=restored.optimize)
+        svg = {p.name: p.read_bytes() for p in (folder / 'svg-before').glob('*.svg')}
+        assert svg and svg == {p.name: p.read_bytes() for p in (folder / 'svg-after').glob('*.svg')}
+        geometry = svg_geometry(folder / 'svg-before')
+        if common_svg is None:
+            common_svg = geometry
+        else:
+            assert geometry == common_svg
+        assert digest(font.path) == report['input_sha256']
+        report.update(pages=len(snapshot.pages), frozen_choices=len(choices),
+            preview_first_and_last_ready=True, save_reopen_exact=True, strict_svg_bytes_exact=True,
+            source_font_sha_unchanged=True)
+        results.append(report)
+        emit('document-verified', font=index, pages=len(snapshot.pages), choices=len(choices),
+             diagnostics=report['diagnostics'])
+    return {'raw_limit': MAX_TOTAL, 'member_limit': MAX_MEMBER,
+        'candidate_controls': {'counts': [8, 64], 'attempt_limits': [32, 256], 'method_lock': True,
+                               'busy_lock': True, 'no_generation': True},
+        'common_candidates_exact': len(subset.records), 'same_occurrence_candidate_ids': True,
+        'same_svg_geometry': True, 'fonts': results, 'wall_s': time.perf_counter() - started,
+        'mode': 'offscreen frozen/source check; native focus, responsiveness and tablet not certified'}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--font", type=Path)
     parser.add_argument("--samples", type=Path)
     parser.add_argument('--generation-profile', type=Path)
+    parser.add_argument('--candidate-check', action='store_true')
+    parser.add_argument('--math-settings-check', action='store_true')
+    parser.add_argument('--large-font-check', action='store_true')
+    parser.add_argument('--large-font', action='append', type=Path, default=[])
     parser.add_argument("--writer", default="scx")
     parser.add_argument("--export-only", action="store_true")
     args = parser.parse_args()
-    if args.generation_profile is None and (args.font is None or args.samples is None):
+    if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
+                                         args.large_font_check, args.large_font, args.export_only)):
+        parser.error('--math-settings-check is separate from the other checks')
+    if args.large_font_check:
+        if (len(args.large_font) != 2 or len({p.resolve() for p in args.large_font}) != 2
+                or any(not p.is_file() for p in args.large_font)):
+            parser.error('--large-font-check requires two distinct existing --large-font archives')
+        if args.font or args.samples or args.generation_profile or args.candidate_check or args.export_only:
+            parser.error('--large-font-check is separate from the legacy font/sample/generation/export checks')
+    elif args.large_font:
+        parser.error('--large-font requires --large-font-check')
+    elif args.math_settings_check:
+        if args.font is None or not args.font.is_file():
+            parser.error('--math-settings-check requires an existing --font')
+    elif args.generation_profile is None and (args.font is None or args.samples is None):
         parser.error('--font and --samples are required unless --generation-profile is supplied')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
+    if args.large_font_check or args.math_settings_check:
+        # Recovery files must be private too, not only Qt preferences/workspace.
+        os.environ['INKSTRUCT_LAYOUT_PREVIEW_HOME'] = str(out / 'private')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["InkStructCheck"])
     app.setApplicationName("InkStructCheck")
     app.setOrganizationName("InkStructCheck")
@@ -711,6 +990,26 @@ def main():
     QtCore.QSettings.setPath(
         QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, str(out / "settings")
     )
+    if args.large_font_check:
+        QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat,
+                                QtCore.QSettings.Scope.SystemScope, str(out / 'settings-system'))
+    original_settings = QtCore.QSettings
+
+    class CheckSettings(original_settings):
+        def __init__(self, *values, **kwargs):
+            if len(values) >= 2 and isinstance(values[0], str) and isinstance(values[1], str):
+                values = (original_settings.IniFormat, original_settings.UserScope, *values)
+            super().__init__(*values, **kwargs)
+
+    QtCore.QSettings = CheckSettings
+    from handwriting_collector import config as capture_config
+    original_store = capture_config.UiSettingsStore
+
+    class CheckUiSettingsStore(original_store):
+        def __init__(self, path=None):
+            super().__init__(path if path is not None else out / "settings/collector-ui.json")
+
+    capture_config.UiSettingsStore = CheckUiSettingsStore
     notices = []
     QtWidgets.QMessageBox.information = lambda *a: None
     QtWidgets.QMessageBox.warning = lambda *a: notices.append(str(a[2]))
@@ -731,8 +1030,53 @@ def main():
             time.sleep(0.01)
         raise AssertionError((notices, w.editor.status.text()))
 
+    if args.math_settings_check:
+        from inkstruct.editor.math_settings import GROUPS, MathSettingsDialog
+        from inkstruct.math.style import MathStyle
+
+        dialog = MathSettingsDialog(MathStyle(), font_path=args.font)
+        dialog.resize(760, 510)
+        dialog.show()
+        assert dialog.reference and dialog.reference.font.familyName() == 'Latin Modern Math'
+        dimensions = 0
+        for index, (title, _example, fields, _hint) in enumerate(GROUPS):
+            dialog.categories.setCurrentRow(index)
+            keys = {key for key, _label in fields}
+            coverage = [set(), set()]
+            for example_index in range(dialog.example_choice.count()):
+                dialog.example_choice.setCurrentIndex(example_index)
+                dialog.refresh_preview()
+                app.processEvents()
+                for pane, seen in zip((dialog.print_preview, dialog.preview), coverage, strict=True):
+                    seen.update(key for key in keys if pane.annotation_marks(key))
+            assert all(seen == keys for seen in coverage), (title, keys, coverage)
+            wait(lambda: all(dialog.controls[key].isVisible() for key in keys), timeout=4)
+            assert dialog.parameter_scroll.horizontalScrollBar().maximum() == 0, title
+            dimensions += len(keys)
+        dialog.reject()
+        w.editor.dirty = False
+        w.close()
+        QtCore.QThreadPool.globalInstance().waitForDone()
+        assert not notices, notices
+        (out / 'verification.json').write_text(json.dumps({
+            'app_version': APP_VERSION, 'frozen': bool(getattr(sys, 'frozen', False)),
+            'formula_categories': len(GROUPS), 'measured_dimensions': dimensions,
+            'reference_font': 'Latin Modern Math', 'executable': sys.executable,
+        }, ensure_ascii=False, indent=2), 'utf-8')
+        return 0
+
+    if args.large_font_check:
+        result = verify_large_fonts(w, out, wait, [p.resolve() for p in args.large_font])
+        (out/'verification.json').write_text(json.dumps({'app_version': APP_VERSION,
+            'large_font_check': result, 'executable': sys.executable,
+            'frozen': bool(getattr(sys, 'frozen', False)), 'notices': notices}, ensure_ascii=False, indent=2), 'utf-8')
+        w.editor.dirty = False
+        w.close()
+        QtCore.QThreadPool.globalInstance().waitForDone()
+        return 0
     if args.generation_profile:
-        result = verify_generation(w, out, wait, args.generation_profile)
+        result = (verify_real_candidates(out, args.generation_profile, args.writer) if args.candidate_check
+                  else verify_generation(w, out, wait, args.generation_profile))
         (out/'verification.json').write_text(json.dumps({'app_version': APP_VERSION, 'generation': result,
             'notices': notices}, ensure_ascii=False, indent=2), 'utf-8')
         w.editor.dirty = False
@@ -746,8 +1090,28 @@ def main():
         wait(lambda: w.editor.snapshot and w.editor.canvas.isEnabled() and
              not w.editor.worker and not w.editor.timer.isActive(), 300)
         result = verify_background_export(w.editor, out, wait)
+        # Reuse the preview's actual-handler checks in the standard frozen bundle.
+        # These fixtures remain private and never alter user fonts or settings.
+        from inkstruct_layout_smoke import verify_new_features
+
+        from inkstruct.document.flow_template import FlowTemplate, PageLayout, TextFrame
+        from inkstruct.document.template import Region
+        frames = (TextFrame('a','A',Region('a',5,5,50,44),order=1),
+                  TextFrame('b','B',Region('b',65,5,50,44),order=2))
+        template = FlowTemplate(kind='custom',name='Integrated check',width_mm=120,height_mm=120,
+                                layouts=(PageLayout('two','Two frames',frames),),loop_pages=('two',))
+        def ready(*, allow_errors=False):
+            wait(lambda: w.editor.snapshot and not w.editor.timer.isActive() and not w.editor.worker
+                 and w.editor.canvas.isEnabled() and w.editor.canvas.viewport_ready())
+            if not allow_errors:
+                assert w.editor.snapshot.plotter_exportable,w.editor.snapshot.diagnostics
+            return w.editor.snapshot
+        new_features = verify_new_features(w.editor,out,ready,template)
+        workspace = verify_workspace_views(w)
+        assert any(d.code=='asset-missing' for g in w.editor.problems_panel.groups for d in g.diagnostics)
         (out/'verification.json').write_text(json.dumps({'app_version': APP_VERSION,
-            'background_export': result, 'notices': notices}, ensure_ascii=False, indent=2), 'utf-8')
+            'background_export': result, 'layout_features':new_features, 'workspace_views': workspace,
+            'problems_panel_grouped_missing':True,'notices': notices}, ensure_ascii=False, indent=2), 'utf-8')
         w.editor.dirty = False
         w.close()
         assert not notices, notices
@@ -810,26 +1174,28 @@ def main():
     # Both pipelines start from real captures, using the actual UI worker handlers.
     workflow = w.generator.centralWidget()
     assert workflow.method.count() == 3 and workflow.method.currentData() == "v62"
-    assert not workflow.profile_button.isEnabled() and not workflow.generate_button.isEnabled()
+    assert not workflow.generate_button.isEnabled()
     workflow.writer.setText(args.writer)
     workflow.samples.setText(str(args.samples))
-    workflow.text.setText("人物理羝羚而铜伯攣盼⺼")
+    target_text = "人物理羝羚而铜伯攣盼⺼"
+    target_file = out / "generation-targets.txt"
+    target_file.write_text(target_text, encoding="utf-8")
+    picker = QtWidgets.QFileDialog.getOpenFileName
+    try:
+        QtWidgets.QFileDialog.getOpenFileName = lambda *args: (str(target_file), "")
+        workflow.target_file_button.click()
+        wait(lambda: not workflow.busy and workflow.target_manifest is not None)
+    finally:
+        QtWidgets.QFileDialog.getOpenFileName = picker
     from inkstruct.assets.resolver import AssetResolver
     from inkstruct.document.editing import SourceSession
     generation_reports = {}
     for method in ("v62", "v61", "v4"):
         workflow.method.setCurrentIndex(workflow.method.findData(method))
-        print(method, "import", flush=True)
-        workflow.do_import()
-        wait(lambda: not workflow.busy, 120)
-        assert workflow.profile_button.isEnabled(), workflow.log.toPlainText()
-        print(method, "profile", flush=True)
-        workflow.do_profile()
-        wait(lambda: not workflow.busy, 300)
         assert workflow.generate_button.isEnabled(), workflow.log.toPlainText()
         workflow.last_generated_run = None
-        print(method, "generate", flush=True)
-        workflow.do_generate()
+        print(method, "prepare and generate", flush=True)
+        workflow.generate_button.click()
         wait(lambda: not workflow.busy, 300)
         assert workflow.last_generated_run, workflow.log.toPlainText()
         run = Path(workflow.last_generated_run)
@@ -840,6 +1206,7 @@ def main():
         w.library.name.setText("smoke " + method)
         w.library.symbols.clear()
         w.library.kind.setCurrentIndex(w.library.kind.findData("user"))
+        wait(lambda: w.library.build_button.isEnabled(), 120)
         assert w.library.build_button.isEnabled()
         w.library.build_button.click()
         wait(lambda: w.library.job is None, 120)
@@ -848,7 +1215,7 @@ def main():
         font = FontPackage(made)
         assert font.verify()["characters"] == 11
         resolver = AssetResolver(embedded=font.glyphs())
-        result = layout_markdown(parse_markdown(SourceSession(workflow.text.text())), resolver)
+        result = layout_markdown(parse_markdown(SourceSession(target_text)), resolver)
         assert result.plotter_exportable, result.diagnostics
         generation_reports[method] = {"run": str(run), "font": font.verify(), "layout": True,
                                       "warnings": resolver.usage_warnings()}
@@ -930,15 +1297,18 @@ def main():
     math = dialog.pages['math']
     assert math.guides.isChecked() and math.preview.show_guides
     assert all(not old.isVisible() for old in math.findChildren(QtWidgets.QScrollArea, 'retired_math_scroll'))
-    for index in range(math.structure_choice.count()):
-        math.structure_choice.setCurrentIndex(index)
+    for index in range(math.categories.count()):
+        math.categories.setCurrentRow(index)
+        math.refresh_preview()
         app.processEvents()
-        assert math.parentWidget().parentWidget().horizontalScrollBar().maximum() == 0
+        assert math.parameter_scroll.horizontalScrollBar().maximum() == 0
     dialog.grab().save(str(out / 'formula-settings.png'))
     assert dialog.apply(), dialog.error.text()
     assert unchanged == (editor.flow, editor.page, editor.style, editor.source_session.atom_ids,
                          editor.resolver.selection_records())
-    math.structure_choice.setCurrentIndex(0)
+    math.categories.setCurrentRow(0)
+    math.refresh_preview()
+    app.processEvents()
     math.controls['em_mm'].setFocus()
     QtTest.QTest.keyClick(math.controls['em_mm'], QtCore.Qt.Key_Escape)
     app.processEvents()

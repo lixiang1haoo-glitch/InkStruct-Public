@@ -25,7 +25,9 @@ class CorrectionPreview(QtWidgets.QWidget):
         if key != self.context_key:
             self.context_key = key
             self.context = (surrounding_glyphs(owner.editor.snapshot, owner.fragment,
-                                              owner.editor.asset_for_fragment)
+                                              owner.editor.asset_for_fragment,
+                                              flow=owner.editor.flow,
+                                              document=owner.editor.markdown_document)
                             if owner.fragment and owner.glyph and owner.editor.snapshot else ())
             self.setToolTip("实际排版邻字：" + "".join(c.fragment.text for c in self.context))
 
@@ -87,7 +89,11 @@ class GlyphInspector(QtWidgets.QWidget):
         self.source_session = None
         column = QtWidgets.QVBoxLayout(self)
         self.selection = label("在排版预览中点击一个有字形的字符。")
+        self.selection.setObjectName("inspector_context")
         column.addWidget(self.selection)
+        self.impact = label("")
+        self.impact.setObjectName("inspector_scope")
+        column.addWidget(self.impact)
         self.fields = QtWidgets.QWidget()
         column.addWidget(self.fields)
         form = QtWidgets.QFormLayout(self.fields)
@@ -117,8 +123,6 @@ class GlyphInspector(QtWidgets.QWidget):
         self.write_font = QtWidgets.QCheckBox("同时保存到字体包的新版本")
         self.write_font.setAccessibleName("同时保存到字体包的新版本")
         form.addRow(self.write_font)
-        self.impact = label("")
-        form.addRow(self.impact)
         self.hint = label("位移以当前字高为单位，向右／向下为正；缩放以左侧基线为原点。")
         column.addWidget(self.hint)
         self.preview = CorrectionPreview(self)
@@ -127,6 +131,7 @@ class GlyphInspector(QtWidgets.QWidget):
                                "批量应用统一更新范围内已有校正，包括单字校正；正体与斜体默认分开。"))
         actions = QtWidgets.QGridLayout()
         self.apply_button = QtWidgets.QPushButton("应用字符校正")
+        self.apply_button.setProperty("inkRole", "primary")
         self.reset_button = QtWidgets.QPushButton("恢复所选范围")
         self.reset_button.setToolTip("恢复本文所选范围到字体原字形；不会删除或覆盖已经另存的字体包。")
         self.cancel_button = QtWidgets.QPushButton("取消未应用修改")
@@ -159,6 +164,9 @@ class GlyphInspector(QtWidgets.QWidget):
         self.cancel_button.setEnabled(ready)
         self.undo_button.setEnabled(bool(ready and self.undo_records))
         self.redo_button.setEnabled(bool(ready and self.redo_records))
+        if not self.editor.canvas.isEnabled():
+            self.selection.setText("预览正在更新，字符校正暂不可用。")
+            self.impact.clear()
 
     def select(self, fragment):
         if self.job:
@@ -173,8 +181,10 @@ class GlyphInspector(QtWidgets.QWidget):
             self.selection.setText("该元素没有可校正的字形，请选择一个已载入的字符。")
         else:
             style = self.glyph.font_core["record"]["letter_style"] if self.glyph.font_core else ""
-            samples = self.sample_ids()
-            index = samples.index(self.glyph.asset_id) + 1
+            samples = self.sample_index()
+            index = next(i for i, candidate in enumerate(samples, 1)
+                         if candidate.sample_id == self.glyph.sample_id
+                         and getattr(candidate, "asset_id", self.glyph.asset_id) == self.glyph.asset_id)
             count = len({f.occurrence_id for f in self.editor.snapshot.fragments
                          if f.asset_id == self.glyph.asset_id and f.text == fragment.text})
             self.selection.setText(f"「{fragment.text}」 U+{ord(fragment.text):04X}\n"
@@ -192,6 +202,10 @@ class GlyphInspector(QtWidgets.QWidget):
             self.undo_records.clear()
             self.redo_records.clear()
             self.fragment = self.glyph = None
+            self.selection.setText("在排版预览中点击一个有字形的字符。")
+            self.impact.clear()
+            self.preview.refresh_context()
+            self.preview.update()
         if self.fragment and self.editor.snapshot:
             fragment = next((f for f in self.editor.snapshot.fragments
                              if f.occurrence_id == self.fragment.occurrence_id
@@ -201,6 +215,8 @@ class GlyphInspector(QtWidgets.QWidget):
             else:
                 self.fragment = self.glyph = None
                 self.selection.setText("先前选择的字符已变化，请在新预览中重新选择。")
+                self.impact.clear()
+                self.preview.refresh_context()
                 self.preview.update()
         self.set_ready(self.editor.canvas.isEnabled())
 
@@ -215,8 +231,8 @@ class GlyphInspector(QtWidgets.QWidget):
 
     def scope_changed(self, *_):
         scope = self.scope.currentData()
-        same = self.sample_ids()
-        all_styles = self.sample_ids(include_styles=True)
+        same = self.sample_index()
+        all_styles = self.sample_index(include_styles=True)
         self.include_styles.setVisible(scope == "character" and len(all_styles) > len(same))
         self.write_font.setVisible(scope != "occurrence")
         self.write_font.setEnabled(bool(self.glyph and self.glyph.font_core and not self.job))
@@ -226,9 +242,10 @@ class GlyphInspector(QtWidgets.QWidget):
             count = len({f.occurrence_id for f in self.editor.snapshot.fragments
                          if f.text == self.fragment.text and f.asset_id in ids and
                          (scope != "occurrence" or f.occurrence_id == self.fragment.occurrence_id)})
-            text = f"将调整 {count} 处" if scope == "occurrence" else (
-                f"将调整当前样本，本文 {count} 处" if scope == "sample" else
-                f"将调整「{self.fragment.text}」的 {len(ids)} 份样本，本文 {count} 处")
+            samples = len(all_styles if self.include_styles.isChecked() else same)
+            text = f"仅此处 · 本文 {count} 处" if scope == "occurrence" else (
+                f"本文同一样本 · {count} 处" if scope == "sample" else
+                f"本文同一字符 · {samples} 份样本／{count} 处")
             if scope != "occurrence" and self.write_font.isChecked() and self.glyph.font_core:
                 text += "；同时另存校正字体"
             self.impact.setText(text)
@@ -237,20 +254,37 @@ class GlyphInspector(QtWidgets.QWidget):
         self.set_ready(self.editor.canvas.isEnabled())
         self.preview.update()
 
-    def sample_ids(self, *, include_styles=False):
-        if not self.glyph:
-            return ()
-        core = self.glyph.font_core
+    def matching_samples(self, pool, include_styles):
+        core = self.glyph.font_metadata
         style = core["record"]["letter_style"] if core else None
-        return tuple(g.asset_id for g in self.editor.resolver.pools.get(self.glyph.character, ())
-                     if not core or (g.font_core and g.font_core["identity"] == core["identity"]
-                                     and (include_styles or g.font_core["record"]["letter_style"] == style)))
+        return tuple(g for g in pool
+                     if not core or (g.font_metadata and g.font_metadata["identity"] == core["identity"]
+                                     and (include_styles or g.font_metadata["record"]["letter_style"] == style)))
 
-    def target_ids(self):
+    def sample_index(self, *, include_styles=False):
         if not self.glyph:
             return ()
-        return (self.sample_ids(include_styles=self.include_styles.isChecked())
-                if self.scope.currentData() == "character" else (self.glyph.asset_id,))
+        return self.matching_samples(
+            self.editor.resolver.candidate_index(self.glyph.character), include_styles
+        )
+
+    def target_ids(self, *, materialize=False):
+        if not self.glyph:
+            return ()
+        if self.scope.currentData() != "character":
+            return (self.glyph.asset_id,)
+        resolver = self.editor.resolver
+        char = self.glyph.character
+        if materialize:
+            from ..fonts.preview_candidates import PreviewFontError
+
+            try:
+                pool = resolver.candidate_pool(char)
+            except PreviewFontError as error:
+                raise ValueError(str(error)) from error
+        else:
+            pool = resolver.pools.get(char, ())
+        return tuple(g.asset_id for g in self.matching_samples(pool, self.include_styles.isChecked()))
 
     def rule(self, **identity):
         if not identity:
@@ -261,7 +295,7 @@ class GlyphInspector(QtWidgets.QWidget):
         scope, f = self.scope.currentData(), self.fragment
         return [self.rule(scope="occurrence" if scope == "occurrence" else "character", character=f.text,
                           occurrence_id=f.occurrence_id if scope == "occurrence" else "", asset_id=a)
-                for a in self.target_ids()]
+                for a in self.target_ids(materialize=True)]
 
     def ready(self):
         w = self.editor

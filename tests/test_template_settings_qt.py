@@ -44,6 +44,11 @@ def ready():
         QtTest.QTest.qWait(10)
     raise AssertionError(w.status.text())
 ready()
+# This dialog is the legacy editor for an existing fixed-region template.
+# New documents open the modern built-in ordinary template workbench.
+w.flow = replace(w.flow, template=t)
+w.schedule_layout()
+ready()
 def accept(dialog):
     dialog.set_template(t)
     dialog.mode.setCurrentIndex(dialog.mode.findData('blank'))

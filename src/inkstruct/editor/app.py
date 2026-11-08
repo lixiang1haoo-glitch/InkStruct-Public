@@ -13,7 +13,7 @@ from ..document.schema import PageProfile, StyleProfile, digest, new_id
 from ..document.source import parse_plain_text, scalar_to_utf16, utf16_to_scalar
 from ..layout.plain import layout_document
 from ..renderers.pages import export_pages, page_svg, preview_key
-from .continuous_preview import ContinuousPageCanvas
+from .continuous_preview import ContinuousPageCanvas, PreviewScrollArea
 from .page_navigation import PageNumberSpinBox
 from .review import (
     RATINGS,
@@ -393,6 +393,7 @@ class ReviewWindow(QtWidgets.QMainWindow):
         for label, scale in [("75%", 2.25), ("100%", 3.0), ("150%", 4.5), ("200%", 6.0)]:
             self.zoom.addItem(label, scale)
         self.zoom.setCurrentIndex(1)
+        self.zoom.setToolTip("在页面预览区按住 Ctrl 滚动可缩放")
         self.zoom.currentIndexChanged.connect(self.zoom_changed)
         nav.addWidget(self.zoom)
         nav.addStretch()
@@ -400,7 +401,8 @@ class ReviewWindow(QtWidgets.QMainWindow):
         right_layout.addLayout(nav)
         self.canvas = ContinuousPageCanvas()
         self.canvas.selected.connect(self.select_fragment)
-        self.scroll = QtWidgets.QScrollArea()
+        self.scroll = PreviewScrollArea()
+        self.scroll.zoom_requested.connect(self.preview_zoom_wheel)
         self.scroll.setObjectName("page_scroll")
         self.scroll.setWidget(self.canvas)
         self.scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -587,21 +589,34 @@ class ReviewWindow(QtWidgets.QMainWindow):
             with QtCore.QSignalBlocker(self.page_picker):
                 self.page_picker.setValue(index + 1)
 
-    def zoom_changed(self):
+    def preview_zoom_wheel(self, steps, position):
+        index = max(0, min(self.zoom.count() - 1, self.zoom.currentIndex() + steps))
+        if index != self.zoom.currentIndex():
+            with QtCore.QSignalBlocker(self.zoom):
+                self.zoom.setCurrentIndex(index)
+            self.zoom_changed(position=position)
+
+    def zoom_changed(self, *, position=None):
         anchor = None
         if self.canvas.snapshot:
             visible = self.canvas.viewport_rect()
-            index = self.canvas.page_at(visible.top())
+            point = visible.topLeft() + position if position is not None else visible.topLeft()
+            index = self.canvas.page_at(point.y())
             page = self.canvas.page_rect(index)
-            anchor = (index, (visible.top() - page.top()) / page.height(),
-                      self.scroll.horizontalScrollBar().value() / page.width())
+            horizontal = ((point.x() - page.left()) if position is not None else
+                          self.scroll.horizontalScrollBar().value()) / page.width()
+            anchor = (index, (point.y() - page.top()) / page.height(), horizontal)
         self.canvas.scale = self.zoom.currentData()
         self.canvas.resize_page()
         if anchor:
             index, fraction, horizontal = anchor
             page = self.canvas.page_rect(index)
-            self.scroll.verticalScrollBar().setValue(round(page.top() + fraction * page.height()))
-            self.scroll.horizontalScrollBar().setValue(round(horizontal * page.width()))
+            x, y = horizontal * page.width(), page.top() + fraction * page.height()
+            if position is not None:
+                x += page.left() - position.x()
+                y -= position.y()
+            self.scroll.verticalScrollBar().setValue(round(y))
+            self.scroll.horizontalScrollBar().setValue(round(x))
         self.preview_scrolled()
 
     def toggle_marks(self, value):

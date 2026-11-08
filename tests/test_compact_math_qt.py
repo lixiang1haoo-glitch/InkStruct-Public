@@ -51,8 +51,7 @@ d=SettingsDialog(w,category='math');page=d.pages['math']
 page.categories.setCurrentRow(0);page.reset_category()
 page.categories.setCurrentRow(4);page.reset_category()
 page.categories.setCurrentRow(7);page.reset_category()
-d.apply_current.setChecked(True)
-assert d.apply(),d.error.text()
+assert d.apply(to_document=True),d.error.text()
 d.reject();ready()
 assert w.flow.math.spacing_policy=='handwriting'
 assert w.flow.math.radical_source==w.flow.math.delimiter_source=='sample'

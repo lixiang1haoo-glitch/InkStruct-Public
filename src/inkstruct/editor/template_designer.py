@@ -460,7 +460,7 @@ class TemplateDesignerDialog(QtWidgets.QDialog):
             self.valid_template = template
             self.preview.set_template(template, self.face.currentData())
             self.preview.show()
-            self.error.setText("几何校验通过；应用后仍需检查内容是否越框，纸面校准需另行验证。")
+            self.error.setText("几何校验通过；应用后仍需检查内容是否越框。")
         except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
             self.preview.hide()  # Never show an old preview as if it matches this draft.
             self.error.setText(f"草稿尚未通过校验：{error}")

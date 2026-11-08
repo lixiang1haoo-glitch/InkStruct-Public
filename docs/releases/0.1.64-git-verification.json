@@ -1,0 +1,78 @@
+{
+  "version": "0.1.64",
+  "commit": "d008fa517ea8a8bb7a5c2c0518aa07942f541119",
+  "tag": "app-v0.1.64",
+  "published_archive": {
+    "version": "0.1.64",
+    "filename": "InkStruct-0.1.64-Windows-x64.zip",
+    "bytes": 133755898,
+    "members": 1680,
+    "sha256": "bb992d8329ff543941d457b99f005b049a24669804aabdac6dbdb69a46a6fea3"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 343,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 78,
+      "failed": 1,
+      "failures": [
+        "test_image_settings_and_portable_reference_preview"
+      ],
+      "passed_on_recheck": [
+        "test_footnote_settings_transaction_reset_precision_and_project",
+        "test_math_settings_and_editor_roundtrip",
+        "test_table_and_image_scopes_persist_and_restore",
+        "test_table_settings_and_legacy_import"
+      ],
+      "baseline_preview_failures": [
+        "test_image_settings_and_portable_reference_preview"
+      ]
+    },
+    "native": {
+      "platform": "windows",
+      "scale": 1.5,
+      "generation": {
+        "author": 340,
+        "method": 160,
+        "parallelism": 160,
+        "candidates": 96,
+        "path": 1020
+      },
+      "body": {
+        "mode": 160,
+        "alignment": 177,
+        "seed": 127,
+        "character_height": 136,
+        "search": 1298
+      },
+      "capture": {
+        "reference_grid": 260
+      }
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "app_version": "0.1.64",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      },
+      "InkStructTool.exe": {
+        "app_version": "0.1.64",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      }
+    }
+  },
+  "previous_archive": {
+    "version": "0.1.63",
+    "filename": "InkStruct-0.1.63-Windows-x64.zip",
+    "bytes": 133752219,
+    "members": 1680,
+    "sha256": "b60dd2732c635afce3247c652ae9dcb45530e38c67c0fc45ce80db48104280b3"
+  }
+}

@@ -4,6 +4,22 @@ from dataclasses import fields, replace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .ui_behavior import compact_field
+
+
+def compact_form_parameters(widget):
+    """Size scalar fields in settings forms without constraining notes or long text."""
+    role = QtWidgets.QFormLayout.ItemRole.FieldRole
+    for form in widget.findChildren(QtWidgets.QFormLayout):
+        for index in range(form.rowCount()):
+            item = form.itemAt(index, role)
+            field = item.widget() if item else None
+            if isinstance(field, QtWidgets.QAbstractSpinBox):
+                compact_field(field)
+            elif (isinstance(field, QtWidgets.QComboBox) and not field.isEditable()
+                  and field.sizeAdjustPolicy() != QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon):
+                compact_field(field)
+
 
 def label(text):
     result = QtWidgets.QLabel(text)
@@ -37,6 +53,7 @@ def embed(dialog):
     for button in dialog.findChildren(QtWidgets.QPushButton):
         if button.text() in {"恢复默认", "当前分类恢复默认"}:
             button.hide()
+    compact_form_parameters(dialog)
     return dialog
 
 
@@ -168,7 +185,7 @@ class CapturePreview(QtWidgets.QWidget):
         p.setPen(
             QtGui.QPen(
                 self.palette().text().color(),
-                self.page.stroke.value() / 50,
+                2,
                 QtCore.Qt.PenStyle.SolidLine,
                 QtCore.Qt.PenCapStyle.RoundCap,
             )
@@ -200,64 +217,47 @@ class CapturePage(QtWidgets.QWidget):
         self.base = collector.ui_settings
         column = QtWidgets.QVBoxLayout(self)
         column.addWidget(
-            label("适用于汉字样本和标点与扩展。仅调整屏幕显示，不改变已录坐标、压力或采集进度。")
+            label("参考格比例只调整汉字画布内的方格，以画布短边为基准。画布大小和笔迹粗细可在采集页直接调整。")
         )
-        self.stroke = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.stroke.setRange(75, 400)
-        self.stroke.setValue(round(self.base.stroke_width_scale * 100))
         self.grid = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.grid.setRange(45, 95)
         self.grid.setValue(round(self.base.grid_scale * 100))
-        self.initial = (self.stroke.value(), self.grid.value())
+        self.initial = self.grid.value()
         self.preview = CapturePreview(self)
         form = QtWidgets.QFormLayout()
         column.addLayout(form)
         self.values = []
-        for title, slider in [("屏幕笔迹粗细", self.stroke), ("书写格大小", self.grid)]:
-            row = QtWidgets.QHBoxLayout()
-            value = QtWidgets.QSpinBox()
-            value.setRange(slider.minimum(), slider.maximum())
-            value.setSuffix(" %")
-            value.setValue(slider.value())
-            value.setAccessibleName(title)
-            slider.valueChanged.connect(value.setValue)
-            value.valueChanged.connect(slider.setValue)
-            slider.valueChanged.connect(self.preview.update)
-            row.addWidget(slider, 1)
-            row.addWidget(value)
-            form.addRow(title, row)
-            self.values.append(value)
+        row = QtWidgets.QHBoxLayout()
+        value = QtWidgets.QSpinBox()
+        value.setRange(self.grid.minimum(), self.grid.maximum())
+        value.setSuffix(" %")
+        value.setValue(self.grid.value())
+        self.grid.setAccessibleName("汉字参考格比例")
+        value.setAccessibleName("汉字参考格比例")
+        self.grid.valueChanged.connect(value.setValue)
+        value.valueChanged.connect(self.grid.setValue)
+        self.grid.valueChanged.connect(self.preview.update)
+        row.addWidget(compact_field(self.grid, maximum=260), 1)
+        row.addWidget(compact_field(value))
+        row.addStretch()
+        form.addRow("汉字参考格比例", row)
         column.addWidget(self.preview)
-        column.addWidget(
-            label(
-                "示意：汉字、Aa、α 与括号均使用同一显示规则；字母正斜体和采集份数在“创建任务”中选择。"
-            )
-        )
         section(column, "配置位置", label(str(collector.ui_settings_store.path)))
         column.addStretch()
 
     def configuration(self):
         acceptable(self)
-        changes = {}
-        for key, control, initial in zip(
-            ("stroke_width_scale", "grid_scale"), (self.stroke, self.grid), self.initial
-        ):
-            if control.value() != initial:
-                changes[key] = control.value() / 100
-        return replace(self.base, **changes).validated()
+        grid = self.grid.value() / 100 if self.grid.value() != self.initial else self.base.grid_scale
+        return replace(self.collector.ui_settings, grid_scale=grid).validated()
 
     def reset_defaults(self):
-        default = type(self.base)()
-        self.base = default
-        self.stroke.setValue(round(default.stroke_width_scale * 100))
-        self.grid.setValue(round(default.grid_scale * 100))
-        self.initial = (self.stroke.value(), self.grid.value())
+        self.grid.setValue(round(type(self.base)().grid_scale * 100))
 
 
 class LocalPreview(QtWidgets.QWidget):
     """Small isolated numeric sample; never re-layout the user's whole document."""
 
-    def __init__(self, resolver, configuration, parent=None, *, letters=False):
+    def __init__(self, resolver, configuration, parent=None, *, letters=False, han=False):
         super().__init__(parent)
         from PySide6 import QtSvgWidgets
 
@@ -266,6 +266,10 @@ class LocalPreview(QtWidgets.QWidget):
 
         self.configuration = configuration
         available = "".join(c for c in "minimumWilliam" if c in resolver.pools) if letters else ""
+        if han:
+            from .assets.glyph_provider import is_han
+            chinese = "".join(c for c in resolver.pools if is_han(c))[:4]
+            available = chinese * 4 + available
         self.resolver = AssetResolver(
             embedded=tuple(g for char in dict.fromkeys("12345678." + available)
                            for g in resolver.pools.get(char, ())),

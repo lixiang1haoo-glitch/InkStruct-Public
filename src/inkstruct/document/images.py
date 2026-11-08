@@ -15,6 +15,8 @@ from .schema import Diagnostic
 
 MAX_BYTES = 8_000_000
 MAX_PIXELS = 2_000_000
+MAX_IMAGE_RESOURCES = 64
+MAX_IMAGE_CATALOG_BYTES = 128_000_000
 WINDOWS_RESERVED_NAMES = {'CON', 'PRN', 'AUX', 'NUL',
                           *(f'COM{i}' for i in range(1, 10)),
                           *(f'LPT{i}' for i in range(1, 10))}
@@ -178,6 +180,10 @@ def import_local_images(document, flow, root):
     """Import relative files within an explicitly selected root, without networking."""
     root = Path(root).resolve()
     resources = {r.source: r for r in flow.images}
+    def encoded_size(resource):
+        return len(resource.original_base64) + len(getattr(resource, "png_base64", ""))
+
+    catalog_size = sum(map(encoded_size, resources.values()))
     issues = []
     for node in (n for top in document.nodes for n in top.walk() if n.kind == "image"):
         source = dict(node.attributes).get("src", "")
@@ -185,13 +191,17 @@ def import_local_images(document, flow, root):
             continue
         try:
             url = urlsplit(source)
-            local = Path(unquote(url.path))
+            decoded = unquote(url.path, errors="strict")
+            local = Path(decoded)
             if (
                 url.scheme
                 or url.netloc
                 or url.query
                 or url.fragment
                 or local.is_absolute()
+                or local.drive
+                or any(ord(c) < 32 or c in ':<>|"?*' for c in decoded)
+                or local.suffix.lower() not in {".png", ".jpg", ".jpeg", ".svg"}
                 or not source
             ):
                 raise ValueError(
@@ -200,7 +210,14 @@ def import_local_images(document, flow, root):
             file = (root / local).resolve()
             if not file.is_relative_to(root):
                 raise ValueError("Image path escapes the selected image root")
-            resources[source] = import_image_file(file, source)
+            if len(resources) >= MAX_IMAGE_RESOURCES:
+                raise ValueError("Image catalog exceeds 64 resources")
+            resource = import_image_file(file, source)
+            size = encoded_size(resource)
+            if catalog_size + size > MAX_IMAGE_CATALOG_BYTES:
+                raise ValueError("Image catalog exceeds its 128 MB encoded-data budget")
+            resources[source] = resource
+            catalog_size += size
         except FileNotFoundError as error:
             code = 'image-import-missing' if local_raster_reference_name(source) else 'image-import-failed'
             issues.append(Diagnostic(code, str(error), node.span))

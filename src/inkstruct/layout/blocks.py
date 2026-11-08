@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 
 from ..assets.resolver import AssetResolver
+from ..document.break_commands import FLOW_BREAK_KINDS
 from ..document.limits import (
     BudgetedOps,
     PointAccumulator,
@@ -37,6 +38,7 @@ from .inline import (
     inline_runs,
     measure_runs,
 )
+from .justification import justify_line
 from .note_units import AtomicBand
 from .plain import CLOSING, OPENING
 from .table_pages import (
@@ -48,7 +50,7 @@ from .table_pages import (
 )
 from .tables import measure_table
 
-LAYOUT_VERSION = "markdown-mixed-mm-v4/code-grid-v1/marker-identity-v2"
+LAYOUT_VERSION = "markdown-mixed-mm-v4/code-grid-v1/marker-identity-v2/page-frame-breaks-v2/justify-natural-v2"
 
 
 @dataclass(frozen=True)
@@ -81,9 +83,42 @@ def marker_occurrence(block, index, character, resolver):
     return Occurrence(identity, block.node.node_id, block.node.span, character)
 
 
-def body_blocks(document: MarkdownDocument, flow=None):
+def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
     flow = flow or FlowStyle()
     result = []
+
+    def append_text(block):
+        runs = tuple(r for r in block.runs if frame_breaks or r.kind != "framebreak")
+        block = replace(block, runs=runs)
+        controls = any(run.kind in FLOW_BREAK_KINDS for run in block.runs)
+        if not controls:
+            result.append(block)
+            return
+        part, first = [], True
+
+        def flush():
+            nonlocal first
+            if not part:
+                return
+            span = SourceSpan(part[0].occurrence.span.start, part[-1].occurrence.span.end)
+            identity = digest([block.node.node_id, "frame-segment", part[0].occurrence.occurrence_id])
+            result.append(replace(
+                block, node=replace(block.node, node_id=identity, span=span), runs=tuple(part),
+                marker=block.marker if first else "", task=block.task if first else None,
+                note_label=block.note_label if first else None,
+                first_indent=block.first_indent if first else 0,
+            ))
+            part.clear()
+            first = False
+
+        for run in block.runs:
+            if run.kind not in FLOW_BREAK_KINDS:
+                part.append(run)
+                continue
+            flush()
+            o = run.occurrence
+            result.append(BodyBlock(SemanticNode(o.node_id, run.kind, o.span), ()))
+        flush()
 
     def visit(node, indent=0, quote=0, marker=""):
         if node.kind == "footnote_entry":
@@ -128,7 +163,7 @@ def body_blocks(document: MarkdownDocument, flow=None):
             attrs = dict(node.attributes)
             level = int(attrs.get("tag", "h1")[1:]) if node.kind == "heading" else 1
             scale = flow.heading_scales[level - 1]
-            result.append(
+            append_text(
                 BodyBlock(
                     node,
                     runs,
@@ -152,14 +187,25 @@ def body_blocks(document: MarkdownDocument, flow=None):
             start = int(dict(node.attributes).get("start", "1"))
             for index, item in enumerate(node.children):
                 label = "bullet" if node.kind == "bullet_list" else f"{start + index}."
-                if not item.children or item.children[0].kind not in {
-                    "paragraph",
-                    "heading",
-                    "math_block",
+                first = 0
+                while first < len(item.children) and item.children[first].kind in {
+                    "pagebreak", "framebreak", "break_command_error",
                 }:
+                    visit(item.children[first], indent + flow.list_indent_mm, quote)
+                    first += 1
+                children = item.children[first:]
+                if (not item.children or (children and children[0].kind not in {
+                    "paragraph", "heading", "math_block",
+                })):
                     result.append(BodyBlock(item, (), indent + flow.list_indent_mm, quote, label))
-                for n, child in enumerate(item.children):
+                for n, child in enumerate(children):
                     visit(child, indent + flow.list_indent_mm, quote, label if n == 0 else "")
+        elif node.kind == "break_command_error":
+            return
+        elif node.kind in FLOW_BREAK_KINDS:
+            attrs = dict(node.attributes)
+            if (node.kind == "pagebreak" or frame_breaks) and attrs.get("blocked") != "true" and attrs.get("strength", "4") == "4":
+                result.append(BodyBlock(node, ()))
         elif node.kind == "math_block":
             result.append(BodyBlock(node, tuple(inline_runs(node)), indent, quote, marker))
         elif node.kind in {"fence", "code_block"}:
@@ -261,19 +307,19 @@ def layout_markdown(
                             node.span,
                         )
                     )
-    blocks = body_blocks(document, flow)
+    if _regions is None:
+        for root in document.nodes:
+            for node in root.walk():
+                if node.kind == "framebreak" and dict(node.attributes).get("blocked") != "true":
+                    diagnostics.append(Diagnostic(
+                        "frame-break-inactive",
+                        "Frame breaks only advance the template body text-frame flow",
+                        node.span, "warning",
+                    ))
+    blocks = body_blocks(document, flow, frame_breaks=_regions is not None)
     template = flow.template
     if template:
         page = template.page
-        if template.calibration == "unreviewed":
-            diagnostics.append(
-                Diagnostic(
-                    "template-calibration-unreviewed",
-                    "Template coordinates have not been calibrated on physical paper",
-                    SourceSpan(0, 0),
-                    "warning",
-                )
-            )
     margin, radius = page.margin_mm, style.stroke_width_mm / 2
 
     def page_bounds(index):
@@ -295,6 +341,9 @@ def layout_markdown(
     code_continuations = {}
     for block in blocks:
         check_cancel(cancelled)
+        if block.node.kind in FLOW_BREAK_KINDS:
+            measured.append((block, [], [(0, 0, 0)], 0, []))
+            continue
         if block.node.kind == "image":
             figure = measure_image(
                 block, resolver, style, flow,
@@ -315,6 +364,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_variation=flow.han_variation,
             )
             measured_tables[block.node.node_id] = table
             diagnostics.extend(table.diagnostics)
@@ -348,6 +398,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_variation=flow.han_variation,
             )
             diagnostics.extend(issues)
         prefix = []
@@ -401,6 +452,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_variation=flow.han_variation,
             )
         if width <= 0:
             diagnostics.append(
@@ -504,10 +556,10 @@ def layout_markdown(
             _footnotes.checkpoint() if _footnotes else None,
         )
 
-    def new_page():
+    def new_page(*, physical=False):
         nonlocal y, region_left, region_top, region_right, region_bottom, content_width, content_height
         if _regions:
-            _regions.next()
+            _regions.next_page() if physical else _regions.next()
         count=_regions.page_index+1 if _regions else len(fragments)+1
         allocating_page(count)
         while len(fragments)<count:
@@ -713,6 +765,10 @@ def layout_markdown(
         )
         return x + box.advance
 
+    last_content_block = next(
+        (i for i in range(len(measured) - 1, -1, -1) if measured[i][0].node.kind not in FLOW_BREAK_KINDS),
+        -1,
+    )
     for block_index in range(resume, len(measured)):
         check_cancel(cancelled)
         state = checkpoint() if prepared else None
@@ -748,6 +804,18 @@ def layout_markdown(
         if prepared:
             checkpoints.append(state)
         block, lines, metrics, indent, prefix = measured[block_index]
+        if block.node.kind in FLOW_BREAK_KINDS:
+            # Page controls skip remaining frames on this physical page. Empty
+            # pages and trailing controls do not create spurious blank output.
+            active = block.node.kind == "framebreak" or bool(
+                fragments[-1] or ops[-1] or images[-1] or y > region_top
+            )
+            if active and block_index < last_content_block:
+                if _regions:
+                    _regions.span = block.node.span
+                new_page(physical=block.node.kind == "pagebreak")
+            previous_heading_page = None
+            continue
         if _regions:
             _regions.span=block.node.span
             if block.node.node_id not in measured_images and block.node.node_id not in measured_tables and not block.rule:
@@ -758,6 +826,8 @@ def layout_markdown(
             if block.keep_next and block_index + 1 < len(measured):
                 required = sum(m[2] for m in metrics)
                 for next_block, _, next_metrics, _, _ in measured[block_index + 1 :]:
+                    if next_block.node.kind in FLOW_BREAK_KINDS:
+                        break
                     required += (
                         flow.heading_gap_mm if next_block.keep_next else flow.paragraph_gap_mm
                     )
@@ -775,6 +845,8 @@ def layout_markdown(
                 for offset, (future_block, future_lines, future_metrics, _, _) in enumerate(
                     measured[block_index:]
                 ):
+                    if future_block.node.kind in FLOW_BREAK_KINDS:
+                        break
                     if offset:
                         future_y += (
                             flow.heading_gap_mm if future_block.keep_next else flow.paragraph_gap_mm
@@ -1120,7 +1192,7 @@ def layout_markdown(
                             span,
                         )
                     )
-                visible = [b for b in line if b.status not in {"space", "line-break"}]
+                visible = [b for b in line if b.status not in {"space", "line-break", "break-hint"}]
                 if (
                     block.node.kind not in {"fence", "code_block"}
                     and visible
@@ -1227,9 +1299,13 @@ def layout_markdown(
                             )
                         )
                 decoration = []
-                for box in line:
+                extra = [0.0] * len(line)
+                if (flow.paragraph_align == "justify" and block.node.kind == "paragraph"
+                        and local+1 < len(lines) and line and line[-1].status != "line-break"):
+                    line, extra = justify_line(line, content_width-indent-first_indent)
+                for box, gap_after in zip(line, extra):
                     left = x
-                    x = place_box(box, x, baseline, line_index)
+                    x = place_box(box, x, baseline, line_index) + gap_after
                     if box.run.underline or box.run.strike:
                         decoration.append((left, x, box))
                 for name in ("underline", "strike"):

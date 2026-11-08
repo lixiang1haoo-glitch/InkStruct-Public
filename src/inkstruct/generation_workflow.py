@@ -32,9 +32,12 @@ def resources():
 def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
-    tmp.replace(path)
+    tmp = path.with_suffix(path.suffix + "." + uuid.uuid4().hex + ".tmp")
+    try:
+        tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def read(path):
@@ -71,36 +74,75 @@ class GenerationWorkflow:
 
     @staticmethod
     def validate_writer(writer):
-        if not re.fullmatch(r"[\w-]{1,64}", writer, re.UNICODE):
-            raise ValueError("作者 ID 请使用 1–64 个文字、数字、下划线或连字符。")
+        from .capture_management import valid_writer
+
+        if not valid_writer(writer) and not re.fullmatch(r"[\w-]{1,64}", writer, re.UNICODE):
+            raise ValueError("请选择有效的书写者，或填写已有作者 ID。")
 
     def state(self, writer, source):
         path = self.state_path(writer, source)
         return read(path) if path.is_file() else {}
 
+    def sample_status(self, writer, source, method, previous=None):
+        from .samples import iter_index, sample_identity, scan_samples
+
+        self.validate_writer(writer)
+        source = Path(source).resolve()
+        if not source.is_dir():
+            raise ValueError("样本目录不存在")
+        state = self.state(writer, source)
+        batch = state.get("import", {})
+        profile = state.get("profiles", {}).get(method, {})
+        index = Path(batch.get("index", ""))
+        stamp = []
+        for path in sorted(source.rglob("*.json")):
+            stat = path.stat()
+            stamp.append((path, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+        key = (writer, source, method, batch.get("index"), batch.get("created_at"),
+               profile.get("path"), index.is_file(), Path(profile.get("path", "")).is_file(), stamp)
+        if previous and previous["key"] == key:
+            return previous
+        samples, _, foreign = scan_samples(source, writer)
+        imported = batch.get("accepted_count", 0)
+        indexed = set(map(sample_identity, iter_index(index))) if index.is_file() else set()
+        donors = None
+        if profile.get("index_sha256") == batch.get("index_sha256") and Path(profile.get("path", "")).is_file():
+            if method in ("v61", "v62"):
+                donors = profile.get("source_samples")
+            elif "effective_donors" in profile:
+                donors = profile["effective_donors"]
+            else:
+                from .profile import load_profile
+                donors = load_profile(Path(profile["path"])).sample_count
+        records = [str(value) for value in (batch.get("index"), profile.get("path")) if value]
+        return {"key": key, "path": str(source), "foreign": foreign, "found": len(samples), "records": records,
+                "imported": imported, "imported_at": batch.get("created_at"), "donors": donors,
+                "changed": bool(imported) and indexed != set(map(sample_identity, samples))}
+
     def readiness(self, writer, source, method):
-        result = {"import": False, "profile": False, "generate": False}
+        result = {"import": False, "profile": False, "generate": False, "start": False}
         try:
             self.validate_writer(writer)
             if method not in METHODS:
                 raise ValueError("请选择生成方式。")
             if not source or not Path(source).is_dir():
-                raise ValueError("请选择该作者的单字采集 JSON 目录，然后导入。")
+                raise ValueError("请选择该作者的单字采集 JSON 目录。")
             result["import"] = True
             if not self.database.is_file():
                 raise ValueError("结构库缺失，请重新安装完整应用。")
             if method in ("v61", "v62") and not all(p.is_file() for p in corrections()):
                 raise ValueError("参考修正资源缺失，请重新安装完整应用。")
+            result["start"] = True
             state = self.state(writer, source)
             batch = state.get("import", {})
             if not batch.get("accepted_count") or not Path(batch.get("index", "")).is_file():
-                raise ValueError("尚未导入可用的汉字样本。请先点“1. 导入”；字母和符号可直接在字体库加入。")
+                raise ValueError("尚未导入可用的汉字样本。开始生成时自动导入并建档。")
             result["profile"] = True
             profile = state.get("profiles", {}).get(method, {})
             if profile.get("index_sha256") != batch["index_sha256"] or not Path(profile.get("path", "")).is_file():
-                raise ValueError("样本已导入；请点“2. 建档”，准备所选方法需要的档案。")
+                raise ValueError("样本已导入。开始生成时会为所选方法建立档案。")
             if profile.get("workflow_version") != workflow_version(method):
-                raise ValueError("生成流程已更新，请重新建档。旧档案会保留。")
+                raise ValueError("生成流程已更新。开始生成时会重新建档。")
             result["generate"] = True
             result["message"] = f"已就绪 · {batch['accepted_count']} 份样本 · {METHODS[method]}"
         except (ValueError, OSError, KeyError) as error:
@@ -112,24 +154,86 @@ class GenerationWorkflow:
         if not ready[operation]:
             raise ValueError(ready["message"])
 
-    def import_samples(self, writer, source, method="v61"):
+    def _import_batch(self, writer, source, method):
         from .samples import import_samples
         self.require("import", writer, source, method)
-        report = import_samples(Path(source), writer, self.root / "imports" / identity())
+        report = import_samples(Path(source), writer, self.root / "imports" / identity(), require_single_writer=True)
+        return self._checked_import(report)
+
+    @staticmethod
+    def _checked_import(report):
         if report["accepted_count"] == 0:
             raise ValueError("没有可导入的该作者汉字样本。请核对作者 ID 和目录；支持 handwriting_single_v1，符号请在字体库加入。导入记录：" + str(Path(report['index']).parent))
+        return report
+
+    def prepare_profile(self, writer, source, method, notify, cancelled):
+        from .samples import iter_index, sample_identity, scan_samples, write_sample_index
+
+        if cancelled():
+            return None
+        notify("核对样本", "检查当前目录、作者归属及已有档案")
+        source = Path(source).resolve()
+        samples, rejected, foreign = scan_samples(source, writer)
+        if cancelled():
+            return None
+        if foreign:
+            raise ValueError(f"样本目录包含其他书写者：{'、'.join(foreign)}。请选择仅属于 {writer} 的目录。")
         state = self.state(writer, source)
-        state["import"] = report
-        state["profiles"] = {}  # Old immutable files stay on disk; no stale profile reuse.
-        write(self.state_path(writer, source), state)
+        batch = state.get("import", {})
+        profiles = state.get("profiles", {})
+        index = Path(batch.get("index", ""))
+        reusable = (samples and batch.get("accepted_count") == len(samples) and index.is_file()
+                    and sha256_file(index) == batch.get("index_sha256")
+                    and set(map(sample_identity, iter_index(index))) == set(map(sample_identity, samples)))
+        if reusable:
+            profile = profiles.get(method, {})
+            path = Path(profile.get("path", ""))
+            if (profile.get("index_sha256") == batch["index_sha256"]
+                    and profile.get("workflow_version") == workflow_version(method)
+                    and path.is_file() and sha256_file(path) == profile.get("sha256")
+                    and sha256_file(self.database) == profile.get("database_sha256")):
+                notify("沿用档案", str(path))
+                return profile
+        else:
+            notify("导入样本", f"校验通过 {len(samples)} 份，跳过 {len(rejected)} 个文件")
+            batch = self._checked_import(write_sample_index(
+                source, writer, self.root / "imports" / identity(), samples, rejected))
+            profiles = {}
+        if cancelled():
+            return None
+        notify("建档", f"使用 {batch['accepted_count']} 份已导入样本")
+        profile, result = self._build_profile(writer, method, batch)
+        if cancelled():
+            return None
+        if self.state(writer, source) != state:
+            raise ValueError("当前样本记录已被另一窗口更新，请重新开始生成。")
+        write(self.state_path(writer, source), {**state, "import": batch, "profiles": {**profiles, method: profile}})
+        notify("建档完成", result["message"] + " " + result["profile"])
+        return profile
+
+    def import_samples(self, writer, source, method="v61"):
+        report = self._import_batch(writer, source, method)
+        write(self.state_path(writer, source), {"import": report, "profiles": {}})
         return {"message": f"导入 {report['accepted_count']} 份样本；跳过 {report['rejected_count']} 个文件。", "report": str(Path(report['index']).with_name('import_report.json'))}
 
     def build_profile(self, writer, source, method):
-        from .profile import build_profile
-        from .structures import StructureRepository
         self.require("profile", writer, source, method)
         state = self.state(writer, source)
-        batch = state["import"]
+        record, result = self._build_profile(writer, method, state["import"])
+        state.setdefault("profiles", {})[method] = record
+        write(self.state_path(writer, source), state)
+        return result
+
+    def update_samples(self, writer, source, method):
+        batch = self._import_batch(writer, source, method)
+        record, result = self._build_profile(writer, method, batch)
+        write(self.state_path(writer, source), {"import": batch, "profiles": {method: record}})
+        result["report"] = str(Path(batch["index"]).with_name("import_report.json"))
+        return result
+
+    def _build_profile(self, writer, method, batch):
+        from .profile import build_profile
+        from .structures import StructureRepository
         if sha256_file(Path(batch["index"])) != batch["index_sha256"]:
             raise ValueError("导入样本索引已改变，请重新导入后建档。")
         profile, path = build_profile(writer, Path(batch["index"]), StructureRepository(self.database),
@@ -139,37 +243,51 @@ class GenerationWorkflow:
             raise ValueError("没有可用于此方法的可靠笔画映射。请检查建档排除记录或补充标准笔序汉字样本。档案：" + str(path))
         record = {"path": str(path), "sha256": sha256_file(path), "method": method,
                   "index_sha256": batch["index_sha256"], "workflow_version": workflow_version(method),
-                  "database_sha256": sha256_file(self.database), "source_samples": len(profile.source_trajectories)}
+                  "database_sha256": sha256_file(self.database), "source_samples": len(profile.source_trajectories),
+                  "effective_donors": len(profile.source_trajectories) if method in ("v61", "v62") else profile.sample_count}
         write(path.with_name("application-build.json"), record)
-        state.setdefault("profiles", {})[method] = record
-        write(self.state_path(writer, source), state)
-        return {"message": f"建档完成：{profile.sample_count} 份，{profile.character_count} 字；完整来源轨迹 {len(profile.source_trajectories)} 份。", "profile": str(path)}
+        return record, {"message": f"建档完成：{profile.sample_count} 份，{profile.character_count} 字；有效供体 {record['effective_donors']} 份。", "profile": str(path)}
 
     def generate(self, writer, source, method, text, *, all_supported=False, progress=None, cancelled=lambda: False,
-                 workers='auto', targets=None):
+                 workers='auto', targets=None, candidate_limit=None, preparation=None):
+        from .generation_variants import DEFAULT_CANDIDATES, candidate_attempt_limit
         from .structures import StructureRepository
-        self.require("generate", writer, source, method)
-        state = self.state(writer, source)
-        profile = state["profiles"][method]
-        if sha256_file(Path(profile["path"])) != profile["sha256"] or sha256_file(self.database) != profile["database_sha256"]:
-            raise ValueError("档案或结构库已改变，请重新建档。")
-        if sha256_file(Path(state["import"]["index"])) != profile["index_sha256"]:
-            raise ValueError("导入索引已改变，请重新导入并建档。")
+        if candidate_limit is None:
+            candidate_limit = DEFAULT_CANDIDATES if method == 'v62' else 1
+        candidate_attempt_limit(candidate_limit)
+        if method != 'v62' and candidate_limit != 1:
+            raise ValueError('当前只有 v6.2 exp 支持同字多候选，其他方法每字保留一份。')
+        self.require("start" if preparation is not None else "generate", writer, source, method)
         repository = StructureRepository(self.database)
-        from .generation_targets import target_manifest, validate_targets
+        from .generation_targets import structure_targets, target_manifest, validate_targets
         supported = repository.characters()
-        manifest = target_manifest(''.join(supported) if all_supported else text, supported,
-                                   source={'kind': 'all-supported'} if all_supported else None)
+        manifest = structure_targets(supported) if all_supported else target_manifest(text, supported)
         if targets is not None and not all_supported:
             if targets.get('source', {}).get('kind') == 'builtin-character-sets':
                 from .character_sets import CharacterSets
                 CharacterSets().validate(targets, supported)
+            if targets.get('source', {}).get('kind') == 'all-supported' and targets != structure_targets(supported):
+                raise ValueError('结构库完整字表已变化，请重新选择内置字表')
             validate_targets(targets)
             if targets['requested'] != manifest['requested']:
                 raise ValueError('字表已改变，请重新确认生成目标')
             manifest = {**targets, 'supported': manifest['supported'], 'unsupported': manifest['unsupported']}
         validate_targets(manifest)
         requested = manifest['requested']
+        if preparation is not None:
+            profile = self.prepare_profile(writer, source, method, preparation, cancelled)
+            if profile is None or cancelled():
+                return {"status": "cancelled", "writer": writer, "completed_count": 0, "failed_count": 0,
+                        "requested_count": len(requested), "message": "已取消生成，尚未生成字形。"}
+            preparation("生成字形", f"目标 {len(requested)} 字")
+        else:
+            state = self.state(writer, source)
+            profile = state["profiles"][method]
+            if sha256_file(Path(profile["path"])) != profile["sha256"] or sha256_file(self.database) != profile["database_sha256"]:
+                raise ValueError("档案或结构库已改变，请重新建档。")
+            if sha256_file(Path(state["import"]["index"])) != profile["index_sha256"]:
+                raise ValueError("导入索引已改变，请重新导入并建档。")
+        started_at = datetime.now(UTC).isoformat()
         run_id = identity()
         if method == "v4":
             from .generate import generate_run
@@ -182,21 +300,32 @@ class GenerationWorkflow:
                         "profile": profile, "code": code_hashes(), "source_status": "unknown: v4 has no exact per-stroke author provenance"}
             write(output / "application-generation.json", application_manifest)
             write(output / 'target-manifest.json', manifest)
+            completed_characters = result.get("completed_characters", "")
         else:
             output = self.root / "outputs" / run_id
             result = generate_v61(output, writer, requested, repository, profile, progress, cancelled,
-                                  semantic=method == 'v62', workers=workers, target_manifest=manifest)
-        return {**result, "writer": writer, "output": str(output), "message": f"{METHODS[method]}：完成 {result['completed_count']} 字，失败 {result['failed_count']} 字。结果已保存，可送入字体库。"}
+                                  semantic=method == 'v62', workers=workers, target_manifest=manifest,
+                                  candidate_limit=candidate_limit)
+            completed_characters = result.get("completed_preview", "")
+        variants = result.get("variant_character_count", 0)
+        note = f"其中 {variants} 字有多份可用字形。" if variants else ""
+        status = "已取消，保留已完成部分。 " if result.get("status") == "cancelled" else ""
+        return {**result, "requested_count": len(requested), "writer": writer, "output": str(output),
+                "started_at": started_at, "completed_preview": "".join(completed_characters[:24]),
+                "message": f"{METHODS[method]} · {status}完成 {result['completed_count']}/{len(requested)} 字，"
+                           f"失败 {result['failed_count']} 字。{note}结果已保存，可送入字体库。"}
 
 
 def generate_v61(output, writer, characters, base, profile_record, progress, cancelled, *, semantic=False,
-                 workers="auto", target_manifest=None):
+                 workers="auto", target_manifest=None, candidate_limit=1):
     from .generation_parallel import run_generation
     return run_generation(output, writer, characters, base, profile_record, progress, cancelled,
-                          semantic=semantic, workers=workers, target_manifest=target_manifest)
+                          semantic=semantic, workers=workers, target_manifest=target_manifest,
+                          candidate_limit=candidate_limit)
 
 
-def prepare_generation(writer, base, profile_record, *, semantic=False, reference_paths=None, cancelled=lambda: False):
+def prepare_generation(writer, base, profile_record, *, semantic=False, reference_paths=None,
+                       cancelled=lambda: False, candidate_limit=1):
     from .exemplar_index import component_key
     from .generation_v61_helpers import (
         check_sources,
@@ -204,6 +333,13 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
         hybrid,
         plan_sources,
         source_audit,
+    )
+    from .generation_variants import (
+        MAX_CANDIDATES,
+        POOL_VERSION,
+        SELECTION_POLICY,
+        alternative_candidates,
+        candidate_attempt_limit,
     )
     from .positional_variants import FAMILIES
     from .positional_variants import PARAMETERS as variant_parameters
@@ -217,6 +353,8 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
     from .v61_candidate_expansion import CandidateExpansionGenerator, ExpansionPolicy
 
     generator_class, stroke_class = CandidateExpansionGenerator, BatchAuthorStrokeFallback
+    if type(candidate_limit) is not int or not 1 <= candidate_limit <= (MAX_CANDIDATES if semantic else 1):
+        raise ValueError("无效的生成候选数量")
     version, method = VERSION, 'v6.1 exp'
     if semantic:
         from .v62_exp import SemanticBatchStrokeFallback, SemanticCandidateGenerator
@@ -252,6 +390,10 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
             'scope': 'stop-component keys and vertical bend hooks; other content forms not newly verified',
             'source_ink': 'unchanged vertices, pressure and within-stroke timing',
             'unknown': 'registered ambiguous critical forms reject candidate; unrelated unregistered forms retain v6.1 behavior'}
+    if candidate_limit > 1:
+        protocol["candidate_pool"] = {"version": POOL_VERSION, "limit": candidate_limit,
+                                      "attempt_limit": candidate_attempt_limit(candidate_limit),
+                                      "selection": SELECTION_POLICY}
     protocol["initialization_rule_log"] = engine.rule_log
     engine.rule_log = []
     count = 0
@@ -308,6 +450,15 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
                 "fallback": fill, "rule_log": engine.rule_log, "checks": checks, "missing": gaps,
                 "author_only_ready": not gaps, "source_profile_sha256": profile_record["sha256"],
                 "structure_correction": target.events.get(character), "reference_identity": target.identity}
+            if candidate_limit > 1:
+                logs["variant_trials"] = []
+                alternatives = alternative_candidates(engine, ctx, glyph, plan, sources,
+                                                      limit=candidate_limit, cancelled=cancelled,
+                                                      diagnostics=logs["variant_trials"])
+                for candidate in alternatives:
+                    candidate["source_profile_sha256"] = profile_record["sha256"]
+                payload["candidate_pool"] = {"version": POOL_VERSION, "alternatives": alternatives}
+                row["candidate_count"] = 1 + len(alternatives)
             path = stem.with_suffix(".json.gz")
             path.write_bytes(gzip.compress(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode(), mtime=0))
             row["files"][str(path.relative_to(output))] = sha256_file(path)

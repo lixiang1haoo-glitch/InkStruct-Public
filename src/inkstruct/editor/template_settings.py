@@ -40,7 +40,7 @@ class TemplateSettingsDialog(QtWidgets.QDialog):
             b.clicked.connect(lambda checked=False,kind=kind:self.new_flow_template(kind))
             modern.addWidget(b)
         self.form.addRow(modern)
-        self.migrate_button=QtWidgets.QPushButton("显式复制旧布局为 v3…（保留原文件与正文）",self)
+        self.migrate_button=QtWidgets.QPushButton("迁移旧版式为 v3…（保留原文件与正文）",self)
         self.migrate_button.clicked.connect(self.migrate)
         self.form.addRow(self.migrate_button)
         self.mode = QtWidgets.QComboBox()
@@ -56,7 +56,7 @@ class TemplateSettingsDialog(QtWidgets.QDialog):
             self.form.addRow(label, control)
             self.controls[name] = control
         note = QtWidgets.QLabel(
-            "底图固定在纸面，偏移只移动书写内容。空白纸仅输出明确配置的框线，不会描摹扫描标题或条码。栏位测量与实际打印校准需分别核对。"
+            "底图固定在纸面，偏移只移动书写内容。空白纸仅输出明确配置的框线，不会描摹扫描标题或条码。"
         )
         note.setWordWrap(True)
         self.form.addRow(note)
@@ -150,7 +150,7 @@ class TemplateSettingsDialog(QtWidgets.QDialog):
     def new_flow_template(self,kind):
         from ..document.flow_template import FlowTemplate, PageLayout
         from .flow_template_designer import FlowTemplateDesigner
-        t=FlowTemplate() if kind=='simple' else FlowTemplate(name='自定义模板',kind='custom',layouts=(PageLayout('layout-1','布局 1'),),loop_pages=('layout-1',))
+        t=FlowTemplate() if kind=='simple' else FlowTemplate(name='自定义模板',kind='custom',layouts=(PageLayout('layout-1','初始空白版式'),),loop_pages=('layout-1',))
         dialog=FlowTemplateDesigner(t,self)
         try:
             if dialog.exec()==QtWidgets.QDialog.DialogCode.Accepted:
@@ -167,7 +167,7 @@ class TemplateSettingsDialog(QtWidgets.QDialog):
         from .flow_template_designer import FlowTemplateDesigner
         try:
             if self.binding_editor.bindings:
-                raise ValueError('本项目的旧绑定和正文保持原样。请先导出旧模板 JSON，在新项目中导入后显式迁移布局并人工对应字段；不能自动改写绑定正文。')
+                raise ValueError('本项目的旧绑定和正文保持原样。请先导出旧模板 JSON，在新项目中导入后显式迁移页面版式并人工对应字段；不能自动改写绑定正文。')
             candidate=migrate_layout(self.configuration())
             dialog=FlowTemplateDesigner(candidate,self)
             try:

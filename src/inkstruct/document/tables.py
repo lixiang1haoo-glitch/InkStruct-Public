@@ -395,6 +395,9 @@ def parse_html_tables(session: SourceSession, span: SourceSpan, mapped=None):
     if parser.stack or not parser.roots or any(n.kind != "table" for n in parser.roots):
         raise TableSourceError("Expected complete closed HTML tables", span)
     roots = html_math(tuple(parser.roots), session, parser.diagnostics)
+    from .break_commands import html_break_commands
+
+    roots = html_break_commands(roots, session, parser.diagnostics)
     for node in roots:
         table_model(node)
     return roots, tuple(parser.diagnostics)

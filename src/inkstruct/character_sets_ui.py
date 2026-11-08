@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6 import QtCore, QtWidgets
 
 from .character_sets import CharacterSets
+from .generation_targets import structure_targets
 
 
 class CharacterSetsDialog(QtWidgets.QDialog):
@@ -19,6 +20,11 @@ class CharacterSetsDialog(QtWidgets.QDialog):
             '以下均有各自范围，不存在一份通用的“全部简繁字表”。关系数据不用于自动转换或替换缺字。')
         intro.setWordWrap(True)
         layout.addWidget(intro)
+        self.all_structures = QtWidgets.QCheckBox(f"结构库全部汉字 · {len(self.supported)} 字")
+        self.all_structures.setObjectName("structure_library_all")
+        self.all_structures.setToolTip("采用当前结构库的完整范围，不能与其他内置字表合并。")
+        self.all_structures.toggled.connect(self.structure_selection_changed)
+        layout.addWidget(self.all_structures)
         self.checkboxes = {}
         for entry in self.catalog.entries:
             box = QtWidgets.QCheckBox(f"{entry['title']} · {entry['version']} · {entry['count']} 字")
@@ -61,12 +67,27 @@ class CharacterSetsDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
         self.selection_changed()
 
+    def structure_selection_changed(self, checked):
+        for box in self.checkboxes.values():
+            with QtCore.QSignalBlocker(box):
+                if checked:
+                    box.setChecked(False)
+                box.setEnabled(not checked)
+        self.selection_changed()
+
     def selected_ids(self):
         return [key for key, box in self.checkboxes.items() if box.isChecked()]
 
     def selection_changed(self):
         # Any selection change revokes an earlier omission acknowledgement.
         self.acknowledge.setChecked(False)
+        if self.all_structures.isChecked():
+            self.current = structure_targets(self.supported)
+            self.summary.setText(f"结构库全部汉字 · {len(self.current['requested'])} 字 · 供体池保持完整。")
+            self.details.setPlainText("当前结构库支持的完整目标\n" + "".join(self.current["requested"]))
+            self.acknowledge.setEnabled(False)
+            self.update_accept()
+            return
         self.current = self.catalog.manifest(self.selected_ids(), self.supported)
         source = self.current['source']
         self.summary.setText(f"去重目标 {len(self.current['requested'])} 字；共用/重复成员 {source['shared_deduplicated_count']} 项；"
@@ -94,6 +115,7 @@ class CharacterSetsDialog(QtWidgets.QDialog):
     def accept(self):
         if not self.accept_button.isEnabled():
             return
-        self.result_manifest = self.catalog.manifest(self.selected_ids(), self.supported,
-            reviewed_unsupported=self.acknowledge.isChecked())
+        self.result_manifest = (self.current if self.all_structures.isChecked() else
+            self.catalog.manifest(self.selected_ids(), self.supported,
+                                  reviewed_unsupported=self.acknowledge.isChecked()))
         super().accept()

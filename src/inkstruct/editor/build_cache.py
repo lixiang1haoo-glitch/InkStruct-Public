@@ -23,6 +23,7 @@ class MarkdownBuildCache:
     def __init__(self):
         self.parsed = BoundedCache(max_entries=4, max_weight=16 * 1024**2)
         self.resources = BoundedCache(max_entries=256, max_weight=32 * 1024**2)
+        self.font_trajectories = BoundedCache(max_entries=4096, max_weight=64 * 1024**2)
         self.layouts = BoundedCache(max_entries=2, max_weight=192 * 1024**2)
         self.routes = BoundedCache(max_entries=128, max_weight=16 * 1024**2)
         self.measurements = MeasurementCache()
@@ -31,7 +32,7 @@ class MarkdownBuildCache:
     def statistics(self):
         return {
             name: getattr(self, name).statistics()
-            for name in ("parsed", "resources", "layouts", "routes", "measurements", "continuation")
+            for name in ("parsed", "resources", "font_trajectories", "layouts", "routes", "measurements", "continuation")
         }
 
 
@@ -66,6 +67,7 @@ def layout_key(source, resolver, page, style, flow):
         source,
         pools,
         selections,
+        resolver.font_identity,
         settings,
         LAYOUT_VERSION,
         MATH_LAYOUT_VERSION,

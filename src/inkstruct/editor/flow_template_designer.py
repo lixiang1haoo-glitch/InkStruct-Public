@@ -25,7 +25,7 @@ class FlowCanvas(QtWidgets.QWidget):
         super().__init__()
         self.owner = owner
         self.setMinimumSize(300, 350)
-        self.setAccessibleName("模板布局画布：正文框编号与连接顺序")
+        self.setAccessibleName("页面版式画布，显示正文框编号与连接顺序")
 
     def paintEvent(self, event):
         p = QtGui.QPainter(self)
@@ -139,11 +139,11 @@ class _TemplateDraft(QtWidgets.QDialog):
         row.addLayout(left, 1)
         self.layouts = QtWidgets.QListWidget()
         self.layouts.currentRowChanged.connect(self.select_layout)
-        left.addWidget(QtWidgets.QLabel("源布局（修改统一影响所有自动页面）"))
+        left.addWidget(QtWidgets.QLabel("源页面版式（修改统一影响所有自动页面）"))
         left.addWidget(self.layouts)
         bar = QtWidgets.QHBoxLayout()
-        button(bar, "新增布局", lambda: self.guard(self.add_layout))
-        button(bar, "删除布局", lambda: self.guard(self.remove_layout))
+        button(bar, "新增页面版式", lambda: self.guard(self.add_layout))
+        button(bar, "删除页面版式", lambda: self.guard(self.remove_layout))
         left.addLayout(bar)
         self.groups = {}
         for key, title in [
@@ -156,7 +156,7 @@ class _TemplateDraft(QtWidgets.QDialog):
             self.groups[key] = listing
             left.addWidget(listing)
             bar = QtWidgets.QHBoxLayout()
-            button(bar, "加入当前布局", lambda key=key: self.guard(lambda: self.group_add(key)))
+            button(bar, "加入当前页面版式", lambda key=key: self.guard(lambda: self.group_add(key)))
             button(bar, "↑", lambda key=key: self.guard(lambda: self.group_move(key, -1)))
             button(bar, "↓", lambda key=key: self.guard(lambda: self.group_move(key, 1)))
             button(bar, "移除", lambda key=key: self.guard(lambda: self.group_remove(key)))
@@ -205,7 +205,7 @@ class _TemplateDraft(QtWidgets.QDialog):
         ]:
             button(bar, title, lambda role=role: self.add_frame(role))
         button(bar, "删除框", self.remove_frame)
-        button(bar, "应用布局草稿", lambda: self.guard(self.apply_layout))
+        button(bar, "应用版式草稿", lambda: self.guard(self.apply_layout))
         center.addLayout(bar)
         self.tabs.addTab(design, "页面组与文本框")
         field_page = QtWidgets.QWidget()
@@ -274,7 +274,8 @@ class _TemplateDraft(QtWidgets.QDialog):
         self.refresh()
 
     def refresh(self):
-        selected = self.layouts.currentRow()
+        previous = self.layouts.currentItem()
+        selected = previous.data(QtCore.Qt.UserRole) if previous else None
         self.loading = True
         t = self.template
         self.name.setText(t.name)
@@ -284,11 +285,14 @@ class _TemplateDraft(QtWidgets.QDialog):
             (t.width_mm, t.height_mm, *t.margins_mm),
         ):
             self.paper[k].setValue(v)
-        self.layouts.clear()
-        for p in t.effective_layouts:
-            source = f" · PDF 第 {p.source_page} 页" if p.source_page else ""
-            self.layouts.addItem(p.label + source)
-        self.layouts.setCurrentRow(max(0, min(selected, self.layouts.count() - 1)))
+        rows = {p.layout_id: row for row, p in enumerate(t.effective_layouts)}
+        with QtCore.QSignalBlocker(self.layouts):
+            self.layouts.clear()
+            for p in t.effective_layouts:
+                item = QtWidgets.QListWidgetItem(p.label)
+                item.setData(QtCore.Qt.UserRole, p.layout_id)
+                self.layouts.addItem(item)
+            self.layouts.setCurrentRow(rows.get(selected, rows[t.layout(0).layout_id]))
         for key, listbox in self.groups.items():
             listbox.clear()
             for item in getattr(t, key):
@@ -301,7 +305,7 @@ class _TemplateDraft(QtWidgets.QDialog):
         self.connection.setText(
             "正文按页组顺序，再按框编号流动。\n循环："
             + sequence
-            + " → 回到首布局的正文框 1；实际页码继续递增。"
+            + " → 回到首个页面版式的正文框 1；实际页码继续递增。"
         )
         self.fields.setRowCount(0)
         for f in t.fields:
@@ -313,10 +317,9 @@ class _TemplateDraft(QtWidgets.QDialog):
         self.select_layout(self.layouts.currentRow())
 
     def current_layout(self):
-        rows = self.template.effective_layouts
-        return (
-            rows[self.layouts.currentRow()] if 0 <= self.layouts.currentRow() < len(rows) else None
-        )
+        item = self.layouts.currentItem()
+        key = item.data(QtCore.Qt.UserRole) if item else None
+        return next((p for p in self.template.effective_layouts if p.layout_id == key), None)
 
     def select_layout(self, row):
         p = self.current_layout()
@@ -398,13 +401,13 @@ class _TemplateDraft(QtWidgets.QDialog):
                 kind=kind, layouts=self.template.effective_layouts, loop_pages=("simple",)
             )
         elif kind == "simple" and self.template.kind == "custom":
-            raise ValueError("请通过外层“新建简单模板”另建；不会自动丢弃现有布局、字段和规则。")
+            raise ValueError("请通过外层“新建简单模板”另建；不会自动丢弃现有页面版式、字段和规则。")
         self.commit(replace(self.template, **changes))
 
     def update_layout(self, **changes):
         old = self.current_layout()
         if old is None or self.template.kind != "custom":
-            raise ValueError("请先选择自定义模板布局")
+            raise ValueError("请先选择自定义模板的页面版式")
         new = replace(old, **changes)
         self.commit(
             replace(
@@ -417,14 +420,14 @@ class _TemplateDraft(QtWidgets.QDialog):
 
     def add_layout(self):
         key = "layout-" + uuid4().hex[:12]
-        p = PageLayout(key, "布局 " + str(len(self.template.layouts) + 1))
+        p = PageLayout(key, "页面版式 " + str(len(self.template.layouts) + 1))
         self.commit(replace(self.template, layouts=(*self.template.layouts, p)))
         self.layouts.setCurrentRow(len(self.template.layouts) - 1)
 
     def remove_layout(self):
         key = self.current_layout().layout_id
         if key in (*self.template.start_pages, *self.template.loop_pages):
-            raise ValueError("请先从起始／循环页组移除此布局；循环页组必须保留至少一项。")
+            raise ValueError("请先从起始／循环页组移除此页面版式；循环页组必须保留至少一项。")
         self.commit(
             replace(
                 self.template, layouts=tuple(p for p in self.template.layouts if p.layout_id != key)
@@ -532,9 +535,13 @@ class _TemplateDraft(QtWidgets.QDialog):
         )
         if not path:
             return
-        dialog = PdfPagesDialog(path, self.template, self)
+        dialog = PdfPagesDialog(path, self.template, self, initial_blank=self.initial_blank)
         try:
             if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+                key = dialog.group.currentData()
+                index = len(getattr(self.template, key)) if dialog.mode.currentData() == "append" else 0
+                self.page_selection = (getattr(dialog.candidate, key)[index], key, index)
+                self.selected_frame_id = None
                 self.commit(dialog.candidate)
         finally:
             dialog.close_worker()
@@ -577,7 +584,7 @@ class _TemplateDraft(QtWidgets.QDialog):
                 if f.field_id == target.slot_id:
                     self.fields.selectRow(i)
                     return
-        self.error.setText("诊断对象当前未在布局中配置；请检查字段声明和正文框。")
+        self.error.setText("当前页面版式中没有此诊断对象，请检查字段声明和正文框。")
 
     def accept(self):
         # Apply the active draft only; unrelated, unapplied tabs remain drafts.

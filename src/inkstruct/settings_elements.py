@@ -9,10 +9,11 @@ from .settings_pages import acceptable, embed, label
 
 
 class ElementPage(QtWidgets.QWidget):
-    def __init__(self, kind, document, flow):
+    def __init__(self, kind, document, flow, *, scrollable=True):
         super().__init__()
         self.kind, self.flow = kind, flow
         self.document = document
+        self.scrollable = scrollable
         self.nodes = [n for root in document.nodes for n in root.walk() if n.kind == kind]
         self.editors, self.independent = {}, {}
         self.current_key = None
@@ -52,7 +53,9 @@ class ElementPage(QtWidgets.QWidget):
 
             node = next((n for n in self.nodes if n.node_id == key), None)
             flow = replace(self.flow, table=style)
-            editor = TableSettingsDialog(flow, columns=table_model(node).columns if node else None)
+            editor = TableSettingsDialog(
+                flow, columns=table_model(node).columns if node else None, scrollable=self.scrollable
+            )
             editor.scope.hide()
             editor.inherit.hide()
             editor.scope_info.hide()

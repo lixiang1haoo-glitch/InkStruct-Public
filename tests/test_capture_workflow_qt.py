@@ -18,6 +18,10 @@ QtCore.QSettings.setPath(QtCore.QSettings.IniFormat,QtCore.QSettings.UserScope,s
 w=main(['InkStruct'],create_only=True,workspace=root/'workspace')
 w.show();app.processEvents();a=w.single_widget;b=w.symbol_widget;c=a._capture_catalog
 assert a.task is None and b.task is None and not a.writer_edit.text() and not b.writer_edit.text()
+slider=a.canvas_size_slider
+assert slider.isVisible() and slider.isEnabled() and a.canvas.height()==260
+slider.setValue(24)
+assert a.canvas.height()==312 and '120%' in a.canvas_size_label.text()
 def new_name():
  d=app.activeModalWidget();assert isinstance(d,QtWidgets.QInputDialog);d.setTextValue('张三');d.accept()
 QtCore.QTimer.singleShot(0,new_name)
@@ -43,6 +47,9 @@ assert len(task.items)==3 and task.writer_id==key
 from handwriting_collector.models import TrajectoryPoint
 a.canvas.trajectory.start_stroke(TrajectoryPoint(120,120,.4,0))
 a.canvas.trajectory.append_point(TrajectoryPoint(230,120,.8,10));a.canvas.trajectory_changed.emit()
+assert not slider.isEnabled()
+slider.setValue(16)
+assert slider.value()==24 and a.canvas.height()==312 and a.canvas.trajectory.point_count==2
 QtCore.QTimer.singleShot(0,lambda:app.activeModalWidget().reject());a.configure_han_task(path)
 assert a.task is task and a.canvas.trajectory.point_count==2 and taskpath.read_bytes()==before
 original_exec=QtWidgets.QMessageBox.exec
@@ -52,6 +59,7 @@ QtWidgets.QMessageBox.exec=answer_box;a.pause_task();assert a.task is task and a
 def discard_box(box):
  next(b for b in box.buttons() if b.text()=='放弃当前笔迹').click();return 0
 QtWidgets.QMessageBox.exec=discard_box;a.pause_task();assert a.task is None
+assert slider.isEnabled()
 QtWidgets.QMessageBox.exec=original_exec
 a.open_managed_task(c.tasks()[0]);task=a.task
 QtWidgets.QMessageBox.question=lambda *args:QtWidgets.QMessageBox.Yes
@@ -70,6 +78,7 @@ a.cancel_task();assert a.task is None and c.tasks()[0]['state']=='cancelled' and
 assert taskpath.read_bytes()==saved
 fresh=main(['InkStruct'],create_only=True,workspace=root/'workspace');app.processEvents()
 assert fresh.single_widget.task is None
+assert fresh.single_widget.canvas_size_slider.value()==24 and fresh.single_widget.canvas.height()==312
 c.set_state('han',task.task_id,'paused');a.open_managed_task(entry)
 assert a.task.completed_count==1
 from inkstruct.symbol_revisions import requeue_completed

@@ -98,5 +98,10 @@ def corrected_layout(function):
             _depth.reset(token)
         if depth:
             return snapshot
-        return apply_corrections(snapshot, kwargs.get("flow"), cancelled=kwargs.get("cancelled"))
+        flow = kwargs.get("flow")
+        if flow is not None and flow.han_variation.enabled:
+            from .han_variation import apply_variation
+
+            snapshot = apply_variation(snapshot, args[0] if args else kwargs["document"], flow.han_variation, cancelled=kwargs.get("cancelled"))
+        return apply_corrections(snapshot, flow, cancelled=kwargs.get("cancelled"))
     return layout

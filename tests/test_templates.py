@@ -48,7 +48,7 @@ def test_template_modes_preserve_body_and_never_write_preview_frames():
     assert len(a.pages) == 2
     assert a.fragments == b.fragments
     assert [f.occurrence_id for f in a.fragments] == [o.occurrence_id for o in doc.occurrences]
-    assert any(d.code == "template-calibration-unreviewed" for d in a.diagnostics)
+    assert all(d.code != "template-calibration-unreviewed" for d in a.diagnostics)
     for p in a.pages:
         x1, y1, x2, y2 = t.bounds(p.index)
         for f in p.fragments:

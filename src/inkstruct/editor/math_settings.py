@@ -1,7 +1,8 @@
 """Category-based mathematical settings with live centreline geometry and guides."""
 
 from dataclasses import replace
-from math import ceil
+from math import ceil, isclose
+from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -10,7 +11,8 @@ from ..document.editing import SourceSession
 from ..document.markdown import parse_markdown
 from ..math.handwritten import measure_math
 from ..math.style import MathStyle
-from .math_diagram import StructureDiagram, info_button
+from .math_diagram import info_button
+from .math_reference import MathReferenceFont
 
 GROUPS = (
     (
@@ -32,7 +34,7 @@ GROUPS = (
     ),
     (
         "上标与下标",
-        "12_3^4",
+        "x_i^2",
         (
             ("script_scale", "上下标字号"),
             ("superscript_raise_em", "上标最小上移"),
@@ -44,7 +46,7 @@ GROUPS = (
         "分式",
         r"\frac{12}{3}",
         (("fraction_scale", "分子分母字号"), ("fraction_clearance_em", "分数线净间距")),
-        r"连分式逐层缩小；\dfrac 保持当前层字号。净间距受笔宽下限约束，不能将两层压在一起。",
+        r"连分式逐层缩小；\dfrac 保持当前层字号。横线来源也用于 bar、overline、underline。净间距受笔宽下限约束。",
     ),
     (
         "根式",
@@ -54,7 +56,7 @@ GROUPS = (
     ),
     (
         "积分与大运算符",
-        r"\sum_{1}^{3}12",
+        r"\sum\limits_{1}^{3}12",
         (
             ("large_operator_scale", "运算符字号"),
             ("limits_clearance_em", "上下限净间距"),
@@ -77,7 +79,7 @@ GROUPS = (
         "括号与定界符",
         r"\left(\frac{12}{3}\right)",
         (("delimiter_clearance_em", "括号与内容净间距"), ("delimiter_width_em", "括号构件宽度")),
-        r"\left / \right 及矩阵括号可缩放录制字形。高度由内容适配，宽度有三倍笔宽下限；几何模式使用折线。",
+        r"\left / \right 及矩阵括号围绕数学轴适配高度；录制括号保留端部和花括号中腰，伸长中段。宽度有三倍笔宽下限。",
     ),
     (
         "多行对齐",
@@ -95,15 +97,16 @@ GROUPS = (
         "修饰与向量",
         r"\vec{12}\quad\widehat{34}\quad\ddot{5}",
         (("accent_clearance_em", "标记与内容净间距"), ("accent_height_em", "标记构件高度")),
-        "箭头、横线、帽号、波浪和点号使用独立折线构件。原字形保持不变，尺寸受笔宽下限约束；点号使用短线绘制。",
+        "bar、overline、underline 沿用分式的横线来源，录制模式拉长减号。其他修饰符使用折线，点号使用短线；原字形保持不变。",
     ),
 )
 
 
 EXAMPLES = {
-    1: (("函数间距", r"\sin 12"),),
+    1: (("函数间距", r"\sin 12"), ("正斜体", r"x+\alpha=\sin x+\log 2+\operatorname{rank} x+\mathrm{d}x")),
+    2: (("数字上下标", "12_3^4"),),
     3: (("连分式", r"\frac{12}{\frac{3}{4}}"), ("行间分式", r"\dfrac{12}{3}")),
-    5: (("积分", r"\int_{1}^{3}12"), ("堆叠上下限", r"\int\limits_{1}^{3}12")),
+    5: (("积分", r"\int_{1}^{3}x\,\mathrm{d}x"), ("堆叠上下限", r"\int\limits_{1}^{3}12")),
     6: (
         ("行内小矩阵", r"\begin{smallmatrix}1&2\\3&4\end{smallmatrix}"),
         ("带框线数组", r"\begin{array}{c|c}1&2\\\hline 3&4\end{array}"),
@@ -111,9 +114,18 @@ EXAMPLES = {
     8: (("两组等式对齐", r"\begin{aligned}1&=2&3&=4\\5&=6&7&=8\end{aligned}"),),
 }
 
+ANNOTATION_CANVAS_HEIGHT = 222
+
+# The default overview includes the rows needed to explain the whole category.
+OVERVIEW_EXAMPLES = {1: (1,), 6: (1, 2), 8: (1,)}
+
 
 class DimensionSpinBox(QtWidgets.QDoubleSpinBox):
     """Keep editing precision without filling every field with trailing zeros."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
 
     def textFromValue(self, value):
         text = super().textFromValue(value)
@@ -125,9 +137,20 @@ class MathPreview(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.box = None
+        self.guide_rows = ()
+        self.dimension_tops = {}
+        self.dimension_bottoms = {}
         self.pen_mm = 0.3
-        self.setMinimumSize(380, 140)
+        self.setMinimumSize(175, 135)
+        self.reference = None
+        self.show_actual = False
+        self.measurement_tips = []
+        self.active_key = None
+        self.align = "center"
         self.show_guides = True
+        self.annotation_keys = ()
+        self.annotation_gutter = 0
+        self.annotation_rows = {}
         self.zoom_percent = 200
         self.empty_message = "输入受支持的公式以查看几何预览"
 
@@ -135,14 +158,20 @@ class MathPreview(QtWidgets.QWidget):
     def pixels_per_mm(self):
         return 96 / 25.4 * self.zoom_percent / 100
 
+    def vertical_bounds(self):
+        points = [y for d in self.box.dimensions if d.key in self.annotation_keys
+                  for _, y in (d.start, d.end)]
+        return min(-self.box.ascent, -self.box.axis, *points), max(self.box.descent, 0, *points)
+
     def update_geometry(self):
         if self.box is None:
-            self.setMinimumSize(380, 140)
+            self.setMinimumSize(175, 135)
         else:
-            height = self.box.descent + max(self.box.ascent, self.box.axis)
+            top, bottom = self.vertical_bounds()
+            height = bottom - top
             self.setMinimumSize(
-                max(380, ceil(self.box.width * self.pixels_per_mm + 110)),
-                max(140, ceil(height * self.pixels_per_mm + 70)),
+                max(175, ceil(self.box.width * self.pixels_per_mm + 88 + self.actual_label_width())),
+                max(135, ceil(height * self.pixels_per_mm + 72)),
             )
         self.updateGeometry()
         self.update()
@@ -151,7 +180,104 @@ class MathPreview(QtWidgets.QWidget):
         self.zoom_percent = percent
         self.update_geometry()
 
+    def set_boxes(self, boxes):
+        self.dimension_tops.clear()
+        self.dimension_bottoms.clear()
+        if len(boxes) == 1:
+            self.box, = boxes
+            self.guide_rows = ((self.box, 0, 0),)
+            return
+        width = max(box.width for box in boxes)
+        rows, glyphs, rules, dimensions, diagnostics = [], [], [], [], []
+        baseline = 0
+        for box in boxes:
+            if rows:
+                previous = rows[-1][0]
+                baseline += previous.descent + box.ascent + 8
+            x = 0 if self.align == 'left' else (width - box.width) / 2
+            rows.append((box, x, baseline))
+            glyphs.extend(replace(g, x_mm=g.x_mm + x, baseline_mm=g.baseline_mm + baseline)
+                          for g in box.glyphs)
+            rules.extend(replace(rule, points=tuple((a + x, b + baseline) for a, b in rule.points))
+                         for rule in box.rules)
+            for mark in box.dimensions:
+                translated = mark.translated(x, baseline)
+                dimensions.append(translated)
+                self.dimension_tops[id(translated)] = baseline - box.ascent
+                self.dimension_bottoms[id(translated)] = baseline + box.descent
+            diagnostics.extend(box.diagnostics)
+        self.guide_rows = tuple(rows)
+        self.box = replace(boxes[0], width=width, descent=baseline + boxes[-1].descent,
+                           glyphs=tuple(glyphs), rules=tuple(rules), dimensions=tuple(dimensions),
+                           diagnostics=tuple(diagnostics))
+
+    def origin(self):
+        top, bottom = self.vertical_bounds()
+        zoom = self.pixels_per_mm
+        available = self.width() - (self.annotation_gutter or self.actual_label_width())
+        x = 30 if self.align == "left" else (available - self.box.width * zoom) / 2
+        y = (self.height() - max(1, bottom - top) * zoom) / 2 - top * zoom
+        return x, y
+
+    def annotation_marks(self, key):
+        return [mark for mark in self.box.dimensions if mark.key == key][
+            :2 if key == "fraction_clearance_em" else 1
+        ] if self.box else []
+
+    def horizontal_guide_y(self, mark, number, origin_y):
+        if mark.start[1] != mark.end[1] or mark.start[0] == mark.end[0]:
+            return None
+        top = self.dimension_tops.get(id(mark), -self.box.ascent)
+        if mark.key in {'binary_gap_em', 'relation_gap_em'}:
+            bottom = self.dimension_bottoms.get(id(mark), self.box.descent)
+            return origin_y + max(mark.start[1], bottom) * self.pixels_per_mm + 8 + (number - 2) * 13
+        if mark.key == 'operator_gap_em':
+            return origin_y + min(mark.start[1], top) * self.pixels_per_mm - 12
+        return origin_y + min(mark.start[1], top) * self.pixels_per_mm - 8 - (number - 1) * 13
+
+    def actual_label_width(self):
+        if not self.show_actual or not self.box:
+            return 0
+        marks = self.annotation_marks(self.active_key)
+        if not marks:
+            return 0
+        return max(map(self.fontMetrics().horizontalAdvance,
+                       self.actual_text(marks, multiline=True).splitlines())) + 8
+
+    @staticmethod
+    def actual_text(marks, *, multiline=False):
+        if multiline:
+            return "\n".join(f"{mark.actual:.2f} mm" for mark in marks)
+        return " / ".join(f"{mark.actual:.2f}" for mark in marks) + " mm"
+
+    def paint_actual(self, painter, x, y, marks):
+        height = self.fontMetrics().lineSpacing() * len(marks) + 2
+        label = QtCore.QRectF(x, y - height / 2, self.actual_label_width(), height)
+        painter.drawText(label, QtCore.Qt.AlignVCenter, self.actual_text(marks, multiline=True))
+        self.record_measurement_tip(label, marks)
+
+    def record_measurement_tip(self, area, marks):
+        details = []
+        for mark in marks:
+            line = f"{mark.label} · 实测 {mark.actual:.2f} mm"
+            if mark.note and not isclose(mark.actual, mark.requested, abs_tol=.0001):
+                line += "\n" + mark.note
+            details.append(line)
+        self.measurement_tips.append((area.adjusted(-5, -5, 5, 5), "\n".join(details)))
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ToolTip:
+            for area, tip in self.measurement_tips:
+                if area.contains(event.pos()):
+                    QtWidgets.QToolTip.showText(event.globalPos(), tip, self, area.toAlignedRect())
+                    return True
+            QtWidgets.QToolTip.hideText()
+            event.ignore()
+            return True
+        return super().event(event)
+
     def paintEvent(self, event):
+        self.measurement_tips.clear()
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QtGui.QColor("#ffffff"))
@@ -159,21 +285,18 @@ class MathPreview(QtWidgets.QWidget):
             p.drawText(self.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, self.empty_message)
             return
         box = self.box
-        top = -max(box.ascent, box.axis)
-        height = max(1, box.descent - top)
         zoom = self.pixels_per_mm
-        ox = (self.width() - box.width * zoom) / 2
-        oy = (self.height() - height * zoom) / 2 - top * zoom
+        ox, oy = self.origin()
 
         def at(x, y):
             return QtCore.QPointF(ox + x * zoom, oy + y * zoom)
 
         if self.show_guides:
-            for y, color in ((0, "#64748b"), (-box.axis, "#2563eb")):
-                p.setPen(QtGui.QPen(QtGui.QColor(color), 1, QtCore.Qt.PenStyle.DashLine))
-                p.drawLine(at(-2, y), at(box.width + 2, y))
+            for row, x, baseline in self.guide_rows:
+                for y, color in ((baseline, "#64748b"), (baseline - row.axis, "#2563eb")):
+                    p.setPen(QtGui.QPen(QtGui.QColor(color), 1, QtCore.Qt.PenStyle.DashLine))
+                    p.drawLine(at(x - 2, y), at(x + row.width + 2, y))
             p.setPen(QtGui.QColor("#475569"))
-            p.drawText(12, 23, "虚线：灰色基线 · 蓝色数学轴")
         pen = QtGui.QPen(
             QtGui.QColor("#111827"),
             max(0.2, self.pen_mm * zoom),
@@ -203,6 +326,13 @@ class MathPreview(QtWidgets.QWidget):
                             for x, y in points
                         )
                     )
+            elif g.outline:
+                p.save()
+                p.translate(at(g.x_mm + g.origin_offset_mm, g.baseline_mm))
+                scale = g.em_mm * zoom / 1000
+                p.scale(scale, scale)
+                p.fillPath(self.reference.paths[g.outline.glyph_index], QtGui.QColor("#111827"))
+                p.restore()
             elif g.status != "space":
                 p.setPen(QtGui.QColor("#b91c1c"))
                 p.setBrush(QtGui.QColor("#fff1f2"))
@@ -219,21 +349,74 @@ class MathPreview(QtWidgets.QWidget):
         def arrow(a, b):
             p.drawLine(a, b)
             if a.y() == b.y():
-                for x, sign in ((a.x(), 1), (b.x(), -1)):
-                    p.drawLine(QtCore.QPointF(x, a.y()), QtCore.QPointF(x + sign * 5, a.y() - 3))
-                    p.drawLine(QtCore.QPointF(x, a.y()), QtCore.QPointF(x + sign * 5, a.y() + 3))
+                left, right = sorted((a.x(), b.x()))
+                for x, sign in ((left, 1), (right, -1)):
+                    tip = QtCore.QPointF(x, a.y())
+                    if right - left < 10:
+                        p.drawLine(tip + QtCore.QPointF(0, -3), tip + QtCore.QPointF(0, 3))
+                    else:
+                        for dy in (-3, 3):
+                            p.drawLine(tip, tip + QtCore.QPointF(sign * 5, dy))
             else:
-                for y, sign in ((a.y(), 1), (b.y(), -1)):
-                    p.drawLine(QtCore.QPointF(a.x(), y), QtCore.QPointF(a.x() - 3, y + sign * 5))
-                    p.drawLine(QtCore.QPointF(a.x(), y), QtCore.QPointF(a.x() + 3, y + sign * 5))
+                top, bottom = sorted((a.y(), b.y()))
+                for y, sign in ((top, 1), (bottom, -1)):
+                    tip = QtCore.QPointF(a.x(), y)
+                    if bottom - top < 10:
+                        p.drawLine(tip + QtCore.QPointF(-3, 0), tip + QtCore.QPointF(3, 0))
+                    else:
+                        for dx in (-3, 3):
+                            p.drawLine(tip, tip + QtCore.QPointF(dx, sign * 5))
 
-        arrow(at(0, box.descent + 10 / zoom), at(box.width, box.descent + 10 / zoom))
-        arrow(at(-10 / zoom, -box.ascent), at(-10 / zoom, box.descent))
-        p.drawText(
-            12,
-            self.height() - 14,
-            f"宽 {box.width:.2f} mm   高 {box.ascent + box.descent:.2f} mm   数学轴 {box.axis:.2f} mm",
-        )
+        self.paint_annotations(p, at, arrow)
+
+    def paint_annotations(self, painter, at, arrow):
+        rail = at(self.box.width, 0).x()
+        if self.show_actual and self.active_key in self.annotation_keys and not self.annotation_marks(self.active_key):
+            painter.setPen(QtGui.QColor("#69819f"))
+            painter.drawText(10, self.fontMetrics().height() + 4, "此示例未涉及所选尺寸")
+        for number, key in enumerate(self.annotation_keys, 1):
+            marks = self.annotation_marks(key)
+            if not marks:
+                continue
+            active = key == self.active_key
+            color = QtGui.QColor("#1d5fc4" if active else "#69819f")
+            painter.setPen(QtGui.QPen(color, 1.25 if active else 0.8))
+            x = rail + 6 + (number - 1) * 9
+            mid = []
+            for mark in marks:
+                a, b = at(*mark.start), at(*mark.end)
+                y = self.horizontal_guide_y(mark, number, at(0, 0).y())
+                if y is not None:
+                    start, end = QtCore.QPointF(a.x(), y), QtCore.QPointF(b.x(), y)
+                    painter.drawLine(end if end.x() > start.x() else start, QtCore.QPointF(x, y))
+                else:
+                    start, end = QtCore.QPointF(x, a.y()), QtCore.QPointF(x, b.y())
+                painter.drawLine(a, start)
+                painter.drawLine(b, end)
+                arrow(start, end)
+                self.record_measurement_tip(QtCore.QRectF(start, end).normalized(), [mark])
+                mid.append((start.y() + end.y()) / 2)
+            anchor = QtCore.QPointF(x, sum(mid) / len(mid))
+            row = self.annotation_rows.get(key)
+            if row is None:
+                badge = anchor + QtCore.QPointF(10, 0)
+                rect = QtCore.QRectF(badge.x() - 7, badge.y() - 7, 14, 14)
+                painter.setBrush(QtGui.QColor("#ffffff"))
+                painter.drawEllipse(rect)
+                painter.drawText(rect, QtCore.Qt.AlignCenter, str(number))
+                painter.setBrush(QtCore.Qt.NoBrush)
+                if self.show_actual and active:
+                    self.paint_actual(painter, rect.right() + 4, rect.center().y(), marks)
+                self.record_measurement_tip(rect, marks)
+                continue
+            endpoint = QtCore.QPointF(row.left() - 4, row.center().y())
+            bend = QtCore.QPointF(endpoint.x() - 7, anchor.y())
+            painter.drawLine(anchor, bend)
+            painter.drawLine(bend, endpoint)
+            if self.show_actual:
+                text = f"{number}  {self.actual_text(marks)}" if active else str(number)
+                painter.drawText(row, QtCore.Qt.AlignVCenter, text)
+                self.record_measurement_tip(QtCore.QRectF(row), marks)
 
 
 class MathCategoryDelegate(QtWidgets.QStyledItemDelegate):
@@ -244,29 +427,48 @@ class MathCategoryDelegate(QtWidgets.QStyledItemDelegate):
         return size
 
 
+class CurrentMathPanel(QtWidgets.QStackedWidget):
+    def sizeHint(self):
+        page = self.currentWidget()
+        return page.sizeHint() if page else super().sizeHint()
+
+    def minimumSizeHint(self):
+        page = self.currentWidget()
+        return page.minimumSizeHint() if page else super().minimumSizeHint()
+
+
 class MathSettingsDialog(QtWidgets.QDialog):
-    def __init__(self, style, parent=None, *, resolver=None, stroke_width=0.3):
+    def __init__(self, style, parent=None, *, resolver=None, stroke_width=0.3,
+                 embedded=False, font_path=None):
         super().__init__(parent)
         self.original = style
         resolver = resolver or AssetResolver(builtin_numbers=True)
-        self.preview_resolver = AssetResolver(
-            embedded=tuple(g for pool in resolver.pools.values() for g in pool), seed=resolver.seed
-        )
+        self.set_preview_resources(resolver, font_path)
+        self.preview_document = None
+        self.active_key = None
+        self.reference_error = ""
+        try:
+            self.reference = MathReferenceFont()
+        except (OSError, ValueError) as error:
+            self.reference = None
+            self.reference_error = str(error)
         self.pen_mm = stroke_width
         self.preview_session = None
         self.setWindowTitle("公式字体与样式")
         self.setObjectName("math_settings_dialog")
-        self.resize(980, 740)
-        self.setMinimumSize(880, 620)
+        if not embedded:
+            available = (parent or self).screen().availableGeometry().size()
+            width, height = min(1220, available.width() - 40), min(840, available.height() - 64)
+            self.setMinimumSize(min(600, width), min(400, height))
+            self.resize(width, height)
         self.setStyleSheet("""
             QWidget#math_content { background: #f5f7fa; }
             QDialog#math_settings_dialog { background: #f5f7fa; }
             QDialog#math_settings_dialog QLabel, QDialog#math_settings_dialog QCheckBox { color: #334155; }
             QListWidget { background: #edf1f6; border: none; border-radius: 8px; padding: 6px; }
-            QListWidget::item { padding: 10px 8px; border-radius: 5px; color: #334155; }
+            QListWidget::item { padding: 5px 8px; border-radius: 5px; color: #334155; }
             QListWidget::item:selected { background: #dbeafe; color: #155dad; font-weight: bold; }
-            QFrame#dimension_card { background: transparent; border: none; }
-            QFrame#dimension_card[active="true"] QDoubleSpinBox { border: 1px solid #267bd1; }
+            QDoubleSpinBox[activeMathDimension="true"] { border: 1px solid #267bd1; }
             QDoubleSpinBox { min-height: 20px; background: white; color: #1e293b; border: 1px solid #b7c4d2; border-radius: 2px; padding: 1px 3px; }
             QToolButton { padding: 3px; }
             QScrollArea { border: none; background: transparent; }
@@ -274,21 +476,22 @@ class MathSettingsDialog(QtWidgets.QDialog):
             QLabel#muted { color: #64748b; }
         """)
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setContentsMargins(*(0, 0, 0, 0) if embedded else (18, 16, 18, 14))
         layout.setSpacing(12)
-        heading = QtWidgets.QLabel("公式设置", self)
-        heading.setObjectName("section_title")
-        heading_row = QtWidgets.QHBoxLayout()
-        heading_row.addWidget(heading)
-        heading_row.addWidget(
-            info_button(
-                self,
-                "设置应用于当前文档的全部公式；点击“应用设置”后生效，取消不改变项目。",
-                "公式设置说明",
+        if not embedded:
+            heading = QtWidgets.QLabel("公式设置", self)
+            heading.setObjectName("section_title")
+            heading_row = QtWidgets.QHBoxLayout()
+            heading_row.addWidget(heading)
+            heading_row.addWidget(
+                info_button(
+                    self,
+                    "设置应用于当前文档的全部公式；点击“应用设置”后生效，取消不改变项目。",
+                    "公式设置说明",
+                )
             )
-        )
-        heading_row.addStretch()
-        layout.addLayout(heading_row)
+            heading_row.addStretch()
+            layout.addLayout(heading_row)
         body = QtWidgets.QHBoxLayout()
         body.setSpacing(16)
         layout.addLayout(body, 1)
@@ -300,8 +503,10 @@ class MathSettingsDialog(QtWidgets.QDialog):
         ) + 36))
         self.categories.setAccessibleName("公式结构分类")
         body.addWidget(self.categories)
-        scroll = QtWidgets.QScrollArea(self)
+        scroll = self.parameter_scroll = QtWidgets.QScrollArea(self)
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.viewport().installEventFilter(self)
         body.addWidget(scroll, 1)
         content = QtWidgets.QWidget()
         content.setObjectName("math_content")
@@ -317,21 +522,21 @@ class MathSettingsDialog(QtWidgets.QDialog):
         category_heading.addWidget(self.explanation)
         category_heading.addStretch()
         centre.addLayout(category_heading)
-        self.panels = QtWidgets.QStackedWidget(content)
-        centre.addWidget(self.panels)
+        self.panels = CurrentMathPanel(content)
+        self.panels.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.controls, self.initial, self.factors = {}, {}, {}
         self.sources = {}
-        self.diagrams = []
+        self.control_keys = {}
+        self.reset_buttons = {}
+        self.annotation_cards = {}
         for index, (title, sample, fields, explanation) in enumerate(GROUPS):
             self.categories.addItem(title)
             page = QtWidgets.QWidget(self.panels)
             page_layout = QtWidgets.QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(7)
-            diagram = StructureDiagram(index, fields, page)
-            self.diagrams.append(diagram)
-            page_layout.addWidget(diagram)
-            options = QtWidgets.QHBoxLayout()
+            options = QtWidgets.QFormLayout()
+            options.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
             page_layout.addLayout(options)
             source_key = {
                 "分式": "fraction_source",
@@ -348,10 +553,9 @@ class MathSettingsDialog(QtWidgets.QDialog):
                     "分数线使用减号 −，根号使用 √，括号使用对应字符。缺样本时显示诊断。"
                 )
                 self.sources[source_key] = choice
-                options.addWidget(QtWidgets.QLabel("构件来源", page))
-                options.addWidget(choice)
-            for key, label in fields:
-                widget = DimensionSpinBox(diagram)
+                options.addRow("手写分数线" if index == 3 else "手写构件来源", choice)
+            for number, (key, label) in enumerate(fields, 1):
+                widget = DimensionSpinBox(page)
                 widget.setObjectName(key)
                 widget.setAccessibleName(label)
                 widget.setDecimals(4)
@@ -385,12 +589,31 @@ class MathSettingsDialog(QtWidgets.QDialog):
                 self.controls[key] = widget
                 self.initial[key] = widget.value()
                 self.factors[key] = factor
-                reset = QtWidgets.QToolButton(diagram)
+                reset = QtWidgets.QToolButton(page)
                 reset.setText("↺")
                 reset.setToolTip("恢复“" + label + "”默认值")
                 reset.setAccessibleName("恢复" + label + "默认值")
                 reset.clicked.connect(lambda checked=False, key=key: self.reset_parameter(key))
-                diagram.add_control(key, label, widget, reset)
+                reset.setObjectName("reset_" + key)
+                reset.setAutoRaise(True)
+                self.reset_buttons[key] = reset
+                card = QtWidgets.QWidget(content)
+                row = QtWidgets.QHBoxLayout()
+                row.addWidget(widget)
+                row.addWidget(reset)
+                row.addStretch(1)
+                title_label = QtWidgets.QLabel(f"{number}  {label}")
+                title_label.setBuddy(widget)
+                card_layout = QtWidgets.QVBoxLayout(card)
+                card_layout.setContentsMargins(5, 1, 4, 1)
+                card_layout.setSpacing(1)
+                card_layout.addWidget(title_label)
+                card_layout.addLayout(row)
+                card.hide()
+                self.annotation_cards[key] = card
+                for target in (widget, widget.lineEdit()):
+                    self.control_keys[target] = key
+                    target.installEventFilter(self)
             if title == "字号与字形":
                 self.points = DimensionSpinBox(page)
                 self.points.setDecimals(4)
@@ -399,37 +622,31 @@ class MathSettingsDialog(QtWidgets.QDialog):
                 self.points.setSuffix(" pt")
                 self.points.setValue(style.em_mm * 72 / 25.4)
                 self.points.setAccessibleName("等效字号")
-                options.addWidget(QtWidgets.QLabel("等效字号", page))
-                options.addWidget(self.points)
+                for target in (self.points, self.points.lineEdit()):
+                    self.control_keys[target] = "em_mm"
+                    target.installEventFilter(self)
+                options.addRow("等效字号", self.points)
                 self.points.valueChanged.connect(self.points_changed)
                 self.controls["em_mm"].valueChanged.connect(self.mm_changed)
                 self.alignment = QtWidgets.QComboBox(page)
                 self.alignment.addItem("居中", "center")
                 self.alignment.addItem("左对齐", "left")
                 self.alignment.setCurrentIndex(self.alignment.findData(style.display_align))
-                options.addSpacing(16)
-                options.addWidget(QtWidgets.QLabel("独立公式对齐", page))
-                options.addWidget(self.alignment)
-                policy_row = QtWidgets.QHBoxLayout()
+                options.addRow("独立公式对齐", self.alignment)
                 self.spacing_policy = QtWidgets.QComboBox(page)
                 self.spacing_policy.setAccessibleName("公式字距")
                 self.spacing_policy.addItem("按笔迹紧凑排列（推荐）", "handwriting")
                 self.spacing_policy.addItem("保留采集留白与原结构尺寸（旧版）", "capture")
                 self.spacing_policy.setCurrentIndex(self.spacing_policy.findData(style.spacing_policy))
                 self.spacing_policy.setToolTip("消除公式采集格留白，按实际笔迹布置结构；保留字号、数学轴、显式空格及冻结选样。旧文档仅在明确应用后改变。")
-                policy_row.addWidget(QtWidgets.QLabel("公式字距", page))
-                policy_row.addWidget(self.spacing_policy)
-                policy_row.addStretch()
-                page_layout.addLayout(policy_row)
-            options.addStretch()
+                options.addRow("公式字距", self.spacing_policy)
             self.panels.addWidget(page)
         preview_heading = QtWidgets.QHBoxLayout()
-        preview_heading.addWidget(QtWidgets.QLabel("实际字形预览", content))
+        preview_heading.addWidget(QtWidgets.QLabel("对照预览", content))
         preview_heading.addWidget(
             info_button(
                 content,
-                f"当前项目可用字符：{len(resolver.pools)} 种。上方仅为固定比例结构示意；此处使用实际可用笔迹。"
-                "缺字显示红框，不使用印刷字形代替。示例不会插入正文；尺寸以实际预览为准。",
+                "两栏使用相同公式、参数、模式和倍率。灰色虚线是基线，蓝色虚线是数学轴。印刷栏使用 Latin Modern Math 字形与程序构件，手写缺字保留红框。",
                 "实际字形预览说明",
             )
         )
@@ -448,32 +665,13 @@ class MathSettingsDialog(QtWidgets.QDialog):
         self.guides.toggled.connect(self.toggle_guides)
         preview_heading.addWidget(self.guides)
         centre.addLayout(preview_heading)
-        self.preview = MathPreview(content)
-        self.guides.setChecked(True)
-        self.preview_scroll = QtWidgets.QScrollArea(content)
-        self.preview_scroll.setWidgetResizable(True)
-        self.preview_scroll.setFixedHeight(170)
-        self.preview_scroll.setWidget(self.preview)
-        centre.addWidget(self.preview_scroll)
-        self.preview_zoom.currentIndexChanged.connect(
-            lambda: self.preview.set_zoom(self.preview_zoom.currentData())
-        )
         source_row = QtWidgets.QHBoxLayout()
         self.example_choice = QtWidgets.QComboBox(content)
         self.example_choice.setAccessibleName("试排示例")
         self.example_choice.setMinimumWidth(110)
-        self.example_choice.activated.connect(self.choose_example)
+        self.example_choice.currentIndexChanged.connect(self.schedule_preview)
         source_row.addWidget(self.example_choice)
-        self.formula = QtWidgets.QLineEdit(content)
-        self.formula.setAccessibleName("自定义试排公式")
-        self.formula.setPlaceholderText("输入 LaTeX 公式内容，无需定界符")
-        source_row.addWidget(self.formula, 1)
-        example_reset = QtWidgets.QToolButton(content)
-        example_reset.setText("重置示例")
-        example_reset.clicked.connect(
-            lambda: self.formula.setText(GROUPS[self.categories.currentRow()][1])
-        )
-        source_row.addWidget(example_reset)
+        source_row.addStretch(1)
         self.display = QtWidgets.QCheckBox("独立公式", content)
         self.display.setChecked(True)
         source_row.addWidget(self.display)
@@ -482,32 +680,72 @@ class MathSettingsDialog(QtWidgets.QDialog):
         self.preview_status.setWordWrap(True)
         self.preview_status.setTextFormat(QtCore.Qt.TextFormat.PlainText)
         centre.addWidget(self.preview_status)
+        pair = QtWidgets.QGridLayout()
+        self.print_preview = MathPreview(content)
+        self.print_preview.reference = self.reference
+        self.preview = MathPreview(content)
+        self.preview.show_actual = True
+        self.preview_areas = []
+        for column, (pane, title) in enumerate(((self.print_preview, "印刷参考 · Latin Modern Math"),
+                                               (self.preview, "手写预览 · 当前字形资源"))):
+            pane_title = QtWidgets.QLabel(title, content)
+            pane_title.setWordWrap(True)
+            pair.addWidget(pane_title, 0, column)
+            area = QtWidgets.QScrollArea(content)
+            area.setWidgetResizable(True)
+            area.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+            area.setMinimumWidth(110)
+            area.setFixedHeight(175)
+            area.setWidget(pane)
+            self.preview_areas.append(area)
+            area.viewport().installEventFilter(self)
+            pair.addWidget(area, 1, column)
+            pair.setColumnStretch(column, 1)
+            if pane is self.preview:
+                self.preview_scroll = area
+        self.controls_below = QtWidgets.QWidget(content)
+        self.controls_below.setLayout(QtWidgets.QBoxLayout(QtWidgets.QBoxLayout.LeftToRight))
+        self.controls_below.layout().setContentsMargins(0, 0, 0, 0)
+        self.controls_below.layout().setSpacing(4)
+        self.controls_below.hide()
+        pair.addWidget(self.controls_below, 2, 0, 1, 2)
+        centre.addLayout(pair)
+        centre.addWidget(self.panels)
+        self.annotation_timer = QtCore.QTimer(self)
+        self.annotation_timer.setSingleShot(True)
+        self.annotation_timer.timeout.connect(self.position_annotation_controls)
+        self.guides.setChecked(True)
+        self.preview_zoom.currentIndexChanged.connect(self.zoom_changed)
+        units = QtWidgets.QLabel("百分比以当前层公式字号为基准。标线显示实际结果，缺字红框为占位。")
+        units.setWordWrap(True)
+        centre.addWidget(units)
         centre.addStretch()
-        self._examples = [group[1] for group in GROUPS]
+        self._example_indices = [0] * len(GROUPS)
         self._last_category = None
         self.error = QtWidgets.QLabel(self)
         self.error.setWordWrap(True)
         layout.addWidget(self.error)
-        footer = QtWidgets.QHBoxLayout()
-        layout.addLayout(footer)
-        restore = QtWidgets.QPushButton("当前分类恢复默认", self)
-        restore.clicked.connect(self.reset_category)
-        footer.addWidget(restore)
-        footer.addStretch()
-        buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
-        )
-        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setText("应用设置")
-        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).setText("取消")
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        footer.addWidget(buttons)
+        if not embedded:
+            footer = QtWidgets.QHBoxLayout()
+            layout.addLayout(footer)
+            restore = QtWidgets.QPushButton("当前分类恢复默认", self)
+            restore.clicked.connect(self.reset_category)
+            footer.addWidget(restore)
+            footer.addStretch()
+            buttons = QtWidgets.QDialogButtonBox(
+                QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
+            )
+            buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setText("应用设置")
+            buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).setText("取消")
+            buttons.accepted.connect(self.accept)
+            buttons.rejected.connect(self.reject)
+            footer.addWidget(buttons)
         self.timer = QtCore.QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.refresh_preview)
-        for c in self.controls.values():
-            c.valueChanged.connect(self.schedule_preview)
+        for key, c in self.controls.items():
+            c.valueChanged.connect(lambda _value, key=key: self.parameter_changed(key))
             c.lineEdit().textEdited.connect(self.schedule_preview)
             c.editingFinished.connect(self.schedule_preview)
         self.points.lineEdit().textEdited.connect(self.schedule_preview)
@@ -515,21 +753,142 @@ class MathSettingsDialog(QtWidgets.QDialog):
         for c in self.sources.values():
             c.currentIndexChanged.connect(self.schedule_preview)
         self.spacing_policy.currentIndexChanged.connect(self.schedule_preview)
-        self.formula.textChanged.connect(self.schedule_preview)
+        self.alignment.currentIndexChanged.connect(self.schedule_preview)
         self.display.toggled.connect(self.schedule_preview)
         self.categories.currentRowChanged.connect(self.category_changed)
         self.categories.setCurrentRow(0)
         self.refresh_preview()
 
-    def choose_example(self, index):
-        self.formula.setText(self.example_choice.itemData(index))
-
     def toggle_guides(self, checked):
-        self.preview.show_guides = checked
-        self.preview.update()
+        for pane in (self.print_preview, self.preview):
+            pane.show_guides = checked
+            pane.update()
+
+    def zoom_changed(self):
+        for pane in (self.print_preview, self.preview):
+            pane.set_zoom(self.preview_zoom.currentData())
+        self.annotation_timer.start(0)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.FocusIn and watched in self.control_keys:
+            self.activate_parameter(self.control_keys[watched])
+        if (event.type() == QtCore.QEvent.Resize and hasattr(self, "annotation_timer")
+                and (watched is self.parameter_scroll.viewport()
+                     or any(watched is area.viewport() for area in self.preview_areas))):
+            self.annotation_timer.start(0)
+        return super().eventFilter(watched, event)
+
+    def position_annotation_controls(self):
+        panes = self.print_preview, self.preview
+        keys = self.print_preview.annotation_keys
+        if not keys:
+            return
+        # Reparenting a focused spin box commits its text. Let the user correct
+        # intermediate input before moving the controls between layouts.
+        if any(self.controls[key].hasFocus() and not self.controls[key].hasAcceptableInput() for key in keys):
+            return
+        cards = [self.annotation_cards[key] for key in keys]
+        width = max(card.sizeHint().width() for card in cards)
+        height = max(card.sizeHint().height() for card in cards)
+        actual = self.preview.annotation_marks(self.active_key)
+        readout = self.preview.actual_text(actual) if actual else "此示例未涉及"
+        gutters = width + 22, self.fontMetrics().horizontalAdvance("4  " + readout) + 22
+        # Keep the same preview scale. A long or tall formula uses the bottom
+        # controls as well, so no editable field sits outside the visible canvas.
+        viewport = self.parameter_scroll.viewport()
+        required_height = max((ceil((pane.vertical_bounds()[1] - pane.vertical_bounds()[0])
+                                    * pane.pixels_per_mm + 72) for pane in panes if pane.box), default=0)
+        canvas_height = max(ANNOTATION_CANVAS_HEIGHT, 36 + len(cards) * (height + 4), min(460, required_height))
+        wide = viewport.height() >= max(395, canvas_height + 130) and all(
+            pane.box
+            and area.viewport().width() >= gutter + max(140, pane.box.width * pane.pixels_per_mm + 56)
+            for pane, area, gutter in zip(panes, self.preview_areas, gutters, strict=True)
+        ) and required_height <= canvas_height
+        focus = QtWidgets.QApplication.focusWidget()
+        keep_focus = focus is not None and any(card.isAncestorOf(focus) for card in cards)
+        host = self.print_preview if wide else self.controls_below
+        self.controls_below.layout().setDirection(
+            QtWidgets.QBoxLayout.LeftToRight if viewport.width() >= len(cards) * (width + 4) + 16
+            else QtWidgets.QBoxLayout.TopToBottom
+        )
+        for key, card in zip(keys, cards, strict=True):
+            card.setToolTip("" if self.print_preview.annotation_marks(key) else "此示例未涉及此尺寸，可切换内置示例。")
+            if card.parentWidget() is not host:
+                self.controls_below.layout().removeWidget(card)
+                if wide:
+                    card.setParent(host)
+                else:
+                    host.layout().addWidget(card, 0, QtCore.Qt.AlignLeft)
+            card.show()
+        self.controls_below.setVisible(not wide)
+        if keep_focus and focus is not QtWidgets.QApplication.focusWidget():
+            focus.setFocus(QtCore.Qt.OtherFocusReason)
+        for pane, area, gutter in zip(panes, self.preview_areas, gutters, strict=True):
+            preview_height = canvas_height if wide else min(285, max(156, required_height)) if len(pane.guide_rows) > 1 else 156
+            if area.height() != preview_height:
+                area.setFixedHeight(preview_height)
+            pane.annotation_gutter = gutter if wide else 0
+            pane.annotation_rows = {}
+            if wide:
+                left = pane.width() - gutter + 12
+                _, oy = pane.origin()
+                anchors = {}
+                for number, key in enumerate(keys, 1):
+                    positions = []
+                    for mark in pane.annotation_marks(key):
+                        y = pane.horizontal_guide_y(mark, number, oy)
+                        if y is None:
+                            y = oy + (mark.start[1] + mark.end[1]) * pane.pixels_per_mm / 2
+                        positions.append(y)
+                    anchors[key] = (sum(positions) / len(positions) if positions
+                                    else pane.height() * number / (len(keys) + 1))
+                row_height = height if pane is self.print_preview else 24
+                top = 6
+                ordered = keys if self.categories.currentRow() == 1 else sorted(keys, key=anchors.get)
+                for index, key in enumerate(ordered):
+                    remaining = len(keys) - index
+                    latest = pane.height() - 26 - remaining * (row_height + 4)
+                    y = max(top, min(latest, round(anchors[key] - row_height / 2)))
+                    rect = QtCore.QRect(left, y, gutter - 20, row_height)
+                    pane.annotation_rows[key] = rect
+                    if pane is self.print_preview:
+                        self.annotation_cards[key].setGeometry(rect)
+                    top = y + row_height + 4
+            pane.update()
+
+    def parameter_changed(self, key):
+        self.activate_parameter(key)
+        self.schedule_preview()
+
+    def activate_parameter(self, key):
+        if key == self.active_key:
+            return
+        previous = self.active_key
+        self.active_key = key
+        for field in (previous, key):
+            if field in self.controls:
+                control = self.controls[field]
+                control.setProperty("activeMathDimension", field == key)
+                control.style().unpolish(control)
+                control.style().polish(control)
+        for pane in (self.print_preview, self.preview):
+            pane.active_key = key
+            pane.update_geometry()
+        self.annotation_timer.start(0)
+    def example_source(self):
+        examples = [self.example_choice.currentData()]
+        if self.example_choice.currentIndex() == 0:
+            examples.extend(self.example_choice.itemData(i)
+                            for i in OVERVIEW_EXAMPLES.get(self.categories.currentRow(), ()))
+        opening, closing = ("$$\n", "\n$$") if self.display.isChecked() else ("$", "$")
+        return "\n\n".join(opening + formula + closing for formula in examples)
 
     def reset_parameter(self, key):
-        self.controls[key].setValue(getattr(MathStyle.handwriting(), key) * self.factors[key])
+        default = getattr(MathStyle.handwriting(), key)
+        self.original = replace(self.original, **{key: default})
+        self.controls[key].setValue(default * self.factors[key])
+        self.initial[key] = self.controls[key].value()
+        self.parameter_changed(key)
 
     def mm_changed(self, value):
         with QtCore.QSignalBlocker(self.points):
@@ -539,43 +898,54 @@ class MathSettingsDialog(QtWidgets.QDialog):
         self.controls["em_mm"].setValue(value * 25.4 / 72)
 
     def category_changed(self, index):
+        if not 0 <= index < len(GROUPS):
+            return
         if self._last_category is not None:
-            self._examples[self._last_category] = self.formula.text()
+            self._example_indices[self._last_category] = self.example_choice.currentIndex()
         self._last_category = index
         self.panels.setCurrentIndex(index)
+        self.panels.updateGeometry()
+        keys = tuple(key for key, _ in GROUPS[index][2])
+        for card in self.annotation_cards.values():
+            card.hide()
+        self.controls_below.hide()
+        self.panels.setVisible(index in {0, 3, 4, 7})
+        for pane, area in zip((self.print_preview, self.preview), self.preview_areas, strict=True):
+            pane.annotation_keys = keys
+            pane.annotation_rows = {}
+            pane.annotation_gutter = 0
+            area.setFixedHeight(ANNOTATION_CANVAS_HEIGHT)
         self.category_title.setText(GROUPS[index][0])
         self.explanation.setToolTip(
             GROUPS[index][3]
-            + "\n结构图为固定比例示意，数值变化请查看下方实际字形预览。\n100% = 当前层公式字号；单项尺寸及毫米估算可悬停其旁的 i 查看。"
+            + "\n100% 对应当前层公式字号。蓝色标线随所选参数更新。"
         )
-        self.example_choice.clear()
-        self.example_choice.addItem("默认示例", GROUPS[index][1])
-        for title, source in EXAMPLES.get(index, ()):
-            self.example_choice.addItem(title, source)
-        self.formula.setText(self._examples[index])
-        self.sync_example_choice()
+        with QtCore.QSignalBlocker(self.example_choice):
+            self.example_choice.clear()
+            default_name = "参数总览" if index in OVERVIEW_EXAMPLES else "普通分式" if index == 3 else "默认示例"
+            self.example_choice.addItem(default_name, GROUPS[index][1])
+            for title, source in EXAMPLES.get(index, ()):
+                self.example_choice.addItem(title, source)
+            self.example_choice.setCurrentIndex(self._example_indices[index])
+        self.example_choice.setVisible(self.example_choice.count() > 1)
+        self.activate_parameter(GROUPS[index][2][0][0])
         self.schedule_preview()
+        self.annotation_timer.start(0)
 
     def reset_category(self):
         defaults = MathStyle.handwriting()
         if self.categories.currentRow() == 0:
             self.alignment.setCurrentIndex(self.alignment.findData(defaults.display_align))
             self.spacing_policy.setCurrentIndex(self.spacing_policy.findData(defaults.spacing_policy))
-        for key, label in GROUPS[self.categories.currentRow()][2]:
-            self.controls[key].setValue(getattr(defaults, key) * self.factors[key])
+        for key, _label in GROUPS[self.categories.currentRow()][2]:
+            self.reset_parameter(key)
         key = {3: "fraction_source", 4: "radical_source", 7: "delimiter_source"}.get(
             self.categories.currentRow()
         )
         if key:
             self.sources[key].setCurrentIndex(self.sources[key].findData(getattr(defaults, key)))
 
-    def sync_example_choice(self):
-        index = self.example_choice.findData(self.formula.text())
-        self.example_choice.setCurrentIndex(index)
-        self.example_choice.setPlaceholderText("自定义公式")
-
     def schedule_preview(self, *args):
-        self.sync_example_choice()
         self.timer.start()
 
     def configuration(self):
@@ -594,53 +964,86 @@ class MathSettingsDialog(QtWidgets.QDialog):
         return replace(self.original, **changes, display_align=self.alignment.currentData(),
                        spacing_policy=self.spacing_policy.currentData())
 
+    def set_preview_resources(self, resolver, font_path=None):
+        self.embedded = tuple(g for pool in resolver.pools.values() for g in pool)
+        self.preview_seed = resolver.seed
+        self.font_path = Path(font_path) if font_path and str(font_path).lower().endswith(".inkfont") else None
+        self.preview_resolver = AssetResolver(embedded=self.embedded, seed=self.preview_seed)
+        self.font_preview_source = None
+
+    def prepare_handwriting(self, nodes, source):
+        if self.font_path is None or self.font_preview_source == source:
+            return
+        from ..fonts.core import cached_font
+
+        characters = {n.value for node in nodes for n in node.math.walk() if n.kind == "Symbol"} | set("−√()[]{}|‖")
+        if "ℏ" in characters:
+            characters.update("h-")
+        if "．" in characters:
+            characters.add(".")
+        glyphs = tuple(cached_font(self.font_path).glyphs(characters, reuse=self.embedded))
+        # Reuse validated decodes, but never merge another font's pool into the
+        # linked font. This draft may target a different default than the document.
+        self.preview_resolver = AssetResolver(embedded=glyphs, seed=self.preview_seed, builtin_numbers=True)
+        self.font_preview_source = source
+
     def refresh_preview(self):
         self.timer.stop()
         try:
             style = self.configuration()
-            for diagram in self.diagrams:
-                diagram.update_values(style)
-            source = (
-                "$$\n" + self.formula.text() + "\n$$"
-                if self.display.isChecked()
-                else "$" + self.formula.text() + "$"
-            )
+            display = self.display.isChecked()
+            for pane in (self.print_preview, self.preview):
+                pane.align = style.display_align if display else "center"
+            source = self.example_source()
             if self.preview_session is None or self.preview_session.source != source:
                 self.preview_session = SourceSession(source)
                 self.preview_resolver.selections.clear()
-            document = parse_markdown(self.preview_session)
+                self.preview_document = parse_markdown(self.preview_session)
+            document = self.preview_document
             errors = [d.message for d in document.diagnostics if d.severity == "error"]
-            node = next((n for root in document.nodes for n in root.walk() if n.math), None)
-            if errors or node is None:
-                raise ValueError("; ".join(errors) or "请输入非空公式")
-            box = measure_math(
-                node.math,
-                self.preview_resolver,
-                owner=node.node_id,
-                style=style,
-                stroke_width=self.pen_mm,
-                display=self.display.isChecked(),
-            )
-            self.preview.box = box
-            self.preview.pen_mm = self.pen_mm
-            missing = sorted({g.occurrence.text for g in box.glyphs if g.status == "missing"})
-            issues = [d.message for d in box.diagnostics if d.severity == "error"]
-            message = (
-                ("缺少字形：" + " ".join(missing) + "；红框仅用于定位，不能用于机器输出。")
-                if missing
-                else ("预览存在不可书写问题：" + issues[0])
-                if issues
-                else ""
-            )
-            self.preview_status.setText(message)
-            self.preview_status.setVisible(bool(message))
+            nodes = [n for root in document.nodes for n in root.walk() if n.math]
+            if errors or not nodes:
+                raise ValueError("、".join(errors) or "请输入非空公式")
+            args = dict(style=style, stroke_width=self.pen_mm, display=display, inspect=True)
+            if self.reference:
+                self.print_preview.set_boxes([measure_math(
+                    node.math, self.preview_resolver, owner=node.node_id, reference=self.reference.measure, **args
+                ) for node in nodes])
+            else:
+                self.print_preview.empty_message = "印刷参考不可用"
+            issues = [d.message for d in self.print_preview.box.diagnostics
+                      if d.code == "reference-glyph-missing"] if self.print_preview.box else []
+            if self.reference_error:
+                issues.append(self.reference_error)
+            try:
+                self.prepare_handwriting(nodes, source)
+                self.preview.set_boxes([measure_math(
+                    node.math, self.preview_resolver, owner=node.node_id, **args
+                ) for node in nodes])
+                missing = sorted({g.occurrence.text for g in self.preview.box.glyphs if g.status == "missing"})
+                hand_errors = [d.message for d in self.preview.box.diagnostics if d.severity == "error"]
+                if missing:
+                    issues.append("手写缺少字形：" + " ".join(missing) + "。红框用于定位。")
+                if hand_errors and (not missing or any(
+                        d.code != "asset-missing" for d in self.preview.box.diagnostics if d.severity == "error")):
+                    issues.append("手写预览：" + hand_errors[-1])
+            except (OSError, ValueError) as error:
+                self.preview.box = None
+                self.preview.empty_message = "手写预览不可用"
+                issues.append("手写预览：" + str(error))
+            self.preview_status.setText("\n".join(issues))
+            self.preview_status.setVisible(bool(issues))
             self.error.clear()
         except (ValueError, TypeError) as error:
-            self.preview.box = None
-            self.preview.empty_message = "请检查下方提示，输入有效参数或公式"
+            for pane in (self.print_preview, self.preview):
+                pane.box = None
+                pane.empty_message = "请输入有效参数或公式"
             self.preview_status.setText("无法预览：" + str(error))
             self.preview_status.show()
-        self.preview.update_geometry()
+        for pane in (self.print_preview, self.preview):
+            pane.pen_mm = self.pen_mm
+            pane.update_geometry()
+        self.annotation_timer.start(0)
 
     def accept(self):
         try:

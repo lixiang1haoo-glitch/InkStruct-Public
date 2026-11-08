@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtWidgets
 from ..assets.resolver import AssetResolver
 from ..document.editing import SourceSession
 from ..fonts.core import cached_font
+from ..fonts.identity import release_identity
 from ..fonts.library import fingerprint
 from ..fonts.ui import Job
 
@@ -20,7 +21,8 @@ def document_token(editor):
 
 def clone_resolver(resolver):
     return AssetResolver(embedded=tuple(g for pool in resolver.pools.values() for g in pool),
-                         seed=resolver.seed, selections=tuple(resolver.selections.values()))
+                         seed=resolver.seed, selections=tuple(resolver.selections.values()),
+                         font_identity=resolver.font_identity)
 
 
 def font_resolver(font, old):
@@ -37,7 +39,116 @@ def font_resolver(font, old):
                 and record['enabled'] and core['summary']['review_status'] not in {'rejected', 'needs_review'}):
             preserved[glyph.asset_id] = glyph
             selected.append(choice)
-    return AssetResolver(embedded=tuple(preserved.values()), seed=old.seed, selections=selected), len(selected)
+    return AssetResolver(embedded=tuple(preserved.values()), seed=old.seed, selections=selected,
+                         font_identity=release_identity(font.identity)), len(selected)
+
+
+def template_replacement(flow, target, document):
+    """Keep legacy bindings by stable slot/region identity and leave source text intact."""
+    from ..document.flow_template import FlowTemplate
+    from ..document.template_slots import KINDS
+
+    old = flow.template
+    source_nodes = {node.node_id: node for node in document.nodes}
+    old_slots = {s.region: s for s in getattr(old, 'slots', ())}
+    new_slots = {s.slot_id: s for s in getattr(target, 'slots', ())}
+    bindings, invalid = [], []
+    for binding in flow.template_bindings:
+        old_slot = old_slots.get(binding.region)
+        slot = new_slots.get(old_slot.slot_id) if old_slot else None
+        candidate = slot.bind(binding.node_ids) if slot else binding
+        if slot:
+            kinds = KINDS[slot.kind]
+            valid = all(key in source_nodes and (kinds is None or source_nodes[key].kind in kinds)
+                        for key in candidate.node_ids)
+        elif target is not None and not isinstance(target, FlowTemplate) and not old_slot and not new_slots:
+            faces = (target.first, target.continuation) if binding.pages == 'all' else (target.first,)
+            valid = (all(key in source_nodes for key in binding.node_ids)
+                     and all(any(r.name == binding.region for r in face.reserved)
+                             and (not binding.anchor or any(a.name == binding.anchor for a in face.anchors))
+                             for face in faces))
+        else:
+            valid = False
+        if valid:
+            bindings.append(candidate)
+        else:
+            invalid.append(old_slot.slot_id if old_slot else binding.region)
+    if isinstance(old, FlowTemplate):
+        target_fields = {f.field_id: f for f in getattr(target, 'fields', ())}
+        values = {dict(n.attributes)['field_id'] for n in document.nodes if n.kind == 'named_field'}
+        invalid.extend(f.field_id for f in old.fields if f.field_id in values and (
+            f.field_id not in target_fields or f.value_type != target_fields[f.field_id].value_type))
+    return replace(flow, template=target, template_bindings=tuple(bindings)), tuple(invalid)
+
+
+def template_changes(before, after):
+    from ..document.flow_template import FlowTemplate
+
+    def page_group(template, key):
+        return getattr(template, key, ()) if isinstance(template, FlowTemplate) else ()
+
+    def page_names(template, ids, *, identify=False):
+        if not ids:
+            return '无'
+        names = {p.layout_id: p.label for p in template.layouts}
+        return ' → '.join(f'{names[key]}〔{key}〕' if identify else names[key] for key in ids)
+
+    for title, key in [('起始页组', 'start_pages'), ('循环页组', 'loop_pages')]:
+        old, new = page_group(before, key), page_group(after, key)
+        if old != new:
+            a, b = page_names(before, old), page_names(after, new)
+            if a == b:
+                a, b = page_names(before, old, identify=True), page_names(after, new, identify=True)
+            yield '页组顺序', title, f'原顺序 {a} / 新顺序 {b}'
+
+    def backgrounds(template):
+        if isinstance(template, FlowTemplate):
+            return {p.layout_id: (p.label, p.background.sha256) for p in template.layouts if p.background}
+        return {key: (label, face.background.sha256)
+                for key, label in [('first', '首页'), ('continuation', '续页')]
+                if (face := getattr(template, key, None)) and face.background}
+
+    old, new = backgrounds(before), backgrounds(after)
+    for key in sorted(old.keys() | new.keys()):
+        label, previous_hash = old.get(key, ('', None))
+        current_label, current_hash = new.get(key, ('', None))
+        if previous_hash != current_hash:
+            yield '页面底图', current_label or label, (
+                '新增' if previous_hash is None else '移除' if current_hash is None else '已更换'
+            )
+    for title, key in [('横向偏移', 'offset_x_mm'), ('纵向偏移', 'offset_y_mm')]:
+        old, new = getattr(before, key, 0), getattr(after, key, 0)
+        if old != new:
+            yield '整份模板偏移', title, f'{old:g} → {new:g} mm'
+    old, new = (getattr(t, 'finish_cycle', False) for t in (before, after))
+    if old != new:
+        yield '循环设置', '末尾补齐整个循环页组', '开启' if new else '关闭'
+
+    def regions(template):
+        if isinstance(template, FlowTemplate):
+            return {(page.layout_id, f.frame_id): (f.role, f.field_id, f.order, f.region.bounds)
+                    for page in template.effective_layouts for f in page.frames}
+        if template:
+            return {(face, r.name): r.bounds for face in ('first', 'continuation')
+                    for r in (getattr(template, face).body, *getattr(template, face).reserved)}
+        return {}
+
+    def fields(template):
+        return {getattr(f, 'field_id', None) or f.slot_id: f
+                for f in getattr(template, 'fields', getattr(template, 'slots', ()))}
+
+    for category, getter in [('区域', regions), ('字段', fields)]:
+        old, new = getter(before), getter(after)
+        for key in sorted(old.keys() | new.keys()):
+            if old.get(key) == new.get(key):
+                continue
+            name = '/'.join(key) if isinstance(key, tuple) else key
+            if key not in old:
+                yield category, name, '新增'
+            elif key not in new:
+                yield category, name, '移除'
+            else:
+                yield category, name, f'变更：{old[key]} → {new[key]}' if category == '区域' else '声明或规则变更'
 
 
 class ResourceHistory:
@@ -77,11 +188,12 @@ class ResourceHistory:
 
 
 class ResourceApplyDialog(QtWidgets.QDialog):
-    def __init__(self, editor, *, font=None, template=None, parent=None):
+    def __init__(self, editor, *, font=None, template=None, exact_identity=None, parent=None):
         super().__init__(parent or editor)
         self.editor, self.font, self.template = editor, str(font) if font else None, template
         self.is_font = font is not None
-        self.setWindowTitle('更换本文字体 · 影响确认' if self.is_font else '更换本文模板 · 适配确认')
+        self.setWindowTitle('连接原版本 · 完整验证' if exact_identity else
+                            '更换本文字体 · 影响确认' if self.is_font else '更换本文模板 · 适配确认')
         self.resize(820, 620)
         self.token = document_token(editor)
         self.result = None
@@ -117,15 +229,29 @@ class ResourceApplyDialog(QtWidgets.QDialog):
         revision = editor.revision
         def calculate(progress):
             from .mixed import build_markdown
-            retained = len(resolver.selections)
             target_resolver = resolver
+            target_flow, invalid = flow, ()
+            # Font previews compare against the authoritative embedded snapshot.
+            # An unavailable external copy must not prevent a manual replacement.
+            baseline_run = '' if self.is_font and Path(run).suffix == '.inkfont' else run
+            baseline = build_markdown(session, revision, clone_resolver(resolver), baseline_run, symbols,
+                                      page, style, flow, None)
             if self.is_font:
                 progress('正在验证字体并检查本文…')
-                target_resolver, retained = font_resolver(cached_font(Path(self.font)), resolver)
+                package = cached_font(Path(self.font))
+                if exact_identity and release_identity(package.identity) != exact_identity:
+                    raise ValueError('所选字体的字体 ID、发布 ID 或核心哈希与本文原版本不同')
+                if not exact_identity:
+                    target_resolver, _ = font_resolver(package, resolver)
+            else:
+                target_flow, invalid = template_replacement(flow, template, baseline['document'])
             result = build_markdown(session, revision, target_resolver,
                                     self.font if self.is_font else run, '' if self.is_font else symbols,
-                                    page, style, flow if self.is_font else replace(flow, template=template), None)
-            return {**result, 'retained': retained, 'previous': len(resolver.selections)}
+                                    page, style, target_flow, None)
+            return {**result, 'retained': len(target_resolver.selections),
+                    'baseline': baseline['snapshot'], 'target_flow': target_flow,
+                    'invalid_bindings': invalid, 'previous_choices': tuple(resolver.selections.values()),
+                    'old_template': flow.template, 'page_profile': page}
         self.job = Job(calculate)
         self.job.signals.completed.connect(self.completed)
         self.job.signals.failed.connect(self.failed)
@@ -145,9 +271,38 @@ class ResourceApplyDialog(QtWidgets.QDialog):
             snapshot = result['snapshot']
             errors = sum(d.severity == 'error' for d in snapshot.diagnostics)
             warnings = sum(d.severity == 'warning' for d in snapshot.diagnostics)
-            retained, previous = result['retained'], result['previous']
-            self.summary.setText((f'兼容冻结选样保留 {retained}/{previous} 处；需要重新选样 {previous-retained} 处。\n' if self.is_font else
-                                  '字段按稳定标识对应，未声明字段和必填项问题如下；不删除原文内容。\n') +
+            baseline = result['baseline']
+            changes = []
+            if self.is_font:
+                by_id = {o.occurrence_id: o for o in result['document'].occurrences}
+                nodes = {n.node_id: n for root in result['document'].nodes for n in root.walk()}
+                changed = [s for s in result['previous_choices']
+                           if result['resolver'].selections.get(s.occurrence_id) != s
+                           and (s.occurrence_id in by_id or s.occurrence_id.split(':math-rule:')[0] in nodes)]
+                previous = len(result['previous_choices'])
+                old_missing = {(d.span.start, d.span.end) for d in baseline.diagnostics if d.code == 'asset-missing'}
+                new_missing = [d for d in snapshot.diagnostics if d.code == 'asset-missing'
+                               and (d.span.start, d.span.end) not in old_missing]
+                impact = f'冻结选样保留 {previous-len(changed)}/{previous} 处；需要重新选样 {len(changed)} 处；新增缺字 {len(new_missing)} 处。'
+                for choice in changed:
+                    owner = by_id.get(choice.occurrence_id) or nodes[choice.occurrence_id.split(':math-rule:')[0]]
+                    changes.append(('重新选样', f'{owner.span.start}–{owner.span.end}', choice.character))
+                for diagnostic in new_missing:
+                    changes.append(('新增缺字', f'{diagnostic.span.start}–{diagnostic.span.end}', diagnostic.message))
+            else:
+                old, new = result['old_template'], self.template
+                old_page, new_page = (t.page if t else result['page_profile'] for t in (old, new))
+                overflow = [sum('overflow' in d.code or 'too-tall' in d.code or 'no-progress' in d.code
+                                for d in s.diagnostics) for s in (baseline, snapshot)]
+                impact = (f'纸张 {old_page.width_mm:g} × {old_page.height_mm:g} → '
+                          f'{new_page.width_mm:g} × {new_page.height_mm:g} mm；'
+                          f'页数 {len(baseline.pages)} → {len(snapshot.pages)}；溢出问题 {overflow[0]} → {overflow[1]}。')
+                changes.extend(template_changes(old, new))
+                changes.extend(('失效绑定', key, '需重新检查字段对应；源码保留')
+                               for key in result['invalid_bindings'])
+            for change in changes:
+                self.issues.addTopLevelItem(QtWidgets.QTreeWidgetItem(change))
+            self.summary.setText(impact + '\n' +
                                  f'试排 {len(snapshot.pages)} 页 · {errors} 项错误 · {warnings} 项提醒。' +
                                  ('\n当前内容具备严格 SVG 条件。' if snapshot.plotter_exportable else '\n当前内容仍有导出限制，应用资源不会放行这些限制。'))
             for d in snapshot.diagnostics:
@@ -156,7 +311,7 @@ class ResourceApplyDialog(QtWidgets.QDialog):
                 self.issues.addTopLevelItem(item)
             for warning in result['resolver'].usage_warnings():
                 self.issues.addTopLevelItem(QtWidgets.QTreeWidgetItem(['来源提醒', warning['character'], '；'.join(warning['reasons'])]))
-            self.requires_acknowledgement = bool(snapshot.diagnostics or previous-retained or result['resolver'].usage_warnings())
+            self.requires_acknowledgement = bool(snapshot.diagnostics or changes or result['resolver'].usage_warnings())
             self.acknowledge.setVisible(self.requires_acknowledgement)
             self.update_action()
         except (ValueError, OSError) as error:
@@ -197,7 +352,8 @@ class ResourceApplyDialog(QtWidgets.QDialog):
                 w.mark_dirty()
                 w.schedule_layout()
             else:
-                w.template_content_panel.apply_template(self.template)
+                w.template_content_panel.apply_template(self.template,
+                    bindings=self.result['target_flow'].template_bindings)
             self.closed = True
             super().accept()
         except (ValueError, OSError) as error:

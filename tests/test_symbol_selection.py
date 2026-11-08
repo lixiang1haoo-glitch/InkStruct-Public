@@ -20,7 +20,7 @@ from inkstruct.fonts.importer import build_font
 from inkstruct.layout.blocks import layout_markdown
 from inkstruct.symbol_reuse import inventory
 from inkstruct.symbol_task_dialog import ReuseDialog, SymbolTaskDialog
-from inkstruct.symbol_tasks import CUSTOM_PREFIX, item_letter_style
+from inkstruct.symbol_tasks import CUSTOM_PREFIX, LEGACY_CUSTOM_PREFIX, item_letter_style
 
 
 @pytest.fixture
@@ -63,6 +63,26 @@ def test_individual_selection_no_presets_and_backward_task_styles(app):
     assert item_letter_style(task, task.items[-1]) == 'unspecified'
     assert not json.loads(source[len(CUSTOM_PREFIX):])['reuse']
     dialog.reject()
+
+
+def test_legacy_task_indices_and_reuse_are_preserved_by_new_catalog(tmp_path):
+    from inkstruct.fonts.publication import symbol_group
+    from inkstruct.symbol_reuse import declarations
+
+    source = LEGACY_CUSTOM_PREFIX + json.dumps({
+        'groups': ['operators', 'chinese_punctuation', 'latin_italic', 'punctuation'],
+        'reuse': [declaration()],
+    })
+    task = CollectionTask.create('old', source, 'fixture', [('-', 1, 0), ('【', 1, 1), ('B', 1, 2), ('%', 1, 3)])
+    repo = TaskRepository(tmp_path)
+    repo.save(task)
+    restored = repo.load(repo.path_for(task.task_id))
+    assert restored.to_dict() == task.to_dict()
+    assert [item_letter_style(restored, item) for item in restored.items] == [
+        'unspecified', 'unspecified', 'italic', 'unspecified']
+    assert list(declarations(tmp_path, 'fixture')) == [declaration()]
+    assert [symbol_group(c) for c in '-−【％℃ℏ§'] == [
+        'punctuation', 'operators', 'brackets', 'units', 'units', 'operators', 'other']
 
 
 def test_confirm_cancel_preview_and_only_missing_counts(app, tmp_path):
@@ -146,6 +166,30 @@ def test_missing_retired_source_rejected_and_direct_italic_wins(tmp_path):
     assert len(FontPackage(tmp_path/'direct.inkfont').records)==2
 
 
+def test_publication_scopes_capture_root_and_reuses_only_selected_styles(tmp_path):
+    from inkstruct.fonts.publication import publication_inventory
+
+    root = tmp_path / 'collection'
+    own = root / 'samples' / 'fixture'
+    captured(own)
+    other = captured(root / 'samples' / 'other', sid='foreign')
+    value = json.loads(other.read_text('utf-8'))
+    value['writer_id'] = 'other'
+    other.write_text(json.dumps(value), 'utf-8')
+    save_config(root, [declaration(), declaration('greek', 'Α', ids=['retired'])])
+
+    _, recorded, rejected, reused = publication_inventory('fixture', '', str(root))
+    assert recorded['latin_upright'] == {'A'}
+    assert reused['latin_italic'] == {'A'}
+    assert rejected['greek'] == {'Α'}
+    output = tmp_path / 'only-italic.inkfont'
+    build_font(output, writer='fixture', name='filtered', symbols=root, symbol_groups={'latin_italic'})
+    records = FontPackage(output, verify_all=True).records
+    assert [(r['character'], r['letter_style'], r['style_evidence']) for r in records] == [
+        ('A', 'italic', 'confirmed-reuse'),
+    ]
+
+
 def test_reuse_configuration_only_persists_and_stale_confirmation_blocks(app,tmp_path):
     path = captured(tmp_path)
     dialog = SymbolTaskDialog('fixture', collection_root=tmp_path)
@@ -177,3 +221,237 @@ def test_unconfirmed_or_foreign_reuse_does_not_supply_a_glyph(tmp_path):
         p.write_text(json.dumps(value),encoding='utf-8')
     build_font(tmp_path/'foreign.inkfont',writer='fixture',name='foreign',symbols=root)
     assert len(FontPackage(tmp_path/'foreign.inkfont').records)==1
+
+
+def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_path, monkeypatch):
+    import os
+
+    from inkstruct.fonts.library import publish_font
+    from inkstruct.fonts.publication import publication_stamp, review_selection, symbol_group
+
+    source = tmp_path / "capture"
+    samples = source / "samples" / "fixture"
+    recorded = captured(samples)
+    captured(samples, "。", "unspecified", "stop")
+    captured(samples, "C", "upright", "upright-C")
+    captured(samples, ",", "unspecified", "comma")
+    save_config(source, [declaration(), declaration("greek", "Α", ids=["missing"])])
+    args = ("fixture", "", str(source), "same-name")
+    groups = {"latin_upright", "latin_italic", "punctuation", symbol_group("℃"), "greek"}
+    all_coverage = review_selection(*args, groups)
+    assert any(key[1:] == ("constructed", "℃") for key in all_coverage["coverage"])
+    assert all_coverage["coverage"]["punctuation", "shared", "，"] == 1
+    assert any(item["target"] == "Α" and item["invalid"] for item in all_coverage["issues"])
+    groups.remove("latin_upright")
+    review = review_selection(*args, groups)
+    expected = review["coverage"]
+    assert expected["latin_italic", "reuse", "A"] == 1
+    assert not any(key[2] == "℃" for key in expected)
+    assert any(item["target"] == "℃" and "C" in item["reason"] for item in review["issues"])
+    rules = {row.key: row for row in review["rules"]}
+    assert rules["constructed", "℃"].enabled and rules["constructed", "℃"].outcome == "缺少可用的英文正体 C"
+    borrowed = rules["latin_italic", "A"]
+    assert borrowed.enabled and borrowed.donor_status == "采集任务已指定" and borrowed.outcome == "已共用 1 份"
+    assert rules["shared", "，"].outcome.startswith("已共用")
+
+    root = tmp_path / "fonts"
+    root.mkdir()
+    old = root / "old.inkfont"
+    build_font(old, writer=args[0], name=args[3], symbols=source, symbol_groups={"latin_upright"})
+    old_bytes = old.read_bytes()
+    stamp = publication_stamp(*args[:3])
+
+    def publish():
+        return publish_font(root, writer=args[0], run=args[1], symbols=args[2], name=args[3],
+                            package_kind="user", groups=groups, stamp=stamp, expected=expected, progress=lambda _: None)
+
+    def fail_verify(font, **kwargs):
+        assert list(root.glob("*.inkfont")) == [old]
+        assert font.path.parent.parent == root
+        raise ValueError("mock final verification")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(FontPackage, "verify", fail_verify)
+        with pytest.raises(ValueError, match="完整验证失败"):
+            publish()
+    assert list(root.iterdir()) == [old]
+    real_link = os.link
+
+    def fail_link(source, dest):
+        if dest.parent == root:
+            assert list(root.glob("*.inkfont")) == [old]
+            raise OSError("mock final link")
+        return real_link(source, dest)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "link", fail_link)
+        with pytest.raises(ValueError, match="入库失败"):
+            publish()
+    assert list(root.iterdir()) == [old]
+    result = publish()
+    assert result["coverage"] == expected and not result["difference"]
+    assert list(result["timings"]) == ["准备字形", "封装", "完整验证", "入库"]
+    assert old.read_bytes() == old_bytes
+    assert len(list(root.glob("*.inkfont"))) == 2
+    state = next(source.rglob("state.json"))
+    state.write_text(state.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="重新核对"):
+        publish()
+    assert recorded.is_file() and len(list(root.glob("*.inkfont"))) == 2
+
+
+def test_auto_review_discards_stale_failures_and_keeps_group_choices(app, tmp_path, monkeypatch):
+    from threading import Event
+    from time import monotonic, sleep
+
+    from inkstruct.fonts import ui
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    captured(first, "A")
+    captured(second, "B", sid="second-B")
+    captured(second, ",", "unspecified", "comma")
+    library = ui.FontLibrary(tmp_path / "fonts")
+    entered, release = Event(), Event()
+    real_review = ui.review_selection
+
+    def review(writer, run, symbols, name, groups, **kwargs):
+        if name == "迟到的旧请求":
+            entered.set()
+            if not release.wait(5):
+                raise ValueError("test did not release the worker")
+            raise ValueError("过期错误")
+        return real_review(writer, run, symbols, name, groups, **kwargs)
+
+    def wait(predicate):
+        end = monotonic() + 5
+        while monotonic() < end:
+            app.processEvents()
+            if predicate():
+                return
+            sleep(.01)
+        raise AssertionError(library.coverage_summary.text())
+
+    monkeypatch.setattr(ui, "review_selection", review)
+    library.writer.setText("fixture")
+    library.symbols.setText(str(first))
+    library.name.setText("迟到的旧请求")
+    library.open_publication()
+    try:
+        wait(entered.is_set)
+        assert not library.build_button.isEnabled()
+        library.symbols.setText(str(second))
+        library.name.setText("当前字体")
+    finally:
+        release.set()
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B", ",", "，"}
+    assert "过期错误" not in library.coverage_summary.text()
+    row = next(library.contents.topLevelItem(i) for i in range(library.contents.topLevelItemCount())
+               if library.contents.topLevelItem(i).data(0, QtCore.Qt.UserRole) == "punctuation")
+    row.setCheckState(0, QtCore.Qt.Unchecked)
+    assert not library.build_button.isEnabled()
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B"}
+    library.name.setText("当前字体改名")
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B"}
+    captured(second, "C", sid="late-C")
+    library.watch_publication()
+    wait(lambda: library.build_button.isEnabled() and any(key[2] == "C" for key in library.review_result["coverage"]))
+    assert "punctuation" not in library.review_groups
+    library.publication.reject()
+    QtCore.QThreadPool.globalInstance().waitForDone()
+
+
+@pytest.mark.parametrize("archive", [False, True])
+def test_publication_rules_toggle_and_bind_a_previewed_donor(tmp_path, archive):
+    from inkstruct.fonts.library import publish_font
+    from inkstruct.fonts.publication import publication_stamp, review_selection
+    from inkstruct.fonts.publication_rules import DonorChoice, PublicationRules
+
+    root = tmp_path / "collection"
+    samples = root / "samples" / "fixture"
+    captured(samples)
+    donor = captured(samples, "B", sid="source-B")
+    captured(samples, "C", sid="source-C")
+    captured(samples, ",", "unspecified", "comma")
+    captured(samples, "。", "unspecified", "stop")
+    save_config(root, [declaration("greek", "Α")])
+    state = next(root.rglob("state.json"))
+    before = state.read_bytes()
+    source = tmp_path / "collection.zip" if archive else root
+
+    def update_zip():
+        if archive:
+            with zipfile.ZipFile(source, "w") as package:
+                for path in root.rglob("*.json"):
+                    package.write(path, path.relative_to(root).as_posix())
+
+    update_zip()
+    groups = {"latin_upright", "latin_italic", "greek", "punctuation", "units"}
+    args = ("fixture", "", str(source), "rule choices")
+    baseline = review_selection(*args, groups)
+    assert {"，", "℃", "Α"} <= {key[2] for key in baseline["coverage"]}
+    digest, ink = baseline["rule_evidence"].donors["B"]["source-B"]
+    assert ink["character"] == "B"
+    rules = PublicationRules(frozenset({("shared", "，"), ("constructed", "℃"), ("greek", "Α")}),
+                             (DonorChoice(("latin_italic", "B"), "source-B", digest),))
+    review = review_selection(*args, groups, rules=rules)
+    expected = review["coverage"]
+    assert not {"，", "℃", "Α"} & {key[2] for key in expected}
+    assert expected["latin_italic", "reuse", "B"] == 1
+    result = publish_font(tmp_path / "fonts", writer=args[0], run="", symbols=source, name=args[3],
+                          package_kind="user", groups=groups, stamp=publication_stamp(*args[:3]),
+                          expected=expected, progress=lambda _: None, rules=rules)
+    assert not result["difference"] and result["coverage"] == expected
+    font = FontPackage(result["path"], verify_all=True)
+    borrowed = next(s["confirmed_reuse"] for s in font.provenance.values() if "confirmed_reuse" in s)
+    assert borrowed["source_sample_id"] == "source-B" and borrowed["source_sha256"] == digest
+    assert state.read_bytes() == before
+    donor.write_bytes(donor.read_bytes() + b"\n")
+    update_zip()
+    changed = review_selection(*args, groups, rules=rules)
+    assert not changed["coverage"]["latin_italic", "reuse", "B"]
+    assert any(item["target"] == "B" and "笔迹已变化" in item["reason"] for item in changed["issues"])
+
+
+def test_mapping_families_share_only_when_enabled_and_keep_designated_priority(tmp_path):
+    from inkstruct.fonts.library import publish_font
+    from inkstruct.fonts.publication import display_coverage, publication_stamp, review_selection
+    from inkstruct.fonts.publication_rules import PublicationRules
+
+    root = tmp_path / "collection"
+    samples = root / "samples" / "fixture"
+    captured(samples)
+    captured(samples, "A", sid="other-A")
+    captured(samples, "B", sid="source-B")
+    captured(samples, "B", "italic", "direct-B")
+    captured(samples, "C", sid="source-C")
+    captured(samples, "N", sid="source-N")
+    save_config(root, [declaration("greek", "Α")])
+    args = "fixture", "", str(root), "family mapping"
+    groups = {"latin_italic", "greek"}
+    defaults = review_selection(*args, groups)["coverage"]
+    assert defaults["greek", "reuse", "Α"] == 1
+    assert not defaults["latin_italic", "reuse", "A"] and not defaults["greek", "reuse", "Ν"]
+    rules = PublicationRules(disabled=frozenset({("latin_italic", "C")}),
+                             families=(("greek", True), ("latin_italic", True)))
+    coverage = review_selection(*args, groups, rules=rules)["coverage"]
+    assert coverage["greek", "reuse", "Α"] == 1
+    assert coverage["greek", "reuse", "Ν"] == 1
+    assert coverage["latin_italic", "reuse", "A"] == 2
+    assert coverage["latin_italic", "recorded", "B"] == 1
+    assert not coverage["latin_italic", "reuse", "B"] and not coverage["latin_italic", "reuse", "C"]
+    assert display_coverage(coverage)["latin_italic", "shared", "A"] == 2
+    result = publish_font(tmp_path / "fonts", writer=args[0], run="", symbols=root, name=args[3],
+                          package_kind="user", groups=groups, stamp=publication_stamp(*args[:3]),
+                          expected=coverage, progress=lambda _: None, rules=rules)
+    assert result["coverage"] == coverage and not result["difference"]
+    font = FontPackage(result["path"], verify_all=True)
+    summaries = list(font.provenance.values())
+    assert any(s.get("mapped_reuse", {}).get("source_sample_id") == "other-A" for s in summaries)
+    assert any(s.get("confirmed_reuse", {}).get("source_sample_id") == "source-A" for s in summaries)
+    override = PublicationRules(enabled=frozenset({("latin_italic", "C")}), families=(("greek", False),))
+    switched = review_selection(*args, groups, rules=override)["coverage"]
+    assert not switched["greek", "reuse", "Α"] and switched["latin_italic", "reuse", "C"] == 1

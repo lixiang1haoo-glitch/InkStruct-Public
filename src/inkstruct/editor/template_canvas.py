@@ -303,7 +303,7 @@ class TemplateCanvas(QtSvgWidgets.QSvgWidget):
             self._candidate, self._candidate_key = candidate, key
             self.status.emit("松开应用；Esc 取消；按住 Alt 暂停吸附。")
         except (ValueError, TypeError) as error:
-            self.status.emit(f"不能放置：{error}。松开将保留原布局。")
+            self.status.emit(f"不能放置：{error}。松开将保留原页面版式。")
         self.update()
 
     def mouseReleaseEvent(self, event):
@@ -348,7 +348,7 @@ class TemplateCanvas(QtSvgWidgets.QSvgWidget):
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape and self._gesture is not None:
             self.cancel_gesture()
-            self.status.emit("已取消画布操作，布局未改变。")
+            self.status.emit("已取消画布操作，页面版式未改变。")
             event.accept()
             return
         super().keyPressEvent(event)

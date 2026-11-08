@@ -1,7 +1,7 @@
 """Pen-aware array tracks and accent polylines, independent of glyph resolution."""
 
 
-def array_geometry(node, rows, *, em, style, pen):
+def array_geometry(node, rows, *, em, style, pen, measure=None):
     attributes = dict(node.attributes)
     columns = attributes["columns"]
     nr, nc = len(rows), len(columns)
@@ -75,6 +75,29 @@ def array_geometry(node, rows, *, em, style, pen):
         else height - pen / 2
     )
     rules = []
+    if measure:
+        if nc > 1:
+            edge = xs[0] + widths[0]
+            measure("matrix_col_gap_em", (edge, top), (xs[1], top), "数组列槽")
+        if nr > 1:
+            edge = top + baselines[0] + descents[0]
+            measure("matrix_row_gap_em", (width, edge), (width, edge + ygaps[1]), "数组行槽")
+        for c, centers in enumerate(vx):
+            if centers:
+                if c < nc:
+                    a, b = centers[-1] + pen / 2, xs[c]
+                else:
+                    a, b = xs[-1] + widths[-1], centers[0] - pen / 2
+                measure("array_rule_clearance_em", (a, top), (b, top), "线至列框")
+                break
+        for r, centers in enumerate(hy):
+            if centers:
+                if r < nr:
+                    a, b = top + centers[-1] + pen / 2, top + baselines[r] - ascents[r]
+                else:
+                    a, b = top + baselines[-1] + descents[-1], top + centers[0] - pen / 2
+                measure("array_rule_clearance_em", (width, a), (width, b), "线至行框")
+                break
     for c, group in enumerate(vertical):
         for source, x in zip(group, vx[c]):
             rules.append((source, "array-vertical", ((x, top + upper), (x, top + lower))))

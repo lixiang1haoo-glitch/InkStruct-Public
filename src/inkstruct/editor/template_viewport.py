@@ -2,7 +2,31 @@
 
 import math
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtSvgWidgets, QtWidgets
+
+
+class FitSvgPreview(QtSvgWidgets.QSvgWidget):
+    """Paper size determines aspect ratio; the surrounding view determines scale."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+
+    def sizeHint(self):
+        return QtCore.QSize(320, 240)
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(0, 0)
+
+    def show_svg(self, svg):
+        self.load(svg)
+        self.renderer().setAspectRatioMode(QtCore.Qt.KeepAspectRatio)
+        self.update()
+        return self.renderer().isValid()
+
+    def clear(self):
+        self.load(QtCore.QByteArray())
+        self.update()
 
 
 class TemplateRuler(QtWidgets.QWidget):

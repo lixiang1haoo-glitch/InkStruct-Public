@@ -26,6 +26,11 @@ def target_manifest(text, supported, *, source=None, ranges=(), diagnostics=()):
             'donor_scope': 'complete author profile; independent of target list'}
 
 
+def structure_targets(supported):
+    supported = tuple(supported)
+    return target_manifest("".join(supported), supported, source={"kind": "all-supported"})
+
+
 def read_target_file(path):
     path = Path(path)
     if path.stat().st_size > 4_000_000:

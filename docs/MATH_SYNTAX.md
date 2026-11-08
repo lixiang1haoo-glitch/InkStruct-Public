@@ -4,6 +4,19 @@
 
 日期：2026-10-13。M4-01 语法与身份已完成，M4a–M4c 手写公式已接通正文及表格。数字、标识符、希腊、单位文本、分组、函数和常用运算关系可在资源齐备时导出。普通上下标、分式、根式、运算符上下限、伸缩定界符、简单矩阵、显式多行对齐、公式编号和标签引用、列格式数组及常用修饰符均已实现受控几何。解析成功不代表对应几何或资源已经可用；实际英文/希腊样本尚未同步，数学轴尚未完成人工和写字机校准。
 
+## 2026-10-25 独立排版修复
+
+开发目录为 `InkStruct-Layout-Dev`，应用版本仍为 0.1.40；未合并主研究目录、未生成新发布包。
+
+- `\sqrt6`、`\sqrt[3]8`、`\frac12`、`\frac1{x}`、`\mathrm x` 可使用单个 token 参数；多个字符仍需分组。`\sqrt12` 只将 `1` 放入根内；`\sqrt{12}` 才包含两个数字。参数后的上下标属于外层结构，根内的上下标需写入组内。
+- `\frac1` 仍缺少分母，给出明确的缺分母诊断；可改为 `\frac12` 或 `\frac{1}{2}`，不自动猜测分母。
+- 公式中的全角点 `．` 解释为小数点 `.`；正文的全角点保留源码字符并可复用英文句号轨迹。
+- `\hbar` / `ℏ` 支持从已有 `h` 与数学减号 `−` 合成；独立的 `ℏ` 字形优先。合成资源和来源随原生项目保存，仍需两个实际来源字形。
+- `\bar`、`\overline`、`\underline` 在分式录制来源下复用拉长的减号；缺少减号会进入资源检查并阻止导出。
+- 伸缩括号围绕数学轴对称；高度采用 TeX 的 delimiter factor / shortfall 规则，端部与花括号中腰分段保形。手写样本未提供 OpenType 装配元数据，分段保形是针对手写轨迹的近似。
+
+常用语法检查与未支持清单见 [本次语法审计](LAYOUT_LATEX_AUDIT_20261025.md)。语法解析通过不代表真实字形资源已齐备。
+
 ## 定界符和源范围
 
 Markdown 行内使用 `$...$`；展示公式的起止 `$$` 分别独占一行。代码块、缩进代码和行内代码不解析数学。普通正文中的字面美元符号使用 `\$`。不自动猜测货币语义，不接受同一行的 `$$x$$`。
@@ -18,8 +31,8 @@ Markdown 行内使用 `$...$`；展示公式的起止 `$$` 分别独占一行。
 | --- | --- | --- |
 | 符号、分组、常用运算关系 | `x+1`、`\alpha`、`{x+y}` | 单个字形来自资源；不执行宏 |
 | 上下标 | `x_1^2`、`x^{12}` | 单个原子或花括号组；重复同类脚本报错 |
-| 分数 | `\frac{a}{b}`、`\dfrac{a}{b}`、`\tfrac{a}{b}` | 两个非空花括号参数 |
-| 根式 | `\sqrt{x}`、`\sqrt[3]{x}` | 非空根内组；根指数可选 |
+| 分数 | `\frac{a}{b}`、`\dfrac{a}{b}`、`\tfrac{a}{b}` | 两个非空参数；各取单个 token 或花括号组，例如 `\frac12` |
+| 根式 | `\sqrt{x}`、`\sqrt[3]{x}` | 根内取单个 token 或非空花括号组，例如 `\sqrt6`；根指数可选 |
 | 伸缩定界结构 | `\left( x \right)` | 必须成对；`.` 表示不可见一侧 |
 | 运算符与上下限 | `\sum\limits_{i=1}^{n}`、`\int\nolimits_0^1` | limits 仅应用于运算符 |
 | 单位与文字 | `\mathrm{m^2}`、`\text{电压}`、`\operatorname{rank}` | roman 组保留数学语义；text 不接受嵌套数学、任意命令或嵌套组 |
@@ -55,7 +68,7 @@ Markdown 行内使用 `$...$`；展示公式的起止 `$$` 分别独占一行。
 
 ## M4c 定界构件、上下限和矩阵
 
-`left/right` 的圆括号、方括号、花括号、角括号、单竖线和双竖线由专门单线折线生成，根据内容高度留出净空。`.` 不绘制该侧。默认几何模式无需采集括号样本；录制模式使用对应括号样本按宽高缩放；源码中的普通 `(1)` 仍使用真实字符样本。每条构件保留源范围和独立路径身份。
+`left/right` 的圆括号、方括号、花括号、角括号、单竖线和双竖线由专门单线折线生成，根据内容高度留出净空。`.` 不绘制该侧。默认几何模式无需采集括号样本；两种模式均按内容到数学轴的最大距离确定高度并围绕数学轴对称；录制模式保留括号端部与花括号中腰，分段延长连接部分；源码中的普通 `(1)` 仍使用真实字符样本。每条构件保留源范围和独立路径身份。
 
 `limits` 显式将上下限居中堆叠于运算符上方/下方，`nolimits` 显式侧置。无显式指令时，展示公式中的求和、乘积和 `lim/min/max` 采用堆叠，行内公式侧置；积分和环路积分默认侧置。分式子内容、矩阵单元格和脚本内部按行内样式处理，不继承外层展示公式的堆叠默认；显式指令仍有效。运算符当前保留与其他符号相同的 em，不自动放大。
 
@@ -181,7 +194,7 @@ tag 参数当前为普通文字及受控转义标点，不接受嵌套数学、�
 
 支持 `vec`、`overrightarrow`、`overleftarrow`、`overleftrightarrow`、`bar`、`overline`、`underline`、`hat`、`widehat`、`tilde`、`widetilde`、`dot`、`ddot`。每个命令取一个原子，多个字符应使用花括号分组；可与上下标、分式和其他修饰符嵌套。短标记在内容上方居中，宽标记覆盖内容宽度；长箭头、双向箭头会为箭头端保留最小宽度。
 
-所有修饰符为独立折线路径，不改变内容字形。净距默认 12%、构件高度默认 18%，以当前层字号为参照且受笔宽下限保护。横线和点号不使用构件高度；点号是一个笔宽长的短线，双点由两条分离短线组成，不能据此推断真实点写法已经采集或校准。新增高度进入数学盒测量，表格和脚注共享同一实现。
+`bar`、`overline`、`underline` 沿用分数线的来源设置：录制模式使用拉长的数学减号 `−`，保留当前字号下的纵向起伏，并按实际线迹边界留净距；显式几何模式使用直线。其他修饰符为独立折线路径。所有修饰符均不改变内容字形。净距默认 12%、构件高度默认 18%，以当前层字号为参照且受笔宽下限保护。横线和点号不使用构件高度；点号是一个笔宽长的短线，双点由两条分离短线组成，不能据此推断真实点写法已经采集或校准。新增高度进入数学盒测量，表格和脚注共享同一实现。
 
 管道表中的列格式竖线仍须在 Markdown 层转义，例如：
 
@@ -197,13 +210,13 @@ tag 参数当前为普通文字及受控转义标点，不接受嵌套数学、�
 
 以下清单由当前解析器常量生成。环境包括 `matrix`、`pmatrix`、`bmatrix`、`Bmatrix`、`vmatrix`、`Vmatrix`、`cases`、`smallmatrix`、`array`，以及 `aligned`、`gathered`、`split`、`align*`、`gather*`；行分隔命令仅在这些环境中有效。另支持 `equation`、`equation*`、`align`、`gather` 及下述编号命令。宏定义、宏包、文件输入和完整 TeX 文档仍不支持。
 
-**符号命令：** `\Delta`、`\Gamma`、`\Lambda`、`\Leftarrow`、`\Leftrightarrow`、`\Omega`、`\Phi`、`\Pi`、`\Psi`、`\Rightarrow`、`\Sigma`、`\Theta`、`\Upsilon`、`\Vert`、`\Xi`、`\alpha`、`\approx`、`\beta`、`\cap`、`\cdot`、`\cdots`、`\chi`、`\circ`、`\cup`、`\degree`、`\delta`、`\div`、`\epsilon`、`\equiv`、`\eta`、`\exists`、`\forall`、`\gamma`、`\ge`、`\geq`、`\in`、`\infty`、`\int`、`\iota`、`\kappa`、`\lVert`、`\lambda`、`\land`、`\langle`、`\lbrace`、`\ldots`、`\le`、`\leftarrow`、`\leftrightarrow`、`\leq`、`\lor`、`\lvert`、`\mp`、`\mu`、`\nabla`、`\ne`、`\neg`、`\neq`、`\notin`、`\nu`、`\oint`、`\omega`、`\omicron`、`\partial`、`\phi`、`\pi`、`\pm`、`\prod`、`\propto`、`\psi`、`\rVert`、`\rangle`、`\rbrace`、`\rho`、`\rightarrow`、`\rvert`、`\sigma`、`\sim`、`\subset`、`\subseteq`、`\sum`、`\supset`、`\supseteq`、`\tau`、`\theta`、`\times`、`\to`、`\upsilon`、`\varepsilon`、`\varphi`、`\varpi`、`\varrho`、`\varsigma`、`\vartheta`、`\vert`、`\xi`、`\zeta`。
+**符号命令：** `\Delta`、`\Gamma`、`\Lambda`、`\Leftarrow`、`\Leftrightarrow`、`\Omega`、`\Phi`、`\Pi`、`\Psi`、`\Rightarrow`、`\Sigma`、`\Theta`、`\Upsilon`、`\Vert`、`\Xi`、`\alpha`、`\approx`、`\beta`、`\cap`、`\cdot`、`\cdots`、`\chi`、`\circ`、`\cup`、`\degree`、`\delta`、`\div`、`\epsilon`、`\equiv`、`\eta`、`\exists`、`\forall`、`\gamma`、`\ge`、`\geq`、`\hbar`、`\in`、`\infty`、`\int`、`\iota`、`\kappa`、`\lVert`、`\lambda`、`\land`、`\langle`、`\lbrace`、`\ldots`、`\le`、`\leftarrow`、`\leftrightarrow`、`\leq`、`\lor`、`\lvert`、`\mp`、`\mu`、`\nabla`、`\ne`、`\neg`、`\neq`、`\notin`、`\nu`、`\oint`、`\omega`、`\omicron`、`\partial`、`\phi`、`\pi`、`\pm`、`\prod`、`\propto`、`\psi`、`\rVert`、`\rangle`、`\rbrace`、`\rho`、`\rightarrow`、`\rvert`、`\sigma`、`\sim`、`\subset`、`\subseteq`、`\sum`、`\supset`、`\supseteq`、`\tau`、`\theta`、`\times`、`\to`、`\upsilon`、`\varepsilon`、`\varphi`、`\varpi`、`\varrho`、`\varsigma`、`\vartheta`、`\vert`、`\xi`、`\zeta`。
 
 **函数命令：** `\arccos`、`\arcsin`、`\arctan`、`\cos`、`\cosh`、`\cot`、`\csc`、`\det`、`\exp`、`\gcd`、`\lim`、`\ln`、`\log`、`\max`、`\min`、`\sec`、`\sin`、`\sinh`、`\tan`、`\tanh`。
 
 **编号与引用命令：** `\tag`、`\tag*`、`\notag`、`\nonumber`、`\label`、`\ref`、`\eqref`。
 
-**结构命令：** `\begin`、`\dfrac`、`\end`、`\frac`、`\left`、`\limits`、`\mathrm`、`\nolimits`、`\operatorname`、`\right`、`\sqrt`、`\text`、`\tfrac`。
+**结构命令：** `\begin`、`\dfrac`、`\end`、`\frac`、`\left`、`\limits`、`\linebreak`、`\mathrm`、`\newline`、`\nolimits`、`\operatorname`、`\right`、`\sqrt`、`\text`、`\tfrac`。
 
 **数组规则与修饰命令：** `\hline`、`\cline`、`\vec`、`\overrightarrow`、`\overleftarrow`、`\overleftrightarrow`、`\bar`、`\overline`、`\underline`、`\hat`、`\widehat`、`\tilde`、`\widetilde`、`\dot`、`\ddot`。
 
@@ -215,3 +228,10 @@ tag 参数当前为普通文字及受控转义标点，不接受嵌套数学、�
 ## 2026-10-13 新符号实样补充
 
 已用新增 user_001 样本验证普通括号、集合/箭头、求和、乘积、积分、环路积分等，累计 80 字符、405 样本。之前“积分等仅合成测试”的说明是旧阶段证据，现在参见 [新符号验证](SYMBOL_VALIDATION_20261013.md)。新接通 `\emptyset`、`\ni`、`\uparrow`、`\downarrow`、`\perp`、`\parallel`、`\angle`、`\prime`；其中包含关系和垂直/平行关系使用关系间距。`\parallel` 对应 U+2225，与 `\Vert` 的 U+2016 保持不同身份；`\varnothing` 未实现，不冒用空集样本。54 个已有资源的命令已逐项实样验证。英文、希腊字母与其变体仍缺失，轴标定仍是未人工复核的采集参考线。
+
+
+## 2026-10-25 换行别名与正文流控制
+
+现有数学多行环境接受 `\newline`、`\linebreak`、`\linebreak[4]` 作为 `\\` 的别名。普通公式中的强制换行给出 `math-line-break-context`，提示改用 `aligned` 等环境；不静默拼接。低强度 `\linebreak[0]`–`[3]` 不强制换行。分页与换框命令只能放在公式外的正文中，公式内给出定位诊断。
+
+正文支持换行命令；`\newpage`、`\pagebreak`、`\clearpage` 跳下一物理页，`\framebreak` 仅在连续正文流中跳下一个正文框。固定字段、表格单元格和脚注等不执行分页/换框。详见 [换行、分页与换框](TEXT_FLOW_BREAK_COMMANDS.md)。本轮随 0.1.41 Layout Preview 交付，主研究目录未合并。

@@ -63,6 +63,12 @@ class RegionCursor:
             self.stop("后续布局没有正文框，未排完内容无法继续；请修正循环页组。")
         self.page_index, self.frame_index = found[0]
 
+    def next_page(self):
+        found = [(p, i) for p, i in self.candidates(include_current=False) if p > self.page_index]
+        if not found:
+            self.stop("后续页面没有正文框，未排完内容无法继续；请修正循环页组。")
+        self.page_index, self.frame_index = found[0]
+
     def fits_later(self, width, height):
         for page, index in self.candidates(include_current=False):
             r = self.template.layout(page).body_frames[index].region

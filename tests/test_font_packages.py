@@ -103,6 +103,61 @@ def test_unknown_source_is_usable_warned_and_frozen(tmp_path):
     assert layout_markdown(parse_markdown(reopened.session), reopened.resolver) == before
 
 
+def test_verified_preview_loads_the_selected_candidate_and_checks_its_member(tmp_path, monkeypatch):
+    from threading import Event
+
+    from inkstruct.cache import BoundedCache
+    from inkstruct.fonts.core import verified_preview_font
+    from inkstruct.fonts.identity import release_identity
+    from inkstruct.fonts.library import fingerprint
+    from inkstruct.fonts.preview_candidates import PreviewCandidates, PreviewFontError
+    from inkstruct.resource_catalog import FontMetadata
+
+    path = tmp_path / "preview.inkfont"
+    build_font(path, writer="fixture", name="indexed", symbols=recorded(tmp_path, ("upright", "upright")))
+    assert verified_preview_font(path) is None
+    FontPackage(path).verify()
+    FontMetadata(tmp_path).update(path.name, verified_stamp=list(fingerprint(path)))
+    font = verified_preview_font(path)
+    identity = release_identity(font.identity)
+    candidates = tuple(font.glyphs("A"))
+    session = SourceSession("A")
+    occurrence = parse_markdown(session).occurrences[0]
+    eager = AssetResolver(embedded=candidates, font_identity=identity)
+    expected = eager.resolve(occurrence)
+    reads = []
+    checked = font._checked
+
+    def tracked(archive, name):
+        reads.append(name)
+        return checked(archive, name)
+
+    monkeypatch.setattr(font, "_checked", tracked)
+    cache = BoundedCache(max_entries=1, max_weight=1024**2)
+    indexed = PreviewCandidates(font, "A", cache, Event())
+    resolver = AssetResolver(font_identity=identity, indexed=indexed)
+    with indexed.opened():
+        assert resolver.resolve(occurrence) == expected
+        assert resolver.resolve(occurrence) == expected
+    assert len(reads) == 1
+    assert resolver.selection_records() == eager.selection_records()
+    assert resolver.pools["A"] == (expected,)
+    assert resolver.candidate_pool("A") == candidates
+    assert cache.statistics()["entries"] == 1
+
+    cache.clear()
+    frozen = AssetResolver(font_identity=identity, indexed=indexed, selections=eager.selections.values())
+    with indexed.opened():
+        assert frozen.resolve(occurrence) == expected
+    cache.clear()
+    def damaged(*_args):
+        raise ValueError("字体成员损坏")
+    monkeypatch.setattr(font, "_checked", damaged)
+    frozen = AssetResolver(font_identity=identity, indexed=indexed, selections=eager.selections.values())
+    with indexed.opened(), pytest.raises(PreviewFontError, match="字体成员损坏"):
+        frozen.resolve(occurrence)
+
+
 def test_generated_partition_and_protocol_are_independent():
     g = glyph()
     sources = [

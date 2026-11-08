@@ -29,7 +29,7 @@ def measured(source, *, display=False):
         (".", ")", 1),
     ],
 )
-def test_delimiters_are_constructions_with_source_spans_and_ink_clearance(left, right, paths):
+def test_delimiters_are_constructions_with_source_spans_and_tex_sizing(left, right, paths):
     source = "$\\left" + left + r"\frac{1}{2}\right" + right + "$"
     box = measured(source)
     assert box.ready
@@ -40,8 +40,14 @@ def test_delimiters_are_constructions_with_source_spans_and_ink_clearance(left, 
         raw = source[rule.span.start : rule.span.end]
         assert raw in (left, right)
         ys = [y for _, y in rule.points]
-        assert min(ys) < min(g.baseline_mm - g.ascent_mm for g in box.glyphs)
-        assert max(ys) > max(g.baseline_mm + g.descent_mm for g in box.glyphs)
+        content = measured(r"$\frac{1}{2}$")
+        distance = max(content.ascent - content.axis, content.descent + content.axis)
+        height = max(6, 1.802 * distance, 2 * distance - 3)
+        # TeX permits delimiter shortfall; the axis, not full ink enclosure,
+        # determines the frame. Horizontal pen clearance is still required.
+        assert (min(ys), max(ys)) == pytest.approx(
+            (-box.axis - height / 2 + .15, -box.axis + height / 2 - .15)
+        )
         for glyph in box.glyphs:
             if "delimiter-left" in rule.occurrence_id:
                 assert max(x for x, _ in rule.points) + 0.15 + 0.72 <= glyph.x_mm + 1e-9

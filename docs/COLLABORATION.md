@@ -4,12 +4,11 @@
 
 ## 获取协作基线
 
-迁移 PR 合并前，克隆后检出 `codex/team-baseline-20261022`。该分支在原远端历史之上保留本地开发历史，再加入当前 0.1.40 工作树；原 main 和用户数据不被替换。不要只用旧 main 的文件开始开发。
+日常协作从 `main` 接续。Windows 发布从 [Windows Git 发布基线](WINDOWS_GIT_BASELINE.md) 接续。20261022 团队基线分支和 0.1.40 记录保留为历史。
 
 ```powershell
 git clone --recurse-submodules https://github.com/lixiang1haoo-glitch/InkStruct.git
 cd InkStruct
-git switch codex/team-baseline-20261022
 py -3.13 -m venv .venv
 .venv/Scripts/python.exe -m pip install -e ".[desktop,dev]"
 ```
@@ -23,17 +22,16 @@ Python 支持 3.12 至 3.13，推荐该基线使用 3.13。桌面不要求 GPU�
 | Make Me a Hanzi | `git submodule update --init --recursive`，固定提交 `bddc96d41bef78427ed0e034e9f7e31d71fd1b92`，保留 APL／LGPL | 只有 gitlink，内容从上游获取 |
 | 结构数据库 | 执行下列 structures build；使用修正规则时校验实际资源身份 | 被忽略，可从固定源重建 |
 | 完整具名字表 | `configs/character_sets/`，应用校验固定哈希 | 包含事实数据、许可证与来源 |
-| 桌面采集内核 | 组长提供 `InkStruct-collector-kernel-source-20261022.zip`，用校验脚本安装 | 仅提交哈希清单，不含源包 |
+| 桌面采集内核 | 当前源码随 Windows 基线提供，构建输入哈希见对应发布记录 | 采集内核源码和固定参考资源 |
 | 研究作者样本与验证集 | 组长按授权范围单独分发；字集组冻结划分并重新建档 | 不提交 |
 | 生成结果、评分和字体 | 每次新目录，记录版本与输入身份 | 不提交 |
 
 ```powershell
 .venv/Scripts/python.exe -m inkstruct.cli structures build
-.venv/Scripts/python.exe scripts/install_collector_source.py "C:/path/to/InkStruct-collector-kernel-source-20261022.zip"
 .venv/Scripts/python.exe -B -m inkstruct.application --workspace workspaces/team
 ```
 
-安装脚本核验整包与逐文件哈希，只写入尚不存在的 `artifacts/external/data_collection`，已有目录不会覆盖。外部包是采集源代码与既有参考资源，不包含作者轨迹；原来源及许可声明保留，不在本迁移中重新授权。缺少源包时可以运行不依赖采集器的基础测试，集成采集验收须等待资源齐备。
+旧版独立采集内核源包的清单和安装脚本保留供历史检出使用。安装脚本核验整包与逐文件哈希，并保留已有目录。当前采集内核的来源和许可说明随源码保留。
 
 ## 任务和接口
 

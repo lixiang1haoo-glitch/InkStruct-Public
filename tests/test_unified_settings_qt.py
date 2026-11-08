@@ -61,12 +61,16 @@ if scenario=='no_op':
 elif scenario=='scopes':
     from inkstruct.global_defaults import GlobalDefaultsStore
     d=SettingsDialog(w,category='table');p=d.pages['table']
+    d.resize(d.width(), 500); d.show(); app.processEvents()
+    outer = d.stack.currentWidget()
+    assert isinstance(outer, QtWidgets.QScrollArea) and outer.verticalScrollBar().maximum() > 0
+    assert not p.findChildren(QtWidgets.QScrollArea)
     p.editors[None].controls['width_mm'].setValue(140)
     d.select('image');d.pages['image'].editors[None].controls['height_mm'].setValue(70)
     assert d.apply(),d.error.text()
     assert w.flow.table.width_mm==160 and w.flow.image.height_mm==60
     assert GlobalDefaultsStore().load()[0].flow.table.width_mm==140
-    d.apply_current.setChecked(True);assert d.apply(),d.error.text();d.reject();ready()
+    assert d.apply(to_document=True),d.error.text();d.reject();ready()
     inspector=w.element_inspector
     assert w.element_properties_dock.isVisible()
     def select(node):
@@ -106,6 +110,43 @@ elif scenario=='scopes':
     new.timer.stop()
     if new.cancelled:new.cancelled.set()
     new.pool.waitForDone();new.dirty=False;new.close()
+elif scenario=='footer':
+    from inkstruct.global_defaults import GlobalDefaultsStore
+    w.flow=replace(w.flow,
+        table_overrides=((tables[0].node_id,TableStyle(width_mm=123)),),
+        image_overrides=((images[0].node_id,ImageStyle(width_mm=45)),))
+    def show(editor):
+        dialog=SettingsDialog(editor,category='body')
+        dialog.show();app.processEvents()
+        assert not hasattr(dialog,'apply_current')
+        assert not hasattr(dialog.pages['body'],'preview')
+        actions={b.text():b for b in dialog.buttons.findChildren(QtWidgets.QPushButton)}
+        assert set(actions)=={'取消','存为默认','应用并保存'}
+        return dialog,actions,dialog.pages['body'].style.controls['em_mm']
+    def click(action):
+        QtTest.QTest.mouseClick(action,QtCore.Qt.LeftButton)
+        app.processEvents()
+    d,a,c=show(w)
+    c.setValue(7);click(a['存为默认'])
+    assert not d.isVisible() and GlobalDefaultsStore().load()[0].style.em_mm==7
+    assert w.style.em_mm==6
+    d,a,c=show(w)
+    hint='更新当前文档，并保存为新文档默认'
+    assert a['应用并保存'].toolTip()==a['应用并保存'].accessibleDescription()==hint
+    c.setValue(8);click(a['应用并保存']);ready()
+    assert d.isVisible() and w.style.em_mm==GlobalDefaultsStore().load()[0].style.em_mm==8
+    assert w.flow.table_for(tables[0].node_id).width_mm==123
+    assert w.flow.image_for(images[0].node_id).width_mm==45
+    c.setValue(9);click(a['取消'])
+    assert not d.isVisible() and w.style.em_mm==GlobalDefaultsStore().load()[0].style.em_mm==8
+    blank=MixedWindow()
+    d,a,c=show(blank)
+    assert a['应用并保存'].isHidden()
+    click(a['取消'])
+    blank.new_document()
+    d,a,c=show(blank)
+    assert a['应用并保存'].isVisible()
+    click(a['取消']);blank.dirty=False;blank.close()
 elif scenario=='validation':
     from inkstruct.global_defaults import GlobalDefaultsStore
     before=(w.flow,w.style,w.page)
@@ -122,20 +163,28 @@ elif scenario=='validation':
     assert GlobalDefaultsStore().load()[0].style.em_mm==7
 elif scenario in {'navigation','navigation_largefont'}:
     d=SettingsDialog(w,category='body'); d.resize(980,650);d.show(); app.processEvents()
+    body = d.pages['body']
+    short_fields = (body.han_seed, body.style.controls['em_mm'], body.mode)
+    widths = [field.width() for field in short_fields]
+    for field in short_fields:
+        assert field.sizeHint().width() <= field.width() < 300
+    search_width = d.search.width()
+    d.resize(1260, 650);app.processEvents()
+    assert [field.width() for field in short_fields] == widths
+    assert d.search.width() > search_width
+    d.resize(980, 650);app.processEvents()
     for key in d.items:
         d.select(key); app.processEvents()
         assert d.buttons.isVisible()==(key!='templates')
         if key!='templates':assert d.rect().contains(d.buttons.geometry())
         assert d.width()>=d.minimumWidth() and d.height()==650
     d.search.setText('上下标'); assert d.current=='math'
-    math=d.pages['math']; assert not math.categories.isVisible()
-    for i in range(math.structure_choice.count()):
-        math.structure_choice.setCurrentIndex(i);app.processEvents()
+    math=d.pages['math']; assert math.categories.isVisible()
+    for i in range(math.categories.count()):
+        math.categories.setCurrentRow(i);app.processEvents()
         assert math.categories.currentRow()==i
         assert math.panels.currentIndex()==i
-        scroll=math.parentWidget().parentWidget()
-        assert scroll.horizontalScrollBar().maximum()==0
-        assert scroll.viewport().width()>=math.minimumSizeHint().width()
+        assert math.parameter_scroll.horizontalScrollBar().maximum()==0
     before=(w.flow,w.style,w.page,w.source_session.atom_ids)
     d.reject(); assert before==(w.flow,w.style,w.page,w.source_session.atom_ids)
 else:raise AssertionError(scenario)
@@ -147,7 +196,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
-@pytest.mark.parametrize("scenario", ["no_op", "scopes", "validation", "navigation", "navigation_largefont"])
+@pytest.mark.parametrize("scenario", ["no_op", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
 def test_settings_transactions_and_navigation(tmp_path, dpi, scenario):
     result = subprocess.run(
         [sys.executable, "-c", PROGRAM, str(tmp_path), scenario],
@@ -184,7 +233,7 @@ positions=[]
 def inspect():
     d=app.activeModalWidget();assert isinstance(d,SettingsDialog)
     assert ('capture' in d.pages)==(w.tabs.currentIndex()==0)
-    assert len(d.items)==11 and 'preview' in d.items
+    assert len(d.items)==8 and 'preview' in d.items and not {'templates','paper','font'} & d.items.keys()
     d.reject()
 for i in range(w.tabs.count()):
     w.tabs.setCurrentIndex(i);app.processEvents()
@@ -200,9 +249,22 @@ canvas.trajectory.start_stroke(TrajectoryPoint(100,100,.4,0))
 canvas.trajectory.append_point(TrajectoryPoint(150,140,.7,40))
 points=repr(canvas.trajectory.strokes)
 d=SettingsDialog(w.editor,collector,w,category='capture');p=d.pages['capture']
+d.resize(980, 650);d.show();app.processEvents()
+assert p.grid.width() <= 260
+assert collector.single_widget.stroke_width_slider.width() <= 260
 assert p.configuration()==collector.ui_settings
 before=(w.editor.style,w.editor.flow,collector.ui_settings)
-p.stroke.setValue(250)
+assert not hasattr(p, 'stroke')
+collector.apply_ui_settings(collector.ui_settings)
+collector.single_widget.stroke_width_slider.setValue(250)
+assert collector.single_widget.canvas.stroke_width_scale == 2.5
+assert canvas.stroke_width_scale == 2.123456789
+collector.symbol_widget.stroke_width_slider.setValue(300)
+assert collector.single_widget.canvas.stroke_width_scale == 2.5
+assert canvas.stroke_width_scale == 3
+assert collector.ui_settings_store.load()[0] == collector.ui_settings
+before=(w.editor.style,w.editor.flow,collector.ui_settings)
+p.grid.setValue(80)
 d.select('body');d.pages['body'].style.controls['em_mm'].setValue(7)
 save=collector.ui_settings_store.save
 def fail(settings):raise OSError('write denied')
@@ -219,9 +281,10 @@ d.defaults_store.save=default_save
 assert d.apply(),d.error.text()
 assert collector.ui_settings.stroke_width_scale==2.5
 assert collector.ui_settings_store.load()[0]==collector.ui_settings
-assert collector.single_widget.canvas.stroke_width_scale==canvas.stroke_width_scale==2.5
+assert collector.single_widget.canvas.stroke_width_scale==2.5 and canvas.stroke_width_scale==3
+assert canvas.grid_scale==.8
 assert repr(canvas.trajectory.strokes)==points
-p.stroke.setValue(300);d.reject()
+p.grid.setValue(85);d.reject()
 assert collector.ui_settings.stroke_width_scale==2.5
 canvas.clear()
 w.editor.timer.stop()

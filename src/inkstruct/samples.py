@@ -36,7 +36,10 @@ def _finite(value: object, field: str) -> float:
 
 def load_raw_sample(path: Path, *, expected_writer: str | None = None) -> RawSample:
     path = Path(path).resolve()
-    value = json.loads(path.read_text(encoding="utf-8"))
+    raw = path.read_bytes()
+    value = json.loads(raw.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("sample must be a JSON object")
     if value.get("schema_version") != SUPPORTED_SCHEMA:
         raise ValueError(f"unsupported schema: {value.get('schema_version')!r}")
     writer_id = str(value.get("writer_id", "")).strip()
@@ -94,16 +97,12 @@ def load_raw_sample(path: Path, *, expected_writer: str | None = None) -> RawSam
         canvas_height=height,
         strokes=strokes,
         source_path=str(path),
-        source_sha256=sha256_file(path),
+        source_sha256=hashlib.sha256(raw).hexdigest(),
         capture=capture,
     )
 
 
-def import_samples(
-    source: Path,
-    writer_id: str,
-    destination_root: Path = DEFAULT_SAMPLE_ROOT,
-) -> dict:
+def scan_samples(source: Path, writer_id: str):
     source = Path(source).resolve()
     if not source.is_dir():
         raise NotADirectoryError(source)
@@ -111,15 +110,42 @@ def import_samples(
     accepted: list[RawSample] = []
     rejected: list[dict[str, str]] = []
     seen_ids: set[str] = set()
+    foreign = set()
     for path in paths:
         try:
-            sample = load_raw_sample(path, expected_writer=writer_id)
+            sample = load_raw_sample(path)
+            if sample.writer_id != writer_id:
+                foreign.add(sample.writer_id)
+                raise ValueError(f"writer mismatch: expected {writer_id}, found {sample.writer_id}")
             if sample.sample_id in seen_ids:
                 raise ValueError(f"duplicate sample_id: {sample.sample_id}")
             seen_ids.add(sample.sample_id)
             accepted.append(sample)
-        except (OSError, ValueError, json.JSONDecodeError) as error:
+        except (OSError, ValueError, TypeError, AttributeError) as error:
             rejected.append({"path": str(path), "reason": str(error)})
+    return accepted, rejected, sorted(foreign)
+
+
+def sample_identity(sample):
+    return sample.sample_id, sample.source_path, sample.source_sha256
+
+
+def import_samples(
+    source: Path,
+    writer_id: str,
+    destination_root: Path = DEFAULT_SAMPLE_ROOT,
+    *,
+    require_single_writer: bool = False,
+) -> dict:
+    source = Path(source).resolve()
+    accepted, rejected, foreign = scan_samples(source, writer_id)
+    if require_single_writer and foreign:
+        raise ValueError(f"样本目录包含其他书写者：{'、'.join(foreign)}。请选择仅属于 {writer_id} 的目录。")
+    return write_sample_index(source, writer_id, destination_root, accepted, rejected)
+
+
+def write_sample_index(source, writer_id, destination_root, accepted, rejected):
+    """Persist an already validated scan using the existing index and report format."""
     writer_dir = Path(destination_root).resolve() / writer_id
     writer_dir.mkdir(parents=True, exist_ok=True)
     index_path = writer_dir / "index.jsonl"

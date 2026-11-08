@@ -6,7 +6,7 @@ from markdown_it.token import Token
 
 from .schema import SourceSpan
 
-OBSIDIAN_VERSION = "inkstruct-obsidian-static-v1/markdown-it-py-4.0.0"
+OBSIDIAN_VERSION = "inkstruct-obsidian-static-v1/markdown-it-py-4.0.0/break-commands-v2"
 
 
 def wiki_link(state, silent):

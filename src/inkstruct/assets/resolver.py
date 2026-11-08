@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 
 from ..document.schema import Occurrence, digest
+from ..fonts.identity import release_identity
 from ..symbol_capture import symbol_info
 from .glyph_provider import GlyphProvider, is_han
 from .symbol_provider import ResolvedGlyph, SymbolProvider, from_generated
@@ -38,7 +39,10 @@ class AssetResolver:
         selections=(),
         builtin_numbers=False,
         embedded=(),
+        font_identity=None,
+        indexed=None,
     ):
+        selections = tuple(selections)
         pools = {
             c: (from_generated(g),) for c, g in (generated.assets.items() if generated else ())
         }
@@ -55,19 +59,37 @@ class AssetResolver:
 
             for c, glyph in numeric_assets().items():
                 pools.setdefault(c, (glyph,))
+        from .derived_symbols import supplement_recorded_symbols
+
+        pools.update(supplement_recorded_symbols(pools, selections))
+        self._pools = pools
         self.pools = MappingProxyType(pools)
+        self.indexed = indexed
         self.seed = seed
-        selections = tuple(selections)
+        self.font_identity = font_identity
         self.selections = {s.occurrence_id: s for s in selections}
         if len(self.selections) != len(selections):
             raise ValueError("Duplicate selected occurrence")
-        self.resource_key = digest(
-            {c: [(g.asset_id, g.metrics_key) for g in v] for c, v in pools.items()}
-        )
+        resource_ids = {c: [(g.asset_id, g.metrics_key) for g in v] for c, v in pools.items()}
+        self.resource_key = digest(resource_ids if indexed is None else [
+            resource_ids, indexed.token[2], tuple(indexed.pools),
+        ])
+
+    def candidate_index(self, character):
+        records = self.indexed.pools.get(character) if self.indexed else None
+        return records or self.pools.get(character, ())
+
+    def candidate_pool(self, character):
+        records = self.indexed.pools.get(character) if self.indexed else None
+        if not records:
+            return self.pools.get(character, ())
+        with self.indexed.opened():
+            return tuple(self.indexed.load(record) for record in records)
 
     def resolve(self, occurrence: Occurrence, *, letter_style="upright") -> ResolvedGlyph:
         pool = self.pools.get(occurrence.text, ())
-        if not pool:
+        indexed = self.indexed.pools.get(occurrence.text, ()) if self.indexed else ()
+        if not pool and not indexed:
             raise ValueError(f"Missing glyph resource: {occurrence.text!r}")
         previous = self.selections.get(occurrence.occurrence_id)
         if previous and (not previous.requested_style or previous.requested_style == letter_style):
@@ -83,29 +105,62 @@ class AssetResolver:
                     previous.metrics_key,
                 ):
                     return glyph
+            for candidate in indexed:
+                if (candidate.sample_id, candidate.metrics_key) == (previous.sample_id, previous.metrics_key):
+                    glyph = self.indexed.load(candidate)
+                    if glyph.asset_id == previous.asset_id:
+                        self._pools[occurrence.text] = (*pool, glyph)
+                        return glyph
             raise ValueError(
                 "Previously selected asset or calibration is unavailable; no reselection"
             )
+        stored = pool
+        if indexed:
+            pool = indexed
+        if self.font_identity and not indexed:
+            pool = tuple(g for g in pool if not g.font_metadata
+                         or release_identity(g.font_metadata['identity']) in (None, self.font_identity))
+            if not pool:
+                raise ValueError(f"Missing glyph resource: {occurrence.text!r}")
+        if occurrence.text in {"ℏ", "．"}:
+            # Historical frozen choices returned above remain valid. New choices
+            # prefer supplied recordings, then recorded derivations, then builtin ink.
+            from .derived_symbols import is_runtime_derived
+            recorded = tuple(g for g in pool if g.provider_version != "builtin-numeric-em-v1")
+            if recorded:
+                pool = recorded
+            supplied = tuple(g for g in pool if not is_runtime_derived(g))
+            if supplied:
+                pool = supplied
         from ..fonts.core import latin
-        requested = letter_style if latin(occurrence.text) and any(g.font_core for g in pool) else ""
+        styled = latin(occurrence.text) or (occurrence.text == "ℏ" and any(
+            g.font_metadata and g.font_metadata["record"]["letter_style"] in {"upright", "italic", "unspecified"}
+            for g in pool))
+        requested = letter_style if styled and any(g.font_metadata for g in pool) else ""
         if requested:
             def category(g):
-                return g.font_core["record"]["letter_style"] if g.font_core else "unspecified"
+                return g.font_metadata["record"]["letter_style"] if g.font_metadata else "unspecified"
             matching = tuple(g for g in pool if category(g) == requested)
             if not matching:
                 matching = tuple(g for g in pool if category(g) == "unspecified") or pool
             pool = matching
-        if any(g.font_core for g in pool):
-            enabled = tuple(g for g in pool if not g.font_core or (
-                g.font_core["record"]["enabled"] and
-                g.font_core["summary"]["review_status"] not in {"rejected", "needs_review"}))
+        if any(g.font_metadata for g in pool):
+            enabled = tuple(g for g in pool if not g.font_metadata or (
+                g.font_metadata["record"]["enabled"] and
+                g.font_metadata["summary"]["review_status"] not in {"rejected", "needs_review"}))
             if not enabled:
                 raise ValueError("No enabled glyph candidate")
-            priority = min(g.font_core["record"]["priority"] if g.font_core else 2 for g in enabled)
-            pool = tuple(g for g in enabled if (g.font_core["record"]["priority"] if g.font_core else 2) == priority)
+            priority = min(g.font_metadata["record"]["priority"] if g.font_metadata else 2 for g in enabled)
+            pool = tuple(g for g in enabled if (g.font_metadata["record"]["priority"] if g.font_metadata else 2) == priority)
             pool = tuple(sorted(pool, key=lambda g:g.sample_id))
         key = digest([SELECTION_VERSION, self.seed, occurrence.occurrence_id, occurrence.text] + ([requested] if requested else []))
         glyph = pool[int(key[:16], 16) % len(pool)]
+        if indexed:
+            sample_id = glyph.sample_id
+            existing = next((g for g in stored if g.sample_id == sample_id), None)
+            glyph = existing if existing is not None else self.indexed.load(glyph)
+            if existing is None:
+                self._pools[occurrence.text] = (*stored, glyph)
         self.selections[occurrence.occurrence_id] = SelectedAsset(
             occurrence.occurrence_id,
             occurrence.text,
@@ -113,7 +168,7 @@ class AssetResolver:
             glyph.sample_id,
             glyph.metrics_key,
             requested_style=requested,
-            resolved_style=(glyph.font_core["record"]["letter_style"] if glyph.font_core else ""),
+            resolved_style=(glyph.font_metadata["record"]["letter_style"] if glyph.font_metadata else ""),
         )
         return glyph
 
@@ -126,9 +181,9 @@ class AssetResolver:
             if pending_only and choice.warning_accepted:
                 continue
             glyph = lookup.get(choice.asset_id)
-            if not glyph or not glyph.font_core:
+            if not glyph or not glyph.font_metadata:
                 continue
-            summary = glyph.font_core["summary"]
+            summary = glyph.font_metadata["summary"]
             reasons = list(summary.get("warnings", []))
             required = ('作者来源记录不完整' if summary['unknown_strokes'] else
                         '含参考替代笔画' if summary['reference_strokes'] else '')
@@ -160,19 +215,42 @@ class AssetResolver:
 
     def gaps(self, occurrences):
         missing = {}
+        expanded = []
         for occurrence in occurrences:
+            if (occurrence.text == "ℏ" and "ℏ" not in self.pools
+                    and occurrence.occurrence_id not in self.selections):
+                # Capture the missing real sources, never demand an independently
+                # drawn hbar when its construction is already explicitly defined.
+                sources = ("h", "−" if "−" in self.pools or "-" not in self.pools else "-")
+                unavailable = []
+                for char in sources:
+                    source = replace(occurrence, text=char,
+                                     occurrence_id=occurrence.occurrence_id + ":hbar-source:" + str(ord(char)))
+                    try:
+                        self.resolve(source, letter_style="italic" if char == "h" else "upright")
+                    except ValueError:
+                        unavailable.append(source)
+                expanded.extend(unavailable or (occurrence,))
+            else:
+                expanded.append(occurrence)
+        restore = set()
+        for occurrence in expanded:
             text = occurrence.text
             if text.isspace():
                 continue
             try:
-                self.resolve(occurrence)
+                previous = self.selections.get(occurrence.occurrence_id)
+                requested = previous.requested_style if previous and previous.requested_style else "upright"
+                self.resolve(occurrence, letter_style=requested)
             except ValueError as error:
+                if occurrence.occurrence_id in self.selections:
+                    restore.add(text)
                 record = missing.setdefault(
                     text, {"character": text, "reason": str(error), "source_ranges": []}
                 )
                 record["source_ranges"].append(asdict(occurrence.span))
         for text, record in missing.items():
-            if text in self.pools:
+            if text in self.pools or (self.indexed and text in self.indexed.pools) or text in restore:
                 record["action"] = "restore-selected-resource"
                 continue
             try:

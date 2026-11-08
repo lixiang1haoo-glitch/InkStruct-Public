@@ -6,6 +6,7 @@ from dataclasses import replace
 from itertools import pairwise
 
 from ..document.schema import Occurrence, digest
+from .delimiters import delimiter_stretch_breaks, delimiter_stretch_y
 
 
 def sample_occurrence(node, owner, role, character, span=None):
@@ -65,14 +66,54 @@ def delimiter_sample_paths(glyph, *, width, top, bottom, em, radius):
     if low - high <= 1e-8:
         raise ValueError("Delimiter specimen has no vertical extent")
     sx = (width - 2 * radius) / (right - left) if right > left else 0
-    if glyph.character in "|‖":
+    if glyph.character in "|\u2016":
         sx = min(sx, em)  # Do not magnify a vertical stroke's tiny x jitter.
     offset = (width - (right - left) * sx) / 2
-    sy = (bottom - top) / (low - high)
-    return tuple(
-        tuple((offset + (x - left) * sx, top + (y - high) * sy) for x, y in stroke)
-        for stroke in glyph.strokes
-    )
+    height = bottom - top
+    # Captured end turns and a brace's central cusp are not extenders.
+    # Preserve their scale while allocating growth equally to connector bands.
+    natural_height = (low - high) * em
+    waist_fraction = .5
+    if glyph.character in "{}" and right > left:
+        middle = [
+            (x, y) for stroke in glyph.strokes for x, y in stroke
+            if high + .2 * (low - high) <= y <= high + .8 * (low - high)
+        ]
+        if middle:
+            extreme = (min if glyph.character == "{" else max)(x for x, _ in middle)
+            tips = [y for x, y in middle if abs(x - extreme) <= 1e-8]
+            # A captured cusp need not lie halfway down its recorded bounds.
+            # A flat cusp has two endpoints; centre its complete tip on the axis.
+            waist_fraction = ((min(tips) + max(tips)) / 2 - high) / (low - high)
+    breaks = delimiter_stretch_breaks(glyph.character, waist_fraction)
+
+    def transform(x, y):
+        return (
+            offset + (x - left) * sx,
+            top + delimiter_stretch_y(
+                glyph.character, (y - high) / (low - high),
+                height=height, natural_height=natural_height, waist_fraction=waist_fraction,
+            ),
+        )
+
+    result = []
+    for stroke in glyph.strokes:
+        points = [transform(*stroke[0])]
+        for a, b in pairwise(stroke):
+            # Insert all crossed band boundaries: mapping a sparse captured
+            # polyline must not turn a fixed cap into one stretched segment.
+            crossings = []
+            if a[1] != b[1]:
+                for fraction in breaks:
+                    y = high + fraction * (low - high)
+                    t = (y - a[1]) / (b[1] - a[1])
+                    if 0 < t < 1:
+                        crossings.append((t, y))
+            for t, y in sorted(crossings):
+                points.append(transform(a[0] + t * (b[0] - a[0]), y))
+            points.append(transform(*b))
+        result.append(tuple(points))
+    return tuple(result)
 
 
 def radical_sample_paths(glyph, *, start, hook_width, width, bar_bottom, bottom, radius):

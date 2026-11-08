@@ -8,6 +8,7 @@ class ContextGlyph:
     fragment: object
     glyph: object
     strokes: tuple
+    variation: object = None
 
     def original(self):
         f, g = self.fragment, self.glyph
@@ -15,8 +16,12 @@ class ContextGlyph:
             return self.strokes
         x0 = f.x_mm + f.glyph_origin_offset_mm
         top = f.baseline_mm - g.metrics.baseline * f.glyph_em_mm
-        return tuple(tuple((x0 + x * f.glyph_em_mm, top + y * f.glyph_em_mm)
-                           for x, y in stroke) for stroke in g.strokes)
+        strokes = tuple(tuple((x0 + x * f.glyph_em_mm, top + y * f.glyph_em_mm)
+                              for x, y in stroke) for stroke in g.strokes)
+        if self.variation:
+            from ..layout.han_variation import varied_strokes
+            strokes = varied_strokes(strokes, f.occurrence_id, self.variation)
+        return strokes
 
     def corrected(self, rule):
         f = self.fragment
@@ -27,12 +32,16 @@ class ContextGlyph:
                      for stroke in self.original())
 
 
-def surrounding_glyphs(snapshot, selected, asset_for_fragment):
+def surrounding_glyphs(snapshot, selected, asset_for_fragment, *, flow=None, document=None):
     """At most three neighbours each side, from this physical row and frame.
 
     Keep current page operations for neighbours, including applied corrections;
     do not resolve new samples. Spatial filtering handles repeated table heads.
     """
+    eligible = set()
+    if flow is not None and flow.han_variation.enabled and document is not None:
+        from ..layout.han_variation import eligible_occurrences
+        eligible = eligible_occurrences(document)
     page = snapshot.pages[selected.page_index]
     em = selected.glyph_em_mm or 6
     row = sorted((f for f in page.fragments
@@ -54,5 +63,6 @@ def surrounding_glyphs(snapshot, selected, asset_for_fragment):
         strokes = tuple(op.points for op in ops.get(f.occurrence_id, ()) if bounds and all(
             bounds[0] - 1e-8 <= x <= bounds[2] + 1e-8
             and bounds[1] - 1e-8 <= y <= bounds[3] + 1e-8 for x, y in op.points))
-        result.append(ContextGlyph(f, asset_for_fragment(f) if f.asset_id else None, strokes))
+        result.append(ContextGlyph(f, asset_for_fragment(f) if f.asset_id else None, strokes,
+                                   flow.han_variation if f.occurrence_id in eligible else None))
     return tuple(result)
