@@ -21,6 +21,7 @@ def _qt():
 def main(argv=None, *, create_only=False, workspace=None, database=None):
     QtCore, QtWidgets = _qt()
     from .generation_progress_ui import GenerationProgress
+    from .ui_behavior import compact_field
 
     if find_spec("handwriting_collector") is None:
         from .collector import _collector_source
@@ -132,9 +133,10 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 "v4 adaptive：固定自适应融合配置；没有可靠逐笔来源记录时按来源未知提示。\n"
                 "开始生成时自动检查样本，并为所选方法准备档案。每次生成创建新批次。")
             method_row = QtWidgets.QHBoxLayout()
-            method_row.addWidget(self.method, 1)
+            method_row.addWidget(compact_field(self.method))
             method_row.addWidget(info)
-            form.addRow("作者", self.writer)
+            method_row.addStretch()
+            form.addRow("作者", compact_field(self.writer, maximum=340))
             form.addRow("样本目录", row)
             form.addRow("样本与档案", self.sample_summary)
             form.addRow("", self.sample_notice)
@@ -169,7 +171,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
                 self.parallelism.addItem(label, key)
             self.parallelism.setToolTip('按汉字分配任务，每个进程复用完整档案。并发受 CPU 和可用内存限制；进程不可用时保留完成结果并串行恢复。v4 使用串行。')
-            generation_form.addRow('计算方式', self.parallelism)
+            generation_form.addRow('计算方式', compact_field(self.parallelism))
             self.candidate_preferences = QtCore.QSettings("InkStruct", "Generation")
             self.candidate_default = DEFAULT_CANDIDATES
             self.candidate_limit = QtWidgets.QSpinBox()
@@ -182,7 +184,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 "仅用于 v6.2 exp，数量包含原主字形。实际份数取决于真实来源和完整检查；"
                 "增加上限会增加尝试次数、生成时间和包体。"
             )
-            generation_form.addRow("每字成品上限", self.candidate_limit)
+            generation_form.addRow("每字成品上限", compact_field(self.candidate_limit))
             self.candidate_hint = QtWidgets.QLabel()
             self.candidate_hint.setWordWrap(True)
             generation_form.addRow("", self.candidate_hint)

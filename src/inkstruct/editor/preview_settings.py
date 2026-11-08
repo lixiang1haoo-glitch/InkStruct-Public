@@ -2,6 +2,7 @@
 from PySide6 import QtCore, QtWidgets
 
 from ..global_defaults import GlobalDefaultsStore
+from ..ui_behavior import compact_field
 
 
 class PreviewSettingsPage(QtWidgets.QWidget):
@@ -15,7 +16,7 @@ class PreviewSettingsPage(QtWidgets.QWidget):
         current = GlobalDefaultsStore.make_settings().value('preview_backend_v1', 'cpu', str)
         self.backend.setCurrentIndex(max(0, self.backend.findData(current)))
         column.addWidget(QtWidgets.QLabel('页面预览绘制后端'))
-        column.addWidget(self.backend)
+        column.addWidget(compact_field(self.backend))
         text = QtWidgets.QLabel('保存后下次启动应用生效。仅影响屏幕栅格化，不改变排版、选字或 SVG 导出。'
                                '\nCPU 与 GPU 均启用有限 SVG 解析缓存及预取优化。GPU 保留 8 倍抗锯齿；设备不支持或发生错误时使用 CPU。')
         text.setWordWrap(True)

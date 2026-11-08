@@ -15,6 +15,7 @@ from .settings_pages import (
     CompactSpinBox,
     ProfileForm,
     acceptable,
+    compact_form_parameters,
     embed,
     label,
 )
@@ -170,6 +171,7 @@ class BodyPage(QtWidgets.QWidget):
         column.addWidget(headings)
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
         column.addStretch()
+        compact_form_parameters(self)
 
     def configuration(self):
         acceptable(self)

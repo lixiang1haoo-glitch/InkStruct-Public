@@ -2,6 +2,8 @@
 
 from PySide6 import QtCore, QtWidgets
 
+from .ui_behavior import compact_field
+
 
 def canvas_slider_row(title, accessible_name, hint):
     row = QtWidgets.QHBoxLayout()
@@ -15,6 +17,7 @@ def canvas_slider_row(title, accessible_name, hint):
     value = QtWidgets.QLabel()
     value.setMinimumWidth(value.fontMetrics().horizontalAdvance('150% · 840 × 480 px') + 6)
     row.addWidget(label)
-    row.addWidget(slider, 1)
+    row.addWidget(compact_field(slider, maximum=260), 1)
     row.addWidget(value)
+    row.addStretch()
     return row, slider, value

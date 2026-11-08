@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from .ui_behavior import compact_field
 from .capture_management import (
     CaptureCatalog,
     ManagedRepository,
@@ -103,11 +104,11 @@ class HanTaskDialog(QtWidgets.QDialog):
         row.addWidget(add)
         form.addRow('书写者', row)
         self.name = QtWidgets.QLineEdit(self.path.stem if self.path else '汉字样本采集')
-        form.addRow('任务名称', self.name)
+        form.addRow('任务名称', compact_field(self.name, maximum=340))
         self.repeats = QtWidgets.QSpinBox()
         self.repeats.setRange(1, 100)
         self.repeats.setValue(5)
-        form.addRow('CSV 空份数 / 默认份数', self.repeats)
+        form.addRow('CSV 空份数 / 默认份数', compact_field(self.repeats))
         layout.addLayout(form)
         self.summary = QtWidgets.QLabel()
         self.summary.setWordWrap(True)

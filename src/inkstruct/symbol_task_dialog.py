@@ -9,6 +9,7 @@ from .symbol_catalog import SYMBOL_GROUPS, character_preview
 from .symbol_reuse import inventory, reuse_options, validate_reuse
 from .symbol_review_dialog import InkPreview
 from .symbol_tasks import CUSTOM_PREFIX, TASK_GROUPS, imported_entries
+from .ui_behavior import compact_field
 
 
 class SymbolTaskDialog(QtWidgets.QDialog):
@@ -40,9 +41,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         self.repeats.setValue(5)
         self.repeats.setSuffix(' 份')
         self.repeats.setObjectName('task_repeats')
-        form.addRow('任务名称', self.name)
+        form.addRow('任务名称', compact_field(self.name, maximum=340))
         if catalog is None:
-            form.addRow('书写者 ID', self.writer)
+            form.addRow('书写者 ID', compact_field(self.writer, maximum=340))
         else:
             row = QtWidgets.QHBoxLayout()
             row.addWidget(self.writer, 1)
@@ -51,7 +52,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             row.addWidget(create)
             form.addRow('书写者', row)
         if imported is None:
-            form.addRow('每个字符目标份数', self.repeats)
+            form.addRow('每个字符目标份数', compact_field(self.repeats))
         else:
             self.repeats.hide()
             form.addRow('每个字符目标份数', QtWidgets.QLabel('按导入字表；空值默认 5 份'))

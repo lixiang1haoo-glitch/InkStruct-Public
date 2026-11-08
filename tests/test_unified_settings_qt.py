@@ -163,6 +163,16 @@ elif scenario=='validation':
     assert GlobalDefaultsStore().load()[0].style.em_mm==7
 elif scenario in {'navigation','navigation_largefont'}:
     d=SettingsDialog(w,category='body'); d.resize(980,650);d.show(); app.processEvents()
+    body = d.pages['body']
+    short_fields = (body.han_seed, body.style.controls['em_mm'], body.mode)
+    widths = [field.width() for field in short_fields]
+    for field in short_fields:
+        assert field.sizeHint().width() <= field.width() < 300
+    search_width = d.search.width()
+    d.resize(1260, 650);app.processEvents()
+    assert [field.width() for field in short_fields] == widths
+    assert d.search.width() > search_width
+    d.resize(980, 650);app.processEvents()
     for key in d.items:
         d.select(key); app.processEvents()
         assert d.buttons.isVisible()==(key!='templates')
@@ -239,6 +249,9 @@ canvas.trajectory.start_stroke(TrajectoryPoint(100,100,.4,0))
 canvas.trajectory.append_point(TrajectoryPoint(150,140,.7,40))
 points=repr(canvas.trajectory.strokes)
 d=SettingsDialog(w.editor,collector,w,category='capture');p=d.pages['capture']
+d.resize(980, 650);d.show();app.processEvents()
+assert p.grid.width() <= 260
+assert collector.single_widget.stroke_width_slider.width() <= 260
 assert p.configuration()==collector.ui_settings
 before=(w.editor.style,w.editor.flow,collector.ui_settings)
 assert not hasattr(p, 'stroke')

@@ -30,12 +30,16 @@ if sys.argv[2] == 'invalid':
     settings.setValue('candidate_limit', 'invalid')
     settings.sync()
 w = main(['check'], create_only=True, workspace=root / 'workspace', database=root / 'no-db')
+w.resize(1220, 820)
 w.show()
 app.processEvents()
 f = w.centralWidget()
 count = f.candidate_limit
 assert count.minimum() == 1 and count.maximum() == MAX_CANDIDATES == 64
 assert count.objectName() == 'generation_candidate_limit'
+assert count.sizeHint().width() <= count.width() < 150
+assert f.method.width() < 300 and f.parallelism.width() < 300
+assert f.writer.width() <= 340 and f.samples.width() > f.writer.width()
 if sys.argv[2] == 'restore':
     assert count.value() == 8 and '32' in f.candidate_hint.text()
 elif sys.argv[2] == 'invalid':

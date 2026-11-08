@@ -5,6 +5,22 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
+def compact_field(control, *, maximum=None):
+    """Keep a short field near its label while preserving the native size hint."""
+    if maximum is not None:
+        control.setMaximumWidth(maximum)
+    else:
+        if isinstance(control, QtWidgets.QComboBox):
+            control.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+            control.setMinimumWidth(max(160, control.minimumWidth()))
+        elif isinstance(control, QtWidgets.QAbstractSpinBox):
+            control.setMinimumWidth(max(96, control.minimumWidth()))
+        policy = control.sizePolicy()
+        policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Fixed)
+        control.setSizePolicy(policy)
+    return control
+
+
 def open_containing_folder(path):
     folder = Path(path).resolve().parent
     if not folder.is_dir() or not QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder))):

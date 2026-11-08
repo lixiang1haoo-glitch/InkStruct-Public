@@ -4,6 +4,22 @@ from dataclasses import fields, replace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .ui_behavior import compact_field
+
+
+def compact_form_parameters(widget):
+    """Size scalar fields in settings forms without constraining notes or long text."""
+    role = QtWidgets.QFormLayout.ItemRole.FieldRole
+    for form in widget.findChildren(QtWidgets.QFormLayout):
+        for index in range(form.rowCount()):
+            item = form.itemAt(index, role)
+            field = item.widget() if item else None
+            if isinstance(field, QtWidgets.QAbstractSpinBox):
+                compact_field(field)
+            elif (isinstance(field, QtWidgets.QComboBox) and not field.isEditable()
+                  and field.sizeAdjustPolicy() != QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon):
+                compact_field(field)
+
 
 def label(text):
     result = QtWidgets.QLabel(text)
@@ -37,6 +53,7 @@ def embed(dialog):
     for button in dialog.findChildren(QtWidgets.QPushButton):
         if button.text() in {"恢复默认", "当前分类恢复默认"}:
             button.hide()
+    compact_form_parameters(dialog)
     return dialog
 
 
@@ -220,8 +237,9 @@ class CapturePage(QtWidgets.QWidget):
         self.grid.valueChanged.connect(value.setValue)
         value.valueChanged.connect(self.grid.setValue)
         self.grid.valueChanged.connect(self.preview.update)
-        row.addWidget(self.grid, 1)
-        row.addWidget(value)
+        row.addWidget(compact_field(self.grid, maximum=260), 1)
+        row.addWidget(compact_field(value))
+        row.addStretch()
         form.addRow("汉字参考格比例", row)
         column.addWidget(self.preview)
         section(column, "配置位置", label(str(collector.ui_settings_store.path)))

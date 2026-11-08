@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtWidgets
 
 from ..symbol_catalog import SYMBOL_GROUPS, character_preview
+from ..ui_behavior import compact_field
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
@@ -117,8 +118,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.name = QtWidgets.QLineEdit("我的手写体")
         self.run = QtWidgets.QLineEdit()
         self.symbols = QtWidgets.QLineEdit()
-        form.addRow("书写者 ID", self.author)
-        form.addRow("字体名称", self.name)
+        form.addRow("书写者 ID", compact_field(self.author, maximum=340))
+        form.addRow("字体名称", compact_field(self.name, maximum=340))
         self.batches = QtWidgets.QComboBox()
         self.batches.activated.connect(lambda: self.run.setText(self.batches.currentData() or ""))
         self.run.textChanged.connect(self.sync_publication_batch)
@@ -140,7 +141,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind = QtWidgets.QComboBox()
         self.kind.addItem("用户版 · 用于排版与分享", "user")
         self.kind.addItem("开发者版 · 附来源详情", "developer")
-        form.addRow("包类型", self.kind)
+        form.addRow("包类型", compact_field(self.kind))
         self.contents = QtWidgets.QTreeWidget()
         self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
