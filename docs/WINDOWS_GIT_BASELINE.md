@@ -2,7 +2,7 @@
 
 本分支从现有研究与生成内核历史接续，将 Windows 0.1.59 的应用源码、采集内核、测试、配置、构建入口和手册纳入 Git。应用版本仍由 `src/inkstruct/fonts/__init__.py` 的 `APP_VERSION` 定义。原 Windows 交付包的版本和 SHA-256 见 [0.1.59 发布记录](RELEASE_0_1_59_WINDOWS.md)。
 
-当前 Windows 发布为 [0.1.63](RELEASE_0_1_63_WINDOWS.md)。从对应发布源码检出核验时，可将下方命令的版本和 ZIP 换成 0.1.63。为更新的源码检出准备已锁定公开资源时，可加 `--resources-only`，核验原发布 ZIP 和公开资源哈希。
+当前 Windows 发布为 [0.1.64](RELEASE_0_1_64_WINDOWS.md)。从对应发布源码检出核验时，可将下方命令的版本和 ZIP 换成 0.1.64。为更新的源码检出准备已锁定公开资源时，可加 `--resources-only`，核验原发布 ZIP 和公开资源哈希。
 
 ## 从干净检出核对并构建
 
