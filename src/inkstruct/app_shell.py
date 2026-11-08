@@ -180,8 +180,7 @@ def style_module_pages(window):
     workflow.layout().setSpacing(12)
     for section in workflow.findChildren(QtWidgets.QGroupBox):
         section.setProperty('inkRole', 'workflowSection')
-    for control, name in ((workflow.import_button, 'import'), (workflow.profile_button, 'check'),
-                          (workflow.generate_button, 'play'), (workflow.publish_button, 'library')):
+    for control, name in ((workflow.generate_button, 'play'), (workflow.publish_button, 'library')):
         control.setIcon(line_icon(name, '#ffffff' if control.property('inkRole') == 'primary' else '#475569'))
     workflow.target_summary.setProperty('inkRole', 'hint')
     workflow.candidate_hint.setProperty('inkRole', 'hint')

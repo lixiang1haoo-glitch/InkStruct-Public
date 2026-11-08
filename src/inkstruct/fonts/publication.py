@@ -136,13 +136,17 @@ def publication_stamp(writer, run, symbols):
     return tuple((path, fingerprint(path)) for path in sorted(files))
 
 
+class PublicationInputsChanged(ValueError):
+    pass
+
+
 def require_publication_stamp(writer, run, symbols, stamp):
     try:
         current = publication_stamp(writer, run, symbols)
     except OSError:
         current = None
     if stamp != current:
-        raise ValueError("批次、样本或复用配置已变化，请重新核对待制包清单。")
+        raise PublicationInputsChanged("批次、样本或复用配置已变化，请重新核对待制包清单。")
 
 
 def candidate_coverage(records, provenance):

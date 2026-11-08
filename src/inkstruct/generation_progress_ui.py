@@ -159,6 +159,12 @@ class GenerationProgress(QtWidgets.QWidget):
         if self.state == "正在准备生成":
             self.state = "正在生成"
 
+    def preparation(self, stage, detail):
+        if self.timer.isActive() and self.state != "正在取消":
+            self.state = "正在生成" if stage == "生成字形" else stage
+            self.latest = detail
+            self._render()
+
     def cancelling(self):
         if self.timer.isActive():
             self.state = "正在取消"

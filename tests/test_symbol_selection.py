@@ -273,3 +273,67 @@ def test_selected_coverage_is_the_published_coverage_and_rechecks_inputs(tmp_pat
     with pytest.raises(ValueError, match="重新核对"):
         publish()
     assert recorded.is_file() and len(list(root.glob("*.inkfont"))) == 2
+
+
+def test_auto_review_discards_stale_failures_and_keeps_group_choices(app, tmp_path, monkeypatch):
+    from threading import Event
+    from time import monotonic, sleep
+
+    from inkstruct.fonts import ui
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    captured(first, "A")
+    captured(second, "B", sid="second-B")
+    captured(second, ",", "unspecified", "comma")
+    library = ui.FontLibrary(tmp_path / "fonts")
+    entered, release = Event(), Event()
+    real_review = ui.review_selection
+
+    def review(writer, run, symbols, name, groups):
+        if name == "迟到的旧请求":
+            entered.set()
+            if not release.wait(5):
+                raise ValueError("test did not release the worker")
+            raise ValueError("过期错误")
+        return real_review(writer, run, symbols, name, groups)
+
+    def wait(predicate):
+        end = monotonic() + 5
+        while monotonic() < end:
+            app.processEvents()
+            if predicate():
+                return
+            sleep(.01)
+        raise AssertionError(library.coverage_summary.text())
+
+    monkeypatch.setattr(ui, "review_selection", review)
+    library.writer.setText("fixture")
+    library.symbols.setText(str(first))
+    library.name.setText("迟到的旧请求")
+    library.open_publication()
+    try:
+        wait(entered.is_set)
+        assert not library.build_button.isEnabled()
+        library.symbols.setText(str(second))
+        library.name.setText("当前字体")
+    finally:
+        release.set()
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B", ",", "，"}
+    assert "过期错误" not in library.coverage_summary.text()
+    row = next(library.contents.topLevelItem(i) for i in range(library.contents.topLevelItemCount())
+               if library.contents.topLevelItem(i).data(0, QtCore.Qt.UserRole) == "punctuation")
+    row.setCheckState(0, QtCore.Qt.Unchecked)
+    assert not library.build_button.isEnabled()
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B"}
+    library.name.setText("当前字体改名")
+    wait(library.build_button.isEnabled)
+    assert {key[2] for key in library.review_result["coverage"]} == {"B"}
+    captured(second, "C", sid="late-C")
+    library.watch_publication()
+    wait(lambda: library.build_button.isEnabled() and any(key[2] == "C" for key in library.review_result["coverage"]))
+    assert "punctuation" not in library.review_groups
+    library.publication.reject()
+    QtCore.QThreadPool.globalInstance().waitForDone()

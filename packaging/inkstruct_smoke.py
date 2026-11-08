@@ -1174,7 +1174,7 @@ def main():
     # Both pipelines start from real captures, using the actual UI worker handlers.
     workflow = w.generator.centralWidget()
     assert workflow.method.count() == 3 and workflow.method.currentData() == "v62"
-    assert not workflow.profile_button.isEnabled() and not workflow.generate_button.isEnabled()
+    assert not workflow.generate_button.isEnabled()
     workflow.writer.setText(args.writer)
     workflow.samples.setText(str(args.samples))
     workflow.text.setText("人物理羝羚而铜伯攣盼⺼")
@@ -1183,17 +1183,10 @@ def main():
     generation_reports = {}
     for method in ("v62", "v61", "v4"):
         workflow.method.setCurrentIndex(workflow.method.findData(method))
-        print(method, "import", flush=True)
-        workflow.do_import()
-        wait(lambda: not workflow.busy, 120)
-        assert workflow.profile_button.isEnabled(), workflow.log.toPlainText()
-        print(method, "profile", flush=True)
-        workflow.do_profile()
-        wait(lambda: not workflow.busy, 300)
         assert workflow.generate_button.isEnabled(), workflow.log.toPlainText()
         workflow.last_generated_run = None
-        print(method, "generate", flush=True)
-        workflow.do_generate()
+        print(method, "prepare and generate", flush=True)
+        workflow.generate_button.click()
         wait(lambda: not workflow.busy, 300)
         assert workflow.last_generated_run, workflow.log.toPlainText()
         run = Path(workflow.last_generated_run)
@@ -1204,9 +1197,7 @@ def main():
         w.library.name.setText("smoke " + method)
         w.library.symbols.clear()
         w.library.kind.setCurrentIndex(w.library.kind.findData("user"))
-        assert w.library.review_button.isEnabled()
-        w.library.review_button.click()
-        wait(lambda: w.library.review_job is None, 120)
+        wait(lambda: w.library.build_button.isEnabled(), 120)
         assert w.library.build_button.isEnabled()
         w.library.build_button.click()
         wait(lambda: w.library.job is None, 120)

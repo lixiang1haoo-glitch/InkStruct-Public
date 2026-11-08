@@ -9,7 +9,7 @@ from PySide6 import QtCore, QtWidgets
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import FontManagement
-from .publication import (COVERAGE, GROUPS, batch_label, generated_batches, publication_stamp,
+from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, generated_batches, publication_stamp,
                           require_publication_stamp, review_selection)
 
 
@@ -42,6 +42,9 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.job = None
         self.review_job = None
         self.review = None
+        self.review_revision = 0
+        self.attempted_review = None
+        self.group_choices = {}
         self.watch_job = None
         self.review_stamp = None
         self.review_result = None
@@ -95,7 +98,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.publication.setModal(True)
         self.publication.resize(940, 700)
         publication_layout = QtWidgets.QVBoxLayout(self.publication)
-        hint = QtWidgets.QLabel("先选择书写者、汉字批次及扩展来源，再核对待制包清单。已确认的复用随原采集根目录或含任务配置的 ZIP 读取。")
+        hint = QtWidgets.QLabel("选择书写者、汉字批次及扩展来源后，清单会自动核对。请勾选要入包的类别并查看缺字。已确认的复用从含任务配置的采集目录或 ZIP 读取。")
         hint.setWordWrap(True)
         publication_layout.addWidget(hint)
         group = QtWidgets.QGroupBox("按书写者汇总的待制包清单")
@@ -107,8 +110,6 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.author.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
         self.writer = self.author.lineEdit()
         self.writer.setPlaceholderText("选择采集书写者，或输入外部样本的作者 ID")
-        self.author.activated.connect(self.author_chosen)
-        self.writer.editingFinished.connect(self.author_chosen)
         self.publication_author = ""
         self.name = QtWidgets.QLineEdit("我的手写体")
         self.run = QtWidgets.QLineEdit()
@@ -137,9 +138,6 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("用户版 · 用于排版与分享", "user")
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", self.kind)
-        self.review_button = QtWidgets.QPushButton("核对待制包清单")
-        self.review_button.clicked.connect(self.review_publication)
-        form.addRow(self.review_button)
         self.contents = QtWidgets.QTreeWidget()
         self.contents.setHeaderLabels(["加入 / 类别", "独立录制", "中英文共用", "已确认复用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
@@ -171,8 +169,10 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.progress = QtWidgets.QLabel("")
         layout.addWidget(self.progress)
         self.progress.setWordWrap(True)
-        for field in (self.writer, self.name, self.run, self.symbols):
-            field.textChanged.connect(self.update_actions)
+        self.writer.textChanged.connect(self.author_chosen)
+        for field in (self.name, self.run, self.symbols):
+            field.textChanged.connect(self.invalidate_publication)
+        self.publication.finished.connect(lambda _: self.invalidate_publication())
         self.review_timer = QtCore.QTimer(self, interval=150, singleShot=True)
         self.review_timer.timeout.connect(self.recalculate_publication)
         self.watch_timer = QtCore.QTimer(self, interval=1800)
@@ -183,11 +183,11 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.refresh()
 
     def open_publication(self):
-        if self.job or self.review_job:
+        if self.job:
             return
         from ..capture_management import CaptureCatalog
         current = self.writer.text()
-        with QtCore.QSignalBlocker(self.author):
+        with QtCore.QSignalBlocker(self.author), QtCore.QSignalBlocker(self.writer):
             self.author.clear()
             if self.capture_root_provider:
                 try:
@@ -200,10 +200,11 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.refresh_publication_batches()
         self.publication.show()
         self.publication.raise_()
+        self.invalidate_publication()
         (self.name if current else self.writer).setFocus()
 
     def prepare_publication(self, run, writer):
-        if self.job or self.review_job:
+        if self.job:
             return False
         self.writer.setText(writer)
         self.author_chosen()
@@ -219,6 +220,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         if writer == self.publication_author:
             return
         self.publication_author = writer
+        self.group_choices.clear()
         self.run.clear()
         self.symbols.clear()
         self.refresh_publication_batches()
@@ -227,7 +229,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 root = Path(self.capture_root_provider()) / "symbol_collection"
                 if (root / "samples" / writer).is_dir():
                     self.symbols.setText(str(root))
-        self.update_actions()
+        self.invalidate_publication()
 
     def refresh_publication_batches(self):
         from ..capture_management import valid_writer
@@ -248,52 +250,72 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def publication_inputs(self):
         return tuple(field.text().strip() for field in (self.writer, self.run, self.symbols, self.name))
 
-    def invalidate_publication(self, message=""):
+    def publication_ready(self):
+        from ..capture_management import valid_writer
+
+        writer, run, symbols, _ = self.publication_inputs()
+        return (valid_writer(writer) and bool(run or symbols)
+                and (not run or Path(run).is_dir()) and (not symbols or Path(symbols).exists()))
+
+    def invalidate_publication(self, *_):
+        self.review_revision += 1
         self.review = self.review_stamp = self.review_result = self.review_groups = None
-        self.contents.clear()
+        with QtCore.QSignalBlocker(self.contents):
+            self.contents.clear()
         self.batch_summary.clear()
         self.batch_summary.hide()
-        self.coverage_summary.setText("列中数字为字符数 / 候选份数。展开类别查看字符与诊断。")
-        if message:
-            self.set_progress(message)
+        self.review_timer.stop()
+        if self.publication.isVisible():
+            self.publication_progress.clear()
+            self.coverage_summary.setText("等待核对当前来源…" if self.publication_ready()
+                                          else "选择书写者和可用的汉字批次或扩展来源。")
+            self.review_timer.start()
+        self.update_actions()
 
-    def review_publication(self):
-        if self.job or self.review_job:
+    def recalculate_publication(self):
+        if (not self.publication.isVisible() or not self.publication_ready() or self.job
+                or self.review_job or self.attempted_review == self.review_revision):
             return
-        self.invalidate_publication()
-        self.start_publication_review()
-
-    def start_publication_review(self, groups=None):
         inputs = self.publication_inputs()
         writer, run, symbols, name = inputs
+        revision = self.attempted_review = self.review_revision
         reviewed_stamp = self.review_stamp
+        groups = self.selected_publication_groups() if self.review is not None else None
 
         def work(_):
-            stamp = reviewed_stamp if reviewed_stamp is not None else publication_stamp(writer, run, symbols)
-            require_publication_stamp(writer, run, symbols, stamp)
-            result = review_selection(writer, run, symbols, name, groups)
-            require_publication_stamp(writer, run, symbols, stamp)
-            return inputs, stamp, groups, result
+            stamp = reviewed_stamp
+            try:
+                if stamp is None:
+                    stamp = publication_stamp(writer, run, symbols)
+                require_publication_stamp(writer, run, symbols, stamp)
+                result = review_selection(writer, run, symbols, name, groups)
+                require_publication_stamp(writer, run, symbols, stamp)
+                return revision, inputs, stamp, groups, result, "", False
+            except Exception as error:  # Carry the request identity with failures too.
+                return revision, inputs, stamp, groups, None, str(error), isinstance(error, PublicationInputsChanged)
 
         job = self.review_job = Job(work)
         job.signals.completed.connect(self.publication_reviewed)
-        job.signals.failed.connect(self.publication_review_failed)
-        self.set_progress("正在按勾选计算覆盖…" if groups is not None else "正在核对作者、来源与可用字符…")
+        self.coverage_summary.setText("正在按勾选计算覆盖…" if groups is not None else "正在核对作者、来源与可用字符…")
         self.update_actions()
         QtCore.QThreadPool.globalInstance().start(job)
 
-    def publication_review_failed(self, error):
-        self.review_job = None
-        self.invalidate_publication("清单未通过：" + error)
-        self.update_actions()
-
     def publication_reviewed(self, response):
         self.review_job = None
-        inputs, stamp, groups, result = response
-        if inputs != self.publication_inputs() or (groups is not None and self.review_stamp != stamp):
+        revision, inputs, stamp, groups, result, error, changed = response
+        if revision != self.review_revision or inputs != self.publication_inputs():
+            self.update_actions()
+            self.review_timer.start()
+            return
+        if changed:
+            self.invalidate_publication()
+            return
+        self.review_stamp = stamp
+        if result is None:
+            self.coverage_summary.setText("清单核对失败：" + error)
             self.update_actions()
             return
-        self.review, self.review_stamp = inputs, stamp
+        self.review = inputs
         if groups is None:
             self.unselected_issues = {}
             for item in result["issues"]:
@@ -302,14 +324,12 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             groups = self.selected_publication_groups()
             all_groups = {key[0] for key in result["coverage"]}
             if groups != all_groups:
+                self.review_revision += 1
                 self.recalculate_publication()
                 return
-        if groups != self.selected_publication_groups():
-            self.recalculate_publication()
-            return
         self.review_groups, self.review_result = groups, result
         self.show_publication_coverage(result)
-        self.set_progress("已核对当前勾选。汉字来源与包完整性在制包时核验。")
+        self.publication_progress.setText("已核对当前勾选。汉字来源与包完整性在制包时核验。")
         self.update_actions()
 
     def create_publication_rows(self, result):
@@ -321,7 +341,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 row = QtWidgets.QTreeWidgetItem(self.contents, [label])
                 row.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
                 if key in available or key in invalid:
-                    row.setCheckState(0, QtCore.Qt.Checked if key in available and key not in invalid else QtCore.Qt.Unchecked)
+                    checked = self.group_choices.get(key, key in available and key not in invalid)
+                    row.setCheckState(0, QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
                 else:
                     row.setFlags(row.flags() & ~QtCore.Qt.ItemFlag.ItemIsUserCheckable)
                 if key == "han":
@@ -384,45 +405,42 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         chars = len({key[2] for key in coverage})
         self.coverage_summary.setText(f"预计入包 {chars} 字 · {sum(coverage.values())} 份候选。列中为字符数 / 份数。展开查看缺字和来源诊断。")
 
-    def publication_groups_changed(self, *_):
+    def publication_groups_changed(self, item, column):
+        if column != 0 or item.parent() is not None:
+            return
+        key = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        self.group_choices[key] = item.checkState(0) == QtCore.Qt.Checked
+        self.review_revision += 1
         self.review_result = None
         self.coverage_summary.setText("正在按勾选重新计算字符数与候选份数…")
         self.update_actions()
         self.review_timer.start()
 
-    def recalculate_publication(self):
-        if self.review and not self.review_job and not self.job:
-            self.start_publication_review(self.selected_publication_groups())
-
     def watch_publication(self):
-        if not self.publication.isVisible() or self.job or self.review_job or self.watch_job or self.review_stamp is None:
+        if not self.publication.isVisible() or self.job or self.review_job or self.watch_job:
+            return
+        if self.review_stamp is None:
+            self.recalculate_publication()
             return
         stamp, inputs = self.review_stamp, self.publication_inputs()
 
         def work(_):
             try:
                 require_publication_stamp(*inputs[:3], stamp)
-                return stamp, inputs, True
-            except ValueError:
-                return stamp, inputs, False
+                return stamp, True
+            except (ValueError, OSError):
+                return stamp, False
 
         self.watch_job = Job(work)
         self.watch_job.signals.completed.connect(self.publication_watched)
-        self.watch_job.signals.failed.connect(self.publication_watch_failed)
         QtCore.QThreadPool.globalInstance().start(self.watch_job)
 
     def publication_watched(self, result):
         self.watch_job = None
-        stamp, inputs, valid = result
-        if not valid and self.review_stamp is stamp and self.publication_inputs() == inputs:
-            self.invalidate_publication("批次、样本或复用配置已变化，请重新核对待制包清单。")
-            self.update_actions()
-
-    def publication_watch_failed(self, error):
-        self.watch_job = None
-        if not self.review_job and self.review:
-            self.invalidate_publication("清单核对失败：" + error)
-            self.update_actions()
+        stamp, valid = result
+        if not valid and self.review_stamp is stamp:
+            self.invalidate_publication()
+            self.publication_progress.setText("来源已变化，正在重新核对清单…")
 
     def selected_publication_groups(self):
         return {row.data(0, QtCore.Qt.ItemDataRole.UserRole)
@@ -453,13 +471,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 button.setProperty('inkRole', role)
                 button.style().unpolish(button)
                 button.style().polish(button)
-        run, symbols = self.run.text().strip(), self.symbols.text().strip()
-        inputs_ready = bool(run or symbols) and (not run or Path(run).is_dir()) and (
-            not symbols or Path(symbols).exists())
-        if self.review is not None and self.review != self.publication_inputs():
-            self.invalidate_publication("输入已改变，请重新核对待制包清单。")
         idle = self.job is None and self.review_job is None
-        self.review_button.setEnabled(idle and bool(self.writer.text().strip()) and inputs_ready)
         self.build_button.setEnabled(idle and self.review_result is not None and bool(self.name.text().strip())
                                      and bool(self.review_result["coverage"]))
         self.publication_fields.setEnabled(self.job is None)
@@ -648,8 +660,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
 
     def build(self):
         inputs = self.publication_inputs()
-        if self.review != inputs or self.review_result is None or self.review_groups != self.selected_publication_groups():
-            return self.failed("请先核对待制包清单")
+        if not self.build_button.isEnabled() or self.review != inputs or self.review_groups != self.selected_publication_groups():
+            return
         writer, run, symbols, name = inputs
         kind, stamp = self.kind.currentData(), self.review_stamp
         groups, expected = self.review_groups, self.review_result["coverage"]

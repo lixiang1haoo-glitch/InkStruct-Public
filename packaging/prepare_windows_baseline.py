@@ -38,13 +38,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", help="Version with records under docs/releases, such as 0.1.59")
     parser.add_argument("archive", type=Path, nargs="?", help="Original Windows release ZIP")
+    parser.add_argument("--resources-only", action="store_true",
+                        help="Verify locked public resources for a newer source checkout")
     args = parser.parse_args()
     version = args.version
     if any(not part.isascii() or not part.isdecimal() for part in version.split(".")) or len(version.split(".")) != 3:
         parser.error("请输入三段式应用版本")
     try:
         resources = json.loads((RECORDS / f"{version}-windows-resources.json").read_bytes())
-        build = json.loads((RECORDS / f"{version}-build-provenance.json").read_bytes())
+        source_hashes = {} if args.resources_only else json.loads(
+            (RECORDS / f"{version}-build-provenance.json").read_bytes())["source_hashes"]
         if args.archive:
             if digest(args.archive) != resources["sha256"]:
                 raise ValueError("Windows 发布 ZIP 与归档哈希不符")
@@ -52,14 +55,14 @@ def main():
                 for path, record in resources["resources"].items():
                     restore(archive, ROOT / path, record)
         expected = {path: record["sha256"] for path, record in resources["resources"].items()}
-        expected.update(build["source_hashes"])
+        expected.update(source_hashes)
         mismatches = [path for path, value in expected.items()
                       if not (ROOT / path).is_file() or digest(ROOT / path) != value]
         if mismatches:
             raise ValueError("构建输入缺失或哈希不符\n" + "\n".join(mismatches))
     except (OSError, ValueError) as error:
         parser.exit(1, str(error) + "\n")
-    print(f"InkStruct {version} · {len(build['source_hashes'])} 项构建输入及 {len(resources['resources'])} 项资源校验通过")
+    print(f"InkStruct {version} · {len(source_hashes)} 项源码输入及 {len(resources['resources'])} 项资源校验通过")
 
 
 if __name__ == "__main__":

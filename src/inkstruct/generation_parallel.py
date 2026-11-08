@@ -301,7 +301,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
     execution['total_s'] = time.perf_counter() - started
     protocol.update(characters=complete, failed=failed, pending=[c for c in characters if c not in rows], status=status)
     write(output/'protocol.json', protocol)
-    result = {'completed_count': len(complete), 'failed_count': len(failed), 'failed': failed, 'status': status,
+    result = {'completed_count': len(complete), 'completed_preview': ''.join(complete[:24]),
+              'failed_count': len(failed), 'failed': failed, 'status': status,
               'warning_characters': [c for c in complete if rows[c]['warnings']],
               'method': protocol.get('method', 'v6.2 exp' if semantic else 'v6.1 exp'),
               'version': protocol.get('version'), 'execution': execution, 'pending': protocol['pending']}

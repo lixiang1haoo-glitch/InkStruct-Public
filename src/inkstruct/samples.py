@@ -141,6 +141,11 @@ def import_samples(
     accepted, rejected, foreign = scan_samples(source, writer_id)
     if require_single_writer and foreign:
         raise ValueError(f"样本目录包含其他书写者：{'、'.join(foreign)}。请选择仅属于 {writer_id} 的目录。")
+    return write_sample_index(source, writer_id, destination_root, accepted, rejected)
+
+
+def write_sample_index(source, writer_id, destination_root, accepted, rejected):
+    """Persist an already validated scan using the existing index and report format."""
     writer_dir = Path(destination_root).resolve() / writer_id
     writer_dir.mkdir(parents=True, exist_ok=True)
     index_path = writer_dir / "index.jsonl"

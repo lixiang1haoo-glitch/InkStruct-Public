@@ -21,7 +21,7 @@ QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
 QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, str(workspace))
 use_light_theme(app)
 GenerationWorkflow.readiness = lambda *args: {
-    "generate": True, "profile": False, "import": False, "message": "已准备",
+    "start": True, "message": "已准备",
 }
 ready = Event()
 release = Event()
@@ -114,6 +114,21 @@ for _ in range(100):
 assert panel.heading.text() == "生成结束，部分字失败 · 已处理 100%"
 assert panel.graph.fraction == 1
 assert not panel.timer.isActive()
+
+previous_run = page.last_generated_run
+def zero(*args, **kwargs):
+    return dict(requested_count=10, completed_count=0, failed_count=0, status="cancelled",
+                writer="test", message="已取消", output=str(workspace / "zero"))
+
+GenerationWorkflow.generate = zero
+QtTest.QTest.mouseClick(page.generate_button, button)
+for _ in range(100):
+    QtTest.QTest.qWait(20)
+    if not page.busy:
+        break
+assert page.last_generated_run == previous_run
+assert page.publish_button.text() == "制作上次批次…"
+assert "test" in page.publish_batch_summary.text() and "9 字" in page.publish_batch_summary.text()
 
 def fail(*args, **kwargs):
     raise ValueError("测试读取失败")

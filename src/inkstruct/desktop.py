@@ -49,6 +49,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
 
     class WorkflowWidget(QtWidgets.QWidget):
         generation_progress = QtCore.Signal(object)
+        generation_preparation = QtCore.Signal(str, str)
         publish_requested = QtCore.Signal()
 
         def __init__(self):
@@ -60,6 +61,10 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.busy = False
             self.last_generated_run = None
             self.last_generated_writer = None
+            self.last_generated_batch = None
+            self.generation_active = False
+            self.generation_error = ""
+            self.generation_stage = ""
             self.target_manifest = None
             self.current_document_provider = None
             self.capture_root_provider = None
@@ -110,8 +115,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 "v6.1 exp：参考修正、完整部件、受限关键笔替换及作者单笔回退；保留完整来源轨迹与缺口。\n"
                 "沿用跨字生成规则，排除同字供体；未通过来源筛选处保留参考替代并警告。\n"
                 "v4 adaptive：固定自适应融合配置；没有可靠逐笔来源记录时按来源未知提示。\n"
-                "建档会自动准备所选方法需要的档案。更换方法后若未建档，请先建档。\n"
-                "每次操作创建新批次；采集目录有新增内容时请重新导入。")
+                "开始生成时自动检查样本，并为所选方法准备档案。每次生成创建新批次。")
             method_row = QtWidgets.QHBoxLayout()
             method_row.addWidget(self.method, 1)
             method_row.addWidget(info)
@@ -125,8 +129,6 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             form.addRow("样本与档案", self.sample_summary)
             form.addRow("", self.sample_notice)
             form.addRow("生成方式", method_row)
-            prepare_actions = QtWidgets.QHBoxLayout()
-            source_layout.addLayout(prepare_actions)
             generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
             generation_layout = QtWidgets.QVBoxLayout(generation_group)
             generation_form = QtWidgets.QFormLayout()
@@ -176,19 +178,11 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.status.setWordWrap(True)
             generation_layout.addWidget(self.status)
             actions = QtWidgets.QHBoxLayout()
-            self.buttons = []
-            for name, attr, function in [("更新样本并建档", "update_button", self.do_update),
-                                         ("导入样本", "import_button", self.do_import),
-                                         ("建立档案", "profile_button", self.do_profile),
-                                         ("开始生成", "generate_button", self.do_generate)]:
-                button = QtWidgets.QPushButton(name)
-                button.setObjectName(attr)
-                if attr in ("generate_button", "update_button"):
-                    button.setProperty("inkRole", "primary")
-                button.clicked.connect(function)
-                setattr(self, attr, button)
-                (actions if attr == "generate_button" else prepare_actions).addWidget(button)
-                self.buttons.append(button)
+            self.generate_button = QtWidgets.QPushButton("开始生成")
+            self.generate_button.setObjectName("generate_button")
+            self.generate_button.setProperty("inkRole", "primary")
+            self.generate_button.clicked.connect(self.do_generate)
+            actions.addWidget(self.generate_button)
             self.cancel_button = QtWidgets.QPushButton("取消生成")
             self.cancel_button.clicked.connect(self.cancel_generation)
             self.cancel_button.setEnabled(False)
@@ -200,7 +194,13 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             result_layout = QtWidgets.QHBoxLayout(result_group)
             self.result_summary = QtWidgets.QLabel("尚无生成结果")
             self.result_summary.setWordWrap(True)
-            result_layout.addWidget(self.result_summary, 1)
+            summary_layout = QtWidgets.QVBoxLayout()
+            summary_layout.addWidget(self.result_summary)
+            self.publish_batch_summary = QtWidgets.QLabel()
+            self.publish_batch_summary.setWordWrap(True)
+            self.publish_batch_summary.hide()
+            summary_layout.addWidget(self.publish_batch_summary)
+            result_layout.addLayout(summary_layout, 1)
             self.publish_button = QtWidgets.QPushButton("制作字体…")
             self.publish_button.setObjectName("generation_to_font_library")
             self.publish_button.setProperty("inkRole", "primary")
@@ -225,6 +225,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 QtCore.Qt.ArrowType.DownArrow if checked else QtCore.Qt.ArrowType.RightArrow))
             layout.addStretch()
             self.generation_progress.connect(self.show_generation_progress)
+            self.generation_preparation.connect(self.show_generation_preparation)
             self.writer.textChanged.connect(self.writer_changed)
             self.samples.textChanged.connect(self.manual_sample_source)
             self.text.textChanged.connect(self.refresh)
@@ -269,6 +270,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 self.sample_request = values
                 self.sample_status = None
                 self.sample_revision += 1
+                self.generation_error = ""
             self.refresh()
             self.scan_sample_source()
 
@@ -330,7 +332,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 if status["foreign"]:
                     notices.append("作者归属不符：目录包含 " + "、".join(status["foreign"]))
                 if status["changed"]:
-                    notices.append("有样本变化尚未纳入当前档案。使用「更新样本并建档」纳入变化。")
+                    notices.append("有样本变化尚未纳入当前档案。下次开始生成时会自动更新。")
             elif source:
                 line += "\n" + ("正在核对样本归属与导入记录…" if Path(source).is_dir() else "样本目录不存在")
             self.sample_summary.setText(line)
@@ -378,16 +380,13 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.publish_button.setEnabled(bool(self.last_generated_run) and not self.busy)
             ready = service.readiness(*self.values())
             self.refresh_sample_summary()
-            checked = self.sample_status and not (self.sample_status.get("foreign") or self.sample_status.get("error"))
-            self.update_button.setEnabled(bool(checked and ready["import"] and not self.busy))
-            self.status.setText("正在处理，请稍候…" if self.busy else ready["message"])
-            for kind in ("import", "profile", "generate"):
-                enabled = ready[kind] and not self.busy
-                if kind == "import":
-                    enabled = enabled and checked
-                if kind == "generate":
-                    enabled = enabled and (self.generate_all.isChecked() or bool(self.text.text().strip()))
-                getattr(self, kind + "_button").setEnabled(bool(enabled))
+            foreign = self.sample_status and self.sample_status.get("foreign")
+            status = "请选择属于当前书写者的样本目录。" if foreign else ready["message"]
+            if ready["start"] and self.sample_status and self.sample_status.get("changed") and not foreign:
+                status = "开始生成时会先更新样本并建档。"
+            self.status.setText("正在处理，请稍候…" if self.busy else self.generation_error or status)
+            self.generate_button.setEnabled(ready["start"] and not foreign and not self.busy
+                and (self.generate_all.isChecked() or bool(self.text.text().strip())))
             for widget in (self.writer, self.samples, self.browse, self.follow_samples, self.method, self.generate_all):
                 widget.setEnabled(not self.busy)
             self.text.setEnabled(not self.busy and not self.generate_all.isChecked())
@@ -402,8 +401,10 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.update_candidate_hint()
 
         def invalidate_targets(self):
+            self.generation_error = ""
             self.target_manifest = None
             self.target_summary.setText('已编辑为自定义字表；开始前会检查全部目标，不支持字符不会静默跳过。')
+            self.refresh()
 
         def load_targets(self, function):
             def run():
@@ -480,11 +481,14 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
 
         def completed(self, value):
             self.busy = False
-            if "output" in value:
+            if self.generation_active or "output" in value:
+                self.generation_active = False
                 self.progress_panel.finish(result=value)
                 self.status.show()
+                self.sample_status = None
             self.log.appendPlainText(value["message"])
             if 'target_manifest' in value:
+                self.generation_error = ""
                 manifest = value['target_manifest']
                 self.target_manifest = manifest
                 self.text.setText(''.join(manifest['requested']))
@@ -504,9 +508,21 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                     self.last_generated_writer = value["writer"]
                     self.result_summary.setText(value["message"])
                     self.result_summary.setToolTip("结果目录：" + value["output"])
+                    self.publish_button.setText("制作字体…")
+                    when = (datetime.fromisoformat(value["started_at"]).astimezone()
+                            if "started_at" in value else datetime.now())
+                    when = when.strftime("%Y-%m-%d %H:%M")
+                    self.last_generated_batch = f"{value['writer']} · {when} · 完成 {value['completed_count']} 字"
+                    preview = value.get("completed_preview", "")
+                    partial = value["completed_count"] < value["requested_count"]
+                    if partial and preview:
+                        self.last_generated_batch += f" · 已完成范围 {' '.join(preview)}"
+                        if value["completed_count"] > len(preview):
+                            self.last_generated_batch += " …"
+                    self.publish_batch_summary.setText(self.last_generated_batch)
+                    self.publish_batch_summary.show()
                 else:
-                    self.result_summary.setText("本次没有完成的字形。" + (
-                        "仍可制作上次成功结果的字体。" if self.last_generated_run else ""))
+                    self.show_previous_batch("本次没有完成的字形。")
                 self.log.appendPlainText("结果目录：" + value["output"])
                 if value.get("status") == "cancelled":
                     self.log.appendPlainText("已取消；已完成字形保留，未完成部分未发布。")
@@ -519,6 +535,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                     self.log.appendPlainText("含参考替代：" + "".join(value["warning_characters"]) + "。可继续使用，在字体提示中查看具体缺口。")
                 for item in value.get("failed", []):
                     self.log.appendPlainText(f"{item['character']}：{item['reason']}")
+            elif value.get("status") == "cancelled":
+                self.show_previous_batch(value["message"])
             for key in ("report", "profile"):
                 if key in value:
                     self.log.appendPlainText("详细记录：" + value[key])
@@ -529,33 +547,40 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
 
         def failed(self, message):
             self.busy = False
+            prefix = "操作未完成"
+            if self.generation_active:
+                self.generation_active = False
+                self.show_previous_batch("本次生成未完成。")
+                self.sample_status = None
+                prefix = self.generation_stage + "失败"
+            self.generation_error = prefix + "：" + message.splitlines()[0]
             self.progress_panel.finish()
             self.status.show()
-            self.log.appendPlainText("操作未完成：" + message)
+            self.log.appendPlainText(prefix + "：" + message)
             self.cancel_button.setEnabled(False)
             self.resume_sample_status()
-            self.status.setText("操作未完成：" + message.splitlines()[0])
+
+        def show_previous_batch(self, message):
+            self.result_summary.setText(message)
+            self.result_summary.setToolTip("")
+            if self.last_generated_batch:
+                self.publish_button.setText("制作上次批次…")
+                self.publish_batch_summary.setText("上次批次 · " + self.last_generated_batch)
+                self.publish_batch_summary.show()
 
         def show_generation_progress(self, value):
             self.progress_panel.record(value)
+
+        def show_generation_preparation(self, stage, detail):
+            self.generation_stage = stage
+            self.progress_panel.preparation(stage, detail)
+            self.log.appendPlainText(f"{stage} · {detail}")
 
         def cancel_generation(self):
             self.cancel_event.set()
             self.cancel_button.setEnabled(False)
             self.progress_panel.cancelling()
             self.log.appendPlainText("已请求取消；停止投递任务，保留已校验完成结果。串行计算将在当前字结束后停止。")
-
-        def do_import(self):
-            values = self.values()
-            self.submit(lambda: service.import_samples(*values))
-
-        def do_update(self):
-            values = self.values()
-            self.submit(lambda: service.update_samples(*values))
-
-        def do_profile(self):
-            values = self.values()
-            self.submit(lambda: service.build_profile(*values))
 
         def do_generate(self):
             if self.busy:
@@ -567,11 +592,15 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             if targets and ''.join(targets['requested']) != text:
                 targets = None
             self.cancel_event.clear()
+            self.generation_active = True
+            self.generation_error = ""
+            self.generation_stage = "核对目标"
             self.progress_panel.start()
             self.status.hide()
             self.submit(lambda: service.generate(*values, text, all_supported=full,
                 workers=workers, targets=targets, candidate_limit=candidate_limit,
-                progress=self.generation_progress.emit, cancelled=self.cancel_event.is_set), cancellable=True)
+                progress=self.generation_progress.emit, preparation=self.generation_preparation.emit,
+                cancelled=self.cancel_event.is_set), cancellable=True)
 
     class GeneratorWindow(QtWidgets.QMainWindow):
         def __init__(self):

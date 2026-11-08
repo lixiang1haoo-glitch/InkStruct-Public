@@ -1,6 +1,6 @@
 # InkStruct（墨构）
 
-0.1.59 显示作者样本的导入与建档状态，待制包清单随勾选计算覆盖，字体包通过完整验证后才加入字体库。见 [Windows 交付记录](docs/RELEASE_0_1_59_WINDOWS.md)。
+0.1.60 「开始生成」按需自动导入、建档或沿用有效档案。待制包清单自动核对，字体包通过完整验证后才加入字体库。见 [Windows 交付记录](docs/RELEASE_0_1_60_WINDOWS.md)。
 
 0.1.48：左侧常驻采集／生成／排版，底部依次为字体库、模板库及设置；名称与版本显示在系统标题栏。字体库提供精简列表、真实汉字／公式预览及保留草稿的试写，其他页面统一视觉层级，完整校验和旧文档冻结选样保持。见 [Windows 交付说明](docs/RELEASE_0_1_48_WINDOWS.md)。
 
@@ -35,7 +35,7 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)：安装、桌面应用、完整 CLI、数据协议、训练与故障排查。
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)：结构数据库、轨迹生成、笔顺对齐和模型架构。
 
-## InkStruct 0.1.59 集成应用
+## InkStruct 0.1.60 集成应用
 
 0.1.34：六辐星号由录制减号合成，比号复用冒号，公式圆圈复用中文句号；新字体保留来源与动态数据。页码向上为上一页、向下为下一页。见 [Windows 交付记录](docs/RELEASE_0_1_34_WINDOWS.md)。
 
@@ -69,7 +69,7 @@ InkStruct 是一个以汉字结构先验驱动的个性化在线手写轨迹生�
 
 齿轮保存本机全局默认，重启后保留并供新文档使用；已有项目保留原参数。排版右侧“元素属性”用于表格和图片的独立设置，可恢复沿用本文默认。公式设置按内容限定窗口最小宽度，无需横向滚动。详见 [0.1.16 Windows 验收](docs/RELEASE_0_1_16_WINDOWS.md)。
 
-统一应用将采集、生成、字体与模板和 Markdown 排版放在同一窗口，支持完整 `.inkfont` 的发布、导入与文档冻结。使用说明和验证边界见 [0.1.59 集成应用](docs/INKSTRUCT_0_1.md)。源码入口为 `inkstruct-app`，独立应用构建入口为 `packaging/build_inkstruct_app.py`。应用版本 0.1.59 与 Python 库版本 0.2.0 独立。生成页默认 **v6.2 exp（推荐）**，另可选 **v6.1 exp**、**v4 adaptive**；从采集样本统一导入、建档、生成并发布字体。独立 CLI 的默认仍为 v4 adaptive，研究训练入口不随用户应用提供。Windows 初始化、命令和实际验收结果见 [Windows 初始化记录](docs/WINDOWS_INITIALIZATION_20261015.md)。
+统一应用将采集、生成、字体与模板和 Markdown 排版放在同一窗口，支持完整 `.inkfont` 的发布、导入与文档冻结。使用说明和验证边界见 [0.1.60 集成应用](docs/INKSTRUCT_0_1.md)。源码入口为 `inkstruct-app`，独立应用构建入口为 `packaging/build_inkstruct_app.py`。应用版本 0.1.60 与 Python 库版本 0.2.0 独立。生成页默认 **v6.2 exp（推荐）**，另可选 **v6.1 exp**、**v4 adaptive**；从采集样本统一导入、建档、生成并发布字体。独立 CLI 的默认仍为 v4 adaptive，研究训练入口不随用户应用提供。Windows 初始化、命令和实际验收结果见 [Windows 初始化记录](docs/WINDOWS_INITIALIZATION_20261015.md)。
 
 新版4 GiB限制按ZIP成员展开总量计算，不按压缩文件大小计算；32 MiB单成员、每候选点数、来源和哈希等原检查保留，超限结果不会发布。字体格式不变，但旧2 GiB读者不能读取超过旧上限的包。同源user_001八份上限字体实测：全结构库＋其余字符约611 MB，简体支持字集＋相同其余字符约454 MB，压缩空间减少约25.7%；简体包展开量仍超过2 GiB，需新程序读取。详见[容量与简体对照](docs/FONT_CAPACITY_SIMPLIFIED_20261104.md)。这些为字体文件体积，不是应用安装包体积。
 

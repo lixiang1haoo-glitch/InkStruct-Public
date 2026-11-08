@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from inkstruct.generation_workflow import METHODS, VERSION, GenerationWorkflow, write
+from inkstruct.generation_workflow import METHODS, VERSION, GenerationWorkflow, workflow_version, write
 from inkstruct.samples import sha256_file
 
 
@@ -20,7 +20,7 @@ def test_missing_index_and_method_specific_state_do_not_enable_generation(tmp_pa
     flow = GenerationWorkflow(tmp_path/'work', db)
     assert list(METHODS) == ['v62', 'v61', 'v4']
     ready = flow.readiness('alice', str(source), 'v4')
-    assert ready['import'] and not ready['profile'] and not ready['generate']
+    assert ready['import'] and ready['start'] and not ready['profile'] and not ready['generate']
     with pytest.raises(ValueError, match='导入'):
         flow.build_profile('alice', str(source), 'v4')
     assert not flow.readiness('../other', str(source), 'v4')['import']
@@ -109,6 +109,72 @@ def test_sample_change_status_and_failed_update_keep_successful_pair(tmp_path, m
     assert flow.state("alice", source)["import"]["index"] != old["import"]["index"]
 
 
+def test_generation_prepares_only_what_changed(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from inkstruct import generation_workflow, structures
+
+    source = tmp_path / "samples"
+    source.mkdir()
+    db = tmp_path / "db"
+    db.write_bytes(b"structures")
+    sample = {"schema_version": "handwriting_single_v1", "sample_id": "one", "writer_id": "alice",
+              "character": "一", "capture": {"canvas_width": 100, "canvas_height": 100},
+              "strokes": [{"points": [{"x": 20, "y": 30, "t_ms": 0}, {"x": 80, "y": 30, "t_ms": 50}]}]}
+    write(source / "one.json", sample)
+    flow = GenerationWorkflow(tmp_path / "work", db)
+    stages, used_profiles = [], []
+
+    def build(writer, method, batch):
+        path = tmp_path / f"{len(stages)}-{method}.json"
+        write(path, {"method": method})
+        return ({"path": str(path), "sha256": sha256_file(path), "index_sha256": batch["index_sha256"],
+                 "workflow_version": workflow_version(method), "database_sha256": sha256_file(db)},
+                {"message": "建档完成", "profile": str(path)})
+
+    def generate(output, writer, characters, base, profile, *_args, **_kwargs):
+        used_profiles.append(profile)
+        return {"completed_count": 1, "completed_preview": "一", "failed_count": 0}
+
+    monkeypatch.setattr(flow, "_build_profile", build)
+    monkeypatch.setattr(generation_workflow, "corrections", lambda: [])
+    monkeypatch.setattr(generation_workflow, "generate_v61", generate)
+    monkeypatch.setattr(structures, "StructureRepository", lambda path: SimpleNamespace(characters=lambda: ["一"]))
+
+    def start(method="v62", cancelled=lambda: False):
+        return flow.generate("alice", source, method, "一",
+                             preparation=lambda stage, _: stages.append(stage), cancelled=cancelled)
+
+    assert start()["completed_preview"] == "一"
+    assert stages == ["核对样本", "导入样本", "建档", "建档完成", "生成字形"]
+    first = flow.state("alice", source)
+    stages.clear()
+    start()
+    assert stages == ["核对样本", "沿用档案", "生成字形"]
+    assert flow.state("alice", source) == first and used_profiles[0] == used_profiles[1]
+    stages.clear()
+    start("v61")
+    assert stages == ["核对样本", "建档", "建档完成", "生成字形"]
+    previous = flow.state("alice", source)
+    assert previous["import"] == first["import"]
+    assert set(previous["profiles"]) == {"v61", "v62"}
+
+    write(source / "two.json", {**sample, "sample_id": "two"})
+    with monkeypatch.context() as patch:
+        def fail(*_):
+            raise ValueError("模拟建档失败")
+        patch.setattr(flow, "_build_profile", fail)
+        with pytest.raises(ValueError, match="模拟建档失败"):
+            start()
+    assert flow.state("alice", source) == previous and len(used_profiles) == 3
+    stages.clear()
+    result = start(cancelled=lambda: "建档" in stages)
+    assert result["status"] == "cancelled" and "output" not in result
+    assert flow.state("alice", source) == previous and len(used_profiles) == 3
+    start()
+    assert flow.state("alice", source)["import"]["accepted_count"] == 2
+    assert Path(used_profiles[0]["path"]).is_file() and Path(first["import"]["index"]).is_file()
+
+
 def test_verified_helpers_have_not_changed_algorithm():
     def functions(path):
         tree = ast.parse(Path(path).read_text(encoding='utf-8'))
@@ -131,10 +197,10 @@ app=QtWidgets.QApplication([])
 w=main(['check'], create_only=True, workspace=Path(sys.argv[1]), database=Path(sys.argv[1])/'no-db')
 f=w.centralWidget()
 assert f.method.count()==3 and f.method.currentData()=='v62'
-assert not f.import_button.isEnabled() and not f.profile_button.isEnabled() and not f.generate_button.isEnabled()
+assert not f.generate_button.isEnabled()
 assert not hasattr(f,'trajectory_mode') and not hasattr(f,'source_profile')
 assert 'CUDA' not in ''.join(x.text() for x in f.findChildren(QtWidgets.QLabel))
-f.do_profile()
+f.do_generate()
 end=time.monotonic()+5
 while f.busy and time.monotonic()<end:
     app.processEvents();time.sleep(.01)
