@@ -14,9 +14,9 @@ $env:PYTHONPATH = (Join-Path $PWD 'src') + ';' + (Join-Path $PWD 'artifacts/exte
 .venv/Scripts/python.exe -B -X utf8 packaging/build_inkstruct_app.py --output '<新验证目录>'
 ```
 
-准备命令省略 ZIP 参数时只核对已经准备好的资源和工作树。核对以发布构建清单为准，包含文件原始字节。少数 Windows 发布源文件保留原换行，规则记录在 `.gitattributes`。原始构建的工具版本和 340 个输入哈希保存在 [构建溯源](releases/0.1.59-build-provenance.json)。
+准备命令省略 ZIP 参数时只核对已经准备好的资源和工作树。核对以发布构建清单为准，包含文件原始字节。部分 Windows 发布源文件保留原换行，规则记录在 `.gitattributes`。原始构建的工具版本和 340 个输入哈希保存在 [构建溯源](releases/0.1.59-build-provenance.json)。
 
-此基线的 0.1.59 构建用于验证 Git 检出，正式交付仍以已发布 ZIP 为准。样本、作者档案、字体、生成结果、排版文档与测试产物保存在仓库外或被忽略的工作区。保留原有研究提交，未审查的研究工作树增量继续留在原目录。
+此基线的 0.1.59 构建用于验证 Git 检出，正式交付仍以已发布 ZIP 为准。 提交、发布包哈希、171 项通过和 4 项已知失败的对应关系见 [Git 验证记录](releases/0.1.59-git-verification.json)。样本、作者档案、字体、生成结果、排版文档与测试产物保存在仓库外或被忽略的工作区。保留原有研究提交，未审查的研究工作树增量继续留在原目录。
 
 ## 后续发布
 

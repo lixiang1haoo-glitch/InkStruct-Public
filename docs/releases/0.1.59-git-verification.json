@@ -1,0 +1,49 @@
+{
+  "version": "0.1.59",
+  "commit": "40963482016b24ec0232731cd42aaa5bb4f6b240",
+  "tag": "app-v0.1.59",
+  "published_archive": {
+    "filename": "InkStruct-0.1.59-Windows-x64.zip",
+    "sha256": "406ec90486a1d5903756aa7f739aa7b2894d2da716e937630e7aaf4e5f59bcab",
+    "bytes": 133696620,
+    "members": 1679
+  },
+  "verification": {
+    "clean_checkout": true,
+    "matching_release_build_inputs": 340,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "published_dependency_versions_match": true,
+    "reused_local_python_environment": true,
+    "regression": {
+      "passed": 171,
+      "failed": 4,
+      "same_failures_as_release": true,
+      "failures": [
+        "test_resource_management_preserves_document[template-library]",
+        "test_resource_management_preserves_document[template-apply]",
+        "test_resource_management_preserves_document[template-revision]",
+        "test_resource_management_preserves_document[template-workflow]"
+      ]
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "frozen": true,
+        "app_version": "0.1.59",
+        "formula_categories": 11,
+        "measured_dimensions": 26
+      },
+      "InkStructTool.exe": {
+        "frozen": true,
+        "app_version": "0.1.59",
+        "formula_categories": 11,
+        "measured_dimensions": 26
+      }
+    }
+  },
+  "previous_reconstructed_source": {
+    "commit": "7f3d3fb2669eb2c8af46a848498a6919e415add4",
+    "tag": "app-v0.1.58-reconstructed",
+    "matching_release_build_inputs": 340
+  }
+}
