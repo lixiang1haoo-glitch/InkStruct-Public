@@ -1,0 +1,95 @@
+{
+  "version": "0.1.63",
+  "commit": "3762f3b6bcc6800b4408eedcf2e50ca7b3afe892",
+  "tag": "app-v0.1.63",
+  "published_archive": {
+    "version": "0.1.63",
+    "filename": "InkStruct-0.1.63-Windows-x64.zip",
+    "bytes": 133752219,
+    "members": 1680,
+    "sha256": "b60dd2732c635afce3247c652ae9dcb45530e38c67c0fc45ce80db48104280b3"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 343,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 208,
+      "failed": 4,
+      "same_failures_as_baseline": true,
+      "failures": [
+        "test_resource_management_preserves_document[template-library]",
+        "test_resource_management_preserves_document[template-apply]",
+        "test_resource_management_preserves_document[template-revision]",
+        "test_resource_management_preserves_document[template-workflow]"
+      ]
+    },
+    "native": {
+      "platform": "windows",
+      "writer_ids": [
+        "user_001",
+        "scx",
+        "outside.writer"
+      ],
+      "writer_display": "书写者甲",
+      "auto": "m",
+      "auto_count": 5,
+      "disabled": "n",
+      "pinned": "o",
+      "pinned_source": "0df9acf5-7080-4db7-91c0-36657d7f7e4e",
+      "historical_greek_alpha_retained": true,
+      "actual_matches_review": true,
+      "mapped_candidates": 105,
+      "statistics": {
+        "characters": 208,
+        "candidates": 1352,
+        "points": 113061,
+        "source_warning_candidates": 0,
+        "latin_candidates": {
+          "upright": 310,
+          "italic": 294,
+          "unspecified": 0
+        },
+        "core_hash": "e79b235ad9d9a50abf7c9f8d2e3f627a2f2d151e07cfe0f8643215d6efff3f9a",
+        "content_hash": "3ddb1f9278bcd86963656bc08c0d3c28b41eccd6aa2bad8d9ef456421d898333"
+      },
+      "source_hashes_preserved": true,
+      "old_font_sha256": "31e52b9d65b58c81f7f33b3796a849696659d9563eb77ab2840f9c0d77eded85",
+      "document_sha256": "1ae58dd5e2e249dd2c9c3b558d99beca8f7efae6b7cc6530b8159e336ba2d731",
+      "frozen_selections": 5129
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "app_version": "0.1.63",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      },
+      "InkStructTool.exe": {
+        "app_version": "0.1.63",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      }
+    },
+    "frozen_candidates": {
+      "characters": 4,
+      "candidates": 16,
+      "worker_counts": [
+        1,
+        2
+      ],
+      "same_reopened_svg": true
+    }
+  },
+  "previous_archive": {
+    "version": "0.1.62",
+    "filename": "InkStruct-0.1.62-Windows-x64.zip",
+    "bytes": 133743177,
+    "members": 1680,
+    "sha256": "19984b3ee244ea1c0f8b79baa64a73ff5e39a515ae6ee911a7eca1f7c2ea0266"
+  }
+}
