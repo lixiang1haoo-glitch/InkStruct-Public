@@ -15,8 +15,11 @@ from pathlib import Path
 from PySide6 import QtCore,QtGui,QtTest,QtWidgets
 from inkstruct.application import InkStructWindow
 from inkstruct.settings_dialog import SettingsDialog
-from inkstruct.theme import use_light_theme
+from inkstruct.theme import native_style_key, use_light_theme
 app=QtWidgets.QApplication([])
+assert native_style_key('windows', 19045) is None
+assert native_style_key('windows', 22000) == 'windows11'
+assert native_style_key('offscreen', 26300) is None
 QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
 QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat,QtCore.QSettings.Scope.UserScope,sys.argv[1])
 app.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
@@ -28,6 +31,7 @@ for group in (QtGui.QPalette.Active,QtGui.QPalette.Inactive,QtGui.QPalette.Disab
         palette.setColor(group,role,QtGui.QColor('#eeeeee'))
 app.setPalette(palette)
 w=InkStructWindow(workspace=Path(sys.argv[1])/'workspace');w.show();app.processEvents()
+assert app.property('inkstructDesktopStyle') == 'fusion'
 assert app.styleHints().colorScheme()!=QtCore.Qt.ColorScheme.Dark
 for group in (QtGui.QPalette.Active,QtGui.QPalette.Inactive,QtGui.QPalette.Disabled):
     p=app.palette()

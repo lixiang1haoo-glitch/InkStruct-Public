@@ -290,6 +290,7 @@ class SettingsDialog(QtWidgets.QDialog):
                                          or editor.document_started)
         footer = QtWidgets.QHBoxLayout()
         self.reset = QtWidgets.QPushButton("恢复本分类初始值")
+        self.reset.setAutoDefault(False)
         self.reset.clicked.connect(self.reset_current)
         footer.addWidget(self.reset)
         footer.addStretch()

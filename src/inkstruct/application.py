@@ -89,8 +89,8 @@ def show_startup_window(window, splash, icon):
 
 class InkStructWindow(QtWidgets.QMainWindow):
     def __init__(self, *, workspace=None, database=None):
-        from .theme import use_light_theme
-        use_light_theme(QtWidgets.QApplication.instance())
+        from .theme import use_platform_theme
+        use_platform_theme(QtWidgets.QApplication.instance())
         super().__init__()
         from .collector import main as collector
         from .desktop import main as generator

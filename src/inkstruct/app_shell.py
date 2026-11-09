@@ -3,7 +3,6 @@
 from itertools import pairwise
 
 from PySide6 import QtCore, QtGui, QtSvg, QtWidgets
-from .theme import COLORS
 
 # Small, local line icons share a grid and stroke weight; labels remain authoritative.
 _PATHS = {
@@ -22,9 +21,8 @@ _PATHS = {
 }
 
 
-def line_icon(name, color=None):
+def line_icon(name, color):
     """Render bundled vector paths at multiple pixel ratios without platform emoji."""
-    color = color or COLORS["text_secondary"]
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
            f'fill="none" stroke="{color}" stroke-width="1.7" '
            'stroke-linecap="round" stroke-linejoin="round">' + _PATHS[name] + '</svg>')
@@ -39,6 +37,29 @@ def line_icon(name, color=None):
         pixmap.setDevicePixelRatio(ratio)
         icon.addPixmap(pixmap)
     return icon
+
+
+class PaletteIcon(QtCore.QObject):
+    """Keep a button icon in the same palette as its label."""
+
+    def __init__(self, button, name):
+        super().__init__(button)
+        self.name = name
+        self.color = None
+        button.installEventFilter(self)
+        self.refresh()
+
+    def refresh(self):
+        button = self.parent()
+        color = button.palette().color(QtGui.QPalette.ColorGroup.Active, QtGui.QPalette.ColorRole.ButtonText).name()
+        if color != self.color:
+            self.color = color
+            button.setIcon(line_icon(self.name, color))
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.Polish):
+            self.refresh()
+        return False
 
 
 def install_shell(window, about):
@@ -71,7 +92,7 @@ def install_shell(window, about):
         item.setObjectName('navigate_' + key)
         item.setProperty('inkRole', 'navigation')
         item.setText(title)
-        item.setIcon(line_icon(key))
+        PaletteIcon(item, key)
         item.setIconSize(QtCore.QSize(20, 20))
         item.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         item.setCheckable(True)
@@ -86,7 +107,7 @@ def install_shell(window, about):
     button = window.settings_button
     button.setText('设置')
     button.setProperty('inkRole', 'navigation')
-    button.setIcon(line_icon('settings'))
+    PaletteIcon(button, 'settings')
     button.setIconSize(QtCore.QSize(20, 20))
     button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     button.setMinimumSize(0, 0)
@@ -158,7 +179,7 @@ def style_module_pages(window):
     for widget in (collector.single_widget, collector.symbol_widget):
         for control, name in ((widget.import_button, 'import'), (widget.save_button, 'check'),
                               (widget.undo_button, 'undo')):
-            control.setIcon(line_icon(name, '#ffffff' if control is widget.save_button else '#475569'))
+            PaletteIcon(control, name)
         widget.task_help.setProperty('inkRole', 'hint')
     workflow = window.generator.centralWidget()
     workflow.setObjectName('generation_workspace')
@@ -167,16 +188,16 @@ def style_module_pages(window):
     for section in workflow.findChildren(QtWidgets.QGroupBox):
         section.setProperty('inkRole', 'workflowSection')
     for control, name in ((workflow.generate_button, 'play'), (workflow.publish_button, 'library')):
-        control.setIcon(line_icon(name, '#ffffff' if control.property('inkRole') == 'primary' else '#475569'))
+        PaletteIcon(control, name)
     workflow.target_summary.setProperty('inkRole', 'hint')
     workflow.candidate_hint.setProperty('inkRole', 'hint')
     workflow.log.setObjectName('generation_log')
     editor = window.editor
     editor.setObjectName('layout_workspace')
-    editor.machine_export.setIcon(line_icon('export', '#ffffff'))
     editor.machine_export.setProperty('inkRole', 'primary')
+    PaletteIcon(editor.machine_export, 'export')
     paste = editor.findChild(QtWidgets.QToolButton, 'paste_source')
-    paste.setIcon(line_icon('paste'))
+    PaletteIcon(paste, 'paste')
     paste.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     # This is the existing toolbar; no extra row, document action, or layout state.
     title = QtWidgets.QLabel('排版')

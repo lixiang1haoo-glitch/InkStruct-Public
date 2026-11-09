@@ -1,9 +1,10 @@
 """Semantic palette and component styling for the integrated desktop."""
 
+import sys
 from pathlib import Path
 from string import Template
 
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore, QtGui, QtWidgets
 
 
 COLORS = {
@@ -158,6 +159,35 @@ QDialog#unified_settings_dialog QTreeWidget::item { min-height: 28px; }
 """)
 
 
+def native_style_key(platform, windows_build):
+    """Choose the platform adapter independently of Qt plugin availability."""
+    if platform == "windows" and windows_build >= 22000:
+        return "windows11"
+    return None
+
+
+def use_platform_theme(application):
+    """Use the Windows 11 style where available and retain the existing fallback."""
+    from .ui_behavior import protect_parameter_wheels
+
+    windows_build = sys.getwindowsversion().build if sys.platform == "win32" else 0
+    key = native_style_key(application.platformName(), windows_build)
+    if key and application.property("inkstructDesktopStyle") == key:
+        return key
+    style = QtWidgets.QStyleFactory.create(key) if key else None
+    if style is None:
+        use_light_theme(application)
+        return "fusion"
+
+    protect_parameter_wheels(application)
+    application.setStyleSheet("")
+    application.setPalette(QtGui.QPalette())
+    application.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Unknown)
+    application.setStyle(style)
+    application.setProperty("inkstructDesktopStyle", key)
+    return key
+
+
 def use_light_theme(application):
     from .ui_behavior import protect_parameter_wheels
     protect_parameter_wheels(application)
@@ -208,6 +238,7 @@ def use_light_theme(application):
     application.setPalette(palette)
     assets = (Path(__file__).parent / "editor/resources").as_posix()
     application.setStyleSheet(_STYLE.substitute(COLORS, asset_dir=assets))
+    application.setProperty("inkstructDesktopStyle", "fusion")
 
 def set_tone(widget, tone):
     """Update the shared status presentation when a workflow changes state."""
