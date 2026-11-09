@@ -26,16 +26,17 @@ jobs:
           architecture: x64
       - name: Restore exact build inputs
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes -r packaging/windows-x64-py313.lock
           python -B packaging/prepare_public_resources.py
-          $nsis = Get-Content packaging/nsis-win.lock.json -Raw | ConvertFrom-Json
-          Invoke-WebRequest -Uri $nsis.url -OutFile "$env:RUNNER_TEMP/nsis.zip"
+          packaging/fetch_nsis.ps1 -Output "$env:RUNNER_TEMP/nsis.zip"
           "PYTHONPATH=$pwd/src;$pwd/artifacts/external/data_collection" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Path release-check | Out-Null
       - name: Run source regressions
         run: python -B -m pytest -o addopts= -q -p no:cacheprovider --junitxml release-check/source-regression.xml
       - name: Build and verify the portable bundle
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           python -B packaging/build_inkstruct_app.py --output "$env:RUNNER_TEMP/ib"
           Copy-Item "$env:RUNNER_TEMP/ib/build-provenance.json" release-check/
           python -B packaging/verify_public_windows.py --bundle "$env:RUNNER_TEMP/ib/dist/InkStruct" --output "$env:RUNNER_TEMP/iz"
@@ -49,6 +50,7 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP/ir/clean-runtime.json" release-check/
       - name: Install and uninstall on the verified runtime
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $record = Get-Content release-check/portable-verification.json -Raw | ConvertFrom-Json
           python -B packaging/verify_windows_installer.py --installer-build "$env:RUNNER_TEMP/ii/installer-build.json" --zip "$env:RUNNER_TEMP/iz/$($record.archive)" --output "$env:RUNNER_TEMP/it"
           Copy-Item "$env:RUNNER_TEMP/it/installer-verification.json" release-check/
