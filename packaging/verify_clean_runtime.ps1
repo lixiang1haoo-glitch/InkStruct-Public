@@ -9,7 +9,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $Output = (New-Item -ItemType Directory -Path $Output).FullName
 $runtime = 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64'
-$libraries = 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
+$libraries = 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
 
 function RuntimeState {
     $key = Get-ItemProperty -LiteralPath $runtime -ErrorAction SilentlyContinue
@@ -56,12 +56,12 @@ foreach ($bundle in $bundles) {
     $cached = [IO.Path]::GetFullPath($command.Groups['path'].Value)
     if ($cached.StartsWith($cache, [StringComparison]::OrdinalIgnoreCase) -and
         (Test-Path -LiteralPath $cached -PathType Leaf) -and (IsMicrosoftExecutable $cached)) {
-        $code = Run $cached @('/uninstall', '/quiet', '/norestart')
+        $code = Run $cached @('/uninstall', '/quiet', '/norestart', '-burn.ignoredependencies=ALL')
         $removed += [ordered]@{ name = $bundle.DisplayName; version = $bundle.DisplayVersion; exit = $code }
     }
 }
 if ((RuntimeState).installed -eq 1) {
-    $code = Run $download @('/uninstall', '/quiet', '/norestart')
+    $code = Run $download @('/uninstall', '/quiet', '/norestart', '-burn.ignoredependencies=ALL')
     $removed += [ordered]@{ name = 'Microsoft download'; version = (Get-Item $download).VersionInfo.FileVersion; exit = $code }
 }
 
@@ -77,22 +77,68 @@ foreach ($product in $products) {
     $removed += [ordered]@{ name = $product.DisplayName; version = $product.DisplayVersion; exit = $code }
     if ($code -notin @(0, 1605)) { throw "Could not remove $($product.DisplayName). Exit code $code." }
 }
-$absent = RuntimeState
 Write-Output ($removed | ConvertTo-Json -Compress)
-if ($absent.installed -eq 1 -or ($absent.system_files.Values | Where-Object { $_ })) {
-    throw "The hosted VM still has the x64 runtime: $($absent | ConvertTo-Json -Compress)"
-}
-$target = Join-Path $Output 'should-not-be-installed'
-$missingExit = Run $Installer @('/S', '/ISOLATED', "/D=$target")
-if ($missingExit -ne 10 -or (Test-Path -LiteralPath $target)) {
-    throw "Missing runtime did not stop installation cleanly. Exit code $missingExit."
-}
+$held = @()
+$heldKey = "$runtime.inkstruct-ci-hold"
+$absenceMethod = 'microsoft-uninstall'
+$restoreAction = '/install'
+$runtimeKeyHeld = $false
+try {
+    $remaining = RuntimeState
+    if ($remaining.installed -eq 1 -or ($remaining.system_files.Values | Where-Object { $_ })) {
+        # Visual Studio dependencies can keep the redistributable registered.
+        # On this disposable VM, hold only the application's known x64 runtime
+        # files and detection key. The real installer must see missing files.
+        $absenceMethod = 'held-runtime-files-and-registration'
+        $restoreAction = '/repair'
+        $system32 = (Resolve-Path -LiteralPath "$env:SystemRoot\System32").Path
+        foreach ($library in $libraries) {
+            $path = Join-Path $system32 $library
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+            $file = Get-Item -LiteralPath $path
+            if ($file.DirectoryName -ne $system32 -or $file.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint) -or
+                $file.VersionInfo.OriginalFilename -ne $library -or -not (IsMicrosoftExecutable $path) -or
+                (Test-Path -LiteralPath "$path.inkstruct-ci-hold")) {
+                throw "Unexpected runtime file at $path"
+            }
+            Rename-Item -LiteralPath $path -NewName "$library.inkstruct-ci-hold"
+            $held += $path
+        }
+        if (Test-Path -LiteralPath $runtime) {
+            if (Test-Path -LiteralPath $heldKey) { throw 'Unexpected held runtime key' }
+            Rename-Item -LiteralPath $runtime -NewName 'x64.inkstruct-ci-hold'
+            $runtimeKeyHeld = $true
+        }
+    }
 
-$installExit = Run $download @('/install', '/quiet', '/norestart')
-if ($installExit -notin @(0, 3010)) { throw "Microsoft redistributable failed. Exit code $installExit." }
-$after = RuntimeState
-if ($after.installed -ne 1 -or $after.system_files.Values -contains $null) {
-    throw 'The downloaded Microsoft runtime did not become available.'
+    $absent = RuntimeState
+    Write-Output ("$absenceMethod " + ($absent | ConvertTo-Json -Compress))
+    if ($absent.installed -eq 1 -or ($absent.system_files.Values | Where-Object { $_ })) {
+        throw 'The x64 runtime is still available.'
+    }
+    $target = Join-Path $Output 'should-not-be-installed'
+    $missingExit = Run $Installer @('/S', '/ISOLATED', "/D=$target")
+    if ($missingExit -ne 10 -or (Test-Path -LiteralPath $target)) {
+        throw "Missing runtime did not stop installation cleanly. Exit code $missingExit."
+    }
+
+    if ($runtimeKeyHeld) {
+        Rename-Item -LiteralPath $heldKey -NewName 'x64'
+        $runtimeKeyHeld = $false
+    }
+    $installExit = Run $download @($restoreAction, '/quiet', '/norestart')
+    if ($installExit -notin @(0, 3010)) { throw "Microsoft redistributable failed. Exit code $installExit." }
+    $after = RuntimeState
+    if ($after.installed -ne 1 -or $after.system_files.Values -contains $null) {
+        throw ("The downloaded Microsoft runtime did not restore every file: " + ($after | ConvertTo-Json -Compress))
+    }
+} finally {
+    if ($runtimeKeyHeld) { Rename-Item -LiteralPath $heldKey -NewName 'x64' }
+    foreach ($path in $held) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            Rename-Item -LiteralPath "$path.inkstruct-ci-hold" -NewName (Split-Path -Leaf $path)
+        }
+    }
 }
 [ordered]@{
     runner = $env:ImageOS
@@ -101,9 +147,11 @@ if ($after.installed -ne 1 -or $after.system_files.Values -contains $null) {
     before = $before
     removed = $removed
     absent = $absent
+    absence_method = $absenceMethod
     missing_runtime_exit = $missingExit
     no_partial_install = $true
     microsoft_download_sha256 = $runtimeHash
+    microsoft_restore_action = $restoreAction
     microsoft_install_exit = $installExit
     after = $after
 } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $Output 'clean-runtime.json')
