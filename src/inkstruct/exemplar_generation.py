@@ -19,7 +19,7 @@ from .trajectory_experiment import (
 )
 
 SOURCE_POLICY = 'complete_source_components_v1'
-SIMPLIFICATION_EPSILON = .004  # Frozen scx development choice; normalized output units.
+SIMPLIFICATION_EPSILON = .004  # Fixed simplification threshold; normalized output units.
 
 
 class SourceComponentGenerator:

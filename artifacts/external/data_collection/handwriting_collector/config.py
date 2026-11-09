@@ -81,4 +81,3 @@ class UiSettingsStore:
             except FileNotFoundError:
                 pass
             raise
-

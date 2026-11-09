@@ -12,9 +12,7 @@ import uuid
 import numpy as np
 
 from .models import Trajectory, is_cjk_character
-from .line_tasks import LineCollectionTask, LineTaskItem
 from .tasks import CollectionTask, TaskItem
-from .tasks import _atomic_json_write
 from .paths import native_path
 
 
@@ -164,164 +162,6 @@ class SampleStorage:
                 continue
         return recovered
 
-    def save_line_raw(
-        self,
-        *,
-        writer_id: str,
-        task: LineCollectionTask,
-        item: LineTaskItem,
-        trajectory: Trajectory,
-        char_ends: list[int],
-        canvas_width: int,
-        canvas_height: int,
-        device_pixel_ratio: float,
-        logical_dpi_x: float,
-        logical_dpi_y: float,
-        capture_route: str,
-        sample_id: str | None = None,
-    ) -> tuple[str, Path]:
-        writer = sanitize_writer_id(writer_id)
-        if task.writer_id != writer_id:
-            raise ValueError("当前书写者 ID 与整行任务创建时不一致")
-        if capture_route not in {"direct_surface", "moonlight_pen"}:
-            raise ValueError("未知的采集链路")
-        if task.capture_route != capture_route:
-            raise ValueError("当前采集链路与整行任务创建时不一致")
-        if item not in task.items:
-            raise ValueError("当前整行项目不属于该任务")
-        trajectory.validate(canvas_width, canvas_height)
-        ends = [int(value) for value in char_ends]
-        if len(ends) != len(item.text):
-            raise ValueError(
-                f"字符结束点数量应为 {len(item.text)}，实际为 {len(ends)}"
-            )
-        if any(right <= left for left, right in zip(ends, ends[1:])):
-            raise ValueError("字符结束点必须严格递增")
-        if not ends or ends[-1] != trajectory.point_count:
-            raise ValueError("最后一个字符结束点必须等于总点数")
-        stroke_ends: list[int] = []
-        count = 0
-        for stroke in trajectory.strokes:
-            count += len(stroke.points)
-            stroke_ends.append(count)
-        invalid_boundaries = [end for end in ends if end not in set(stroke_ends)]
-        if invalid_boundaries:
-            raise ValueError("字符结束点必须位于抬笔后的笔画末端")
-
-        sample_id = sample_id or str(uuid.uuid4())
-        json_path = (
-            self.root
-            / "line_samples"
-            / writer
-            / task.task_id
-            / f"{sample_id}.json"
-        )
-        if json_path.exists():
-            raise FileExistsError(f"整行样本目标已存在：{json_path}")
-        created_at = datetime.now(timezone.utc).isoformat()
-        payload = {
-            "schema_version": "handwriting_line_raw_v1",
-            "sample_id": sample_id,
-            "writer_id": writer_id,
-            "line_text": item.text,
-            "split": item.split,
-            "char_point_ends": ends,
-            "supersedes": item.sample_id
-            or (item.sample_history[-1] if item.sample_history else None),
-            "task": {
-                "task_id": task.task_id,
-                "item_id": item.item_id,
-                "source": task.source,
-                "source_index": item.source_index,
-            },
-            "capture": {
-                "created_at": created_at,
-                "input_type": "tablet",
-                "capture_route": capture_route,
-                "canvas_width": int(canvas_width),
-                "canvas_height": int(canvas_height),
-                "device_pixel_ratio": float(device_pixel_ratio),
-                "logical_dpi_x": float(logical_dpi_x),
-                "logical_dpi_y": float(logical_dpi_y),
-                "coordinate_space": "logical_px_qt_y_down",
-                "duration_ms": trajectory.duration_ms,
-            },
-            "strokes": [
-                stroke.to_dict(index) for index, stroke in enumerate(trajectory.strokes)
-            ],
-            "stats": {
-                "stroke_count": len(trajectory.strokes),
-                "point_count": trajectory.point_count,
-                "character_count": len(item.text),
-            },
-        }
-        _atomic_json_write(json_path, payload)
-        return sample_id, json_path
-
-    def reconcile_line_task(self, task: LineCollectionTask) -> int:
-        """Recover newest durable line samples missing from task state."""
-        recovered = 0
-        writer = sanitize_writer_id(task.writer_id)
-        sample_root = self.root / "line_samples" / writer / task.task_id
-        if not sample_root.exists():
-            return recovered
-        candidates: dict[str, tuple[float, Path, dict]] = {}
-        for path in sample_root.glob("*.json"):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-                task_data = payload.get("task", {})
-                if task_data.get("task_id") != task.task_id:
-                    continue
-                item_id = task_data["item_id"]
-                timestamp = path.stat().st_mtime
-                if item_id not in candidates or timestamp > candidates[item_id][0]:
-                    candidates[item_id] = (timestamp, path, payload)
-            except (OSError, KeyError, json.JSONDecodeError):
-                continue
-        for item in task.items:
-            if item.status == "completed" or item.item_id not in candidates:
-                continue
-            _, path, payload = candidates[item.item_id]
-            item.status = "completed"
-            item.sample_id = payload["sample_id"]
-            item.sample_path = path.relative_to(self.root).as_posix()
-            recovered += 1
-        return recovered
-
-
-def save_line_legacy(
-    output_root: Path,
-    writer_id: str,
-    line_text: str,
-    point_seq: np.ndarray,
-    char_points_idx: list[int],
-) -> Path:
-    writer = sanitize_writer_id(writer_id)
-    base_dir = Path(output_root) / "legacy" / writer
-    base_dir.mkdir(parents=True, exist_ok=True)
-    max_number = -1
-    for path in base_dir.glob(f"{writer}_line_*.npy"):
-        try:
-            max_number = max(max_number, int(path.stem.rsplit("_", 1)[1]))
-        except ValueError:
-            continue
-    name = f"{writer}_line_{max_number + 1:04d}"
-    npy_path = base_dir / f"{name}.npy"
-    sample = {
-        "point_seq": point_seq,
-        "line_text": line_text,
-        "char_points_idx": np.asarray(char_points_idx, dtype=np.int32),
-        "writer_id": writer_id,
-        "format_version": "diffink_v1_char_end",
-    }
-    with npy_path.open("xb") as stream:
-        np.save(stream, sample, allow_pickle=True)
-    text_dir = base_dir / name
-    text_dir.mkdir()
-    _write_legacy_text(text_dir, point_seq, line_text, char_points_idx, writer_id)
-    return npy_path
-
-
 def _write_legacy_text(
     directory: Path,
     point_seq: np.ndarray,
@@ -340,4 +180,3 @@ def _write_legacy_text(
         " ".join(map(str, char_points_idx)), encoding="utf-8"
     )
     (directory / "writer_id.txt").write_text(writer_id, encoding="utf-8")
-

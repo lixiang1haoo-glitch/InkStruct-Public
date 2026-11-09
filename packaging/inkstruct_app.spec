@@ -8,6 +8,12 @@ root = Path(SPECPATH).parent
 app_version = runpy.run_path(str(root / 'src/inkstruct/fonts/__init__.py'))['APP_VERSION']
 layout_preview = os.environ.get('INKSTRUCT_BUILD_LAYOUT_PREVIEW') == '1'
 product_name = 'InkStruct Layout Preview' if layout_preview else 'InkStruct'
+excluded = ['inkstruct.train','inkstruct.model','inkstruct.dataset','torch','torchvision',
+            'h5py','lmdb','pytest','scipy','pandas']
+if sys.platform == 'win32':
+    excluded += ['PySide6.QtPdf', 'PySide6.QtPdfWidgets']
+else:
+    excluded += ['inkstruct.editor.pdf_windows']
 
 def windows_version(executable):
     if sys.platform != 'win32':
@@ -36,14 +42,16 @@ hidden = collect_submodules('inkstruct', filter=lambda n: not any(
     n == 'inkstruct.' + part for part in ('train', 'model', 'dataset')))
 hidden += ['PySide6.QtTest', 'handwriting_collector.ui', 'handwriting_collector.canvas',
            'handwriting_collector.models', 'handwriting_collector.config',
-           'handwriting_collector.storage', 'handwriting_collector.tasks',
-           'handwriting_collector.line_tasks', 'handwriting_collector.exporter']
-data = [(str(root/'packaging/inkstruct_smoke.py'), '.'),
+           'handwriting_collector.storage', 'handwriting_collector.tasks']
+data = [(str(root/'LICENSE'), 'licenses/inkstruct'),
+        (str(root/'THIRD_PARTY_NOTICES.md'), 'licenses'),
+        (str(root/'third_party/runtime-licenses'), 'licenses/runtime'),
+        (str(root/'packaging/public-resources.lock.json'), 'licenses'),
+        (str(root/'packaging/inkstruct_smoke.py'), '.'),
         (str(root/'src/inkstruct/editor/resources'), 'inkstruct/editor/resources'),
         (str(root/'packaging/inkstruct_layout_smoke.py'), '.'),
         (str(root/'artifacts/structures/characters.sqlite3'), 'data'),
         (str(kernel/'handwriting_collector'), 'collector_kernel/handwriting_collector'),
-        (str(kernel/'handwriting_collector/assets'), 'handwriting_collector/assets'),
         (str(root/'configs'), 'configs'),
         (str(root/'third_party/makemeahanzi/graphics.txt'), 'third_party/makemeahanzi'),
         (str(root/'third_party/makemeahanzi/dictionary.txt'), 'third_party/makemeahanzi'),
@@ -53,15 +61,26 @@ data = [(str(root/'packaging/inkstruct_smoke.py'), '.'),
 # Exact source identities are used by reference correction and generation manifests.
 data += [(str(p), 'inkstruct') for p in (root/'src/inkstruct').glob('*.py')
          if p.stem not in ('train', 'model', 'dataset')]
-for package in ('inkstruct','numpy','Pillow','markdown-it-py','mdurl','PySide6','PySide6_Essentials','PySide6_Addons','shiboken6','matplotlib'):
-    data += copy_metadata(package)
+for package in ('numpy','Pillow','markdown-it-py','PySide6','matplotlib'):
+    data += copy_metadata(package, recursive=True)
+if sys.platform == 'win32':
+    data += copy_metadata('winrt-Windows.Data.Pdf', recursive=True)
+    data += [(str(root / 'packaging' / name), 'licenses')
+             for name in ('QT_SOURCES.md', 'qt-windows-sources.json')]
 entry = root/'packaging'/('inkstruct_layout_launcher.py' if layout_preview else 'inkstruct_launcher.py')
 a=Analysis([str(entry)],pathex=[str(root/'src'),str(kernel),str(root/'packaging')],
     hiddenimports=hidden,datas=data,
     hooksconfig={"matplotlib": {"backends": []}},
-    excludes=['inkstruct.train','inkstruct.model','inkstruct.dataset','torch','torchvision','h5py','lmdb','pytest','scipy','pandas'])
+    excludes=excluded)
 a.datas=[('inkstruct-smoke.py' if name=='inkstruct_smoke.py' else name,path,kind)
-         for name,path,kind in a.datas if '__pycache__' not in name and not name.endswith('.pyc')]
+         for name,path,kind in a.datas
+         if '__pycache__' not in name and not name.endswith('.pyc')
+         and not name.replace('\\','/').startswith('matplotlib/mpl-data/sample_data/')]
+if sys.platform == 'win32':
+    sys.path.insert(0, SPECPATH)
+    from windows_bundle import excluded_binary
+
+    a.binaries = [entry for entry in a.binaries if not excluded_binary(entry[0])]
 pyz=PYZ(a.pure)
 app_exe=EXE(pyz,a.scripts,[],exclude_binaries=True,name='InkStruct',console=False,
             version=windows_version('InkStruct'),

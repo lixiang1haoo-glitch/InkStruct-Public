@@ -2,6 +2,8 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
+0.1.70 将 v6.3 连笔支持接入桌面采集、生成与制包，Windows 安装和卸载界面使用简体中文。[发行记录](docs/RELEASE_0_1_70_WINDOWS.md) · [在线文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
+
 0.1.64 收紧设置、生成和采集页的短字段与滑块，长路径和搜索框随窗口伸展。见 [Windows 交付记录](docs/RELEASE_0_1_64_WINDOWS.md)。
 
 0.1.67 在「设置 › 应用设置 › 主题」提供跟随系统、浅色和深色，保存后立即切换。公式设置及印刷参考、手写预览使用当前主题配色。见 [Windows 交付记录](docs/RELEASE_0_1_67_WINDOWS.md)。

@@ -41,6 +41,23 @@ def source_snapshot():
         ROOT / "pyproject.toml",
         ROOT / "third_party/makemeahanzi/graphics.txt",
         ROOT / "third_party/makemeahanzi/dictionary.txt",
+        ROOT / "third_party/makemeahanzi/COPYING",
+        ROOT / "third_party/makemeahanzi/LGPL",
+        *sorted((ROOT / "third_party/makemeahanzi/APL").rglob("*.TXT")),
+        *sorted((ROOT / "third_party/runtime-licenses").glob("*.txt")),
+        ROOT / "LICENSE",
+        ROOT / "THIRD_PARTY_NOTICES.md",
+        ROOT / "packaging/public-resources.lock.json",
+        ROOT / "packaging/windows-x64-py313.lock",
+        ROOT / "packaging/prepare_public_resources.py",
+        ROOT / "packaging/verify_public_windows.py",
+        ROOT / "packaging/windows_bundle.py",
+        ROOT / "packaging/qt-windows-sources.json",
+        ROOT / "packaging/QT_SOURCES.md",
+        ROOT / "packaging/nsis-win.lock.json",
+        ROOT / "packaging/InkStruct.nsi",
+        ROOT / "packaging/build_windows_installer.py",
+        ROOT / "packaging/verify_windows_installer.py",
         *sorted((ROOT / "configs").rglob("*.json")),
         *sorted((ROOT / "configs/character_sets").glob("*.txt")),
         ROOT / "packaging/inkstruct_app.spec",
@@ -78,10 +95,18 @@ def main():
         )
     }
     before = source_snapshot()
+    if sys.platform == "win32":
+        versions["delvewheel"] = importlib.metadata.version("delvewheel")
     output.mkdir(parents=True, exist_ok=False)
     (output / "source-before.json").write_text(json.dumps(before, indent=2), encoding="utf-8")
     env = {**os.environ, "PYINSTALLER_CONFIG_DIR": str(output / "cache"),
            "INKSTRUCT_BUILD_LAYOUT_PREVIEW": "1" if args.layout_preview else "0"}
+    if sys.platform == "win32":
+        windows = Path(os.environ["SystemRoot"])
+        env["PATH"] = os.pathsep.join(str(path) for path in (
+            Path(sys.executable).parent, Path(sys.base_prefix), windows / "System32", windows
+        ))
+    windows_validation = {}
     with (output / "build.log").open("w", encoding="utf-8") as log:
         subprocess.run(
             [
@@ -101,10 +126,15 @@ def main():
             stderr=subprocess.STDOUT,
             check=True,
         )
+        if sys.platform == "win32":
+            from windows_bundle import prepare_windows_bundle
+
+            windows_validation = prepare_windows_bundle(output / "dist/InkStruct", log)
     if before != source_snapshot():
         raise ValueError("构建期间源码发生变化，当前包不可作为冻结版本验收；请检查后重建")
     bundle_validation = (
-        validate_macos_bundle(output / "dist/InkStruct.app") if sys.platform == "darwin" else {}
+        validate_macos_bundle(output / "dist/InkStruct.app")
+        if sys.platform == "darwin" else windows_validation
     )
     (output / "build-provenance.json").write_text(
         json.dumps(

@@ -18,7 +18,7 @@ def test_missing_index_and_method_specific_state_do_not_enable_generation(tmp_pa
     db = tmp_path / 'structure'
     db.write_bytes(b'db')
     flow = GenerationWorkflow(tmp_path/'work', db)
-    assert list(METHODS) == ['v62', 'v61', 'v4']
+    assert list(METHODS) == ['v63', 'v62', 'v61', 'v4']
     ready = flow.readiness('alice', str(source), 'v4')
     assert ready['import'] and ready['start'] and not ready['profile'] and not ready['generate']
     with pytest.raises(ValueError, match='导入'):
@@ -197,7 +197,7 @@ from inkstruct.generation_targets import target_manifest
 app=QtWidgets.QApplication([])
 w=main(['check'], create_only=True, workspace=Path(sys.argv[1]), database=Path(sys.argv[1])/'no-db')
 f=w.centralWidget()
-assert f.method.count()==3 and f.method.currentData()=='v62'
+assert f.method.count()==4 and f.method.currentData()=='v63'
 assert not f.generate_button.isEnabled()
 assert not hasattr(f,'trajectory_mode') and not hasattr(f,'source_profile')
 assert 'CUDA' not in ''.join(x.text() for x in f.findChildren(QtWidgets.QLabel))
@@ -212,7 +212,7 @@ assert '目录' in f.log.toPlainText()
 assert not f.generate_button.isEnabled()
 f.method.setCurrentIndex(1)
 fresh=main(['check'], create_only=True, workspace=Path(sys.argv[1]))
-assert fresh.centralWidget().method.currentData()=='v62'
+assert fresh.centralWidget().method.currentData()=='v63'
 QtCore.QThreadPool.globalInstance().waitForDone()
 '''
     result = subprocess.run([sys.executable, '-c', code, str(tmp_path)], env={**os.environ,'QT_QPA_PLATFORM':'offscreen'}, capture_output=True, text=True, timeout=15, check=False)

@@ -40,6 +40,21 @@ def batch_info(run, writer):
     from .importer import _read
 
     root = Path(run)
+    grouped = root / "v63-run.json"
+    if grouped.is_file():
+        from ..v63 import RUN
+        data = _read(grouped)
+        if data.get("schema_version") != RUN or data.get("writer") != writer:
+            raise ValueError("连笔批次协议或书写者不符")
+        completed = tuple(data["files"])
+        failed = [{"character": char, "reason": reason} for char, reason in data["failed"].items()]
+        date = (datetime.fromisoformat(data["created_at"]).astimezone() if "created_at" in data
+                else datetime.fromtimestamp(grouped.stat().st_mtime).astimezone())
+        requested = data.get("requested", (*completed, *data["failed"]))
+        return {"path": root, "characters": completed, "target": len(requested),
+                "date": date, "method": "v6.3 exp", "status": "failed" if not completed else
+                "completed_with_errors" if failed else "completed",
+                "protocol": True, "failed": failed, "pending": [], "has_pool": False}
     protocol = (root / "protocol.json").is_file()
     manifest = root / ("protocol.json" if protocol else "manifest.json")
     if not manifest.is_file() and (root / "trajectories").is_dir():
@@ -259,7 +274,7 @@ def review_selection(writer, run, symbols, name, groups=None, *, rules=Publicati
             count = 1
             if batch["has_pool"]:
                 row = _read(batch["path"] / writer / f"{ord(char):04X}.json")
-                count = row.get("candidate_count", 1)
+                count = row.get("total_candidate_count", row.get("candidate_count", 1))
                 if type(count) is not int or not 1 <= count <= MAX_CANDIDATES:
                     raise ValueError("汉字候选数量无效：" + char)
             coverage["han", "generated", char] += count

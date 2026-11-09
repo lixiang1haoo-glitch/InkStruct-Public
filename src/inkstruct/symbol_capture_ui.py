@@ -66,7 +66,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             root = QtWidgets.QVBoxLayout(self)
             top = QtWidgets.QHBoxLayout()
             top.addWidget(QtWidgets.QLabel("书写者 ID"))
-            self.writer_edit = QtWidgets.QLineEdit("user_001")
+            self.writer_edit = QtWidgets.QLineEdit("demo_writer")
             self.writer_edit.setMaximumWidth(160)
             top.addWidget(self.writer_edit)
             top.addStretch()
@@ -433,6 +433,5 @@ def install_symbol_tab(window, collector_ui, QtCore, QtGui, QtWidgets):
     window.installEventFilter(window.symbol_close_guard)
     # The external collector uses window-wide shortcuts. Scope existing actions so
     # Enter in the symbol tab cannot also save a pending Han sample.
-    for widget in (window.single_widget, window.line_widget):
-        for action in widget.actions():
-            action.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+    for action in window.single_widget.actions():
+        action.setShortcutContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)

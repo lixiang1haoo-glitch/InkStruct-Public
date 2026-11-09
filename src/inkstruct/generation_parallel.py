@@ -58,7 +58,8 @@ def _session(config, cancelled=lambda: False):
     base = FrozenStructureRepository(config['database'], cancelled)
     return prepare_generation(config['writer'], base, config['profile'], semantic=config['semantic'],
                               reference_paths=config['references'], cancelled=cancelled,
-                              candidate_limit=config.get('candidate_limit', 1))
+                              candidate_limit=config.get('candidate_limit', 1),
+                              same_character=config.get('same_character', False))
 
 
 def _worker(connection, config, cancel_event):
@@ -88,7 +89,8 @@ def _worker(connection, config, cancel_event):
         connection.close()
 
 
-def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit=None):
+def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit=None, connected=False,
+               same_character=False):
     """Only committed rows with matching complete payloads can leave staging."""
     from .generation_workflow import read
     # In-memory tuples in provenance are JSON arrays on disk. Compare the exact
@@ -117,16 +119,22 @@ def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit
     from .generation_variants import candidate_payloads
     candidate_payloads(payload, row, writer=writer, character=character, profile_hash=profile_hash,
                        limit=candidate_limit)
+    if connected or "connected_candidates" in payload:
+        from .v63_package import verify_connected_candidates
+        verify_connected_candidates(payload, row, writer, character,
+                                    candidate_limit if connected else None, same_character)
     return path
 
 
 def run_generation(output, writer, characters, base, profile_record, progress, cancelled, *,
-                   semantic=False, workers='auto', target_manifest=None, candidate_limit=1, _context=None, timeout=300):
+                   semantic=False, workers='auto', target_manifest=None, candidate_limit=1, _context=None,
+                   timeout=300, same_character=False):
     from .generation_workflow import corrections, write
     from .generation_variants import MAX_CANDIDATES
     if type(candidate_limit) is not int or not 1 <= candidate_limit <= (MAX_CANDIDATES if semantic else 1):
         raise ValueError("无效的生成候选数量")
     characters = list(characters)
+    connected = profile_record.get('connected')
     if not characters or len(set(characters)) != len(characters) or any(len(c) != 1 for c in characters):
         raise ValueError('生成目标必须是非空、去重的受支持单字符列表')
     if target_manifest is None:
@@ -162,7 +170,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
 
     def accept(character, row, staging):
         payload = verify_row(staging, writer, character, row, profile_record['sha256'],
-                             candidate_limit=candidate_limit)
+                             candidate_limit=candidate_limit, connected=connected is not None,
+                             same_character=same_character)
         if character in rows:
             raise ValueError('同一字符重复提交')
         dest = output / writer
@@ -192,7 +201,10 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
         folder.mkdir()
         database = folder / 'characters.sqlite3'
         freeze_database(base.path, database, cancelled)
-        paths = [Path(profile_record['path']), *corrections()]
+        references = corrections()
+        paths = [Path(profile_record['path']), *references]
+        if connected is not None:
+            paths.append(Path(connected['path']))
         copied = []
         origins = {}
         for index, path in enumerate(paths):
@@ -208,9 +220,14 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
         if sha256_file(copied[0]) != profile_record['sha256']:
             raise ValueError('作者档案已改变，请重新建档')
         config = {'writer': writer, 'database': str(database), 'semantic': semantic, 'candidate_limit': candidate_limit,
+                  'same_character': same_character,
                   'profile': {**profile_record, 'path': str(copied[0]), 'original_path': str(paths[0])},
-                  'references': [str(p) for p in copied[1:]],
+                  'references': [str(p) for p in copied[1:1+len(references)]],
                   'hashes': {str(p): sha256_file(p) for p in [database, *copied]}}
+        if connected is not None:
+            if sha256_file(copied[-1]) != connected['sha256']:
+                raise ValueError('作者连笔档案已改变，请重新建档')
+            config['profile']['connected'] = {**connected, 'path': str(copied[-1])}
         write(folder / 'identity.json', {'schema': 'inkstruct-generation-resources-v1',
               'origins': origins, 'snapshot_hashes': config['hashes'], 'donor_scope': 'entire verified author profile'})
         execution['resource_preparation_s'] = time.perf_counter() - started
@@ -306,8 +323,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
               'warning_characters': [c for c in complete if rows[c]['warnings']],
               'method': protocol.get('method', 'v6.2 exp' if semantic else 'v6.1 exp'),
               'version': protocol.get('version'), 'execution': execution, 'pending': protocol['pending']}
-    if candidate_limit > 1:
-        result.update(candidate_count=sum(rows[c]['candidate_count'] for c in complete),
-                      variant_character_count=sum(rows[c]['candidate_count'] > 1 for c in complete))
+    if candidate_limit > 1 or connected is not None:
+        counts = [rows[c].get('total_candidate_count', rows[c].get('candidate_count', 1)) for c in complete]
+        result.update(candidate_count=sum(counts), variant_character_count=sum(n > 1 for n in counts))
     write(output/'summary.json', result)
     return result

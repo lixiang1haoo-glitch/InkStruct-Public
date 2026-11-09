@@ -243,4 +243,3 @@ def _atomic_json_write(path: Path, value: dict) -> None:
         except FileNotFoundError:
             pass
         raise
-

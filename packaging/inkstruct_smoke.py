@@ -626,12 +626,12 @@ def verify_generation(w, out, wait, profile_path):
         widget.generation_progress.emit(value)
         # Completion is intentionally unordered. Wait for the chosen prefix's
         # commit markers, not merely any twelve results, before cancellation.
-        if all((limited/'user_001'/f'{ord(c):04X}.json').is_file() for c in manifest['requested'][:12]):
+        if all((limited/'demo_writer'/f'{ord(c):04X}.json').is_file() for c in manifest['requested'][:12]):
             stop.set()
     def builtin_compute():
-        result = generate_v61(limited, 'user_001', manifest['requested'], StructureRepository(database_path()),
+        result = generate_v61(limited, 'demo_writer', manifest['requested'], StructureRepository(database_path()),
             profile, builtin_progress, stop.is_set, semantic=True, workers=2, target_manifest=manifest)
-        return {**result, 'writer': 'user_001', 'output': str(limited), 'message': '完整内置字表边界与取消验收'}
+        return {**result, 'writer': 'demo_writer', 'output': str(limited), 'message': '完整内置字表边界与取消验收'}
     widget.submit(builtin_compute, cancellable=True)
     wait(lambda: not widget.busy, 300)
     limited_result = json.loads((limited/'summary.json').read_text('utf-8'))
@@ -640,22 +640,22 @@ def verify_generation(w, out, wait, profile_path):
     assert json.loads((limited/'target-manifest.json').read_text('utf-8')) == manifest
     subset = manifest['requested'][:12]
     baseline = out/'builtin-subset-serial'
-    subset_result = generate_v61(baseline, 'user_001', subset, StructureRepository(database_path()),
+    subset_result = generate_v61(baseline, 'demo_writer', subset, StructureRepository(database_path()),
         profile, None, lambda: False, semantic=True, workers=1)
     assert subset_result['completed_count'] == len(subset)
     for c in subset:
-        a = json.loads(gzip.decompress((limited/'user_001'/f'{ord(c):04X}.json.gz').read_bytes()))
-        b = json.loads(gzip.decompress((baseline/'user_001'/f'{ord(c):04X}.json.gz').read_bytes()))
+        a = json.loads(gzip.decompress((limited/'demo_writer'/f'{ord(c):04X}.json.gz').read_bytes()))
+        b = json.loads(gzip.decompress((baseline/'demo_writer'/f'{ord(c):04X}.json.gz').read_bytes()))
         assert a == b  # donor choices/geometry/pressure/times/warnings unaffected by target scope
     reports = []
     authority = None
     for workers in (1, 2, 4):
         path = out/f'generation-{workers}'
         def compute(workers=workers, path=path):
-            result = generate_v61(path, 'user_001', characters, StructureRepository(database_path()),
+            result = generate_v61(path, 'demo_writer', characters, StructureRepository(database_path()),
                                   profile, widget.generation_progress.emit, lambda: False,
                                   semantic=True, workers=workers)
-            return {**result, 'writer': 'user_001', 'output': str(path), 'message': '真实档案生成验收完成'}
+            return {**result, 'writer': 'demo_writer', 'output': str(path), 'message': '真实档案生成验收完成'}
         w.tabs.setCurrentIndex(1)
         widget.submit(compute, cancellable=True)
         wait(lambda: not widget.busy, 300)
@@ -664,7 +664,7 @@ def verify_generation(w, out, wait, profile_path):
         assert result['completed_count'] == len(characters) and not result['failed_count'], result
         if workers > 1:
             assert result['execution']['workers'] > 1 and result['execution']['fallback'] is None, result
-        actual = {c: json.loads(gzip.decompress((path/'user_001'/f'{ord(c):04X}.json.gz').read_bytes())) for c in characters}
+        actual = {c: json.loads(gzip.decompress((path/'demo_writer'/f'{ord(c):04X}.json.gz').read_bytes())) for c in characters}
         if authority is None:
             authority = actual
         else:
@@ -950,6 +950,8 @@ def verify_large_fonts(window, out, wait, paths):
 
 
 def verify_windows_style(window, app, out, font_path=None):
+    from PIL import Image
+    from inkstruct.document.images import RasterResource
     from inkstruct.global_defaults import GlobalDefaultsStore
     from inkstruct.settings_dialog import SettingsDialog
     from inkstruct.theme import theme_preference
@@ -957,6 +959,11 @@ def verify_windows_style(window, app, out, font_path=None):
     assert app.platformName() == "windows"
     assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
     assert app.property("inkstructDesktopStyle") == "windows11"
+    assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
+    jpeg = out / "synthetic-reference.jpg"
+    Image.new("RGB", (120, 60), (90, 20, 150)).save(jpeg)
+    raster = RasterResource.from_file(jpeg, jpeg.name)
+    assert (raster.width_px, raster.height_px) == (120, 60)
     dialog = SettingsDialog(window.editor, window.collector, window, category="body")
     dialog.show()
     spin = dialog.pages["body"].style.controls["em_mm"]
@@ -1038,6 +1045,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "dpr": dialog.devicePixelRatio(), "schemes": reports,
             "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
+            "jpeg_reference_imported": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
@@ -1062,7 +1070,7 @@ def main():
     parser.add_argument('--windows-style-check', action='store_true')
     parser.add_argument('--large-font-check', action='store_true')
     parser.add_argument('--large-font', action='append', type=Path, default=[])
-    parser.add_argument("--writer", default="scx")
+    parser.add_argument("--writer", default="demo_writer")
     parser.add_argument("--export-only", action="store_true")
     args = parser.parse_args()
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,

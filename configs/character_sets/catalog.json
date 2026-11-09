@@ -1,16 +1,11 @@
 {
   "schema": "inkstruct-character-set-catalog-v1",
-  "revision": "2026-10-22.1",
+  "revision": "2026-11-09.public.1",
   "sources": [
     {
       "file": "Unihan-17.0.0.zip",
       "sha256": "f7a48b2b545acfaa77b2d607ae28747404ce02baefee16396c5d2d7a8ef34b5e",
       "url": "https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip"
-    },
-    {
-      "file": "tw-common-4808.ods",
-      "sha256": "e97e29ed2aa222bbfc12c18a6d96f0270440b1d73f64366d9ad22d7fe9012408",
-      "url": "https://language.moe.gov.tw/uploads/files/17694982751710.ods"
     }
   ],
   "sets": [
@@ -39,28 +34,6 @@
       "errata": []
     },
     {
-      "id": "tw-common-1982",
-      "title": "繁体 · 常用國字標準字體表（台湾）",
-      "version": "1982",
-      "region": "TW",
-      "count": 4808,
-      "file": "tw-common-1982.json",
-      "scope": "教育部 ODS 全表 4808 字，依 A 字号排列；不含次常用、罕用字",
-      "url": "https://language.moe.gov.tw/material/info?m=9fe3ff5a-5a8c-4817-9e60-6337dd55a509",
-      "unicode_version": "17.0.0",
-      "errata": [
-        {
-          "record": "A02149",
-          "source_unicode_column": "6c69",
-          "source_character_column": "汨",
-          "used_codepoint": "U+6C68",
-          "policy": "use explicit character column; retain conflicting Unicode column, no normalization",
-          "corroboration": "https://dict.variants.moe.edu.tw/dictView.jsp?ID=23423",
-          "corroboration_version": "2024 正式七版 A02149 汨; B02035 汩 is 次常用"
-        }
-      ]
-    },
-    {
       "id": "traditional-tgh-unihan17",
       "title": "繁体扩展 · 8105 字的 Unihan 全对应（派生）",
       "version": "TGH 2013 + Unihan 17.0.0",
@@ -76,11 +49,10 @@
   "files": {
     "cn-tgh-2013.json": "c758edf190556374b2bd322223558b518f43e86be9eb512d63a32e4b36fbb89e",
     "traditional-gb12345-1990.json": "ecc024dc0dca47cb646086fc15d40b904eee0b506aa24f33f8ec85237235cf7f",
-    "tw-common-1982.json": "7e2c6687ff781b44e937bfb2c12a57d404606fab3673239151136a412736857b",
     "traditional-tgh-unihan17.json": "4cac131e5aab8b7ec67afd6ce85d3cb62a6e43fb2c770d6b362e74d5756cfe76",
     "relations.json": "f1eb1f0a1cdbde04617ca5d1f2dfcc31f0171d0175db37b80de46e6bfe97ef79",
     "UNICODE-LICENSE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
-    "NOTICE.txt": "cdfcb4d2ff647c7b7e195b9de411d099a6aad4a147c8c4a3aea68583577a70a3"
+    "NOTICE.txt": "7087b8616c3bfc72bef831558c46559540f7d2864bdd119adf0af6f10203b726"
   },
   "relation_documentation": "https://www.unicode.org/reports/tr38/tr38-39.html",
   "policy": "Literal character identities. Membership and relations are separate. Full donor pool remains independent.",

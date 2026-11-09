@@ -129,26 +129,3 @@ class Trajectory:
         seq[-1, 3] = 0.0
         seq[-1, 4] = 1.0
         return seq, [len(seq)]
-
-    def to_line_point_seq(self, char_ends: list[int]) -> tuple[np.ndarray, list[int]]:
-        """Convert a line trajectory using 1-based character end indices."""
-        if self.point_count == 0:
-            raise ValueError("没有轨迹数据")
-        ends = sorted(set(int(value) for value in char_ends))
-        if not ends or ends[-1] != self.point_count:
-            raise ValueError("最后一个字符结束点必须等于总点数")
-        seq = np.zeros((self.point_count, 5), dtype=np.float32)
-        row = 0
-        for stroke in self.strokes:
-            for point in stroke.points:
-                seq[row, 0:2] = (point.x, point.y)
-                seq[row, 2] = 1.0
-                row += 1
-            if stroke.points:
-                seq[row - 1, 2] = 0.0
-                seq[row - 1, 3] = 1.0
-        for end in ends:
-            if end < 1 or end > len(seq):
-                raise ValueError("字符结束点超出轨迹范围")
-            seq[end - 1, 2:5] = (0.0, 0.0, 1.0)
-        return seq, ends

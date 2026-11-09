@@ -106,8 +106,9 @@ def main(directory=None):
             response.update(render(request, directory, service))
         except Exception as error:  # noqa: BLE001 - isolated process boundary
             response['error'] = str(error)
-        sys.stdout.write(json.dumps(response, ensure_ascii=False) + '\n')
-        sys.stdout.flush()
+        line = json.dumps(response, ensure_ascii=False) + '\n'
+        sys.stdout.buffer.write(line.encode('utf-8'))
+        sys.stdout.buffer.flush()
     return 0 if app else 1
 
 

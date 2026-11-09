@@ -2,7 +2,7 @@
 
 团队成员可先查看 [GitHub 协作与环境准备](COLLABORATION.md)。
 
-当前主应用版本：[0.1.67](RELEASE_0_1_67_WINDOWS.md)，采用左侧导航、左下字体库、模板库及设置，保留4 GiB展开字体和可选同字成品数量。另见 [AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) 与 [换行/分页/换框](TEXT_FLOW_BREAK_COMMANDS.md)。
+当前主应用版本为 [0.1.70](RELEASE_0_1_70_WINDOWS.md)。使用 v6.3 生成连笔汉字，现有字体和文档可继续打开。[AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) · [在线使用与开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
 
 历史交付：[0.1.45界面整理](RELEASE_0_1_45_WINDOWS.md)的验收与实验记录继续保留。
 
