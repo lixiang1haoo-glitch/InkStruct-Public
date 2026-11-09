@@ -12,7 +12,7 @@ def test_dark_host_uses_light_controls_without_document_changes(tmp_path, dpi):
     program = r"""
 import sys,time
 from pathlib import Path
-from PySide6 import QtCore,QtGui,QtWidgets
+from PySide6 import QtCore,QtGui,QtTest,QtWidgets
 from inkstruct.application import InkStructWindow
 from inkstruct.settings_dialog import SettingsDialog
 from inkstruct.theme import use_light_theme
@@ -44,10 +44,13 @@ option=QtWidgets.QStyleOptionSpinBox()
 spin.initStyleOption(option)
 step_rect=spin.style().subControlRect(QtWidgets.QStyle.CC_SpinBox,option,QtWidgets.QStyle.SC_SpinBoxUp,spin)
 assert step_rect.width() >= 20, step_rect
-spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-spin.initStyleOption(option)
-assert spin.style().subControlRect(QtWidgets.QStyle.CC_SpinBox,option,QtWidgets.QStyle.SC_SpinBoxUp,spin).isEmpty()
-spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.UpDownArrows)
+unstepped=QtWidgets.QSpinBox()
+unstepped.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+unstepped.setValue(3)
+unstepped.show();app.processEvents()
+QtTest.QTest.mouseClick(unstepped,QtCore.Qt.LeftButton,pos=QtCore.QPoint(unstepped.width()-8,6))
+assert unstepped.value()==3
+unstepped.close()
 d=SettingsDialog(w.editor,w.collector,w,category='capture');d.show()
 for key in d.items:
     d.select(key);app.processEvents()
