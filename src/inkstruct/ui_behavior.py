@@ -21,6 +21,37 @@ def compact_field(control, *, maximum=None):
     return control
 
 
+class AdaptiveActions(QtWidgets.QWidget):
+    """Keep a group of desktop commands compact and give it two rows in narrow layouts."""
+
+    def __init__(self, buttons, parent=None):
+        super().__init__(parent)
+        self.buttons = tuple(buttons)
+        self.grid = QtWidgets.QGridLayout(self)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(6)
+        self.grid.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        policy = self.sizePolicy()
+        policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Ignored)
+        self.setSizePolicy(policy)
+        self.columns = 0
+        self.arrange(2)
+
+    def arrange(self, columns):
+        if columns == self.columns:
+            return
+        self.columns = columns
+        for index, button in enumerate(self.buttons):
+            self.grid.removeWidget(button)
+            self.grid.addWidget(button, *divmod(index, columns))
+
+    def resizeEvent(self, event):
+        count = len(self.buttons)
+        full_width = sum(button.sizeHint().width() for button in self.buttons) + self.grid.spacing() * (count - 1)
+        self.arrange(count if event.size().width() >= full_width else 2)
+        super().resizeEvent(event)
+
+
 def open_containing_folder(path):
     folder = Path(path).resolve().parent
     if not folder.is_dir() or not QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder))):

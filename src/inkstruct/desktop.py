@@ -21,9 +21,8 @@ def _qt():
 def main(argv=None, *, create_only=False, workspace=None, database=None):
     QtCore, QtWidgets = _qt()
     from .generation_progress_ui import GenerationProgress
-    from .editor.wrapping import WrappingLayout
     from .theme import set_tone
-    from .ui_behavior import compact_field
+    from .ui_behavior import AdaptiveActions, compact_field
 
     if find_spec("handwriting_collector") is None:
         from .collector import _collector_source
@@ -150,8 +149,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             target_layout = QtWidgets.QVBoxLayout(target_area)
             target_layout.setContentsMargins(0, 0, 0, 0)
             target_layout.setSpacing(6)
-            target_actions = WrappingLayout()
-            target_layout.addLayout(target_actions)
+            target_layout.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetMinimumSize)
             self.target_builtin_button = QtWidgets.QPushButton('内置字表…')
             self.target_builtin_button.clicked.connect(self.choose_builtin_targets)
             self.target_file_button = QtWidgets.QPushButton('导入字表…')
@@ -161,8 +159,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_file_button.clicked.connect(self.choose_target_file)
             self.target_document_button.clicked.connect(self.choose_target_document)
             self.target_current_button.clicked.connect(self.choose_current_document)
-            for button in (self.target_builtin_button, self.target_file_button, self.target_document_button, self.target_current_button):
-                target_actions.addWidget(button)
+            target_layout.addWidget(AdaptiveActions((self.target_builtin_button, self.target_file_button,
+                                                      self.target_document_button, self.target_current_button)))
             self.target_summary = QtWidgets.QLabel('尚未选择生成内容。自定义字表可导入 UTF-8 TXT 或 CSV。')
             self.target_summary.setWordWrap(True)
             self.target_summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
