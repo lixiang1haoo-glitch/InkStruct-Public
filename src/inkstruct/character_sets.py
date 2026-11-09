@@ -8,7 +8,7 @@ import sys
 
 from .generation_targets import fingerprint, target_manifest
 
-CATALOG_SHA256 = '262c98e1e1dbdf257ec447b0072be8da0582c830343a90923b73884e22ce4b02'
+CATALOG_SHA256 = 'ea9da019cedf283f40d94a6d4759fafa2459f8b41d770ef111b9efd9988dea8a'
 
 
 def data_root():

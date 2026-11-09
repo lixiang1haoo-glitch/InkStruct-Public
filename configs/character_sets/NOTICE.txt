@@ -1,1 +1,6 @@
-Character identities and variant relations extracted from Unicode Unihan 17.0.0. See UNICODE-LICENSE.txt. The character sets use the kTGH and kGB1 properties. No government fonts, glyph outlines or scanned standards are included.
+Character facts: Unicode Unihan 17.0.0 (Unicode License V3), GB/T 12345-1990,
+PRC General Standard Chinese Characters 2013, Taiwan MOE common standard characters 1982.
+Taiwan data: Ministry of Education, R.O.C.; factual characters/identifiers only.
+No government font, dictionary definition, scanned page or glyph outline is distributed here.
+Complete original downloads and SHA-256 receipts are retained with the release validation.
+Scope and the A02149 source-column discrepancy are explicitly recorded in catalog.json.
