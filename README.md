@@ -2,7 +2,7 @@
 
 把自己的笔迹做成可复用的字体，再用它排出一页 Markdown。InkStruct 在本机完成采集、生成、制包和排版。
 
-[项目特色](#项目特色) · [下载](#下载) · [从笔迹到文档](#从笔迹到文档) · [源码构建](#源码构建) · [使用说明](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
+[项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
 Windows x64 · 0.1.69 · Python / Qt
 
@@ -20,6 +20,8 @@ Windows x64 · 0.1.69 · Python / Qt
 源码、Qt 对应源码及校验清单也在发行页提供。[源码标签](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.69) · [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)
 
 ## 从笔迹到文档
+
+第一次使用可以跟着[《从录字到排版：做出你的第一份手写文档》](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/first-document.html)操作。教程用三份笔迹排出一段短文，并说明如何处理缺字。
 
 1. **采集。** 创建书写者和任务，用数位笔录制汉字、标点与扩展字符。
 2. **生成。** 选作者、样本目录和目标字。开始生成时会按样本状态自动准备作者档案。
