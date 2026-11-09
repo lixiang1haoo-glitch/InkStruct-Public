@@ -26,7 +26,9 @@ def main():
         for stream in (sys.stdout, sys.stderr):
             if stream is not None:
                 stream.reconfigure(encoding='utf-8')
-        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        os.environ["QT_QPA_PLATFORM"] = "windows" if (
+            sys.platform == "win32" and "--windows-style-check" in sys.argv[2:]
+        ) else "offscreen"
         script = Path(sys._MEIPASS) / "inkstruct-smoke.py"
         sys.argv = [str(script), *sys.argv[2:]]
         runpy.run_path(str(script), run_name="__main__")

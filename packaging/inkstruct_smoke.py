@@ -1,4 +1,4 @@
-"""Headless integrated check; never claims native focus or tablet validation."""
+"""Packaged application checks in isolated workspaces."""
 
 import argparse
 import hashlib
@@ -949,6 +949,51 @@ def verify_large_fonts(window, out, wait, paths):
         'mode': 'offscreen frozen/source check; native focus, responsiveness and tablet not certified'}
 
 
+def verify_windows_style(window, app, out):
+    from inkstruct.settings_dialog import SettingsDialog
+
+    assert app.platformName() == "windows"
+    assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
+    assert app.property("inkstructDesktopStyle") == "windows11"
+    dialog = SettingsDialog(window.editor, window.collector, window, category="body")
+    dialog.show()
+    spin = dialog.pages["body"].style.controls["em_mm"]
+    reports = {}
+    try:
+        for scheme in (QtCore.Qt.ColorScheme.Light, QtCore.Qt.ColorScheme.Dark):
+            app.styleHints().setColorScheme(scheme)
+            app.processEvents()
+            surface = dialog.palette().color(QtGui.QPalette.ColorRole.Window)
+            assert app.styleHints().colorScheme() == scheme
+            assert (surface.lightness() < 128) == (scheme == QtCore.Qt.ColorScheme.Dark)
+            option = QtWidgets.QStyleOptionSpinBox()
+            spin.initStyleOption(option)
+            step = spin.style().subControlRect(
+                QtWidgets.QStyle.ComplexControl.CC_SpinBox, option,
+                QtWidgets.QStyle.SubControl.SC_SpinBoxUp, spin,
+            )
+            before = spin.value()
+            QtTest.QTest.mouseClick(spin, QtCore.Qt.MouseButton.LeftButton, pos=step.center())
+            assert not step.isEmpty() and spin.value() == before + spin.singleStep()
+            reports[scheme.name] = {"surface": surface.name(), "stepper": [step.width(), step.height()]}
+        record = {
+            "app_version": APP_VERSION, "frozen": bool(getattr(sys, "frozen", False)),
+            "platform": app.platformName(), "style": app.property("inkstructDesktopStyle"),
+            "profile": "focused-qss" if app.styleSheet() else "native",
+            "dpr": dialog.devicePixelRatio(), "schemes": reports,
+        }
+        (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    finally:
+        dialog.reject()
+        window.editor.timer.stop()
+        if window.editor.cancelled:
+            window.editor.cancelled.set()
+        window.editor.pool.waitForDone()
+        QtCore.QThreadPool.globalInstance().waitForDone()
+        window.editor.dirty = False
+        window.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
@@ -957,6 +1002,7 @@ def main():
     parser.add_argument('--generation-profile', type=Path)
     parser.add_argument('--candidate-check', action='store_true')
     parser.add_argument('--math-settings-check', action='store_true')
+    parser.add_argument('--windows-style-check', action='store_true')
     parser.add_argument('--large-font-check', action='store_true')
     parser.add_argument('--large-font', action='append', type=Path, default=[])
     parser.add_argument("--writer", default="scx")
@@ -965,7 +1011,12 @@ def main():
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
-    if args.large_font_check:
+    if args.windows_style_check:
+        if sys.platform != "win32" or any((args.font, args.samples, args.generation_profile,
+                                           args.candidate_check, args.math_settings_check,
+                                           args.large_font_check, args.large_font, args.export_only)):
+            parser.error('--windows-style-check is a separate Windows-only check')
+    elif args.large_font_check:
         if (len(args.large_font) != 2 or len({p.resolve() for p in args.large_font}) != 2
                 or any(not p.is_file() for p in args.large_font)):
             parser.error('--large-font-check requires two distinct existing --large-font archives')
@@ -980,7 +1031,7 @@ def main():
         parser.error('--font and --samples are required unless --generation-profile is supplied')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    if args.large_font_check or args.math_settings_check:
+    if args.large_font_check or args.math_settings_check or args.windows_style_check:
         # Recovery files must be private too, not only Qt preferences/workspace.
         os.environ['INKSTRUCT_LAYOUT_PREVIEW_HOME'] = str(out / 'private')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["InkStructCheck"])
@@ -1016,6 +1067,9 @@ def main():
     QtWidgets.QMessageBox.critical = lambda *a: notices.append(str(a[2]))
     w = InkStructWindow(workspace=out / "workspace")
     w.show()
+    if args.windows_style_check:
+        verify_windows_style(w, app, out)
+        return
     assert app.styleHints().colorScheme() != QtCore.Qt.ColorScheme.Dark
     assert app.palette().color(QtGui.QPalette.Window).lightness() > 230
     assert app.palette().color(QtGui.QPalette.Base).lightness() > 230
