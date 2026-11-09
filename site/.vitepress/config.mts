@@ -33,6 +33,8 @@ export default defineConfig({
         { text: 'CLI 与快速开始', link: '/developers/cli' },
         { text: '字体包 .inkfont', link: '/developers/inkfont' },
         { text: '项目文档 .inkdoc', link: '/developers/inkdoc' },
+        { text: '排版输入与模板', link: '/developers/layout-inputs' },
+        { text: '采集、生成与字形来源', link: '/developers/glyph-sources' },
       ] },
     ],
     outline: { level: [2, 3], label: '本页大纲' },
