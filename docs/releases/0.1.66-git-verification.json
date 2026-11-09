@@ -1,0 +1,240 @@
+{
+  "version": "0.1.66",
+  "commit": "7ee294aa41333b57623feaa5adc917da9a969bf6",
+  "tag": "app-v0.1.66",
+  "published_archive": {
+    "version": "0.1.66",
+    "filename": "InkStruct-0.1.66-Windows-x64.zip",
+    "bytes": 133779940,
+    "members": 1682,
+    "sha256": "853908a6b6770eda14900c3ac40e7a959da4c868a3e3a0a73ffe217597e57cb4"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 345,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 108,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    "native": {
+      "100": {
+        "platform": "windows",
+        "scale": 1.0,
+        "style": "windows11",
+        "profile": "focused-qss",
+        "scheme": "Light",
+        "generation": {
+          "width": 780,
+          "horizontal_scroll": 0,
+          "stepper_width": 16,
+          "click_and_keyboard_step": true,
+          "keyboard_focus": true
+        },
+        "settings": {
+          "width": 840,
+          "height": 640,
+          "field_left_edges": [
+            106,
+            106,
+            106
+          ],
+          "size_restored": true
+        },
+        "capture": {
+          "sample_saved": true,
+          "input": "synthetic QTabletEvent",
+          "writer": "native_audit",
+          "completed": 1
+        },
+        "preview": {
+          "live_snapshot": true,
+          "painted": true,
+          "exportable": true
+        },
+        "publication": {
+          "visible_rows_open": 10,
+          "visible_rows_collapsed": 12,
+          "characters": 207,
+          "candidates": 1311,
+          "coverage_matches": true,
+          "stale_review_invalidated": true,
+          "frozen_records": 5129,
+          "copied_data_preserved": true
+        }
+      },
+      "150": {
+        "platform": "windows",
+        "scale": 1.5,
+        "style": "windows11",
+        "profile": "focused-qss",
+        "scheme": "Dark",
+        "generation": {
+          "width": 780,
+          "horizontal_scroll": 0,
+          "stepper_width": 16,
+          "click_and_keyboard_step": true,
+          "keyboard_focus": true
+        },
+        "settings": {
+          "width": 840,
+          "height": 640,
+          "field_left_edges": [
+            104,
+            104,
+            104
+          ],
+          "size_restored": true
+        },
+        "capture": {
+          "sample_saved": true,
+          "input": "synthetic QTabletEvent",
+          "writer": "native_audit",
+          "completed": 1
+        },
+        "preview": {
+          "live_snapshot": true,
+          "painted": true,
+          "exportable": true
+        },
+        "publication": {
+          "visible_rows_open": 9,
+          "visible_rows_collapsed": 12,
+          "characters": 207,
+          "candidates": 1311,
+          "coverage_matches": true,
+          "stale_review_invalidated": true,
+          "frozen_records": 5129,
+          "copied_data_preserved": true
+        }
+      }
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "math": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "formula_categories": 11,
+          "measured_dimensions": 26,
+          "reference_font": "Latin Modern Math"
+        },
+        "100": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.0,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ]
+            }
+          }
+        },
+        "150": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.5,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ]
+            }
+          }
+        }
+      },
+      "InkStructTool.exe": {
+        "math": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "formula_categories": 11,
+          "measured_dimensions": 26,
+          "reference_font": "Latin Modern Math"
+        },
+        "100": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.0,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ]
+            }
+          }
+        },
+        "150": {
+          "app_version": "0.1.66",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.5,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ]
+            }
+          }
+        }
+      }
+    },
+    "appearance_selection": "windows11 native controls with focused action QSS"
+  },
+  "previous_archive": {
+    "version": "0.1.65",
+    "filename": "InkStruct-0.1.65-Windows-x64.zip",
+    "bytes": 133772232,
+    "members": 1682,
+    "sha256": "c08e7d6313a241d9f1b604ec4d0458c613396e51570305b90355d5618d240fbe"
+  }
+}
