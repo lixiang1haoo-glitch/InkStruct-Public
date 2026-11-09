@@ -38,7 +38,7 @@
       "sha256": "a28c478b5178e98f67f510b2d52fde08a69dc664654ef43498253b9b764d46ee"
     },
     "src/inkstruct/editor/resources/lm-math-1.959.zip": {
-      "url": "https://mirrors.ctan.org/fonts/lm-math.zip",
+      "url": "https://mirrors.ibiblio.org/CTAN/fonts/lm-math.zip",
       "sha256": "3d906317f27279af05eb095aa4db5e7f3f87312e69d672e8f8928b64adcd403c"
     },
     "third_party/runtime-licenses/Qt-LGPL-3.0.txt": {
