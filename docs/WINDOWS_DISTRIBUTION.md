@@ -6,7 +6,7 @@
 
 - `InkStruct-0.1.68-Windows-x64.zip` 可解压后直接运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.68-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
 - 0.1.68 应用构建对应提交 `cee88ceb315fa3c12598c7b6d21b76f260632888`。在 Windows 11 x64 上，295 项源码回归全部通过。两个随包程序均通过公式与主题自检。隔离安装检查逐项核对了安装文件、启动程序，并确认卸载保留合成用户文件。
-- 验证使用已有 Visual C++ x64 运行库的 Windows 11 环境。隔离模式跳过开始菜单与卸载注册。安装器尚未签名。验证记录中的二进制哈希供核对本地候选。 [构建验证记录](releases/0.1.68-windows.json)
+- 验证使用已有 Visual C++ x64 运行库的 Windows 11 环境。隔离模式跳过开始菜单与卸载注册。安装器尚未签名。验证记录中的二进制哈希供核对本地候选。 [构建验证记录](releases/0.1.68-windows.json) · [本机依赖清单](releases/0.1.68-native-components.json)
 
 ## 字形结构库
 
