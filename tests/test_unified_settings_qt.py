@@ -172,6 +172,9 @@ elif scenario in {'navigation','navigation_largefont'}:
     d.resize(1260, 650);app.processEvents()
     assert [field.width() for field in short_fields] == widths
     assert d.search.width() > search_width
+    core_fields = (body.mode, body.style.controls['em_mm'], body.flow.controls['paragraph_gap_mm'])
+    assert len({field.mapTo(body, QtCore.QPoint()).x() for field in core_fields}) == 1
+    assert body.style.controls['em_mm'].mapTo(body, QtCore.QPoint()).y() < body.han_seed.mapTo(body, QtCore.QPoint()).y()
     d.resize(980, 650);app.processEvents()
     for key in d.items:
         d.select(key); app.processEvents()

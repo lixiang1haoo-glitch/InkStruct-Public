@@ -6,7 +6,9 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from ..settings_pages import section
 from ..symbol_catalog import SYMBOL_GROUPS, character_preview
+from ..theme import set_tone
 from ..ui_behavior import compact_field
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
@@ -102,13 +104,16 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.publication.setModal(True)
         self.publication.resize(940, 700)
         publication_layout = QtWidgets.QVBoxLayout(self.publication)
-        hint = QtWidgets.QLabel("选择书写者、汉字批次及扩展来源后，清单会自动核对。请勾选要入包的类别并查看缺字。可在规则窗口决定本次启用和供体。")
+        hint = QtWidgets.QLabel("选择来源后自动核对。请勾选要入包的类别，并展开查看缺字。")
         hint.setWordWrap(True)
         publication_layout.addWidget(hint)
-        group = QtWidgets.QGroupBox("按书写者汇总的待制包清单")
-        publication_layout.addWidget(group)
+        group = QtWidgets.QWidget()
+        self.source_toggle = section(publication_layout, "字体来源与包设置", group, expanded=True)
+        self.source_toggle.setAccessibleName("展开或收起字体来源与包设置")
         self.publication_fields = group
         form = QtWidgets.QFormLayout(group)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
         self.author = QtWidgets.QComboBox()
         self.author.setEditable(True)
         self.author.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
@@ -142,39 +147,51 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("用户版 · 用于排版与分享", "user")
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", compact_field(self.kind))
+        table_title = QtWidgets.QLabel("待制包清单")
+        table_title.setProperty("inkRole", "sectionTitle")
+        publication_layout.addWidget(table_title)
         self.contents = QtWidgets.QTreeWidget()
+        self.contents.setAccessibleName("待制包清单")
         self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)
+        self.contents.header().setStretchLastSection(False)
         self.contents.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         for column in range(1, self.contents.columnCount()):
             self.contents.header().setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.contents.itemChanged.connect(self.publication_groups_changed)
-        form.addRow(self.contents)
+        publication_layout.addWidget(self.contents, 1)
         self.coverage_summary = QtWidgets.QLabel("列中数字为字符数 / 候选份数。展开类别查看字符与诊断。")
         self.coverage_summary.setWordWrap(True)
         coverage_row = QtWidgets.QHBoxLayout()
         coverage_row.addWidget(self.coverage_summary, 1)
         self.rules_button = QtWidgets.QPushButton("复用与合成规则…")
+        self.rules_button.setAutoDefault(False)
         self.rules_button.clicked.connect(self.show_publication_rules)
         coverage_row.addWidget(self.rules_button)
-        form.addRow(coverage_row)
-        b = QtWidgets.QPushButton("制作并加入字体库")
-        self.build_button = b
-        b.setProperty("inkRole", "primary")
-        b.clicked.connect(self.build)
-        form.addRow(b)
-        self.buttons.append(b)
+        publication_layout.addLayout(coverage_row)
         note = QtWidgets.QLabel(
-            "来源不完整的有效字形可以使用；排版时会汇总提示。开发者版包含供体信息，请按需要分享。"
+            "来源不完整的有效字形仍可使用。开发者版包含供体信息。"
         )
         note.setWordWrap(True)
+        note.setProperty("inkRole", "hint")
         publication_layout.addWidget(note)
-        close = QtWidgets.QPushButton("返回字体库")
-        close.clicked.connect(self.publication.reject)
-        publication_layout.addWidget(close)
         self.publication_progress = QtWidgets.QLabel()
         self.publication_progress.setWordWrap(True)
+        self.publication_progress.setProperty("inkRole", "status")
         publication_layout.addWidget(self.publication_progress)
+        footer = QtWidgets.QHBoxLayout()
+        footer.addStretch()
+        close = QtWidgets.QPushButton("返回字体库")
+        close.setAutoDefault(False)
+        close.clicked.connect(self.publication.reject)
+        footer.addWidget(close)
+        self.build_button = QtWidgets.QPushButton("制作并加入字体库")
+        self.build_button.setProperty("inkRole", "primary")
+        self.build_button.setAutoDefault(False)
+        self.build_button.clicked.connect(self.build)
+        footer.addWidget(self.build_button)
+        publication_layout.addLayout(footer)
+        self.buttons.append(self.build_button)
         self.progress = QtWidgets.QLabel("")
         layout.addWidget(self.progress)
         self.progress.setWordWrap(True)
@@ -208,6 +225,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             self.author.setEditText(current)
         self.author_chosen()
         self.refresh_publication_batches()
+        self.source_toggle.setChecked(True)
         self.publication.show()
         self.publication.raise_()
         self.invalidate_publication()
@@ -281,8 +299,10 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.batch_summary.hide()
         self.review_timer.stop()
         if self.publication.isVisible():
-            self.publication_progress.clear()
-            self.coverage_summary.setText("等待核对当前来源…" if self.publication_ready()
+            ready = self.publication_ready()
+            self.publication_progress.setText("等待核对当前来源…" if ready else "制作前请选择书写者和至少一项可用来源。")
+            set_tone(self.publication_progress, "")
+            self.coverage_summary.setText("等待核对当前来源…" if ready
                                           else "选择书写者和可用的汉字批次或扩展来源。")
             self.review_timer.start()
         self.update_actions()
@@ -313,6 +333,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         job = self.review_job = Job(work)
         job.signals.completed.connect(self.publication_reviewed)
         self.coverage_summary.setText("正在按勾选计算覆盖…" if groups is not None else "正在核对作者、来源与可用字符…")
+        self.publication_progress.setText("正在核对，完成后可制作。")
+        set_tone(self.publication_progress, "")
         self.update_actions()
         QtCore.QThreadPool.globalInstance().start(job)
 
@@ -329,6 +351,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.review_stamp = stamp
         if result is None:
             self.coverage_summary.setText("清单核对失败：" + error)
+            self.publication_progress.setText("制作前请处理清单中的核对错误。")
+            set_tone(self.publication_progress, "danger")
             self.update_actions()
             return
         self.review = inputs
@@ -345,7 +369,13 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 return
         self.review_groups, self.review_result = groups, result
         self.show_publication_coverage(result)
-        self.publication_progress.setText("已核对当前勾选。汉字来源与包完整性在制包时核验。")
+        if not self.name.text().strip():
+            self.publication_progress.setText("请填写字体名称。")
+        elif not result["coverage"]:
+            self.publication_progress.setText("当前勾选没有可入包字形。")
+        else:
+            self.publication_progress.setText("已核对当前勾选。制包时验证汉字来源与包完整性。")
+        set_tone(self.publication_progress, "")
         self.update_actions()
 
     def create_publication_rows(self, result):

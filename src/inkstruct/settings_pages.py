@@ -21,6 +21,19 @@ def compact_form_parameters(widget):
                 compact_field(field)
 
 
+def align_form_labels(*forms):
+    """Align sibling form columns using the width of their actual labels."""
+    role = QtWidgets.QFormLayout.ItemRole.LabelRole
+    labels = [item.widget() for form in forms for index in range(form.rowCount())
+              if (item := form.itemAt(index, role)) and isinstance(item.widget(), QtWidgets.QLabel)]
+    width = max(field.sizeHint().width() for field in labels)
+    for field in labels:
+        field.setMinimumWidth(width)
+    for form in forms:
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
+
+
 def label(text):
     result = QtWidgets.QLabel(text)
     result.setWordWrap(True)

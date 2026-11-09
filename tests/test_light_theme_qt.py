@@ -38,6 +38,16 @@ for widget in (w,w.collector,w.generator,w.library,w.editor,w.editor.editor):
     assert widget.palette().color(QtGui.QPalette.Window).lightness()>230
 before=(w.editor.flow,w.editor.style,w.editor.page,w.editor.source_session.atom_ids,
         w.collector.ui_settings)
+w.tabs.setCurrentIndex(1);app.processEvents()
+spin=w.generator.centralWidget().candidate_limit
+option=QtWidgets.QStyleOptionSpinBox()
+spin.initStyleOption(option)
+step_rect=spin.style().subControlRect(QtWidgets.QStyle.CC_SpinBox,option,QtWidgets.QStyle.SC_SpinBoxUp,spin)
+assert step_rect.width() >= 20, step_rect
+spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
+spin.initStyleOption(option)
+assert spin.style().subControlRect(QtWidgets.QStyle.CC_SpinBox,option,QtWidgets.QStyle.SC_SpinBoxUp,spin).isEmpty()
+spin.setButtonSymbols(QtWidgets.QAbstractSpinBox.UpDownArrows)
 d=SettingsDialog(w.editor,w.collector,w,category='capture');d.show()
 for key in d.items:
     d.select(key);app.processEvents()

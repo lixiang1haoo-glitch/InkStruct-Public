@@ -175,9 +175,7 @@ def organize_workspace(w):
     w.editor.setPlaceholderText(
         "在这里输入或粘贴 Markdown…\n\n例如：12.34\n\n右侧会实时显示手写页面。"
     )
-    w.editor.setStyleSheet(
-        "QPlainTextEdit {font-size: 16px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 5px;} QPlainTextEdit:focus {border: 1px solid #4084db;}"
-    )
+    w.editor.setProperty("inkRole", "sourceEditor")
     split.addWidget(left)
     right = QtWidgets.QWidget()
     right_layout = QtWidgets.QVBoxLayout(right)
