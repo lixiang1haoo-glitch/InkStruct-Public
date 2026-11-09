@@ -16,6 +16,7 @@ export default defineConfig({
       { text: '文档首页', link: '/' },
       { text: '上手教程', link: '/guide/first-document' },
       { text: '常见问题', link: '/guide/faq' },
+      { text: '开发者文档', link: '/developers/', activeMatch: '^/developers/' },
       { text: '下载', link: releases },
     ],
     sidebar: [
@@ -26,6 +27,12 @@ export default defineConfig({
       { text: '帮助与参考', items: [
         { text: '常见问题', link: '/guide/faq' },
         { text: '仓库速查页', link: `${repository}/blob/main/docs/USER_GUIDE.md` },
+      ] },
+      { text: '开发者文档', items: [
+        { text: '开发者首页', link: '/developers/' },
+        { text: 'CLI 与快速开始', link: '/developers/cli' },
+        { text: '字体包 .inkfont', link: '/developers/inkfont' },
+        { text: '项目文档 .inkdoc', link: '/developers/inkdoc' },
       ] },
     ],
     outline: { level: [2, 3], label: '本页大纲' },

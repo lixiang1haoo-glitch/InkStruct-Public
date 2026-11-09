@@ -28,4 +28,12 @@ features:
     details: 按采集、生成、制作字体和排版快速查阅步骤与构建入口。
     link: https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/main/docs/USER_GUIDE.md
     linkText: 打开仓库速查页
+  - title: 开发者文档
+    details: 查阅文件格式、命令行与源码构建，用合成示例验证一次集成。
+    link: /developers/
+    linkText: 查看开发者文档
 ---
+
+## 平台
+
+Windows 桌面版提供采集、生成、制包和排版。用于记录手写笔迹的 **Android 采集端正在开发中**。
