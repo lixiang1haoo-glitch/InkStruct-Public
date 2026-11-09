@@ -37,7 +37,7 @@
 - `\newpage` 或 `\pagebreak` 在正文中推进到下一页。`\clearpage` 在当前没有浮动队列时也推进到下一页。
 - `\framebreak` 用于模板正文流，推进到下一正文框。自动续排足够时，可以直接写连续正文。
 
-## 页面模板与命名字段
+## 页面模板
 
 模板 JSON 描述页面布局、正文框及可选的固定字段。项目保存使用的模板和正文。先生成一份中性 A4 模板，再检查几何和可用字段：
 
@@ -46,6 +46,8 @@
 & $python -m inkstruct.cli document template validate template.json
 & $python -m inkstruct.cli document template inspect-slots template.json
 ```
+
+### 命名字段
 
 上述简单模板只有正文框。有自定义命名字段时，用 `inspect-slots` 报告中的 `fields` 与 `markdown_skeleton` 获取真实字段名，再在源文档中填入：
 

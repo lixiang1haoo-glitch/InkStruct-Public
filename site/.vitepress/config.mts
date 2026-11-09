@@ -35,6 +35,8 @@ export default defineConfig({
         { text: '项目文档 .inkdoc', link: '/developers/inkdoc' },
         { text: '排版输入与模板', link: '/developers/layout-inputs' },
         { text: '采集、生成与字形来源', link: '/developers/glyph-sources' },
+        { text: '架构与源码导航', link: '/developers/architecture' },
+        { text: '构建、验证与贡献', link: '/developers/contributing' },
       ] },
     ],
     outline: { level: [2, 3], label: '本页大纲' },

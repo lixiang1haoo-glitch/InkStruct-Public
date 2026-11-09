@@ -13,7 +13,7 @@ import { withBase } from 'vitepress'
 | 读取项目的 Markdown、嵌入资源和冻结选样 | [项目文档 `.inkdoc`](./inkdoc) |
 | 从其他工具生成排版内容或模板 | [排版输入与模板](./layout-inputs) |
 | 准备采集任务，追踪某个字形从哪里来 | [采集、生成与字形来源](./glyph-sources) |
-| 从源码构建或提交改动 | [源码构建](https://github.com/lixiang1haoo-glitch/InkStruct-Public#源码构建) · [贡献指南](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/main/CONTRIBUTING.md) |
+| 找到相关模块、从源码构建或提交改动 | [架构与源码导航](./architecture) · [构建、验证与贡献](./contributing) |
 
 ## 最小交换示例
 

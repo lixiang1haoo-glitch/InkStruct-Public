@@ -1,5 +1,7 @@
 # 贡献 InkStruct
 
+开发环境、回归入口与文档站构建方式见[构建、验证与贡献](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/contributing.html)。
+
 请为每个改动说明用户场景、复现步骤和验证结果。修改应用界面或发布流程时，建议附上 Windows 版本、缩放比例、InkStruct 版本和相关回归命令。构建与测试使用仓库 README 的锁定依赖及上游资源。
 
 反馈时优先提供手工编写的最小 Markdown、临时生成的合成轨迹或纯文字步骤。提交前检查日志、截图和文件属性中的用户目录、作者名与可识别内容。真实笔迹、采集任务、作者档案、私人字体包、文档及冻结选样应保存在个人工作区。
