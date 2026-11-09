@@ -159,8 +159,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_file_button.clicked.connect(self.choose_target_file)
             self.target_document_button.clicked.connect(self.choose_target_document)
             self.target_current_button.clicked.connect(self.choose_current_document)
-            target_layout.addWidget(AdaptiveActions((self.target_builtin_button, self.target_file_button,
-                                                      self.target_document_button, self.target_current_button)))
+            self.target_actions = AdaptiveActions((self.target_builtin_button, self.target_file_button,
+                                                   self.target_document_button, self.target_current_button))
+            target_layout.addWidget(self.target_actions)
             self.target_summary = QtWidgets.QLabel('尚未选择生成内容。自定义字表可导入 UTF-8 TXT 或 CSV。')
             self.target_summary.setWordWrap(True)
             self.target_summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
@@ -170,7 +171,15 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_details_button.clicked.connect(self.show_target_details)
             summary_row.addWidget(self.target_details_button)
             target_layout.addLayout(summary_row)
-            generation_form.addRow('生成内容', target_area)
+            target_label = QtWidgets.QLabel('生成内容')
+            target_label.setBuddy(self.target_builtin_button)
+            target_container = QtWidgets.QWidget()
+            target_row = QtWidgets.QHBoxLayout(target_container)
+            target_row.setContentsMargins(0, 0, 0, 0)
+            target_row.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetMinimumSize)
+            target_row.addWidget(target_label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+            target_row.addWidget(target_area, 1)
+            generation_layout.addWidget(target_container)
             self.parallelism = QtWidgets.QComboBox()
             self.parallelism.setObjectName('generation_parallelism')
             for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
@@ -190,6 +199,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 "增加上限会增加尝试次数、生成时间和包体。"
             )
             generation_form.addRow("每字成品上限", compact_field(self.candidate_limit))
+            target_label.setMinimumWidth(generation_form.labelForField(self.candidate_limit).sizeHint().width())
             self.candidate_hint = QtWidgets.QLabel()
             self.candidate_hint.setWordWrap(True)
             generation_form.addRow("", self.candidate_hint)
@@ -416,6 +426,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 widget.setEnabled(not self.busy)
             for widget in (self.target_builtin_button, self.target_file_button, self.target_document_button):
                 widget.setEnabled(not self.busy)
+            self.target_actions.setEnabled(not self.busy)
             self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy)
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
             multiple = self.method.currentData() == "v62"

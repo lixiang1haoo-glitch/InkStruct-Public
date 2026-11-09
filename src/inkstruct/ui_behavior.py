@@ -22,33 +22,44 @@ def compact_field(control, *, maximum=None):
 
 
 class AdaptiveActions(QtWidgets.QWidget):
-    """Keep a group of desktop commands compact and give it two rows in narrow layouts."""
+    """Keep the first command visible and place remaining commands in a narrow-window menu."""
 
     def __init__(self, buttons, parent=None):
         super().__init__(parent)
         self.buttons = tuple(buttons)
-        self.grid = QtWidgets.QGridLayout(self)
-        self.grid.setContentsMargins(0, 0, 0, 0)
-        self.grid.setSpacing(6)
-        self.grid.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        row = QtWidgets.QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        for button in self.buttons:
+            row.addWidget(button)
+        self.more = QtWidgets.QPushButton("更多来源…", self)
+        self.more.setAccessibleName("更多生成内容来源")
+        self.menu = QtWidgets.QMenu(self.more)
+        self.more.setMenu(self.menu)
+        for button in self.buttons[1:]:
+            self.menu.addAction(button.text(), button.click)
+        self.menu.aboutToShow.connect(self.sync_menu)
+        row.addWidget(self.more)
+        row.addStretch()
+        self.compact = False
+        self.more.hide()
         policy = self.sizePolicy()
         policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Ignored)
         self.setSizePolicy(policy)
-        self.columns = 0
-        self.arrange(2)
 
-    def arrange(self, columns):
-        if columns == self.columns:
-            return
-        self.columns = columns
-        for index, button in enumerate(self.buttons):
-            self.grid.removeWidget(button)
-            self.grid.addWidget(button, *divmod(index, columns))
+    def sync_menu(self):
+        for action, button in zip(self.menu.actions(), self.buttons[1:]):
+            action.setEnabled(button.isEnabled())
 
     def resizeEvent(self, event):
         count = len(self.buttons)
-        full_width = sum(button.sizeHint().width() for button in self.buttons) + self.grid.spacing() * (count - 1)
-        self.arrange(count if event.size().width() >= full_width else 2)
+        full_width = sum(button.sizeHint().width() for button in self.buttons) + self.layout().spacing() * (count - 1)
+        compact = event.size().width() < full_width
+        if compact != self.compact:
+            self.compact = compact
+            self.more.setVisible(compact)
+            for button in self.buttons[1:]:
+                button.setVisible(not compact)
         super().resizeEvent(event)
 
 
