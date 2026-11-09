@@ -48,8 +48,8 @@ def identity():
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:10]
 
 
-def corrections():
-    root = resources()
+def corrections(root=None):
+    root = root or resources()
     return [root / "third_party/makemeahanzi/graphics.txt",
             root / "third_party/makemeahanzi/dictionary.txt",
             root / "configs/structure_overrides/unclipped_reference_v1.json"]

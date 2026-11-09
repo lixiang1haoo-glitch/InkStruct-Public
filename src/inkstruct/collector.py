@@ -65,8 +65,12 @@ def _collector_source() -> Path:
     raise RuntimeError(f"找不到采集器内核，已检查：\n{searched}")
 
 
-def main(argv: list[str] | None = None, *, create_only=False, workspace=None, database=None):
+def main(argv: list[str] | None = None, *, create_only=False, workspace=None, database=None,
+         connected_capture=False):
+    if connected_capture and workspace is None:
+        raise ValueError("连笔采集需要独立工作区")
     workspace_root = Path(workspace) if workspace else PROJECT_ROOT
+    settings_name = "CaptureV63" if connected_capture else "Capture"
     database_path = Path(database) if database else PROJECT_ROOT / "artifacts" / "structures" / "characters.sqlite3"
     arguments = list(argv or sys.argv)
     smoke_test = "--smoke-test" in arguments
@@ -107,7 +111,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.canvas_size_slider.setPageStep(2)
             self.canvas_size_settings = QtCore.QSettings(
                 QtCore.QSettings.defaultFormat(), QtCore.QSettings.Scope.UserScope,
-                "InkStruct", "Capture",
+                "InkStruct", settings_name,
             )
             try:
                 step = int(self.canvas_size_settings.value("han_canvas_height_step", 20))
@@ -174,21 +178,27 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 self.stroke_count_label.setText("笔画数量：等待任务")
                 self.stroke_count_label.setStyleSheet("color: #475569;")
                 return
-            self.stroke_count_label.setText(check.message)
             has_trajectory = self.canvas.trajectory.point_count > 0
-            if check.matches and has_trajectory:
+            allowed = check.matches or (connected_capture and check.expected is not None)
+            if connected_capture and check.expected is not None:
+                self.stroke_count_label.setText(
+                    f"实录 {check.actual} 段 · 标准 {check.expected} 笔 · 原样保存，建档时校验"
+                )
+            else:
+                self.stroke_count_label.setText(check.message)
+            if allowed and has_trajectory:
                 self.stroke_count_label.setStyleSheet("color: #15803D; font-weight: 600;")
             elif has_trajectory:
                 self.stroke_count_label.setStyleSheet("color: #B91C1C; font-weight: 600;")
             else:
                 self.stroke_count_label.setStyleSheet("color: #475569;")
-            self.save_button.setEnabled(bool(check.matches and has_trajectory and not self.canvas.pen_down))
+            self.save_button.setEnabled(bool(allowed and has_trajectory and not self.canvas.pen_down))
 
         def save_current(self) -> None:
             check = self._stroke_check()
-            if check is None:
+            if check is None or self.canvas.pen_down:
                 return
-            if not check.matches:
+            if not check.matches and (not connected_capture or check.expected is None):
                 QtWidgets.QMessageBox.warning(
                     self,
                     "笔画数量不一致",
@@ -203,7 +213,15 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
 
         def __init__(self):
             super().__init__(auto_resume=False)
-            if create_only:
+            if connected_capture:
+                from handwriting_collector.config import UiSettingsStore
+                self.settings = QtCore.QSettings("InkStruct", settings_name)
+                self.ui_settings_store = UiSettingsStore(workspace_root / "capture-v63-settings.json")
+                self.ui_settings, _ = self.ui_settings_store.load()
+                self.output_root = workspace_root / "capture-v63"
+                self.output_root.mkdir(parents=True, exist_ok=True)
+                self._update_status()
+            elif create_only:
                 # Integrated workspaces do not inherit another collector's output folder.
                 self._integrated_initial_choice = self.output_root is None
                 self.settings = QtCore.QSettings("InkStruct", "Capture")
@@ -245,9 +263,12 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 layout.insertLayout(index, row)
                 slider.valueChanged.connect(lambda value, tab=widget: self.change_stroke_width(tab, value))
             self.apply_ui_settings(self.ui_settings)
-            self.setWindowTitle("InkStruct 墨构 · 轨迹采集器")
+            self.setWindowTitle("InkStruct 墨构 · 连笔采集实验" if connected_capture
+                                else "InkStruct 墨构 · 轨迹采集器")
 
         def choose_output_root(self) -> Path | None:
+            if connected_capture:
+                return self.output_root
             if not smoke_test:
                 if hasattr(self, 'symbol_widget'):
                     for widget in (self.single_widget, self.symbol_widget):
@@ -311,7 +332,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
     if create_only:
         return CollectorWindow()
     application.setOrganizationName("InkStruct")
-    application.setApplicationName("InkStruct Collector")
+    application.setApplicationName("InkStruct Collector V63" if connected_capture else "InkStruct Collector")
     application.setStyle("Fusion")
     application.setPalette(collector_ui.light_palette())
     application.setStyleSheet(collector_ui.APP_STYLE)

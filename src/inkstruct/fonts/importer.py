@@ -73,6 +73,10 @@ def public_development(value):
 
 def generated_records(run, writer):
     root = Path(run)
+    if (root / "v63-run.json").is_file():
+        from ..v63_package import grouped_records
+        yield from grouped_records(root, writer)
+        return
     if (root / "trajectories").is_dir():
         for path in sorted((root / "trajectories").glob("U+*.json")):
             glyph = _read(path)
@@ -121,6 +125,9 @@ def generated_records(run, writer):
 
 
 def make_generated(glyph, row, payload, protocol):
+    if protocol and protocol.get("schema_version") == "inkstruct_v63_grouped_run_v1":
+        from ..v63_package import make_grouped
+        return make_grouped(glyph)
     # Strict legacy generated protocol; new font protocol never relaxes it.
     adapt_glyph(glyph, metrics=GlyphMetrics())
     n = len(glyph["strokes"])

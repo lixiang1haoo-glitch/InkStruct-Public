@@ -236,6 +236,8 @@ def build_parser() -> argparse.ArgumentParser:
     groups.add_parser("collector", help="launch the standalone trajectory collector")
     groups.add_parser("generator", help="launch the standalone style generator")
     groups.add_parser("desktop", help="deprecated alias for the standalone style generator")
+    from .v63_cli import add_v63_commands
+    add_v63_commands(groups)
     return parser
 
 
@@ -249,6 +251,16 @@ def main(argv: list[str] | None = None) -> int:
         code, report = run_document_command(args)
         _emit(report)
         return code
+    if args.group == "v63":
+        from .v63_cli import run_v63_command
+        try:
+            result = run_v63_command(args)
+        except (OSError, ValueError, KeyError) as error:
+            parser.exit(2, f"v6.3: {error}\n")
+        if isinstance(result, int):
+            return result
+        _emit(result)
+        return 0
     if args.group == "structures" and args.command == "build":
         report = build_database(
             args.graphics,
