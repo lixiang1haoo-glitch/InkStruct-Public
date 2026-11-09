@@ -1,10 +1,59 @@
-"""Dark host palettes must not leak into the application or settings controls."""
+"""Desktop theme selection, native palette changes, and the compatibility fallback."""
 
 import os
 import subprocess
 import sys
 
 import pytest
+
+
+@pytest.mark.skipif(sys.platform != "win32" or sys.getwindowsversion().build < 22000,
+                    reason="requires the Windows 11 Qt platform")
+def test_windows11_style_accepts_both_appearance_profiles(tmp_path):
+    program = r"""
+from unittest.mock import patch
+from PySide6 import QtCore, QtGui, QtWidgets
+from inkstruct.app_shell import PaletteIcon, _on_accent
+from inkstruct.theme import use_platform_theme
+
+app = QtWidgets.QApplication([])
+with patch.object(QtWidgets.QStyleFactory, 'create', return_value=None):
+    assert use_platform_theme(app) == 'fusion'
+if 'windows11' not in [key.lower() for key in QtWidgets.QStyleFactory.keys()]:
+    raise SystemExit(77)
+for accents in (False, True, False):
+    assert use_platform_theme(app, windows11_accents=accents) == 'windows11'
+    assert bool(app.styleSheet()) == accents
+    button = QtWidgets.QToolButton()
+    button.setProperty('inkRole', 'navigation')
+    button.setCheckable(True)
+    icon = PaletteIcon(button, 'generate')
+    button.show()
+    for scheme in (QtCore.Qt.ColorScheme.Light, QtCore.Qt.ColorScheme.Dark):
+        app.styleHints().setColorScheme(scheme)
+        app.processEvents()
+        assert use_platform_theme(app, windows11_accents=accents) == 'windows11'
+        assert app.styleHints().colorScheme() == scheme
+        assert (app.palette().color(QtGui.QPalette.Window).lightness() < 128) == (scheme == QtCore.Qt.ColorScheme.Dark)
+        assert icon.color == button.palette().color(QtGui.QPalette.Active, QtGui.QPalette.ButtonText).name()
+        button.setChecked(True)
+        assert icon.color == _on_accent(button.palette().color(QtGui.QPalette.Active, QtGui.QPalette.Accent))
+        button.setChecked(False)
+    button.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        env={**os.environ, "QT_QPA_PLATFORM": "windows"},
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+    if result.returncode == 77:
+        pytest.skip("Qt windows11 style plugin unavailable")
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])

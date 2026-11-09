@@ -159,6 +159,24 @@ QDialog#unified_settings_dialog QTreeWidget::item { min-height: 28px; }
 """)
 
 
+_WINDOWS11_ACCENTS = """
+QLabel[inkRole="title"] { font-size: 18px; font-weight: 600; }
+QLabel[inkRole="sectionTitle"] { font-weight: 600; }
+QLabel[inkRole="status"] { padding: 3px 0; }
+QLabel[inkRole="hint"] { color: palette(placeholder-text); }
+QFrame#app_navigation { border-right: 1px solid palette(mid); }
+QPushButton[inkRole="primary"]:enabled {
+    color: palette(highlighted-text); background: palette(highlight);
+    border: 1px solid palette(highlight); border-radius: 5px; padding: 5px 12px;
+}
+QPushButton[inkRole="primary"]:enabled:hover { border-color: palette(text); }
+QPushButton[inkRole="primary"]:enabled:focus {
+    border: 2px solid palette(text); padding: 4px 11px;
+}
+QPushButton[inkRole="primary"]:enabled:pressed { border-color: palette(shadow); }
+"""
+
+
 def native_style_key(platform, windows_build):
     """Choose the platform adapter independently of Qt plugin availability."""
     if platform == "windows" and windows_build >= 22000:
@@ -166,25 +184,28 @@ def native_style_key(platform, windows_build):
     return None
 
 
-def use_platform_theme(application):
+def use_platform_theme(application, *, windows11_accents=False):
     """Use the Windows 11 style where available and retain the existing fallback."""
     from .ui_behavior import protect_parameter_wheels
 
     windows_build = sys.getwindowsversion().build if sys.platform == "win32" else 0
     key = native_style_key(application.platformName(), windows_build)
-    if key and application.property("inkstructDesktopStyle") == key:
-        return key
-    style = QtWidgets.QStyleFactory.create(key) if key else None
-    if style is None:
-        use_light_theme(application)
-        return "fusion"
+    if not key or application.property("inkstructDesktopStyle") != key:
+        style = QtWidgets.QStyleFactory.create(key) if key else None
+        if style is None:
+            use_light_theme(application)
+            return "fusion"
 
-    protect_parameter_wheels(application)
-    application.setStyleSheet("")
-    application.setPalette(QtGui.QPalette())
-    application.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Unknown)
-    application.setStyle(style)
-    application.setProperty("inkstructDesktopStyle", key)
+        protect_parameter_wheels(application)
+        application.setStyleSheet("")
+        application.setPalette(QtGui.QPalette())
+        application.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Unknown)
+        application.setStyle(style)
+        application.setProperty("inkstructDesktopStyle", key)
+
+    sheet = _WINDOWS11_ACCENTS if windows11_accents else ""
+    if application.styleSheet() != sheet:
+        application.setStyleSheet(sheet)
     return key
 
 

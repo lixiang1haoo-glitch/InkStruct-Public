@@ -39,6 +39,13 @@ def line_icon(name, color):
     return icon
 
 
+def _on_accent(accent):
+    channels = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4
+                for value in accent.getRgbF()[:3]]
+    luminance = sum(channel * weight for channel, weight in zip(channels, (.2126, .7152, .0722)))
+    return "#000000" if luminance >= .179 else "#ffffff"
+
+
 class PaletteIcon(QtCore.QObject):
     """Keep a button icon in the same palette as its label."""
 
@@ -47,11 +54,18 @@ class PaletteIcon(QtCore.QObject):
         self.name = name
         self.color = None
         button.installEventFilter(self)
+        if button.property("inkRole") == "navigation":
+            button.toggled.connect(self.refresh)
         self.refresh()
 
     def refresh(self):
         button = self.parent()
-        color = button.palette().color(QtGui.QPalette.ColorGroup.Active, QtGui.QPalette.ColorRole.ButtonText).name()
+        palette = button.palette()
+        group = QtGui.QPalette.ColorGroup.Active
+        color = palette.color(group, QtGui.QPalette.ColorRole.ButtonText).name()
+        if (button.property("inkRole") == "navigation" and button.isChecked()
+                and QtWidgets.QApplication.instance().property("inkstructDesktopStyle") == "windows11"):
+            color = _on_accent(palette.color(group, QtGui.QPalette.ColorRole.Accent))
         if color != self.color:
             self.color = color
             button.setIcon(line_icon(self.name, color))
@@ -107,6 +121,7 @@ def install_shell(window, about):
     button = window.settings_button
     button.setText('设置')
     button.setProperty('inkRole', 'navigation')
+    button.setFont(window.navigation_buttons[0].font())
     PaletteIcon(button, 'settings')
     button.setIconSize(QtCore.QSize(20, 20))
     button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
