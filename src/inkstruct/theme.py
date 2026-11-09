@@ -7,6 +7,19 @@ from string import Template
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
+THEME_KEY = "appearance_theme_v1"
+THEME_MODES = {
+    "system": QtCore.Qt.ColorScheme.Unknown,
+    "light": QtCore.Qt.ColorScheme.Light,
+    "dark": QtCore.Qt.ColorScheme.Dark,
+}
+
+
+def theme_preference(settings):
+    mode = settings.value(THEME_KEY, "system", str)
+    return mode if mode in THEME_MODES else "system"
+
+
 COLORS = {
     'text_primary': '#1f2937',
     'text_secondary': '#475569',
@@ -184,8 +197,13 @@ def native_style_key(platform, windows_build):
     return None
 
 
-def use_platform_theme(application, *, windows11_accents=False):
-    """Use the Windows 11 style where available and retain the existing fallback."""
+def _refresh_native_stylesheet(application):
+    if application.property("inkstructDesktopStyle") == "windows11" and application.styleSheet():
+        application.setStyleSheet(application.styleSheet())
+
+
+def use_platform_theme(application, *, windows11_accents=False, mode=None):
+    """Apply the requested appearance without replacing the native palette."""
     from .ui_behavior import protect_parameter_wheels
 
     windows_build = sys.getwindowsversion().build if sys.platform == "win32" else 0
@@ -193,20 +211,61 @@ def use_platform_theme(application, *, windows11_accents=False):
     if not key or application.property("inkstructDesktopStyle") != key:
         style = QtWidgets.QStyleFactory.create(key) if key else None
         if style is None:
-            use_light_theme(application)
+            if mode == "dark":
+                use_dark_fallback(application, accents=windows11_accents)
+            else:
+                use_light_theme(application)
             return "fusion"
 
         protect_parameter_wheels(application)
         application.setStyleSheet("")
         application.setPalette(QtGui.QPalette())
-        application.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Unknown)
         application.setStyle(style)
         application.setProperty("inkstructDesktopStyle", key)
+        if not application.property("inkstructRefreshOnSchemeChange"):
+            # Cached palette() rules need to be polished after Qt updates the palette.
+            application.styleHints().colorSchemeChanged.connect(
+                lambda: _refresh_native_stylesheet(application), QtCore.Qt.ConnectionType.QueuedConnection
+            )
+            application.setProperty("inkstructRefreshOnSchemeChange", True)
+        mode = mode or "system"
 
+    if mode is not None:
+        application.styleHints().setColorScheme(THEME_MODES[mode])
     sheet = _WINDOWS11_ACCENTS if windows11_accents else ""
     if application.styleSheet() != sheet:
         application.setStyleSheet(sheet)
     return key
+
+
+def use_dark_fallback(application, *, accents):
+    from .ui_behavior import protect_parameter_wheels
+
+    protect_parameter_wheels(application)
+    application.setStyleSheet("")
+    application.setStyle("Fusion")
+    application.styleHints().setColorScheme(QtCore.Qt.ColorScheme.Dark)
+    palette = QtGui.QPalette(QtGui.QColor("#343942"), QtGui.QColor("#23262c"))
+    role = QtGui.QPalette.ColorRole
+    for color_role, value in {
+        role.Base: "#191c21",
+        role.AlternateBase: "#252932",
+        role.Highlight: "#88b8ff",
+        role.Accent: "#88b8ff",
+        role.HighlightedText: "#101820",
+        role.Link: "#9bc5ff",
+        role.LinkVisited: "#d0a5ff",
+        role.PlaceholderText: "#a9b3c1",
+        role.ToolTipBase: "#343942",
+        role.ToolTipText: "#f2f4f7",
+    }.items():
+        palette.setColor(color_role, QtGui.QColor(value))
+    for color_role in (role.WindowText, role.Text, role.ButtonText):
+        palette.setColor(QtGui.QPalette.ColorGroup.Disabled, color_role, QtGui.QColor("#8e98a8"))
+    application.setPalette(palette)
+    if accents:
+        application.setStyleSheet(_WINDOWS11_ACCENTS)
+    application.setProperty("inkstructDesktopStyle", "fusion")
 
 
 def use_light_theme(application):

@@ -12,9 +12,9 @@ def info_button(parent, text="", name="说明"):
     button.setFixedSize(19, 19)
     button.setCursor(QtCore.Qt.CursorShape.WhatsThisCursor)
     button.setStyleSheet(
-        "QToolButton { color: #64748b; border: 1px solid #b7c4d2; "
+        "QToolButton { color: palette(button-text); border: 1px solid palette(mid); "
         "border-radius: 9px; background: transparent; font: italic 12px Georgia; padding: 0; }"
-        "QToolButton:hover, QToolButton:focus { color: #1269c7; border-color: #1269c7; }"
+        "QToolButton:hover, QToolButton:focus { border-color: palette(highlight); }"
     )
     # Hover is the primary action; click/keyboard access exposes the same help.
     button.clicked.connect(

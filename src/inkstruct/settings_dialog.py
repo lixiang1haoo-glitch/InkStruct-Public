@@ -11,6 +11,7 @@ from .document.styles import FlowStyle
 from .global_defaults import GlobalDefaultsStore, LayoutDefaults, apply_to_document
 from .settings_elements import ElementPage
 from .settings_pages import (
+    AppearancePage,
     CapturePage,
     CompactSpinBox,
     ProfileForm,
@@ -23,6 +24,7 @@ from .settings_pages import (
 from .theme import set_tone
 
 CATEGORIES = (
+    ("appearance", "应用设置", "主题", "外观 深色 浅色 跟随系统 明暗 颜色"),
     ("preview", "应用设置", "预览绘制", "CPU GPU 栅格化 缓存 显卡 加速"),
     ("capture", "采集设置", "书写显示", "书写格 参考格 比例 田字格 配置"),
     (
@@ -305,8 +307,11 @@ class SettingsDialog(QtWidgets.QDialog):
             button.setAutoDefault(False)
             if text == ("应用并保存" if self.has_current_document else "存为默认"):
                 button.setProperty("inkRole", "primary")
+            if text == "存为默认":
+                self.save_button = button
             actions.addWidget(button)
             if text == "应用并保存":
+                self.apply_document = button
                 hint = "更新当前文档，并保存为新文档默认"
                 button.setToolTip(hint)
                 button.setAccessibleDescription(hint)
@@ -357,9 +362,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
         self.heading.setText(f"{group} › {title}")
+        self.apply_document.setVisible(self.has_current_document and key != "appearance")
+        self.save_button.setText("保存" if key == "appearance" else "存为默认")
+        role = "primary" if self.apply_document.isHidden() else None
+        if self.save_button.property("inkRole") != role:
+            self.save_button.setProperty("inkRole", role)
+            self.save_button.style().unpolish(self.save_button)
+            self.save_button.style().polish(self.save_button)
         self.scope_info.setText(
             "生效范围：本机采集显示"
             if key == "capture"
+            else "生效范围：本机应用界面，保存后立即切换。"
+            if key == "appearance"
             else "生效范围：本机预览，下次启动应用生效；不修改文档。"
             if key == "preview"
             else "生效范围：全局默认，保存后新文档使用；已有文档保持原设置。"
@@ -373,7 +387,9 @@ class SettingsDialog(QtWidgets.QDialog):
             self.preferences.setValue("last_layout_category", key)
 
     def make_page(self, key):
-        if key == "preview":
+        if key == "appearance":
+            page = AppearancePage(self.preferences)
+        elif key == "preview":
             from .editor.preview_settings import PreviewSettingsPage
             page = PreviewSettingsPage()
         elif key == "capture":
@@ -485,6 +501,12 @@ class SettingsDialog(QtWidgets.QDialog):
             flow, style, paper, mode, capture = self.collect()
             w = self.editor
             defaults = LayoutDefaults(paper, style, flow, mode, self.run, self.symbols)
+            appearance = self.pages.get("appearance")
+            theme_changed = appearance is not None and appearance.changed
+            save_defaults = (
+                not theme_changed or to_document
+                or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
+            )
             inspector = getattr(w, "element_inspector", None)
             if to_document and not self.has_current_document:
                 raise ValueError("没有当前文档。")
@@ -501,7 +523,8 @@ class SettingsDialog(QtWidgets.QDialog):
             if capture_changed:
                 self.collector.ui_settings_store.save(capture)
             try:
-                self.defaults_store.save(defaults)
+                if save_defaults:
+                    self.defaults_store.save(defaults)
             except (ValueError, OSError, TypeError) as error:
                 if capture_changed:
                     try:
@@ -517,8 +540,14 @@ class SettingsDialog(QtWidgets.QDialog):
             self.flow, self.style, self.page, self.mode = flow, style, paper, mode
             if 'preview' in self.pages:
                 self.pages['preview'].save()
+            if theme_changed:
+                appearance.save()
             set_tone(self.error, "success")
-            self.error.setText("已更新当前文档并存为默认。" if to_document else "已保存为新文档默认。")
+            self.error.setText(
+                "已更新当前文档并存为默认。" if to_document
+                else "已保存应用主题。" if theme_changed and not save_defaults
+                else "已保存为新文档默认。"
+            )
             return True
         except (ValueError, OSError, TypeError) as error:
             set_tone(self.error, "danger")

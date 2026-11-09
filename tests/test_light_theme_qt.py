@@ -56,6 +56,74 @@ for accents in (False, True, False):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_theme_preference_is_local_to_application_settings(tmp_path):
+    program = r"""
+import sys
+from pathlib import Path
+from PySide6 import QtCore, QtGui, QtWidgets
+from inkstruct.application import InkStructWindow
+from inkstruct.global_defaults import GlobalDefaultsStore
+from inkstruct.settings_dialog import SettingsDialog
+from inkstruct.theme import THEME_KEY, theme_preference
+
+app = QtWidgets.QApplication([])
+QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
+QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, sys.argv[1])
+settings = GlobalDefaultsStore.make_settings()
+settings.setValue(THEME_KEY, "invalid")
+assert theme_preference(settings) == "system"
+window = InkStructWindow(workspace=Path(sys.argv[1]) / "workspace")
+editor = window.editor
+editor.document_started = True
+before = (editor.flow, editor.style, editor.page, editor.source_session.atom_ids, editor.dirty)
+dialog = SettingsDialog(editor, window.collector, window, category="appearance")
+page = dialog.pages["appearance"]
+assert page.theme.currentData() == "system"
+assert dialog.apply_document.isHidden()
+page.theme.setCurrentIndex(page.theme.findData("dark"))
+dialog.reject()
+assert theme_preference(settings) == "system"
+assert app.palette().color(QtGui.QPalette.Base).lightness() > 128
+
+dialog = SettingsDialog(editor, window.collector, window, category="appearance")
+page = dialog.pages["appearance"]
+page.theme.setCurrentIndex(page.theme.findData("dark"))
+dialog.accept()
+assert dialog.result() == QtWidgets.QDialog.Accepted, dialog.error.text()
+assert theme_preference(settings) == "dark"
+assert app.palette().color(QtGui.QPalette.Base).lightness() < 128
+assert app.palette().color(QtGui.QPalette.Text).lightness() > 128
+assert not settings.contains(GlobalDefaultsStore.KEY)
+
+dialog = SettingsDialog(editor, window.collector, window, category="appearance")
+page = dialog.pages["appearance"]
+assert page.theme.currentData() == "dark"
+dialog.reset_current()
+assert page.theme.currentData() == "system"
+dialog.accept()
+assert dialog.result() == QtWidgets.QDialog.Accepted, dialog.error.text()
+assert theme_preference(settings) == "system"
+assert app.palette().color(QtGui.QPalette.Base).lightness() > 128
+assert not settings.contains(GlobalDefaultsStore.KEY)
+assert before == (editor.flow, editor.style, editor.page, editor.source_session.atom_ids, editor.dirty)
+editor.timer.stop()
+if editor.cancelled:
+    editor.cancelled.set()
+editor.pool.waitForDone()
+window.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(tmp_path)],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=45,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
 def test_dark_host_uses_light_controls_without_document_changes(tmp_path, dpi):
     program = r"""
