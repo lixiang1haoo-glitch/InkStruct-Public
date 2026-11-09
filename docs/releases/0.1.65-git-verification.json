@@ -1,0 +1,96 @@
+{
+  "version": "0.1.65",
+  "commit": "cf4b71799510e78cf5569e82eacc056a20c759c9",
+  "tag": "app-v0.1.65",
+  "published_archive": {
+    "version": "0.1.65",
+    "filename": "InkStruct-0.1.65-Windows-x64.zip",
+    "bytes": 133772232,
+    "members": 1682,
+    "sha256": "c08e7d6313a241d9f1b604ec4d0458c613396e51570305b90355d5618d240fbe"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 345,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 100,
+      "failed": 0,
+      "failures": []
+    },
+    "native": {
+      "platform": "windows",
+      "scale": 1.5,
+      "generation": {
+        "width": 780,
+        "horizontal_scroll": 0,
+        "stepper_width": 24,
+        "click_and_keyboard_step": true,
+        "keyboard_focus": true,
+        "responsive_widths": [
+          {
+            "width": 780,
+            "visible_source_buttons": 4,
+            "gap": 6,
+            "horizontal_scroll": 0
+          },
+          {
+            "width": 650,
+            "visible_source_buttons": 1,
+            "gap": 6,
+            "horizontal_scroll": 0
+          },
+          {
+            "width": 1100,
+            "visible_source_buttons": 4,
+            "gap": 6,
+            "horizontal_scroll": 0
+          }
+        ]
+      },
+      "settings": {
+        "width": 840,
+        "height": 640,
+        "field_left_edges": [
+          119,
+          119,
+          119
+        ],
+        "size_restored": true
+      },
+      "publication": {
+        "visible_rows_open": 5,
+        "visible_rows_collapsed": 12,
+        "characters": 207,
+        "candidates": 1311,
+        "coverage_matches": true,
+        "frozen_records": 5129,
+        "copied_data_preserved": true
+      }
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "app_version": "0.1.65",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      },
+      "InkStructTool.exe": {
+        "app_version": "0.1.65",
+        "frozen": true,
+        "formula_categories": 11,
+        "measured_dimensions": 26,
+        "reference_font": "Latin Modern Math"
+      }
+    }
+  },
+  "previous_archive": {
+    "version": "0.1.64",
+    "filename": "InkStruct-0.1.64-Windows-x64.zip",
+    "bytes": 133755898,
+    "members": 1680,
+    "sha256": "bb992d8329ff543941d457b99f005b049a24669804aabdac6dbdb69a46a6fea3"
+  }
+}
