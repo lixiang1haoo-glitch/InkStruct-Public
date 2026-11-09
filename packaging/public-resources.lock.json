@@ -1,0 +1,64 @@
+{
+  "makemeahanzi_revision": "bddc96d41bef78427ed0e034e9f7e31d71fd1b92",
+  "downloads": {
+    "third_party/makemeahanzi/APL/big5/ARPHICPL.TXT": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/APL/big5/ARPHICPL.TXT",
+      "sha256": "57e2289236e3546bf114fb1023a725ca37ce3403c60a7f24eb8a7891c4731b07"
+    },
+    "third_party/makemeahanzi/APL/english/ARPHICPL.TXT": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/APL/english/ARPHICPL.TXT",
+      "sha256": "3a5e90c0957524a89e48203febcd4492ca4393678abaa7e5b4d70f3ff32b386d"
+    },
+    "third_party/makemeahanzi/APL/gb/ARPHICPL.TXT": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/APL/gb/ARPHICPL.TXT",
+      "sha256": "0f4119eb7a7bbbb1326b7a904f5bc1aa5d368ad1facc6bf9b8b2a410e414df47"
+    },
+    "third_party/makemeahanzi/APL/zh_CN.UTF-8/ARPHICPL.TXT": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/APL/zh_CN.UTF-8/ARPHICPL.TXT",
+      "sha256": "1038e6570c1454456cae551164d0a8e41c638fb4841ff9f37d257307e5febbd4"
+    },
+    "third_party/makemeahanzi/APL/zh_TW.UTF-8/ARPHICPL.TXT": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/APL/zh_TW.UTF-8/ARPHICPL.TXT",
+      "sha256": "7f709381dd578588d8c5b32ee2c9fa2a4995b991ed120605075fe6d2c7951e2a"
+    },
+    "third_party/makemeahanzi/COPYING": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/COPYING",
+      "sha256": "26fa6b699b32401de4b75a4af574c2e0a99b3df6cb12df9313d257ee4634359c"
+    },
+    "third_party/makemeahanzi/LGPL": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/LGPL",
+      "sha256": "eeb6fd06beac4a94a12ffb66876ecd6af68d5b6f38650d5f11aa90125933098b"
+    },
+    "third_party/makemeahanzi/dictionary.txt": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/dictionary.txt",
+      "sha256": "744bb05d5b0742e9ee35c37791f94d56a173349b3367569e7ca11e510364d203"
+    },
+    "third_party/makemeahanzi/graphics.txt": {
+      "url": "https://raw.githubusercontent.com/skishore/makemeahanzi/bddc96d41bef78427ed0e034e9f7e31d71fd1b92/graphics.txt",
+      "sha256": "a28c478b5178e98f67f510b2d52fde08a69dc664654ef43498253b9b764d46ee"
+    },
+    "src/inkstruct/editor/resources/lm-math-1.959.zip": {
+      "url": "https://mirrors.ctan.org/fonts/lm-math.zip",
+      "sha256": "3d906317f27279af05eb095aa4db5e7f3f87312e69d672e8f8928b64adcd403c"
+    },
+    "third_party/runtime-licenses/Qt-LGPL-3.0.txt": {
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.9.2/LICENSES/LGPL-3.0-only.txt",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    "third_party/runtime-licenses/Qt-GPL-3.0.txt": {
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.9.2/LICENSES/GPL-3.0-only.txt",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    "third_party/runtime-licenses/CPython-3.13.16-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.13.16/LICENSE",
+      "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb"
+    }
+  },
+  "structure": {
+    "revision": "public-candidate-0.1.68",
+    "locale_set": "cn-tgh-2013",
+    "content_sha256": "f31adbeea5fc033928d180438fb1180cb1b510586a836b110e5cbf7a5cc05b2c",
+    "file_sha256": "ce2cd626d287a20e8cca13971d921132767b5d54a735611878a1de5776b859b1",
+    "characters": 9574
+  }
+}

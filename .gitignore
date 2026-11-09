@@ -1,0 +1,14 @@
+/.venv/
+/.pytest_cache/
+**/__pycache__/
+/build/
+/dist/
+/artifacts/structures/
+/third_party/makemeahanzi/
+/third_party/runtime-licenses/
+/src/inkstruct/editor/resources/lm-math-1.959.zip
+/workspace/
+*.inkfont
+*.inkdoc
+*.sqlite3
+*.sqlite3-*

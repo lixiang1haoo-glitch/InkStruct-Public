@@ -1,0 +1,8 @@
+{
+  "policy": "unclipped_reference_overlay_v1",
+  "status": "public reference only",
+  "graphics_sha256": "a28c478b5178e98f67f510b2d52fde08a69dc664654ef43498253b9b764d46ee",
+  "dictionary_sha256": "744bb05d5b0742e9ee35c37791f94d56a173349b3367569e7ca11e510364d203",
+  "database_content_sha256": "f31adbeea5fc033928d180438fb1180cb1b510586a836b110e5cbf7a5cc05b2c",
+  "outline_repairs": []
+}

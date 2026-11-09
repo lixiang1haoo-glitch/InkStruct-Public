@@ -1,0 +1,60 @@
+{
+  "schema": "inkstruct-character-set-catalog-v1",
+  "revision": "2026-11-09.public.1",
+  "sources": [
+    {
+      "file": "Unihan-17.0.0.zip",
+      "sha256": "f7a48b2b545acfaa77b2d607ae28747404ce02baefee16396c5d2d7a8ef34b5e",
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip"
+    }
+  ],
+  "sets": [
+    {
+      "id": "cn-tgh-2013",
+      "title": "简体 · 通用规范汉字表（大陆）",
+      "version": "2013",
+      "region": "CN",
+      "count": 8105,
+      "file": "cn-tgh-2013.json",
+      "scope": "Unicode 17.0.0 kTGH：2013 年全表，依原序号排列",
+      "url": "https://www.moe.gov.cn/jyb_xwfb/xw_fbh/moe_2069/s7135/s7562/s7569/201308/t20130827_156353.html",
+      "unicode_version": "17.0.0",
+      "errata": []
+    },
+    {
+      "id": "traditional-gb12345-1990",
+      "title": "繁体 · GB/T 12345 汉字",
+      "version": "1990",
+      "region": "CN",
+      "count": 6866,
+      "file": "traditional-gb12345-1990.json",
+      "scope": "Unicode 17.0.0 kGB1：完整编码标准中的 6866 个汉字，依区位排列；不是全部繁体字",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=90394D2B4115D9291C825A7651AEFE4B",
+      "unicode_version": "17.0.0",
+      "errata": []
+    },
+    {
+      "id": "traditional-tgh-unihan17",
+      "title": "繁体扩展 · 8105 字的 Unihan 全对应（派生）",
+      "version": "TGH 2013 + Unihan 17.0.0",
+      "region": "derived",
+      "count": 8593,
+      "file": "traditional-tgh-unihan17.json",
+      "scope": "逐字保留全部 kTraditionalVariant；无对应时保留原字，显式自身对应保留。非地区规范、非词义转换。",
+      "url": "https://www.unicode.org/reports/tr38/tr38-39.html",
+      "unicode_version": "17.0.0",
+      "errata": []
+    }
+  ],
+  "files": {
+    "cn-tgh-2013.json": "c758edf190556374b2bd322223558b518f43e86be9eb512d63a32e4b36fbb89e",
+    "traditional-gb12345-1990.json": "ecc024dc0dca47cb646086fc15d40b904eee0b506aa24f33f8ec85237235cf7f",
+    "traditional-tgh-unihan17.json": "4cac131e5aab8b7ec67afd6ce85d3cb62a6e43fb2c770d6b362e74d5756cfe76",
+    "relations.json": "f1eb1f0a1cdbde04617ca5d1f2dfcc31f0171d0175db37b80de46e6bfe97ef79",
+    "UNICODE-LICENSE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+    "NOTICE.txt": "7087b8616c3bfc72bef831558c46559540f7d2864bdd119adf0af6f10203b726"
+  },
+  "relation_documentation": "https://www.unicode.org/reports/tr38/tr38-39.html",
+  "policy": "Literal character identities. Membership and relations are separate. Full donor pool remains independent.",
+  "limitations": "No universal complete traditional-character set; no HK normative list bundled. Unicode relations are informal, not context-aware conversion. Same-codepoint regional glyph differences require appropriate structures, not character replacement."
+}
