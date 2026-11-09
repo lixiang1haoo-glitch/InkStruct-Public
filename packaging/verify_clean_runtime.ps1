@@ -25,21 +25,60 @@ function Run([string]$Program, [string[]]$Arguments) {
     (Start-Process -FilePath $Program -ArgumentList $Arguments -WindowStyle Hidden -Wait -PassThru).ExitCode
 }
 
+function IsMicrosoftExecutable([string]$Path) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    $signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'Microsoft Corporation'
+}
+
 $before = RuntimeState
-# Microsoft registers two separate x64 MSI packages for the v14 runtime.
-$products = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' |
+$download = Join-Path $Output 'vc-redist-x64.exe'
+Invoke-WebRequest -Uri 'https://aka.ms/vc14/vc_redist.x64.exe' -OutFile $download
+if (-not (IsMicrosoftExecutable $download)) {
+    throw 'Microsoft redistributable signature could not be verified.'
+}
+$runtimeHash = (Get-FileHash -LiteralPath $download).Hash.ToLowerInvariant()
+
+# The Microsoft bootstrapper owns the dependency registration for both MSIs.
+$uninstallRoots = @(
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
+$bundles = Get-ItemProperty $uninstallRoots |
     Where-Object {
-        $_.Publisher -eq 'Microsoft Corporation' -and
+        $_.Publisher -eq 'Microsoft Corporation' -and $_.DisplayVersion -like '14.*' -and
+        $_.DisplayName -match '^Microsoft Visual C\+\+ .+ Redistributable \(x64\)'
+    }
+$removed = @()
+$cache = [IO.Path]::GetFullPath((Join-Path $env:ProgramData 'Package Cache')) + '\'
+foreach ($bundle in $bundles) {
+    $command = [regex]::Match([string]$bundle.QuietUninstallString, '^"(?<path>[^"]+)"\s+/uninstall\s+/quiet')
+    if (-not $command.Success) { continue }
+    $cached = [IO.Path]::GetFullPath($command.Groups['path'].Value)
+    if ($cached.StartsWith($cache, [StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $cached -PathType Leaf) -and (IsMicrosoftExecutable $cached)) {
+        $code = Run $cached @('/uninstall', '/quiet', '/norestart')
+        $removed += [ordered]@{ name = $bundle.DisplayName; version = $bundle.DisplayVersion; exit = $code }
+    }
+}
+if ((RuntimeState).installed -eq 1) {
+    $code = Run $download @('/uninstall', '/quiet', '/norestart')
+    $removed += [ordered]@{ name = 'Microsoft download'; version = (Get-Item $download).VersionInfo.FileVersion; exit = $code }
+}
+
+# Some images also install the same runtime directly as individual MSIs.
+$products = Get-ItemProperty $uninstallRoots[1] |
+    Where-Object {
+        $_.Publisher -eq 'Microsoft Corporation' -and $_.DisplayVersion -like '14.*' -and
         $_.DisplayName -match '^Microsoft Visual C\+\+ .+ X64 (Minimum|Additional) Runtime\b' -and
         $_.PSChildName -match '^\{[0-9A-Fa-f-]{36}\}$'
     }
-$removed = @()
 foreach ($product in $products) {
     $code = Run "$env:SystemRoot\System32\msiexec.exe" @('/x', $product.PSChildName, '/qn', '/norestart')
     $removed += [ordered]@{ name = $product.DisplayName; version = $product.DisplayVersion; exit = $code }
     if ($code -notin @(0, 1605)) { throw "Could not remove $($product.DisplayName). Exit code $code." }
 }
 $absent = RuntimeState
+Write-Output ($removed | ConvertTo-Json -Compress)
 if ($absent.installed -eq 1 -or ($absent.system_files.Values | Where-Object { $_ })) {
     throw "The hosted VM still has the x64 runtime: $($absent | ConvertTo-Json -Compress)"
 }
@@ -49,13 +88,6 @@ if ($missingExit -ne 10 -or (Test-Path -LiteralPath $target)) {
     throw "Missing runtime did not stop installation cleanly. Exit code $missingExit."
 }
 
-$download = Join-Path $Output 'vc-redist-x64.exe'
-Invoke-WebRequest -Uri 'https://aka.ms/vc14/vc_redist.x64.exe' -OutFile $download
-$signature = Get-AuthenticodeSignature -LiteralPath $download
-if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
-    throw 'Microsoft redistributable signature could not be verified.'
-}
-$runtimeHash = (Get-FileHash -LiteralPath $download).Hash.ToLowerInvariant()
 $installExit = Run $download @('/install', '/quiet', '/norestart')
 if ($installExit -notin @(0, 3010)) { throw "Microsoft redistributable failed. Exit code $installExit." }
 $after = RuntimeState
