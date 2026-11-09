@@ -7,7 +7,7 @@
 1. 在独立检出中选择要验证的发布标签或提交，并确认工作区状态。
 2. 按 README 准备 CPython 3.13.16 x64，使用 `packaging/windows-x64-py313.lock` 安装带哈希的依赖。运行 `packaging/prepare_public_resources.py`，从锁定来源准备采集器、结构库等输入。
 3. 运行 `python -m inkstruct.application --workspace <测试工作区>` 验证界面。使用独立工作区和合成数据复现。
-4. 运行源码回归，再构建便携包与安装器。精确参数集中在 README。[0.1.69 源码构建](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.69#源码构建)
+4. 运行源码回归，再构建便携包与安装器。精确参数集中在 README。[0.1.70 源码构建](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.70#源码构建)
 
 ## 选择回归范围
 
@@ -23,7 +23,7 @@
 
 发布从拟发布提交的干净检出开始，记录提交 ID、锁定输入哈希、回归结果和产物 SHA-256。构建后验证 ZIP 和安装版，包含运行库缺失、恢复运行库后安装、启动、卸载与用户文件保留。发布新应用构建时递增应用版本，验证通过后为对应提交创建 `app-v<版本>` 注解标签。
 
-0.1.69 的安装器和 ZIP 依赖系统 Microsoft Visual C++ x64 运行库。随包动态库、许可、替换说明和对应源码见分发说明。[Windows 分发说明](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/docs/WINDOWS_DISTRIBUTION.md) · [Windows 验证工作流](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/.github/workflows/windows-release-check.yml)
+0.1.70 的安装器和 ZIP 依赖系统 Microsoft Visual C++ x64 运行库。随包动态库、许可、替换说明和对应源码见分发说明。[Windows 分发说明](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/docs/WINDOWS_DISTRIBUTION.md) · [Windows 验证工作流](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/.github/workflows/windows-release-check.yml)
 
 ## 预览和维护文档站
 

@@ -2,7 +2,7 @@ name: Windows release verification
 
 on:
   push:
-    branches: ['codex/windows-public-0.1.69']
+    branches: ['codex/windows-0.1.70']
   workflow_dispatch:
 
 permissions:

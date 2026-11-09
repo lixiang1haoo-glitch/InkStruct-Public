@@ -7,7 +7,7 @@ from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
 
-from .generation_workflow import METHODS, GenerationWorkflow, identity, resources
+from .generation_workflow import METHODS, MULTI_CANDIDATE_METHODS, GenerationWorkflow, identity, resources
 
 
 def _qt():
@@ -127,7 +127,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             for key, label in METHODS.items():
                 self.method.addItem(label, key)
             info = QtWidgets.QLabel("ⓘ")
-            info.setToolTip("v6.2 exp：增加竖弯钩、止部关键笔语义准入与不兼容来源重试，保留真实原笔迹。\n"
+            info.setToolTip("v6.3 exp：在 v6.2 的分笔规则上增加连笔供体。\n"
+                "v6.2 exp：增加竖弯钩、止部关键笔语义准入与不兼容来源重试，保留真实原笔迹。\n"
                 "作者来源完整的字可按所选上限保留多份真实供体候选，制作字体后按出现位置稳定选样。\n"
                 "v6.1 exp：参考修正、完整部件、受限关键笔替换及作者单笔回退；保留完整来源轨迹与缺口。\n"
                 "沿用跨字生成规则，排除同字供体；未通过来源筛选处保留参考替代并警告。\n"
@@ -142,6 +143,13 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             form.addRow("样本与档案", self.sample_summary)
             form.addRow("", self.sample_notice)
             form.addRow("生成方式", method_row)
+            connected_hint = QtWidgets.QLabel("当前仅 v6.3 支持连笔。请在采集页开启「允许汉字连笔」。")
+            connected_hint.setWordWrap(True)
+            form.addRow("", connected_hint)
+            self.same_character = QtWidgets.QCheckBox("允许回放同字的完整连笔样本")
+            self.same_character.setObjectName("sameCharacterConnected")
+            self.same_character.setToolTip("仅限已通过整字校验的同作者连笔样本。默认使用跨字部件复用。")
+            form.addRow("", self.same_character)
             generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
             generation_layout = QtWidgets.QVBoxLayout(generation_group)
             generation_form = QtWidgets.QFormLayout()
@@ -195,7 +203,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.candidate_limit.setSuffix(" 份")
             self.candidate_limit.setValue(self.preferred_candidate_limit())
             self.candidate_limit.setToolTip(
-                "仅用于 v6.2 exp，数量包含原主字形。实际份数取决于真实来源和完整检查；"
+                "v6.2 和 v6.3 支持多候选。实际份数取决于真实来源和完整检查；"
                 "增加上限会增加尝试次数、生成时间和包体。"
             )
             generation_form.addRow("每字成品上限", compact_field(self.candidate_limit))
@@ -360,6 +368,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 at = datetime.fromisoformat(at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if at else "尚未导入"
                 donors = status["donors"]
                 line += f"\n上次导入 {at} · 成功导入 {status['imported']} 份 · 有效供体 {donors if donors is not None else '—'}"
+                if status.get("connected"):
+                    groups = status["connected"]
+                    line += f" · 连笔整字 {groups['whole']} 个、部件 {groups['parts']} 个"
                 if status["foreign"]:
                     notices.append("作者归属不符：目录包含 " + "、".join(status["foreign"]))
                 if status["changed"]:
@@ -390,17 +401,18 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             return value
 
         def remember_candidate_limit(self, value):
-            if self.method.currentData() == "v62":
+            if self.method.currentData() in MULTI_CANDIDATE_METHODS:
                 self.candidate_preferences.setValue("candidate_limit", value)
             self.update_candidate_hint()
 
         def update_candidate_hint(self):
             from .generation_variants import candidate_attempt_limit
 
-            if self.method.currentData() != "v62":
-                self.candidate_hint.setText("当前生成方式只保留 1 份主字形；多份成品上限仅用于 v6.2 exp。")
+            method = self.method.currentData()
+            if method not in MULTI_CANDIDATE_METHODS:
+                self.candidate_hint.setText("当前生成方式只保留 1 份主字形。v6.2 和 v6.3 支持多候选。")
             elif self.candidate_limit.value() == 1:
-                self.candidate_hint.setText("数量包含原主字形；选择 1 份时不尝试额外成品。")
+                self.candidate_hint.setText("每字只保留 1 份。" + ("有合格连笔时优先使用。" if method == "v63" else ""))
             else:
                 attempts = candidate_attempt_limit(self.candidate_limit.value())
                 self.candidate_hint.setText(
@@ -429,7 +441,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_actions.setEnabled(not self.busy)
             self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy)
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
-            multiple = self.method.currentData() == "v62"
+            self.same_character.setVisible(self.method.currentData() == "v63")
+            self.same_character.setEnabled(not self.busy)
+            multiple = self.method.currentData() in MULTI_CANDIDATE_METHODS
             with QtCore.QSignalBlocker(self.candidate_limit):
                 self.candidate_limit.setValue(self.preferred_candidate_limit() if multiple else 1)
             self.candidate_limit.setEnabled(multiple and not self.busy)
@@ -650,7 +664,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 return
             values, text = self.values(), "".join(targets["requested"])
             workers = self.parallelism.currentData()
-            candidate_limit = self.candidate_limit.value() if values[2] == "v62" else 1
+            candidate_limit = self.candidate_limit.value() if values[2] in MULTI_CANDIDATE_METHODS else 1
+            same_character = values[2] == "v63" and self.same_character.isChecked()
             self.cancel_event.clear()
             self.generation_active = True
             self.generation_error = ""
@@ -658,7 +673,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.progress_panel.start()
             self.status.hide()
             self.submit(lambda: service.generate(*values, text,
-                workers=workers, targets=targets, candidate_limit=candidate_limit,
+                workers=workers, targets=targets, candidate_limit=candidate_limit, same_character=same_character,
                 progress=self.generation_progress.emit, preparation=self.generation_preparation.emit,
                 cancelled=self.cancel_event.is_set), cancellable=True)
 

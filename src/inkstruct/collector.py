@@ -127,8 +127,14 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.layout().insertLayout(canvas_index, writing_row, 1)
             self.stroke_count_label = QtWidgets.QLabel("笔画数量：等待书写")
             self.stroke_count_label.setObjectName("mutedLabel")
+            self.connected_mode = QtWidgets.QCheckBox("允许汉字连笔（仅 v6.3 生成支持）")
+            self.connected_mode.setObjectName("connectedCapture")
+            self.connected_mode.setToolTip("开启后按实际落笔和抬笔保存。生成时请选择 v6.3，由建档校验笔位是否完整。")
+            self.connected_mode.setChecked(connected_capture)
             self.layout().insertWidget(canvas_index, self.stroke_count_label)
             self.layout().insertLayout(canvas_index + 1, size_row)
+            self.layout().insertWidget(canvas_index + 2, self.connected_mode)
+            self.connected_mode.toggled.connect(self.refresh)
             self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
             self.boundary_guard = install_capture_boundary_guard(self, QtCore, QtGui, QtWidgets)
             self.refresh()
@@ -179,8 +185,9 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 self.stroke_count_label.setStyleSheet("color: #475569;")
                 return
             has_trajectory = self.canvas.trajectory.point_count > 0
-            allowed = check.matches or (connected_capture and check.expected is not None)
-            if connected_capture and check.expected is not None:
+            connected = self.connected_mode.isChecked() and check.expected is not None
+            allowed = check.matches or connected
+            if connected:
                 self.stroke_count_label.setText(
                     f"实录 {check.actual} 段 · 标准 {check.expected} 笔 · 原样保存，建档时校验"
                 )
@@ -198,7 +205,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             check = self._stroke_check()
             if check is None or self.canvas.pen_down:
                 return
-            if not check.matches and (not connected_capture or check.expected is None):
+            if not check.matches and (not self.connected_mode.isChecked() or check.expected is None):
                 QtWidgets.QMessageBox.warning(
                     self,
                     "笔画数量不一致",

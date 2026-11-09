@@ -1,6 +1,6 @@
 # 排版输入与模板
 
-本文描述 InkStruct **0.1.69** 的排版输入。用 UTF-8 Markdown 交换正文，用 [`.inkdoc`](./inkdoc) 一起保存页面设置、嵌入资源和冻结选样。接入时先检查结构，再检查资源，最后渲染。[CLI 与快速开始](./cli)
+本文描述 InkStruct **0.1.70** 的排版输入。用 UTF-8 Markdown 交换正文，用 [`.inkdoc`](./inkdoc) 一起保存页面设置、嵌入资源和冻结选样。接入时先检查结构，再检查资源，最后渲染。[CLI 与快速开始](./cli)
 
 ## Markdown 与公式
 
@@ -61,4 +61,4 @@
 
 这里假设模板声明了 `title`。字段块以单独一行 `:::` 结束。模板 v3 使用正文里的字段块。旧模板若使用节点绑定，可通过 `template inspect-content` 获取项目摘要和节点，再用 `template bind --bindings ... --output ...` 另存。两种入口的参数见 `document template --help`。
 
-对已有项目用 `document template validate-document file.inkdoc` 核对实际内容能否排进页面，检查报告的 `exportable`、`plotter_exportable` 和 `diagnostics`。模板几何有效只是其中一步，实体写字机还需要单独对位。[模板命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/document/template_authoring.py)
+对已有项目用 `document template validate-document file.inkdoc` 核对实际内容能否排进页面，检查报告的 `exportable`、`plotter_exportable` 和 `diagnostics`。模板几何有效只是其中一步，实体写字机还需要单独对位。[模板命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/document/template_authoring.py)

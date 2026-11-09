@@ -68,6 +68,29 @@ def grouped_records(root, writer):
         yield glyph, None, {"legacy_source_hash": spec["sha256"]}, manifest
 
 
+def verify_connected_candidates(payload, row, writer, character, limit, same_character):
+    groups = payload.get("connected_candidates", [])
+    if not groups:
+        if "connected_count" in row or "total_candidate_count" in row or row.get("same_character_reuse"):
+            raise ValueError("连笔候选与逐字记录不符")
+        return []
+    if type(limit) is not int or limit < 1 or not isinstance(groups, list):
+        raise ValueError("生成协议不支持连笔候选")
+    count = len(groups) + (row.get("candidate_count", 1) if limit > 1 else 0)
+    if count > limit or row.get("connected_count") != len(groups) or row.get("total_candidate_count") != count:
+        raise ValueError("连笔候选数量不符")
+    standard = [stroke["standard_stroke_id"] for stroke in payload["glyph"]["strokes"]]
+    for glyph in groups:
+        validate_grouped_glyph(glyph, writer, character)
+        allowed = {"cross_character", "same_character"} if same_character else {"cross_character"}
+        if (glyph.get("method") not in allowed or glyph["standard_slots"] != standard
+                or not any(len(s["standard_slots"]) == 2 for s in glyph["segments"])):
+            raise ValueError("连笔候选缺少标准笔位、来源或同字授权")
+    if bool(row.get("same_character_reuse")) != any(g["method"] == "same_character" for g in groups):
+        raise ValueError("同字连笔来源记录不符")
+    return groups
+
+
 def make_grouped(glyph):
     validate_grouped_glyph(glyph, glyph["writer_id"], glyph["character"])
     trajectory = trajectory_for(glyph)

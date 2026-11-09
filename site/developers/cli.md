@@ -1,13 +1,13 @@
 # CLI 与快速开始
 
-以下命令针对 **0.1.69** 源码，在 PowerShell 中运行。示例只有两个字形，不需要采集笔迹或下载生成结构库。
+以下命令针对 **0.1.70** 源码，在 PowerShell 中运行。示例只有两个字形，不需要采集笔迹或下载生成结构库。
 
 ## 环境
 
 在新目录准备对应源码和独立 Python 环境。示例使用 Python 3.13。Qt 窗口预览需要 `desktop` 依赖。
 
 ```powershell
-git clone --branch app-v0.1.69 --depth 1 https://github.com/lixiang1haoo-glitch/InkStruct-Public.git
+git clone --branch app-v0.1.70 --depth 1 https://github.com/lixiang1haoo-glitch/InkStruct-Public.git
 cd InkStruct-Public
 py -3.13 -m venv .venv
 $python = ".\.venv\Scripts\python.exe"
@@ -50,4 +50,4 @@ $python = ".\.venv\Scripts\python.exe"
 | `document render two-shapes.inkdoc --output rendered --no-png` | 项目或文本 | 页面文件与 JSON 报告 |
 | `document template --help` | 子命令入口 | 查看模板检查、预览与绑定参数 |
 
-纯 Markdown 用 `render` 或 `preview` 时需传 `--mode markdown`。`.inkdoc` 会启用 Markdown 模式并读取保存的方言与设置。桌面依赖可用 `& $python -m pip install -e ".[desktop]"` 安装。更多参数以[对应版本的命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/document/cli.py)和 `--help` 为准。
+纯 Markdown 用 `render` 或 `preview` 时需传 `--mode markdown`。`.inkdoc` 会启用 Markdown 模式并读取保存的方言与设置。桌面依赖可用 `& $python -m pip install -e ".[desktop]"` 安装。更多参数以[对应版本的命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/document/cli.py)和 `--help` 为准。

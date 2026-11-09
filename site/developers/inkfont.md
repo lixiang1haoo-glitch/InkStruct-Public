@@ -6,7 +6,7 @@ import { withBase } from 'vitepress'
 
 `.inkfont` 是供 InkStruct 选择和绘制的中心线字形资源。一个字符可以拥有多份不同笔迹，英文正体和斜体可以各有自己的候选。用 InkStruct 字体库导入即可使用，也可通过源码读入器检查。<a :href="withBase('/developer-examples/two-shapes.inkfont')" download>合成字体示例</a>
 
-本页对应应用 **0.1.69** 和字体包 **1.0**。字体包的 `format_version`、`font_version` 和应用版本分别演进。
+本页对应应用 **0.1.70** 和字体包 **1.0**。字体包的 `format_version`、`font_version` 和应用版本分别演进。
 
 ## ZIP 成员
 
@@ -40,7 +40,7 @@ import { withBase } from 'vitepress'
 | `core_hash` | 对字体身份、发布身份、必需特性和核心成员摘要计算的哈希。移除开发附录可保留该值 |
 | `content_hash` | 清单移除此字段后的规范序列化摘要，涵盖包身份与全部成员声明 |
 
-字体清单使用 UTF-8、键排序、紧凑 JSON。轨迹及部分关联字段另用保留整数、浮点数和字段存在性的类型化摘要。文件整体的 SHA-256 可用于核对下载，包内哈希用于校验内容完整性。身份与计算细节见 [0.1.69 字体读写器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/fonts/core.py)。
+字体清单使用 UTF-8、键排序、紧凑 JSON。轨迹及部分关联字段另用保留整数、浮点数和字段存在性的类型化摘要。文件整体的 SHA-256 可用于核对下载，包内哈希用于校验内容完整性。身份与计算细节见 [0.1.70 字体读写器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/fonts/core.py)。
 
 ## 读取与拒绝条件
 

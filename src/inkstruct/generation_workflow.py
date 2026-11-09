@@ -16,13 +16,22 @@ from pathlib import Path
 
 from .samples import sha256_file
 
-METHODS = {"v62": "v6.2 exp（推荐）", "v61": "v6.1 exp", "v4": "v4 adaptive"}
+METHODS = {"v63": "v6.3 exp（支持连笔）", "v62": "v6.2 exp", "v61": "v6.1 exp", "v4": "v4 adaptive"}
 VERSION = "desktop-corrected-v61-20261014.1"
 V62_VERSION = "desktop-semantic-v62-20261020.1"
+V63_VERSION = "desktop-connected-v63-1"
+MULTI_CANDIDATE_METHODS = {"v62", "v63"}
+SOURCE_METHODS = {"v61", *MULTI_CANDIDATE_METHODS}
 
 
 def workflow_version(method):
-    return V62_VERSION if method == 'v62' else VERSION
+    return {"v62": V62_VERSION, "v63": V63_VERSION}.get(method, VERSION)
+
+
+def connected_profile_valid(profile):
+    record = profile.get("connected", {})
+    path = Path(record.get("path", ""))
+    return path.is_file() and sha256_file(path) == record.get("sha256")
 
 
 def resources():
@@ -115,8 +124,12 @@ class GenerationWorkflow:
                 from .profile import load_profile
                 donors = load_profile(Path(profile["path"])).sample_count
         records = [str(value) for value in (batch.get("index"), profile.get("path")) if value]
+        connected = profile.get("connected")
+        if connected:
+            records.append(connected["path"])
         return {"key": key, "path": str(source), "foreign": foreign, "found": len(samples), "records": records,
                 "imported": imported, "imported_at": batch.get("created_at"), "donors": donors,
+                "connected": connected,
                 "changed": bool(imported) and indexed != set(map(sample_identity, samples))}
 
     def readiness(self, writer, source, method):
@@ -130,7 +143,7 @@ class GenerationWorkflow:
             result["import"] = True
             if not self.database.is_file():
                 raise ValueError("结构库缺失，请重新安装完整应用。")
-            if method in ("v61", "v62") and not all(p.is_file() for p in corrections()):
+            if method in SOURCE_METHODS and not all(p.is_file() for p in corrections()):
                 raise ValueError("参考修正资源缺失，请重新安装完整应用。")
             result["start"] = True
             state = self.state(writer, source)
@@ -191,7 +204,8 @@ class GenerationWorkflow:
             if (profile.get("index_sha256") == batch["index_sha256"]
                     and profile.get("workflow_version") == workflow_version(method)
                     and path.is_file() and sha256_file(path) == profile.get("sha256")
-                    and sha256_file(self.database) == profile.get("database_sha256")):
+                    and sha256_file(self.database) == profile.get("database_sha256")
+                    and (method != "v63" or connected_profile_valid(profile))):
                 notify("沿用档案", str(path))
                 return profile
         else:
@@ -236,27 +250,39 @@ class GenerationWorkflow:
         from .structures import StructureRepository
         if sha256_file(Path(batch["index"])) != batch["index_sha256"]:
             raise ValueError("导入样本索引已改变，请重新导入后建档。")
-        profile, path = build_profile(writer, Path(batch["index"]), StructureRepository(self.database),
+        repo = StructureRepository(self.database)
+        index = Path(batch["index"])
+        profile, path = build_profile(writer, index, repo,
                                       self.root / "profiles" / identity(),
-                                      retain_source_trajectories=method in ("v61", "v62"))
-        if not profile.sample_count or (method in ("v61", "v62") and not profile.source_trajectories):
+                                      retain_source_trajectories=method in SOURCE_METHODS)
+        connected = None
+        if method == "v63":
+            from .v63 import build_connected_profile
+            connected = build_connected_profile(writer, index, repo, profile, path)
+        donors = len(profile.source_trajectories) if method in SOURCE_METHODS else profile.sample_count
+        donors += connected["samples"] if connected else 0
+        if not donors:
             raise ValueError("没有可用于此方法的可靠笔画映射。请检查建档排除记录或补充标准笔序汉字样本。档案：" + str(path))
         record = {"path": str(path), "sha256": sha256_file(path), "method": method,
                   "index_sha256": batch["index_sha256"], "workflow_version": workflow_version(method),
                   "database_sha256": sha256_file(self.database), "source_samples": len(profile.source_trajectories),
-                  "effective_donors": len(profile.source_trajectories) if method in ("v61", "v62") else profile.sample_count}
+                  "effective_donors": donors}
+        if connected is not None:
+            record["connected"] = connected
         write(path.with_name("application-build.json"), record)
         return record, {"message": f"建档完成：{profile.sample_count} 份，{profile.character_count} 字；有效供体 {record['effective_donors']} 份。", "profile": str(path)}
 
     def generate(self, writer, source, method, text, *, all_supported=False, progress=None, cancelled=lambda: False,
-                 workers='auto', targets=None, candidate_limit=None, preparation=None):
+                 workers='auto', targets=None, candidate_limit=None, preparation=None, same_character=False):
         from .generation_variants import DEFAULT_CANDIDATES, candidate_attempt_limit
         from .structures import StructureRepository
         if candidate_limit is None:
-            candidate_limit = DEFAULT_CANDIDATES if method == 'v62' else 1
+            candidate_limit = DEFAULT_CANDIDATES if method in MULTI_CANDIDATE_METHODS else 1
         candidate_attempt_limit(candidate_limit)
-        if method != 'v62' and candidate_limit != 1:
-            raise ValueError('当前只有 v6.2 exp 支持同字多候选，其他方法每字保留一份。')
+        if method not in MULTI_CANDIDATE_METHODS and candidate_limit != 1:
+            raise ValueError('v6.2 和 v6.3 支持同字多候选，其他方法每字保留一份。')
+        if same_character and method != "v63":
+            raise ValueError("只有 v6.3 支持同字连笔回放。")
         self.require("start" if preparation is not None else "generate", writer, source, method)
         repository = StructureRepository(self.database)
         from .generation_targets import structure_targets, target_manifest, validate_targets
@@ -304,8 +330,8 @@ class GenerationWorkflow:
         else:
             output = self.root / "outputs" / run_id
             result = generate_v61(output, writer, requested, repository, profile, progress, cancelled,
-                                  semantic=method == 'v62', workers=workers, target_manifest=manifest,
-                                  candidate_limit=candidate_limit)
+                                  semantic=method in MULTI_CANDIDATE_METHODS, workers=workers, target_manifest=manifest,
+                                  candidate_limit=candidate_limit, same_character=same_character)
             completed_characters = result.get("completed_preview", "")
         variants = result.get("variant_character_count", 0)
         note = f"其中 {variants} 字有多份可用字形。" if variants else ""
@@ -317,15 +343,15 @@ class GenerationWorkflow:
 
 
 def generate_v61(output, writer, characters, base, profile_record, progress, cancelled, *, semantic=False,
-                 workers="auto", target_manifest=None, candidate_limit=1):
+                 workers="auto", target_manifest=None, candidate_limit=1, same_character=False):
     from .generation_parallel import run_generation
     return run_generation(output, writer, characters, base, profile_record, progress, cancelled,
                           semantic=semantic, workers=workers, target_manifest=target_manifest,
-                          candidate_limit=candidate_limit)
+                          candidate_limit=candidate_limit, same_character=same_character)
 
 
 def prepare_generation(writer, base, profile_record, *, semantic=False, reference_paths=None,
-                       cancelled=lambda: False, candidate_limit=1):
+                       cancelled=lambda: False, candidate_limit=1, same_character=False):
     from .exemplar_index import component_key
     from .generation_v61_helpers import (
         check_sources,
@@ -367,6 +393,14 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
     if cancelled():
         raise InterruptedError("生成已取消")
     profile = load_profile(Path(profile_record["path"]))
+    connected = profile_record.get("connected")
+    units = []
+    if connected is not None:
+        from .v63 import ARCHIVE, CONNECTED_METHOD, connected_candidates
+        archive = read(connected["path"])
+        if archive.get("schema_version") != ARCHIVE or archive.get("writer") != writer:
+            raise ValueError("连笔档案格式或作者不符")
+        units = archive["units"]
     engine = generator_class(profile, base, target, split_rules=True)
     if cancelled():
         raise InterruptedError("生成已取消")
@@ -390,6 +424,10 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
             'scope': 'stop-component keys and vertical bend hooks; other content forms not newly verified',
             'source_ink': 'unchanged vertices, pressure and within-stroke timing',
             'unknown': 'registered ambiguous critical forms reject candidate; unrelated unregistered forms retain v6.1 behavior'}
+    if connected is not None:
+        protocol.update(method=CONNECTED_METHOD, version=V63_VERSION,
+                        connected_candidates={"same_character": same_character, "limit": candidate_limit},
+                        same_character_sources_excluded=not same_character)
     if candidate_limit > 1:
         protocol["candidate_pool"] = {"version": POOL_VERSION, "limit": candidate_limit,
                                       "attempt_limit": candidate_attempt_limit(candidate_limit),
@@ -459,6 +497,20 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
                     candidate["source_profile_sha256"] = profile_record["sha256"]
                 payload["candidate_pool"] = {"version": POOL_VERSION, "alternatives": alternatives}
                 row["candidate_count"] = 1 + len(alternatives)
+            if units:
+                groups = connected_candidates(writer, base.get(character), ctx.graph, payload["glyph"], rows,
+                                              units, base, same_character=same_character,
+                                              limit=max(1, candidate_limit - row.get("candidate_count", 1)),
+                                              cancelled=cancelled)
+                if groups:
+                    if candidate_limit > 1:
+                        alternatives = payload["candidate_pool"]["alternatives"]
+                        del alternatives[max(0, candidate_limit - len(groups) - 1):]
+                        row["candidate_count"] = 1 + len(alternatives)
+                    payload["connected_candidates"] = groups
+                    row["connected_count"] = len(groups)
+                    row["total_candidate_count"] = len(groups) + (row.get("candidate_count", 1) if candidate_limit > 1 else 0)
+                    row["same_character_reuse"] = any(g["method"] == "same_character" for g in groups)
             path = stem.with_suffix(".json.gz")
             path.write_bytes(gzip.compress(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode(), mtime=0))
             row["files"][str(path.relative_to(output))] = sha256_file(path)

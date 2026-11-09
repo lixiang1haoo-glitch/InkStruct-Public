@@ -1,6 +1,6 @@
 # 采集、生成与字形来源
 
-本页描述 **0.1.69 Windows 桌面版**的数据交接。Android 采集端正在开发中。
+本页描述 **0.1.70 Windows 桌面版**的数据交接。Android 采集端正在开发中。
 
 ## 交接文件
 
@@ -24,7 +24,7 @@ A,2
 +,2
 ```
 
-字符集合及全半角归并由桌面版采集目录决定。需要正斜体时在采集任务中选对应类别。工具可以用 [0.1.69 扩展字表读入器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/symbol_capture.py) 预检这类 CSV。任务进度和样本由采集器记录。
+字符集合及全半角归并由桌面版采集目录决定。需要正斜体时在采集任务中选对应类别。工具可以用 [0.1.70 扩展字表读入器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/symbol_capture.py) 预检这类 CSV。任务进度和样本由采集器记录。
 
 ## 从同作者样本到字体候选
 
@@ -32,8 +32,12 @@ A,2
 2. 制包从明确选中的汉字批次和扩展来源取材。样本、生成结果和供体需要通过各自的身份与来源校验。勾选类别或规则变化后重新核对覆盖。
 3. 完成封装后执行完整验证，成功才发布。候选的来源摘要随包保留，可按 `candidate_id` 在 `provenance.json` 查找。
 
+### v6.3 连笔供体
+
+原始汉字仍写入 `handwriting_single_v1`，一段实录对应一次落笔到抬笔。v6.3 额外记录物理笔段覆盖的标准笔位，分别判断整字和完整部件能否作为供体。v6.2 的分笔候选继续参与同一每字上限。制成字体后，轨迹仍按物理笔段绘制，来源摘要中的 `v63_standard_slots` 和 `v63_physical_sources` 记录标准笔位与物理笔段的对应。现有字体包和文档格式版本沿用原编号。[实现与独立诊断命令](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/docs/V63_CONNECTED_PROTOTYPE.md)
+
 ## 共用与合成
 
-同形共用包含全角与半角、英文正体与斜体、拉丁正体与希腊大写。规则只按已定义的字符映射使用同作者的有效供体，目标有有效独立录制时优先使用。英文与希腊类别按组及字符设置生效。需要由多个输入构造新字形的条目进入规则合成。完整的规则目录与生效结果可在制包页查阅。[规则设置实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/fonts/publication_rules.py)
+同形共用包含全角与半角、英文正体与斜体、拉丁正体与希腊大写。规则只按已定义的字符映射使用同作者的有效供体，目标有有效独立录制时优先使用。英文与希腊类别按组及字符设置生效。需要由多个输入构造新字形的条目进入规则合成。完整的规则目录与生效结果可在制包页查阅。[规则设置实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/fonts/publication_rules.py)
 
-部分旧生成目录可以通过适配器读取。来源证据不足时会标记未知，协议或轨迹损坏会被拒绝。对于长期交换，优先交付经过验证的 `.inkfont` 或 `.inkdoc`。作者档案、内部索引、运行报告及迁移中间文件随实现演进。[生成结果与采集适配器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/fonts/importer.py)
+部分旧生成目录可以通过适配器读取。来源证据不足时会标记未知，协议或轨迹损坏会被拒绝。对于长期交换，优先交付经过验证的 `.inkfont` 或 `.inkdoc`。作者档案、内部索引、运行报告及迁移中间文件随实现演进。[生成结果与采集适配器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/fonts/importer.py)

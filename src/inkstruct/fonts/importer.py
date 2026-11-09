@@ -115,6 +115,17 @@ def generated_records(run, writer):
             raise ValueError("轨迹身份不符")
         candidates = candidate_payloads(payload, row, writer=writer, character=char,
                                         profile_hash=protocol.get("profile", {}).get("sha256"), limit=limit)
+        if "connected_candidates" in protocol or "connected_candidates" in payload:
+            from ..v63_package import verify_connected_candidates
+            connected = protocol.get("connected_candidates", {})
+            if connected and connected.get("limit") != limit:
+                raise ValueError("连笔候选上限与批次不符")
+            groups = verify_connected_candidates(payload, row, writer, char,
+                                                 connected.get("limit"), connected.get("same_character", False))
+            for group in groups:
+                yield group, None, {"grouped": True, "legacy_source_hash": sha(encoded(group))}, protocol
+            if groups and limit == 1:
+                continue
         primary = {k: v for k, v in payload.items() if k != "candidate_pool"} if limit > 1 else payload
         yield primary["glyph"], row, primary, protocol
         for candidate in candidates[1:]:
@@ -125,7 +136,7 @@ def generated_records(run, writer):
 
 
 def make_generated(glyph, row, payload, protocol):
-    if protocol and protocol.get("schema_version") == "inkstruct_v63_grouped_run_v1":
+    if payload.get("grouped") or (protocol and protocol.get("schema_version") == "inkstruct_v63_grouped_run_v1"):
         from ..v63_package import make_grouped
         return make_grouped(glyph)
     # Strict legacy generated protocol; new font protocol never relaxes it.
@@ -200,6 +211,11 @@ def make_generated(glyph, row, payload, protocol):
         if reference
         else "complete"
     )
+    # Split candidates in a v6.3 batch still use the original cross-character rules.
+    same_character_excluded = (
+        True if protocol and "connected_candidates" in protocol else
+        protocol.get("same_character_sources_excluded") if protocol else None
+    )
     summary = {
         "source_kind": "generated",
         "task_status": "completed",
@@ -218,9 +234,7 @@ def make_generated(glyph, row, payload, protocol):
         "generation_version": protocol.get("version") if protocol else None,
         "generation_mode": protocol.get("generation_mode", "cross_character_review"
             if protocol.get("same_character_sources_excluded") else "unknown") if protocol else "unknown",
-        "same_character_sources_excluded": protocol.get("same_character_sources_excluded")
-        if protocol
-        else None,
+        "same_character_sources_excluded": same_character_excluded,
         "evidence_scope": "source run report; trajectory and source partition checked on import",
         "warnings": ["作者来源记录不完整"] if unknown else ["含参考替代笔画"] if reference else [],
     }

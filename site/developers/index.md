@@ -4,7 +4,7 @@
 import { withBase } from 'vitepress'
 </script>
 
-从命令行检查手写文档、读取交换文件，或从源码参与开发。这里的参考页以 InkStruct 桌面应用 **0.1.69** 为验证基线。应用、Python 项目和各文件格式有各自的版本。
+从命令行检查手写文档、读取交换文件，或从源码参与开发。这里的参考页以 InkStruct 桌面应用 **0.1.70** 为验证基线。应用、Python 项目和各文件格式有各自的版本。
 
 | 我想做什么 | 从这里开始 |
 | --- | --- |
@@ -23,4 +23,4 @@ import { withBase } from 'vitepress'
 - <a :href="withBase('/developer-examples/two-shapes.inkdoc')" download>下载项目示例 <code>two-shapes.inkdoc</code></a>
 - [查看生成脚本](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/main/examples/make_format_examples.py)
 
-Python 示例引用 0.1.69 源码中的实现入口。接入时请锁定源码标签，升级后重跑样例。对外交换优先使用已版本化的文件和已验证的 CLI 参数。
+Python 示例引用 0.1.70 源码中的实现入口。接入时请锁定源码标签，升级后重跑样例。对外交换优先使用已版本化的文件和已验证的 CLI 参数。

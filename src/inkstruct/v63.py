@@ -11,7 +11,7 @@ import numpy as np
 
 from .generation_workflow import prepare_generation, read, write
 from .profile import build_profile
-from .samples import scan_samples, sha256_file, write_sample_index
+from .samples import iter_index, scan_samples, sha256_file, write_sample_index
 from .structure_corrections import CorrectedStructureRepository
 from .trajectory_experiment import crossing_pairs
 from .v61_candidate_expansion import correspondence
@@ -22,6 +22,7 @@ from .v63_alignment import align_groups
 ARCHIVE = "inkstruct_v63_group_archive_v1"
 RUN = "inkstruct_v63_grouped_run_v1"
 GLYPH = "inkstruct_v63_grouped_glyph_v1"
+CONNECTED_METHOD = "v6.3 exp"
 
 
 def slots(graph, node):
@@ -114,9 +115,34 @@ def make_archive(source, writer, repo, output):
     report = write_sample_index(source, writer, output / "index", samples, rejected)
     profile, profile_path = build_profile(writer, Path(report["index"]), repo, output / "split",
                                           retain_source_trajectories=True)
+    units, reviewed = collect_units(samples, repo, profile.source_trajectories)
+    data = {
+        "schema_version": ARCHIVE, "writer": writer, "structure_sha256": repo.content_sha256(),
+        "split_profile": str(profile_path.relative_to(output.resolve())),
+        "split_sha256": sha256_file(profile_path),
+        "units": units, "imported": len(samples), "split_donors": len(profile.source_trajectories),
+        "review": reviewed, "import_rejected": len(rejected),
+    }
+    write(output / "archive.json", data)
+    return {k: data[k] for k in ("imported", "split_donors", "review", "import_rejected")} | {
+        "connected_whole": sum(u["path"] == "whole" for u in units),
+        "connected_parts": sum(u["path"] != "whole" for u in units),
+    }
+
+
+def build_connected_profile(writer, index, repo, profile, profile_path):
+    units, review = collect_units(iter_index(index), repo, profile.source_trajectories)
+    path = profile_path.with_name("connected.json")
+    write(path, {"schema_version": ARCHIVE, "writer": writer, "units": units, "review": review})
+    return {"path": str(path), "sha256": sha256_file(path), "samples": len({u["sample"] for u in units}),
+            "whole": sum(u["path"] == "whole" for u in units),
+            "parts": sum(u["path"] != "whole" for u in units)}
+
+
+def collect_units(samples, repo, split_donors):
     units, reviewed = [], []
     for sample in samples:
-        if sample.sample_id in profile.source_trajectories:
+        if sample.sample_id in split_donors:
             continue
         audit = {}
         try:
@@ -131,18 +157,7 @@ def make_archive(source, writer, repo, output):
         if not any(part == "whole" for part, _, _ in found):
             reviewed.append({"sample": sample.sample_id, "character": sample.character,
                              "reason": "仅局部准入" if found else "连写组未达到独立准入条件", **audit})
-    data = {
-        "schema_version": ARCHIVE, "writer": writer, "structure_sha256": repo.content_sha256(),
-        "split_profile": str(profile_path.relative_to(output.resolve())),
-        "split_sha256": sha256_file(profile_path),
-        "units": units, "imported": len(samples), "split_donors": len(profile.source_trajectories),
-        "review": reviewed, "import_rejected": len(rejected),
-    }
-    write(output / "archive.json", data)
-    return {k: data[k] for k in ("imported", "split_donors", "review", "import_rejected")} | {
-        "connected_whole": sum(u["path"] == "whole" for u in units),
-        "connected_parts": sum(u["path"] != "whole" for u in units),
-    }
+    return units, reviewed
 
 
 def fit_component(source, target):
@@ -201,7 +216,8 @@ def physical_points(segments):
     return result
 
 
-def candidates_for(target_graph, corrected, base_segments, units, source_repo, *, same_character):
+def candidates_for(target_graph, corrected, base_segments, units, source_repo, *, same_character,
+                   cancelled=lambda: False):
     target_ids = [s.stroke_id for s in target_graph.strokes]
     candidates = []
     if same_character:
@@ -212,11 +228,15 @@ def candidates_for(target_graph, corrected, base_segments, units, source_repo, *
     original = [np.array([(p["x"], p["y"]) for p in seg["points"]]) for seg in base_segments]
     originals_by_id = dict(zip(target_ids, original, strict=True))
     for part in top_parts(target_graph):
+        if cancelled():
+            break
         wanted = slots(target_graph, part)
         if wanted != tuple(range(wanted[0], wanted[-1]+1)):
             continue
         a, b = wanted[0], wanted[-1]+1
         for unit in units:
+            if cancelled():
+                break
             if unit["key"] != key(target_graph, part) or unit["character"] == target_graph.character:
                 continue
             source = source_repo.get(unit["character"])
@@ -242,6 +262,37 @@ def candidates_for(target_graph, corrected, base_segments, units, source_repo, *
             candidates.append(("cross_character", [*base_segments[:a],
                                 *mapped_segments(unit, mapping, placed), *base_segments[b:]]))
     return candidates
+
+
+def connected_candidates(writer, graph, corrected, base_glyph, source_rows, units, repo, *,
+                         same_character, limit, cancelled=lambda: False):
+    from .v63_package import validate_grouped_glyph
+
+    if not units:
+        return []
+    base = []
+    for stroke, origin in zip(base_glyph["strokes"], source_rows, strict=True):
+        segment = {"standard_slots": [stroke["standard_stroke_id"]], "points": stroke["points"],
+                   "kind": "reference" if origin["kind"] == "explicit_gap" else "author_split"}
+        if segment["kind"] == "author_split":
+            segment["source_sha256"] = origin["source_sha256"]
+            segment["source_character"] = origin["character"]
+        base.append(segment)
+    result, seen = [], set()
+    for method, segments in candidates_for(graph, corrected, base, units, repo,
+                                            same_character=same_character, cancelled=cancelled):
+        signature = tuple(tuple((p["x"], p["y"]) for p in s["points"]) for s in segments)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        glyph = {"schema_version": GLYPH, "writer_id": writer, "character": graph.character,
+                 "generator": CONNECTED_METHOD, "method": method,
+                 "standard_slots": [s.stroke_id for s in graph.strokes], "segments": physical_points(segments)}
+        validate_grouped_glyph(glyph, writer, graph.character)
+        result.append(glyph)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def generate(archive, repo, characters, output, references, *, same_character=False):

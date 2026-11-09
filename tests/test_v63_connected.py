@@ -14,7 +14,7 @@ from inkstruct.document.schema import PageProfile, StyleProfile
 from inkstruct.fonts.core import FontPackage, decode
 from inkstruct.fonts.library import publish_font
 from inkstruct.fonts.publication import publication_stamp, review_selection
-from inkstruct.generation_workflow import read, write
+from inkstruct.generation_workflow import GenerationWorkflow, read, write
 from inkstruct.layout.blocks import layout_markdown
 from inkstruct.samples import load_raw_sample, sha256_file
 from inkstruct.structure_corrections import POLICY
@@ -142,3 +142,44 @@ def test_build_font_publish_and_freeze_unsplit_path(setup, tmp_path, monkeypatch
         with pytest.raises(ValueError, match="摘要不符"):
             publish_font(library, **kwargs)
     assert len(list(library.glob("*.inkfont"))) == 1
+
+
+def test_desktop_workflow_uses_connected_index_and_candidate_budget(setup, tmp_path, monkeypatch):
+    from inkstruct import generation_workflow
+    from inkstruct.fonts.importer import generated_records
+
+    repo, graph, refs = setup
+    monkeypatch.setattr(generation_workflow, "corrections", lambda: refs)
+    source = tmp_path / "samples"
+    first = source / "one.json"
+    record(first, graph, join=0)
+    second = source / "two.json"
+    variant = read(first)
+    variant["sample_id"] = "two"
+    variant["strokes"][0]["points"][1]["y"] += 2
+    write(second, variant)
+    service = GenerationWorkflow(tmp_path / "work", repo.path)
+    stages = []
+    def run(cap, same, cancel=lambda: False):
+        return service.generate("alice", source, "v63", "明", workers=1, candidate_limit=cap,
+                                same_character=same, preparation=lambda stage, _: stages.append(stage),
+                                cancelled=cancel)
+
+    result = run(4, True)
+    assert result["candidate_count"] == 3 and "建档完成" in stages
+    state = service.state("alice", source)
+    assert state["profiles"]["v63"]["effective_donors"] == 2
+    assert state["profiles"]["v63"]["source_samples"] == 0
+    assert state["profiles"]["v63"]["connected"]["whole"] == 2
+    batch = Path(result["output"])
+    assert sum(review_selection("alice", batch, None, "connected", {"han"})["coverage"].values()) == 3
+    records = list(generated_records(batch, "alice"))
+    assert [r[0].get("method") for r in records] == ["same_character", "same_character", None]
+    stages.clear()
+    only = list(generated_records(Path(run(1, True)["output"]), "alice"))
+    assert len(only) == 1 and only[0][0]["method"] == "same_character"
+    assert "沿用档案" in stages
+    assert list(generated_records(Path(run(4, False)["output"]), "alice"))[0][0].get("segments") is None
+    with pytest.raises(ValueError, match="可靠笔画映射"):
+        service.generate("alice", source, "v62", "明", workers=1, preparation=lambda *_: None)
+    assert service.state("alice", source) == state

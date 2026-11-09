@@ -1,4 +1,5 @@
 Unicode true
+LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
@@ -11,10 +12,10 @@ SetCompressor /SOLID lzma
 Icon "${APP_ICON}"
 UninstallIcon "${APP_ICON}"
 VIProductVersion "${VERSION}.0"
-VIAddVersionKey "ProductName" "InkStruct"
-VIAddVersionKey "FileDescription" "InkStruct Windows x64 Installer"
-VIAddVersionKey "FileVersion" "${VERSION}"
-VIAddVersionKey "ProductVersion" "${VERSION}"
+VIAddVersionKey /LANG=2052 "ProductName" "InkStruct"
+VIAddVersionKey /LANG=2052 "FileDescription" "InkStruct Windows x64 安装程序"
+VIAddVersionKey /LANG=2052 "FileVersion" "${VERSION}"
+VIAddVersionKey /LANG=2052 "ProductVersion" "${VERSION}"
 
 Page directory
 Page instfiles
@@ -28,7 +29,7 @@ Var Isolated
 
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "InkStruct requires 64-bit Windows."
+    MessageBox MB_ICONSTOP "InkStruct 需要 64 位 Windows。"
     Abort
   ${EndIf}
   SetShellVarContext current

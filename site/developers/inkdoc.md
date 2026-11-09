@@ -28,7 +28,7 @@ import { withBase } from 'vitepress'
 
 ## 包版本与校验
 
-应用 **0.1.69** 读取以下 `schema_version`。同一应用会按文档内容写出不同的包版本。
+应用 **0.1.70** 读取以下 `schema_version`。同一应用会按文档内容写出不同的包版本。
 
 | 版本 | 写入场景 |
 | --- | --- |
@@ -36,6 +36,6 @@ import { withBase } from 'vitepress'
 | `inkstruct_document_package_v2` | 普通项目，嵌入了来自 `.inkfont` 核心的候选 |
 | `inkstruct_document_package_v3` | 启用模板命名字段的项目，清单同时声明 `inkstruct_named_fields_v1` |
 
-读入器核对包版本、方言、数学语法、每个成员的原始字节 SHA-256、资源描述与原始几何的一致性，以及选样引用。压缩包大于 200 MB、展开总量超过 500 MB、成员数超过 30,000，或出现重复成员时会拒绝读取。单个成员通常限 16 MB，`resources.json` 上限 128 MB。版本和限制以 [0.1.69 项目读写器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/document/package.py) 和 [元数据校验器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.69/src/inkstruct/document/package_validation.py) 为准。
+读入器核对包版本、方言、数学语法、每个成员的原始字节 SHA-256、资源描述与原始几何的一致性，以及选样引用。压缩包大于 200 MB、展开总量超过 500 MB、成员数超过 30,000，或出现重复成员时会拒绝读取。单个成员通常限 16 MB，`resources.json` 上限 128 MB。版本和限制以 [0.1.70 项目读写器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/document/package.py) 和 [元数据校验器](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/document/package_validation.py) 为准。
 
 建议用对应版本的项目写入器改写副本。直接修改 ZIP 中的 Markdown 会涉及源码锚点、选样、资源引用和清单哈希的一致性。

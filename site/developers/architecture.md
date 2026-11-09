@@ -1,6 +1,6 @@
 # 架构与源码导航
 
-以下路径对应桌面应用 **0.1.69**。处理某个文件或界面问题时，先找它所属的阶段，再查看对应测试。[0.1.69 源码](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.69/src/inkstruct)
+以下路径对应桌面应用 **0.1.70**。处理某个文件或界面问题时，先找它所属的阶段，再查看对应测试。[0.1.70 源码](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.70/src/inkstruct)
 
 ## 两条数据路径
 
@@ -30,4 +30,4 @@ Markdown、排版设置、资源与选样 → .inkdoc
 | 项目如何保存与重开 | `document/package.py` 和 `document/package_validation.py` |
 | 命令行怎样调用排版 | `cli.py` 和 `document/cli.py` |
 
-0.1.69 的 Windows 打包与校验脚本在 `packaging/`，示例在 `examples/`，测试在 `tests/`。文档站源码集中在 `site/`。[构建、验证与贡献](./contributing)
+0.1.70 的 Windows 打包与校验脚本在 `packaging/`，示例在 `examples/`，测试在 `tests/`。文档站源码集中在 `site/`。[构建、验证与贡献](./contributing)
