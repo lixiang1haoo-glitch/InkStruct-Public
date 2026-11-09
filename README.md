@@ -2,18 +2,13 @@
 
 把自己的笔迹做成可复用的字体，再用它排出一页 Markdown。InkStruct 在本机完成采集、生成、制包和排版。
 
-[下载与安装](#下载与安装) · [从笔迹到文档](#从笔迹到文档) · [源码构建](#源码构建) · [使用说明](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
+[获取源码](#获取源码) · [从笔迹到文档](#从笔迹到文档) · [源码构建](#源码构建) · [使用说明](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
 Windows x64 · 0.1.68 · Python / Qt
 
-## 下载与安装
+## 获取源码
 
-| 发布文件 | 用途 |
-| --- | --- |
-| `InkStruct-0.1.68-Windows-x64-Installer.exe` | 为当前 Windows 用户安装，在开始菜单创建入口，可从系统设置卸载 |
-| `InkStruct-0.1.68-Windows-x64.zip` | 解压整个目录，直接打开 `InkStruct.exe` |
-
-正式版本通过 [GitHub Releases](../../releases) 提供，核对附件旁的 SHA-256。两种包都使用 Windows 的 UCRT 和系统安装的 Microsoft Visual C++ x64 运行库。 [Microsoft 运行库](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)
+从 [0.1.68 源码标签](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.68) 获取对应版本，或克隆本仓库的 `main` 分支查看最新说明。目前公开的是源码。Windows 安装程序和免安装 ZIP 可用下文步骤在本机构建。构建产物使用 Windows 的 UCRT 和系统安装的 Microsoft Visual C++ x64 运行库。 [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md) · [Microsoft 运行库](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)
 
 ## 从笔迹到文档
 

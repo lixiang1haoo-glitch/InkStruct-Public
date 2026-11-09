@@ -17,6 +17,8 @@
 
 依赖版本和 wheel 哈希见 [Windows 依赖锁](packaging/windows-x64-py313.lock)。保留 wheel 中的著作权、许可和随附组件说明。
 
+Windows 包的源码对应关系、结构库再生成及验收范围见 [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)。
+
 - CPython 采用 PSF 许可及其历史和组件说明。 [Python 许可](https://docs.python.org/3/license.html)
 - Qt、PySide6、Shiboken6 包含 LGPL/GPL 或商业许可条件。发布二进制前须核对实际 Qt 插件与模块，提供适用许可证、对应源码和可替换动态库的说明。 [Qt 许可](https://doc.qt.io/qt-6/licensing.html) · [LGPL 义务](https://www.qt.io/development/open-source-lgpl-obligations)
 - PyInstaller 的引导器适用其打包例外。该例外保留应用及运行依赖自身的条件。 [PyInstaller 许可](https://pyinstaller.org/en/stable/license.html)

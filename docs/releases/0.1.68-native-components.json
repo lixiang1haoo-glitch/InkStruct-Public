@@ -1,0 +1,779 @@
+[
+  {
+    "member": "InkStruct.exe",
+    "category": "generated",
+    "sha256": "622ad3e00518f163e1a0f88136d75903d09eac10db3050975d380f6d91da29d4",
+    "package": "PyInstaller bootloader + InkStruct",
+    "version": "6.22.3"
+  },
+  {
+    "member": "InkStructTool.exe",
+    "category": "generated",
+    "sha256": "8cacf90465a1ab9d8a364e6d5e74e803e2e5333d8867bb39715e1de58a3e0a80",
+    "package": "PyInstaller bootloader + InkStruct",
+    "version": "6.22.3"
+  },
+  {
+    "member": "PIL\\_avif.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "2e3e5cce3aea38c603680ca3da5d161fad123ce23a803bb692a56aff608989be",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_imaging.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "88756e8e0e3f6180e518da25d379597c861e2d20d716ef001894789b515c1777",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_imagingcms.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "7ecb50b954d13d72b7a0ff565872332443cdbc83a36e58a56b2b949a56f32549",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_imagingft.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "e94673a471a0b6fd5e92e8b6cdbdfe16e2e91bcf5689e9e4c9b391ab43788d85",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_imagingmath.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "9d5bbea6a877a48ed7995a0640ecb0a5567d9fad544a4a1fbf9f22d507029b57",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_imagingtk.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "8ccd6128481d5a3a15993c2f8a69585694ff972652a6b06dcaee276fc65633a7",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PIL\\_webp.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "9918faf8d90faa86e03e48479c6a62383be71da759254afded18591a406a92fe",
+    "package": "pillow",
+    "version": "12.3.0"
+  },
+  {
+    "member": "PySide6\\Qt6Core.dll",
+    "category": "locked-wheel",
+    "sha256": "393833b9d4deef7abd8bf475d38c15126c2f016058b03dd5eb27fa18198cfa75",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Gui.dll",
+    "category": "locked-wheel",
+    "sha256": "880ce2a268d84bd4c5d40ab7834ed0d7bc4ea4e26ee2061e309b39c230c55d9f",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Network.dll",
+    "category": "locked-wheel",
+    "sha256": "8d22b86fe8e4a50497d61f0e81a1b8714db6c10c3c249c04e58dfb62256c9f2f",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6OpenGL.dll",
+    "category": "locked-wheel",
+    "sha256": "6dfd8eaeea70b7eae6d38597c74634653518898f4ccce25863a4ac72af363ad2",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Pdf.dll",
+    "category": "locked-wheel",
+    "sha256": "5ad27dceb3c7e049aa3ed3c35e938563fb69ca7b142231430a825e57cc376f0a",
+    "package": "PySide6_Addons",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Qml.dll",
+    "category": "locked-wheel",
+    "sha256": "2ed3896af675eb9b5436308ad70c9611d0957e3f08e714e34aef0ed98f45c71d",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6QmlMeta.dll",
+    "category": "locked-wheel",
+    "sha256": "5b578f212a1a77260d14b490438a492cc560931975514b3bfb9305d19b936c3b",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6QmlModels.dll",
+    "category": "locked-wheel",
+    "sha256": "89b9f81905c0a4112e245eaec8bea621096ec5f5201bc470b397991ca6106762",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6QmlWorkerScript.dll",
+    "category": "locked-wheel",
+    "sha256": "8ff66dde6610e86693f055640841234a2476aaf8be6ca558e179ff8150ba4cb9",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Quick.dll",
+    "category": "locked-wheel",
+    "sha256": "df94aafbf9a587bf5a2da42393d25da1ef93ba26ab27934e3ff913e17ad142fa",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Svg.dll",
+    "category": "locked-wheel",
+    "sha256": "af771ccdae9e8fa9e9750db37616960cf0b9f159344f83793150a210492bd1f5",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6SvgWidgets.dll",
+    "category": "locked-wheel",
+    "sha256": "a61317066830a31490cea349225c843a461a6a2e6aa51fb66e67c1fbde9c7839",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Test.dll",
+    "category": "locked-wheel",
+    "sha256": "2cf7ee10c3cf7c26f4cb0f3aa24ec9bd411c419732408af9000898bb6881dc63",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\Qt6Widgets.dll",
+    "category": "locked-wheel",
+    "sha256": "442e3e598653d4517a755d541a0337a09324f54d5a1409baf62f51b977c3075f",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtCore.pyd",
+    "category": "locked-wheel",
+    "sha256": "76b787b957e06ba050e63bea0150e286136cb333c47feb3171fda419a28c8a51",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtGui.pyd",
+    "category": "locked-wheel",
+    "sha256": "083b83891fb48f32780adddf8806d599c96641d4869fd3a808c354e30592eda2",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtNetwork.pyd",
+    "category": "locked-wheel",
+    "sha256": "c64960a9c37122648e31e119913fe3f1a0857b94d218b5abea3fb4e2ca44e349",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtOpenGL.pyd",
+    "category": "locked-wheel",
+    "sha256": "5f0ae2ec0ef73611552ee59a67f50faa8a959aa901ddb49e8a3de0251a6d8846",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtPdf.pyd",
+    "category": "locked-wheel",
+    "sha256": "34333c8c9be123ce15c83ef96fc29ac46eb0b254c43850e03ca4961ef6757192",
+    "package": "PySide6_Addons",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtSvg.pyd",
+    "category": "locked-wheel",
+    "sha256": "8da1a39609d42a4d41b79a03d85088019eea28084fdb6b2cab21676282314573",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtSvgWidgets.pyd",
+    "category": "locked-wheel",
+    "sha256": "72507ea0936f0e04f399bc4ec88779bee6bc250d126fe3bd103a3efd08a1ba23",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtTest.pyd",
+    "category": "locked-wheel",
+    "sha256": "01f49617a4ec03b6cb2c7a1e509688960c7ec4541ef99e86f7920a7fffbf8943",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\QtWidgets.pyd",
+    "category": "locked-wheel",
+    "sha256": "c1bd6ef8d5d84b0f3462d28d9b4161ad4963c3df389947783d028f87aabc159b",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\opengl32sw.dll",
+    "category": "locked-wheel",
+    "sha256": "44c05806b21b8f72be646b915d3b8416924126642f1ffb32364cb14ca14133e7",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\generic\\qtuiotouchplugin.dll",
+    "category": "locked-wheel",
+    "sha256": "822ae1e598bba67ffb49cc8fe9a8dc7acd7843ff456b6676fcae1aba46427fca",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\iconengines\\qsvgicon.dll",
+    "category": "locked-wheel",
+    "sha256": "12937d4c89f515b78681ea190ee269c68db62099bfe7cd2da97999ac5772bd61",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qgif.dll",
+    "category": "locked-wheel",
+    "sha256": "e4e71d76df7cad96063bbafacccaed325197218cdd233f6a1b5a9b678bfccc82",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qicns.dll",
+    "category": "locked-wheel",
+    "sha256": "47f48c24bfaad16666a3ae231dfee162e6d16788c4ec0bba89f5b0b991ff08f0",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qico.dll",
+    "category": "locked-wheel",
+    "sha256": "f0b821a7fc0059db5661c7f629df49c695fcd99874643ccb1de28e3633d9b505",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qjpeg.dll",
+    "category": "locked-wheel",
+    "sha256": "901cfff48aa667560db42db4c5526c8fb975397e4b3d7f16fe999d8b736ee44e",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qpdf.dll",
+    "category": "locked-wheel",
+    "sha256": "7a8ccb042f6df787de2797e449909ade69f8696f96bbffe8b9b1d602583ae4dd",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qsvg.dll",
+    "category": "locked-wheel",
+    "sha256": "5f7d2eefd70092ea4ab2ff9d0c09f9868cd307bd55dc978a88451b4acc5a5458",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qtga.dll",
+    "category": "locked-wheel",
+    "sha256": "5a2570a139971dfc8ce96b74c4031ce08055eb97981890ad5c119580dccd0010",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qtiff.dll",
+    "category": "locked-wheel",
+    "sha256": "4a7fc527806c23288f80164da05e193f275599bb96795c382553f4d775ef251d",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qwbmp.dll",
+    "category": "locked-wheel",
+    "sha256": "41145fd98246b8666382ba71f912c895f79042e91dfd72994aeba062426ef85f",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\imageformats\\qwebp.dll",
+    "category": "locked-wheel",
+    "sha256": "38e51ef962f291fb8a8279c2236cf78d8118c62a93ed964598848ca07f882998",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\networkinformation\\qnetworklistmanager.dll",
+    "category": "locked-wheel",
+    "sha256": "22a5c7bfe322123cb235df057f2a67cbf1cdd3a1e272387acd5f08b8b7ef0ed1",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\platforms\\qdirect2d.dll",
+    "category": "locked-wheel",
+    "sha256": "fd1ff39c2a508bb2f76f602e287420e16f0fd928847dcd8b4edd7e7a902e7eb2",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\platforms\\qminimal.dll",
+    "category": "locked-wheel",
+    "sha256": "6a670bdef97270c55430d7d57e27f3f1fb33cb3537cb5b65cd5eed1277f0f0d2",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\platforms\\qoffscreen.dll",
+    "category": "locked-wheel",
+    "sha256": "8e34ed01a41deb8d5c8477d8e22aa4dec672460c56f274a3bfd53d6489e7ab8f",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\platforms\\qwindows.dll",
+    "category": "locked-wheel",
+    "sha256": "cb06c35e26717d136462e864f03135459e8fd403b3451735c177dd94805b1e89",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\styles\\qmodernwindowsstyle.dll",
+    "category": "locked-wheel",
+    "sha256": "f926d75b4bd1421838d0bef0024a7c7dc6770d366fbd4d36d4f38b9ecf2262f8",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\tls\\qcertonlybackend.dll",
+    "category": "locked-wheel",
+    "sha256": "0549c9d5d1d2a1a411456d33a80146fbc74a431aa3c46c94a6344d7c3401c239",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\plugins\\tls\\qschannelbackend.dll",
+    "category": "locked-wheel",
+    "sha256": "651922b7cfa7215d351465577a7434e0c4224cd69c931d9b5acc1d10b06cc93d",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "PySide6\\pyside6.abi3.dll",
+    "category": "locked-wheel",
+    "sha256": "bf97616e6e1509fe01a2260383ab19b384a9ccf3c62a7bf23da9490c5398faf1",
+    "package": "PySide6_Essentials",
+    "version": "6.9.2"
+  },
+  {
+    "member": "_asyncio.pyd",
+    "category": "cpython",
+    "sha256": "6654dfbf4cc92609801f35022acaddd3fc19e6c777b7771b0f0a68f5813889a8",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_bz2.pyd",
+    "category": "cpython",
+    "sha256": "6da4d453852346299e983b458f3ec2f0db3b5f765998ba3f45c91b4a1549037b",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_ctypes.pyd",
+    "category": "cpython",
+    "sha256": "5bcddf4c374c4d247e1e4a61f3347159c36c5785fe43bdae11a4e6c9ea2c0166",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_decimal.pyd",
+    "category": "cpython",
+    "sha256": "eeb278dfbdb305bb5af916ed79e878943e25dc4bd6e99ec17abb7b3fd9f935d5",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_elementtree.pyd",
+    "category": "cpython",
+    "sha256": "34968e3aebdb3e89cb1472b75b04986ce1bbf27d290f4154d77649cc17c41fab",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_hashlib.pyd",
+    "category": "cpython",
+    "sha256": "4d3eb9d9492d626c7bb10cfe5ab233a9195ec7b27e92b465b287e7a24fc8266c",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_lzma.pyd",
+    "category": "cpython",
+    "sha256": "2b4dcb12c0420ffced4b91968ae4eff6cb585f0f07490160c6da47da63064a99",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_multiprocessing.pyd",
+    "category": "cpython",
+    "sha256": "5017bb9dd0d5ab6d7c0f007763d7906d33464f0b436ac6577f1f4fffd5c98986",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_overlapped.pyd",
+    "category": "cpython",
+    "sha256": "3f393b2ce1fe5973fc45e49dffcf51405fa875cdb284cf96b2f0d4b93b08765c",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_queue.pyd",
+    "category": "cpython",
+    "sha256": "79c196a0804b152fc48b4055387f4352838e41c28863a0c946e7a98137e681e1",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_socket.pyd",
+    "category": "cpython",
+    "sha256": "c5936292083189e0675a96ddd0e38235726f1c58195cec64eb0085b9c479ddce",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_sqlite3.pyd",
+    "category": "cpython",
+    "sha256": "95d5b99f696cb33550534e8be80d31003db8b8a27062dfd6b09fdba4bb92f812",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_ssl.pyd",
+    "category": "cpython",
+    "sha256": "30ff82a3ea0c675ddc99e6b14f71ca750f06e77d6653e2da3d7d35b7ef0fc2ed",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_tkinter.pyd",
+    "category": "cpython",
+    "sha256": "426c1761322019d382da2b7154786809ee39f7680b130ea405294b8adcc89baf",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_uuid.pyd",
+    "category": "cpython",
+    "sha256": "0d6fcf704721d4bae58cc754b15a3f8c36907b718874f6d7cbbaa363a14618b1",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "_wmi.pyd",
+    "category": "cpython",
+    "sha256": "f88c322f871aef92de562278bd25c34c6e758642669d5512a22ed972840317b1",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "contourpy\\_contourpy.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "703debe3ec58daba6d3d9fff9aad8706f557e052e1fd49ef924bbaa672927287",
+    "package": "contourpy",
+    "version": "1.4.0"
+  },
+  {
+    "member": "fontTools\\misc\\bezierTools.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "a4119c7ccf62552007a7ea1a71a96a6e94a8bc4ea0e9f4c66dec9ceb379610fb",
+    "package": "fonttools",
+    "version": "4.67.0"
+  },
+  {
+    "member": "fontTools\\varLib\\iup.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "9dc369a44773e8a2bbc8eca53f73af15956457d9ba6d626c790a324c7529c909",
+    "package": "fonttools",
+    "version": "4.67.0"
+  },
+  {
+    "member": "kiwisolver\\_cext.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "524089d7d9b847442033f6eb87c492e2c69b76314259e7f3bcc8eb006cb39a34",
+    "package": "kiwisolver",
+    "version": "1.5.1"
+  },
+  {
+    "member": "libcrypto-3.dll",
+    "category": "cpython",
+    "sha256": "75495fe0e079ab00d49be740d3c710a0b94e3f74f9648cb7cc9f768fc7f52319",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "libffi-8.dll",
+    "category": "cpython",
+    "sha256": "eff52743773eb550fcc6ce3efc37c85724502233b6b002a35496d828bd7b280a",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "libssl-3.dll",
+    "category": "cpython",
+    "sha256": "8957182a9c385bfd9f3f790921de2ddc614cf91f99edbed4e9e5446a46504e32",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "matplotlib\\_c_internal_utils.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "2698c7fc595bebbad7ea3e446edb5cc66193c1a1d756b2dcf7909013cbf7402c",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\_image.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "9e01c373c043502d9b7404b93c7036d067aacf839601eeadbf3d90d2beee9555",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\_path.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "61a89fa2c089838b4740bec19305dd241acf5a40d40a7cc9dda0044cd600ad84",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\_qhull.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "efd801600cc85fb659dfa006bafc10ae24d7c1469aaf1b6f3d4437cd35bfc20c",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\_tri.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "3118b47fe718dd399301b87795830fa40b7eafd9e81b2cdc1fd8316ac2d9db02",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\backends\\_backend_agg.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "09006d716fddc00b1e9c3bfa3c716ab3785db85a1309d664aeeef5744d0b3f0c",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\backends\\_tkagg.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "3dfcf538fff79f261daf719abf02e6174c0c266402f9670842ff7758ea3c2eaa",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "matplotlib\\ft2font.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "baf6cfd01136b13ee1cfaf5dbd0aaade784df0cd6e0798d27c9d4341d65ac137",
+    "package": "matplotlib",
+    "version": "3.11.2"
+  },
+  {
+    "member": "numpy.libs\\libscipy_openblas64_-ed4f167a5330424524f45258e7ca2c8d.dll",
+    "category": "locked-wheel",
+    "sha256": "ed4f167a5330424524f45258e7ca2c8d7f03c0cba1f30ee4985553ac1f88ecf8",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy.libs\\msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+    "category": "locked-wheel",
+    "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\_core\\_multiarray_tests.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "089784b9680bb015cc19072b0b685b84b5749f898c3aa9b8ec0838e28189e48c",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\_core\\_multiarray_umath.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "f37332834048e3aef93a33ff53f558a319cad12009defb2231ee1ba4aa6105d8",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\fft\\_pocketfft_umath.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "5b497ecdaea98528ad53bf22e09b49631bd3a963660514a236ece6c82f46efe5",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\linalg\\_umath_linalg.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "2989647fd7df9ce56a0709542f3578d0ca0a5e4f7d83f81b033506c9fec6adc5",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_bounded_integers.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "a2ff00933e7a72477b6976d1629137c38b21c45571e678a4e10ac4284973873c",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_common.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "8c7350e399c5a4f89a52f77b4de6b591032573c4124a3397806b80626788bb96",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_generator.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "811961d6020ca40c28bcd62f7e1c0a29d389b5e1198a9a8e5a83ebc16aaba2dd",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_mt19937.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "ebc88f4759bd866e1c3832a73add6dd19ffd0714194ae2009611c20608cf9ece",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_pcg64.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "2e0b17dc778771432288cc92e260b066d0e96d2046c943ccfa10e73496c68e1e",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_philox.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "ca5626cbcd0c705b9710896ac448c5ae807540f4fb4a66c31751cff85776f641",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\_sfc64.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "33210752124c94bd8aac7034c2ce417a1c80de1bb7d33aa759432748fe7699d8",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\bit_generator.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "4cff629b98560b121b68393016f2e5f2de15c53a5eac036cc262cb154f7ab168",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "numpy\\random\\mtrand.cp313-win_amd64.pyd",
+    "category": "locked-wheel",
+    "sha256": "8055b3177e4a54dd08cb302fc7c600083b35934c0fa87002d5e3a2ea59e0caac",
+    "package": "numpy",
+    "version": "2.5.4"
+  },
+  {
+    "member": "pyexpat.pyd",
+    "category": "cpython",
+    "sha256": "3865fae84ff0f274c049e737731cd8aa184fae208af5b4c0d0cfc42a38f79cea",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "python3.dll",
+    "category": "cpython",
+    "sha256": "a1a32b2475675e784d9b34d33d3a8f3e4afaa563da1feb784b0dd69fc4d8f9dc",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "python313.dll",
+    "category": "cpython",
+    "sha256": "3b29bf9ff39bed8f660f5b935f19657f7ce7f145009851741b11364f6ebcb862",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "select.pyd",
+    "category": "cpython",
+    "sha256": "17df388a7aa42e7f066b80aa4f77cbbba9286495e6f3508425806be6766d122b",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "shiboken6\\Shiboken.pyd",
+    "category": "locked-wheel",
+    "sha256": "abe475aca31dd683ee551e9417a6daf77fa0b146fdecf7f8da3a9d6d73f29fa8",
+    "package": "shiboken6",
+    "version": "6.9.2"
+  },
+  {
+    "member": "shiboken6\\shiboken6.abi3.dll",
+    "category": "locked-wheel",
+    "sha256": "9ddc7b0c61dd74c4c7523478a553e696e028c22742d5b29b54cd765bd93410a8",
+    "package": "shiboken6",
+    "version": "6.9.2"
+  },
+  {
+    "member": "sqlite3.dll",
+    "category": "cpython",
+    "sha256": "fa794b6edd241d456b7d4e7ff5d99cebd326b45ebe659a0bc37d9affcc292210",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "tcl86t.dll",
+    "category": "cpython",
+    "sha256": "a308beae8555cff5ac2aff7eaf0aef40b5fe173f047e246dc49da9a4d3ef62f9",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "tk86t.dll",
+    "category": "cpython",
+    "sha256": "20f4876506bce7f89e53570e64fd1dce30a64548326b45f372871c7019560df4",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "unicodedata.pyd",
+    "category": "cpython",
+    "sha256": "d113047658f92d893bf4ee2da81ffbd624ec5c485733c02e116fac1b9a1b964c",
+    "package": "CPython",
+    "version": "3.13.16"
+  },
+  {
+    "member": "zlib1.dll",
+    "category": "cpython",
+    "sha256": "1dd27f0411ebb31bd148a61589cee254410915f1e6c37aa3ffa52fac71a5426c",
+    "package": "CPython",
+    "version": "3.13.16"
+  }
+]
