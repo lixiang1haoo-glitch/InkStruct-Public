@@ -275,6 +275,33 @@ for i, group in enumerate(GROUPS):
         d.example_choice.setCurrentIndex(j); d.refresh_preview(); app.processEvents()
         assert d.preview.box is not None, d.preview_status.text()
         assert not any(e.code == "reference-glyph-missing" for e in d.print_preview.box.diagnostics)
+d.categories.setCurrentRow(7)
+d.example_choice.setCurrentIndex(0)
+d.refresh_preview(); app.processEvents()
+pane = d.preview
+class TextRecorder:
+    def __init__(self): self.labels = []
+    def drawText(self, rect, alignment, text): self.labels.append((rect, text))
+    def __getattr__(self, name): return lambda *args: None
+for size in ((1380, 860), (760, 440)):
+    d.resize(*size); app.processEvents(); d.position_annotation_controls()
+    marks = [pane.annotation_marks(key) for key in pane.annotation_keys]
+    assert len(marks) == 2 and all(marks)
+    expected = [f"{i}  " + " / ".join(f"{mark.actual:.2f}" for mark in group) + " mm"
+                for i, group in enumerate(marks, 1)]
+    rows = dict(pane.annotation_rows)
+    for key in pane.annotation_keys:
+        d.activate_parameter(key)
+        recorder = TextRecorder()
+        pane.paint_annotations(recorder, lambda x, y: QtCore.QPointF(100+x, 100+y),
+                               lambda *_: None, pane.palette().base(), pane.palette().text().color(),
+                               pane.palette().link().color())
+        assert [text for _, text in recorder.labels] == expected
+        assert pane.annotation_rows == rows
+        assert all(pane.rect().contains(rect) and pane.fontMetrics().horizontalAdvance(text) <= rect.width()
+                   for rect, text in recorder.labels)
+    first, second = rows.values()
+    assert not first.intersects(second)
 d.categories.setCurrentRow(1)
 d.example_choice.setCurrentIndex(0)
 assert d.example_choice.currentIndex() == 0

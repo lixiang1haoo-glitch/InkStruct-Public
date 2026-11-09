@@ -7,6 +7,51 @@ import sys
 import pytest
 
 
+def test_font_library_display_recolors_loaded_svg_when_theme_changes(tmp_path):
+    program = r"""
+import sys
+from pathlib import Path
+from PySide6 import QtGui, QtWidgets
+from inkstruct.fonts.ui import FontLibrary
+from inkstruct.theme import use_platform_theme
+
+app = QtWidgets.QApplication([])
+use_platform_theme(app, windows11_accents=True, mode="light")
+library = FontLibrary(Path(sys.argv[1]) / "fonts")
+svg = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 30">'
+       b'<rect width="90" height="30" fill="white"/>'
+       b'<path d="M 10,10 H 30" stroke="#24354b" stroke-width="4"/>'
+       b'<path d="M 40,10 H 60" stroke="#111827" stroke-width="4"/>'
+       b'<path d="M 70,10 H 80" stroke="#dc2626" stroke-width="4"/></svg>')
+for pane in (library.ink_preview, library.character_preview):
+    pane.set_preview(svg)
+for mode in ("light", "dark", "light"):
+    use_platform_theme(app, windows11_accents=True, mode=mode)
+    app.processEvents()
+    for pane in (library.ink_preview, library.character_preview):
+        assert pane.preview_svg == svg
+        image = QtGui.QImage(90, 30, QtGui.QImage.Format_RGB32)
+        painter = QtGui.QPainter(image)
+        pane.renderer().render(painter)
+        painter.end()
+        paper, ink, formula, missing = [image.pixelColor(x, y) for x, y in ((2, 2), (20, 10), (50, 10), (75, 10))]
+        assert (paper.lightness() < 128) == (mode == "dark")
+        assert (ink.lightness() > 128) == (formula.lightness() > 128) == (mode == "dark")
+        assert missing.red() > missing.green()
+library.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(tmp_path)],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.skipif(sys.platform != "win32" or sys.getwindowsversion().build < 22000,
                     reason="requires the Windows 11 Qt platform")
 def test_windows11_style_accepts_both_appearance_profiles(tmp_path):
