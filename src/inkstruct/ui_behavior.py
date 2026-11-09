@@ -21,6 +21,48 @@ def compact_field(control, *, maximum=None):
     return control
 
 
+class AdaptiveActions(QtWidgets.QWidget):
+    """Keep the first command visible and place remaining commands in a narrow-window menu."""
+
+    def __init__(self, buttons, parent=None):
+        super().__init__(parent)
+        self.buttons = tuple(buttons)
+        row = QtWidgets.QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        for button in self.buttons:
+            row.addWidget(button)
+        self.more = QtWidgets.QPushButton("更多来源…", self)
+        self.more.setAccessibleName("更多生成内容来源")
+        self.menu = QtWidgets.QMenu(self.more)
+        self.more.setMenu(self.menu)
+        for button in self.buttons[1:]:
+            self.menu.addAction(button.text(), button.click)
+        self.menu.aboutToShow.connect(self.sync_menu)
+        row.addWidget(self.more)
+        row.addStretch()
+        self.compact = False
+        self.more.hide()
+        policy = self.sizePolicy()
+        policy.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Ignored)
+        self.setSizePolicy(policy)
+
+    def sync_menu(self):
+        for action, button in zip(self.menu.actions(), self.buttons[1:]):
+            action.setEnabled(button.isEnabled())
+
+    def resizeEvent(self, event):
+        count = len(self.buttons)
+        full_width = sum(button.sizeHint().width() for button in self.buttons) + self.layout().spacing() * (count - 1)
+        compact = event.size().width() < full_width
+        if compact != self.compact:
+            self.compact = compact
+            self.more.setVisible(compact)
+            for button in self.buttons[1:]:
+                button.setVisible(not compact)
+        super().resizeEvent(event)
+
+
 def open_containing_folder(path):
     folder = Path(path).resolve().parent
     if not folder.is_dir() or not QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder))):

@@ -40,6 +40,15 @@ assert count.objectName() == 'generation_candidate_limit'
 assert count.sizeHint().width() <= count.width() < 150
 assert f.method.width() < 300 and f.parallelism.width() < 300
 assert f.writer.width() <= 340 and f.samples.width() > f.writer.width()
+w.resize(620, 820)
+app.processEvents()
+targets = (f.target_builtin_button, f.target_file_button, f.target_document_button, f.target_current_button)
+details_top = f.target_details_button.mapTo(f, QtCore.QPoint()).y()
+assert all(button.mapTo(f, QtCore.QPoint(0, button.height())).y() <= details_top for button in targets if button.isVisible())
+assert all(field.mapTo(f, QtCore.QPoint(0, field.height())).y() <= f.parallelism.mapTo(f, QtCore.QPoint()).y()
+           for field in (f.target_summary, f.target_details_button))
+w.resize(1220, 820)
+app.processEvents()
 if sys.argv[2] == 'restore':
     assert count.value() == 8 and '32' in f.candidate_hint.text()
 elif sys.argv[2] == 'invalid':

@@ -280,7 +280,15 @@ class MathPreview(QtWidgets.QWidget):
         self.measurement_tips.clear()
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), QtGui.QColor("#ffffff"))
+        palette = self.palette()
+        paper, ink = palette.base().color(), palette.text().color()
+        accent = palette.link().color()
+        guide = QtGui.QColor.fromRgbF(*(
+            0.7 * foreground + 0.3 * background
+            for foreground, background in zip(ink.getRgbF()[:3], paper.getRgbF()[:3])
+        ))
+        p.fillRect(self.rect(), paper)
+        p.setPen(ink)
         if self.box is None:
             p.drawText(self.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, self.empty_message)
             return
@@ -293,12 +301,11 @@ class MathPreview(QtWidgets.QWidget):
 
         if self.show_guides:
             for row, x, baseline in self.guide_rows:
-                for y, color in ((baseline, "#64748b"), (baseline - row.axis, "#2563eb")):
-                    p.setPen(QtGui.QPen(QtGui.QColor(color), 1, QtCore.Qt.PenStyle.DashLine))
+                for y, color in ((baseline, guide), (baseline - row.axis, accent)):
+                    p.setPen(QtGui.QPen(color, 1, QtCore.Qt.PenStyle.DashLine))
                     p.drawLine(at(x - 2, y), at(x + row.width + 2, y))
-            p.setPen(QtGui.QColor("#475569"))
         pen = QtGui.QPen(
-            QtGui.QColor("#111827"),
+            ink,
             max(0.2, self.pen_mm * zoom),
             QtCore.Qt.PenStyle.SolidLine,
             QtCore.Qt.PenCapStyle.RoundCap,
@@ -331,11 +338,12 @@ class MathPreview(QtWidgets.QWidget):
                 p.translate(at(g.x_mm + g.origin_offset_mm, g.baseline_mm))
                 scale = g.em_mm * zoom / 1000
                 p.scale(scale, scale)
-                p.fillPath(self.reference.paths[g.outline.glyph_index], QtGui.QColor("#111827"))
+                p.fillPath(self.reference.paths[g.outline.glyph_index], ink)
                 p.restore()
             elif g.status != "space":
-                p.setPen(QtGui.QColor("#b91c1c"))
-                p.setBrush(QtGui.QColor("#fff1f2"))
+                dark = paper.lightness() < 128
+                p.setPen(QtGui.QColor("#ffabab" if dark else "#b91c1c"))
+                p.setBrush(QtGui.QColor("#47282d" if dark else "#fff1f2"))
                 rect = QtCore.QRectF(
                     at(g.x_mm, g.baseline_mm - g.ascent_mm),
                     at(g.x_mm + g.advance_mm, g.baseline_mm + g.descent_mm),
@@ -344,7 +352,6 @@ class MathPreview(QtWidgets.QWidget):
                 p.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, g.occurrence.text)
         for rule in box.rules:
             stroke(rule.points)
-        p.setPen(QtGui.QPen(QtGui.QColor("#2563eb"), 1))
 
         def arrow(a, b):
             p.drawLine(a, b)
@@ -367,19 +374,19 @@ class MathPreview(QtWidgets.QWidget):
                         for dx in (-3, 3):
                             p.drawLine(tip, tip + QtCore.QPointF(dx, sign * 5))
 
-        self.paint_annotations(p, at, arrow)
+        self.paint_annotations(p, at, arrow, paper, guide, accent)
 
-    def paint_annotations(self, painter, at, arrow):
+    def paint_annotations(self, painter, at, arrow, paper, guide, accent):
         rail = at(self.box.width, 0).x()
         if self.show_actual and self.active_key in self.annotation_keys and not self.annotation_marks(self.active_key):
-            painter.setPen(QtGui.QColor("#69819f"))
+            painter.setPen(guide)
             painter.drawText(10, self.fontMetrics().height() + 4, "此示例未涉及所选尺寸")
         for number, key in enumerate(self.annotation_keys, 1):
             marks = self.annotation_marks(key)
             if not marks:
                 continue
             active = key == self.active_key
-            color = QtGui.QColor("#1d5fc4" if active else "#69819f")
+            color = accent if active else guide
             painter.setPen(QtGui.QPen(color, 1.25 if active else 0.8))
             x = rail + 6 + (number - 1) * 9
             mid = []
@@ -401,7 +408,7 @@ class MathPreview(QtWidgets.QWidget):
             if row is None:
                 badge = anchor + QtCore.QPointF(10, 0)
                 rect = QtCore.QRectF(badge.x() - 7, badge.y() - 7, 14, 14)
-                painter.setBrush(QtGui.QColor("#ffffff"))
+                painter.setBrush(paper)
                 painter.drawEllipse(rect)
                 painter.drawText(rect, QtCore.Qt.AlignCenter, str(number))
                 painter.setBrush(QtCore.Qt.NoBrush)
@@ -462,18 +469,20 @@ class MathSettingsDialog(QtWidgets.QDialog):
             self.setMinimumSize(min(600, width), min(400, height))
             self.resize(width, height)
         self.setStyleSheet("""
-            QWidget#math_content { background: #f5f7fa; }
-            QDialog#math_settings_dialog { background: #f5f7fa; }
-            QDialog#math_settings_dialog QLabel, QDialog#math_settings_dialog QCheckBox { color: #334155; }
-            QListWidget { background: #edf1f6; border: none; border-radius: 8px; padding: 6px; }
-            QListWidget::item { padding: 5px 8px; border-radius: 5px; color: #334155; }
-            QListWidget::item:selected { background: #dbeafe; color: #155dad; font-weight: bold; }
-            QDoubleSpinBox[activeMathDimension="true"] { border: 1px solid #267bd1; }
-            QDoubleSpinBox { min-height: 20px; background: white; color: #1e293b; border: 1px solid #b7c4d2; border-radius: 2px; padding: 1px 3px; }
+            QWidget#math_content, QDialog#math_settings_dialog { background: palette(window); }
+            QListWidget { background: palette(base); border: none; border-radius: 8px; padding: 6px; }
+            QListWidget::item { padding: 5px 8px; border-radius: 5px; }
+            QListWidget::item:selected {
+                background: palette(highlight); color: palette(highlighted-text); font-weight: bold;
+            }
+            QDoubleSpinBox {
+                min-height: 20px; background: palette(base); color: palette(text);
+                border: 1px solid palette(mid); border-radius: 2px; padding: 1px 3px;
+            }
+            QDoubleSpinBox[activeMathDimension="true"] { border-color: palette(highlight); }
             QToolButton { padding: 3px; }
             QScrollArea { border: none; background: transparent; }
-            QLabel#section_title { font-size: 20px; font-weight: bold; color: #1e293b; }
-            QLabel#muted { color: #64748b; }
+            QLabel#section_title { font-size: 20px; font-weight: bold; }
         """)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(*(0, 0, 0, 0) if embedded else (18, 16, 18, 14))

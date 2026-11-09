@@ -1,0 +1,260 @@
+{
+  "version": "0.1.67",
+  "commit": "a5708d7f75495fbb35f723259a6159854f8e0b57",
+  "tag": "app-v0.1.67",
+  "published_archive": {
+    "version": "0.1.67",
+    "filename": "InkStruct-0.1.67-Windows-x64.zip",
+    "bytes": 133788238,
+    "members": 1682,
+    "sha256": "c215d050fc3e329fc5e8bec705ea3f6c969dca039c718c3d7e1f291f81f3fc8a"
+  },
+  "verification": {
+    "clean_checkout": true,
+    "build_inputs": 345,
+    "restored_resource_files": 10,
+    "rebuilt_on": "Windows x64",
+    "regression": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "failures": []
+    },
+    "frozen_smoke": {
+      "InkStruct.exe": {
+        "math": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "formula_categories": 11,
+          "measured_dimensions": 26,
+          "reference_font": "Latin Modern Math"
+        },
+        "100": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.0,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                },
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                }
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                },
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                }
+              ]
+            }
+          },
+          "system_scheme_restored": "Dark",
+          "formula_geometry_unchanged": true,
+          "handwritten_glyphs": 12
+        },
+        "150": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.5,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                },
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                }
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                },
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                }
+              ]
+            }
+          },
+          "system_scheme_restored": "Dark",
+          "formula_geometry_unchanged": true,
+          "handwritten_glyphs": 12
+        }
+      },
+      "InkStructTool.exe": {
+        "math": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "formula_categories": 11,
+          "measured_dimensions": 26,
+          "reference_font": "Latin Modern Math"
+        },
+        "100": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.0,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                },
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                }
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                },
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                }
+              ]
+            }
+          },
+          "system_scheme_restored": "Dark",
+          "formula_geometry_unchanged": true,
+          "handwritten_glyphs": 12
+        },
+        "150": {
+          "app_version": "0.1.67",
+          "frozen": true,
+          "platform": "windows",
+          "style": "windows11",
+          "profile": "focused-qss",
+          "dpr": 1.5,
+          "schemes": {
+            "Light": {
+              "surface": "#f3f3f3",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                },
+                {
+                  "background": "#ffffff",
+                  "ink": "#000000"
+                }
+              ]
+            },
+            "Dark": {
+              "surface": "#1e1e1e",
+              "stepper": [
+                16,
+                18
+              ],
+              "formula": [
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                },
+                {
+                  "background": "#2d2d2d",
+                  "ink": "#ffffff"
+                }
+              ]
+            }
+          },
+          "system_scheme_restored": "Dark",
+          "formula_geometry_unchanged": true,
+          "handwritten_glyphs": 12
+        }
+      }
+    },
+    "native_restart": [
+      {
+        "startup_preference": "system",
+        "saved_preference": "dark",
+        "palette_after_save": "#2d2d2d"
+      },
+      {
+        "startup_preference": "dark",
+        "saved_preference": "light",
+        "palette_after_save": "#ffffff"
+      },
+      {
+        "startup_preference": "light",
+        "saved_preference": "system",
+        "palette_after_save": "#2d2d2d"
+      }
+    ],
+    "unverified": [
+      "live Windows theme change via system settings",
+      "other OS and Windows versions"
+    ]
+  },
+  "previous_archive": {
+    "version": "0.1.66",
+    "filename": "InkStruct-0.1.66-Windows-x64.zip",
+    "bytes": 133779940,
+    "members": 1682,
+    "sha256": "853908a6b6770eda14900c3ac40e7a959da4c868a3e3a0a73ffe217597e57cb4"
+  }
+}

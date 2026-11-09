@@ -51,6 +51,9 @@ for focused in (False,True):
 mode=body.mode;before=mode.currentIndex();wheel(mode);assert mode.currentIndex()==before
 spin.setFocus();before=spin.value();QtTest.QTest.keyClick(spin,QtCore.Qt.Key_Up)
 assert spin.value()>before
+draft=spin.value()
+QtTest.QTest.keyClick(spin.lineEdit(),QtCore.Qt.Key_Return)
+assert d.isVisible() and spin.value()==draft and not d.reset.isDefault()
 slider=QtWidgets.QSlider(QtCore.Qt.Horizontal,body);slider.setValue(50);slider.show()
 wheel(slider);assert slider.value()==50
 d.select('math');math=d.pages['math'];app.processEvents()

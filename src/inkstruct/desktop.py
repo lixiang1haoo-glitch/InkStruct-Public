@@ -21,7 +21,8 @@ def _qt():
 def main(argv=None, *, create_only=False, workspace=None, database=None):
     QtCore, QtWidgets = _qt()
     from .generation_progress_ui import GenerationProgress
-    from .ui_behavior import compact_field
+    from .theme import set_tone
+    from .ui_behavior import AdaptiveActions, compact_field
 
     if find_spec("handwriting_collector") is None:
         from .collector import _collector_source
@@ -144,7 +145,11 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
             generation_layout = QtWidgets.QVBoxLayout(generation_group)
             generation_form = QtWidgets.QFormLayout()
-            target_actions = QtWidgets.QHBoxLayout()
+            target_area = QtWidgets.QWidget()
+            target_layout = QtWidgets.QVBoxLayout(target_area)
+            target_layout.setContentsMargins(0, 0, 0, 0)
+            target_layout.setSpacing(6)
+            target_layout.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetMinimumSize)
             self.target_builtin_button = QtWidgets.QPushButton('内置字表…')
             self.target_builtin_button.clicked.connect(self.choose_builtin_targets)
             self.target_file_button = QtWidgets.QPushButton('导入字表…')
@@ -154,9 +159,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_file_button.clicked.connect(self.choose_target_file)
             self.target_document_button.clicked.connect(self.choose_target_document)
             self.target_current_button.clicked.connect(self.choose_current_document)
-            for button in (self.target_builtin_button, self.target_file_button, self.target_document_button, self.target_current_button):
-                target_actions.addWidget(button)
-            generation_form.addRow('生成内容', target_actions)
+            self.target_actions = AdaptiveActions((self.target_builtin_button, self.target_file_button,
+                                                   self.target_document_button, self.target_current_button))
+            target_layout.addWidget(self.target_actions)
             self.target_summary = QtWidgets.QLabel('尚未选择生成内容。自定义字表可导入 UTF-8 TXT 或 CSV。')
             self.target_summary.setWordWrap(True)
             self.target_summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
@@ -165,7 +170,16 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_details_button = QtWidgets.QPushButton("查看清单…")
             self.target_details_button.clicked.connect(self.show_target_details)
             summary_row.addWidget(self.target_details_button)
-            generation_form.addRow('', summary_row)
+            target_layout.addLayout(summary_row)
+            target_label = QtWidgets.QLabel('生成内容')
+            target_label.setBuddy(self.target_builtin_button)
+            target_container = QtWidgets.QWidget()
+            target_row = QtWidgets.QHBoxLayout(target_container)
+            target_row.setContentsMargins(0, 0, 0, 0)
+            target_row.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetMinimumSize)
+            target_row.addWidget(target_label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+            target_row.addWidget(target_area, 1)
+            generation_layout.addWidget(target_container)
             self.parallelism = QtWidgets.QComboBox()
             self.parallelism.setObjectName('generation_parallelism')
             for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
@@ -185,6 +199,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 "增加上限会增加尝试次数、生成时间和包体。"
             )
             generation_form.addRow("每字成品上限", compact_field(self.candidate_limit))
+            target_label.setMinimumWidth(generation_form.labelForField(self.candidate_limit).sizeHint().width())
             self.candidate_hint = QtWidgets.QLabel()
             self.candidate_hint.setWordWrap(True)
             generation_form.addRow("", self.candidate_hint)
@@ -192,6 +207,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             layout.addWidget(generation_group)
             self.status = QtWidgets.QLabel()
             self.status.setWordWrap(True)
+            self.status.setProperty("inkRole", "status")
             generation_layout.addWidget(self.status)
             actions = QtWidgets.QHBoxLayout()
             self.generate_button = QtWidgets.QPushButton("开始生成")
@@ -203,6 +219,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.cancel_button.clicked.connect(self.cancel_generation)
             self.cancel_button.setEnabled(False)
             actions.addWidget(self.cancel_button)
+            actions.addStretch()
             generation_layout.addLayout(actions)
             self.progress_panel = GenerationProgress(self)
             generation_layout.addWidget(self.progress_panel)
@@ -400,6 +417,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             if ready["start"] and self.sample_status and self.sample_status.get("changed") and not foreign:
                 status = "开始生成时会先更新样本并建档。"
             self.status.setText("正在处理，请稍候…" if self.busy else self.generation_error or status)
+            set_tone(self.status, "danger" if self.generation_error and not self.busy else "")
             targets = self.target_manifest or {}
             self.generate_button.setEnabled(ready["start"] and not foreign and not self.busy
                 and bool(targets.get("requested")) and not targets["unsupported"])
@@ -408,6 +426,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 widget.setEnabled(not self.busy)
             for widget in (self.target_builtin_button, self.target_file_button, self.target_document_button):
                 widget.setEnabled(not self.busy)
+            self.target_actions.setEnabled(not self.busy)
             self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy)
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
             multiple = self.method.currentData() == "v62"

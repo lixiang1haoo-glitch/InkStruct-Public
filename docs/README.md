@@ -2,7 +2,7 @@
 
 团队成员可先查看 [GitHub 协作与环境准备](COLLABORATION.md)。
 
-当前主应用版本：[0.1.64](RELEASE_0_1_64_WINDOWS.md)，采用左侧导航、左下字体库、模板库及设置，保留4 GiB展开字体和可选同字成品数量。另见 [AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) 与 [换行/分页/换框](TEXT_FLOW_BREAK_COMMANDS.md)。
+当前主应用版本：[0.1.67](RELEASE_0_1_67_WINDOWS.md)，采用左侧导航、左下字体库、模板库及设置，保留4 GiB展开字体和可选同字成品数量。另见 [AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) 与 [换行/分页/换框](TEXT_FLOW_BREAK_COMMANDS.md)。
 
 历史交付：[0.1.45界面整理](RELEASE_0_1_45_WINDOWS.md)的验收与实验记录继续保留。
 

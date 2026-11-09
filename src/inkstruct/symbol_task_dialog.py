@@ -117,6 +117,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         layout.addWidget(self.error)
         self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText('创建任务')
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setProperty("inkRole", "primary")
         self.buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText('取消')
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)

@@ -97,7 +97,7 @@ def test_math_settings_and_editor_roundtrip(tmp_path):
     program = r"""
 import sys, time
 from pathlib import Path
-from PySide6 import QtWidgets, QtTest
+from PySide6 import QtCore, QtWidgets, QtTest
 from inkstruct.editor.mixed import MixedWindow
 from inkstruct.editor.math_settings import MathSettingsDialog
 from inkstruct.editor.code_settings import CodeSettingsDialog
@@ -106,6 +106,8 @@ from inkstruct.math.style import MathStyle
 from inkstruct.document.package import load_package
 
 app = QtWidgets.QApplication([])
+QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
+QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, sys.argv[1])
 style = MathStyle(em_mm=6.123456789, axis_em=.251234567)
 d = MathSettingsDialog(style)
 assert d.configuration() == style

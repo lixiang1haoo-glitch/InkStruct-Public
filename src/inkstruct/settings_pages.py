@@ -4,6 +4,7 @@ from dataclasses import fields, replace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .theme import THEME_KEY, theme_preference, use_platform_theme
 from .ui_behavior import compact_field
 
 
@@ -21,11 +22,57 @@ def compact_form_parameters(widget):
                 compact_field(field)
 
 
+def align_form_labels(*forms):
+    """Align sibling form columns using the width of their actual labels."""
+    role = QtWidgets.QFormLayout.ItemRole.LabelRole
+    labels = [item.widget() for form in forms for index in range(form.rowCount())
+              if (item := form.itemAt(index, role)) and isinstance(item.widget(), QtWidgets.QLabel)]
+    width = max(field.sizeHint().width() for field in labels)
+    for field in labels:
+        field.setMinimumWidth(width)
+    for form in forms:
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
+
+
 def label(text):
     result = QtWidgets.QLabel(text)
     result.setWordWrap(True)
     result.setTextFormat(QtCore.Qt.TextFormat.PlainText)
     return result
+
+
+class AppearancePage(QtWidgets.QWidget):
+    def __init__(self, settings):
+        super().__init__()
+        self.settings = settings
+        self.original = theme_preference(settings)
+        self.theme = QtWidgets.QComboBox()
+        self.theme.setObjectName("appearance_theme")
+        self.theme.setAccessibleName("应用主题")
+        for text, mode in (("跟随系统", "system"), ("浅色", "light"), ("深色", "dark")):
+            self.theme.addItem(text, mode)
+        self.theme.setCurrentIndex(self.theme.findData(self.original))
+        form = QtWidgets.QFormLayout(self)
+        form.addRow("应用主题", compact_field(self.theme))
+
+    @property
+    def changed(self):
+        return self.theme.currentData() != self.original
+
+    def save(self):
+        if not self.changed:
+            return
+        mode = self.theme.currentData()
+        self.settings.setValue(THEME_KEY, mode)
+        self.settings.sync()
+        if self.settings.status() != QtCore.QSettings.Status.NoError:
+            raise OSError("主题设置保存失败，请检查配置目录的写入权限")
+        use_platform_theme(QtWidgets.QApplication.instance(), windows11_accents=True, mode=mode)
+        self.original = mode
+
+    def reset_defaults(self):
+        self.theme.setCurrentIndex(self.theme.findData("system"))
 
 
 class EmbeddedDialogKeys(QtCore.QObject):

@@ -10,6 +10,8 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .fonts import APP_VERSION
+from .global_defaults import GlobalDefaultsStore
+from .theme import theme_preference, use_platform_theme
 
 
 def resources_root():
@@ -89,8 +91,8 @@ def show_startup_window(window, splash, icon):
 
 class InkStructWindow(QtWidgets.QMainWindow):
     def __init__(self, *, workspace=None, database=None):
-        from .theme import use_light_theme
-        use_light_theme(QtWidgets.QApplication.instance())
+        app = QtWidgets.QApplication.instance()
+        use_platform_theme(app, windows11_accents=True, mode=theme_preference(GlobalDefaultsStore.make_settings()))
         super().__init__()
         from .collector import main as collector
         from .desktop import main as generator

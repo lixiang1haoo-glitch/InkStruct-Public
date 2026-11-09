@@ -172,6 +172,9 @@ elif scenario in {'navigation','navigation_largefont'}:
     d.resize(1260, 650);app.processEvents()
     assert [field.width() for field in short_fields] == widths
     assert d.search.width() > search_width
+    core_fields = (body.mode, body.style.controls['em_mm'], body.flow.controls['paragraph_gap_mm'])
+    assert len({field.mapTo(body, QtCore.QPoint()).x() for field in core_fields}) == 1
+    assert body.style.controls['em_mm'].mapTo(body, QtCore.QPoint()).y() < body.han_seed.mapTo(body, QtCore.QPoint()).y()
     d.resize(980, 650);app.processEvents()
     for key in d.items:
         d.select(key); app.processEvents()
@@ -230,10 +233,13 @@ collector.ui_settings=replace(collector.ui_settings,stroke_width_scale=2.1234567
 assert not any(a.text()=='设置' for a in collector.menuBar().actions())
 assert not w.editor.settings_button.isVisible() and not w.editor.settings_shortcut.isEnabled()
 positions=[]
+navigation_checks=[]
 def inspect():
     d=app.activeModalWidget();assert isinstance(d,SettingsDialog)
-    assert ('capture' in d.pages)==(w.tabs.currentIndex()==0)
-    assert len(d.items)==8 and 'preview' in d.items and not {'templates','paper','font'} & d.items.keys()
+    navigation_checks.append((
+        ('capture' in d.pages)==(w.tabs.currentIndex()==0),
+        set(d.items)=={'appearance','preview','capture','body','math','table','image','code','footnote'},
+    ))
     d.reject()
 for i in range(w.tabs.count()):
     w.tabs.setCurrentIndex(i);app.processEvents()
@@ -243,6 +249,7 @@ for i in range(w.tabs.count()):
     if i==0:QtTest.QTest.keySequence(w,QtGui.QKeySequence('Ctrl+,'))
     else:QtTest.QTest.mouseClick(w.settings_button,QtCore.Qt.LeftButton)
 assert all(p==positions[0] for p in positions)
+assert navigation_checks==[(True,True)]*w.tabs.count()
 canvas=collector.symbol_widget.canvas
 from handwriting_collector.models import TrajectoryPoint
 canvas.trajectory.start_stroke(TrajectoryPoint(100,100,.4,0))

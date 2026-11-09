@@ -1,4 +1,4 @@
-"""Headless integrated check; never claims native focus or tablet validation."""
+"""Packaged application checks in isolated workspaces."""
 
 import argparse
 import hashlib
@@ -949,6 +949,108 @@ def verify_large_fonts(window, out, wait, paths):
         'mode': 'offscreen frozen/source check; native focus, responsiveness and tablet not certified'}
 
 
+def verify_windows_style(window, app, out, font_path=None):
+    from inkstruct.global_defaults import GlobalDefaultsStore
+    from inkstruct.settings_dialog import SettingsDialog
+    from inkstruct.theme import theme_preference
+
+    assert app.platformName() == "windows"
+    assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
+    assert app.property("inkstructDesktopStyle") == "windows11"
+    dialog = SettingsDialog(window.editor, window.collector, window, category="body")
+    dialog.show()
+    spin = dialog.pages["body"].style.controls["em_mm"]
+    editor = window.editor
+    dialog.select("math")
+    math = dialog.pages["math"]
+    if font_path is not None:
+        math.set_preview_resources(editor.resolver, font_path)
+    matrix = math.categories.findItems("矩阵与向量", QtCore.Qt.MatchFlag.MatchExactly)[0]
+    math.categories.setCurrentItem(matrix)
+    math.refresh_preview()
+    panes = math.print_preview, math.preview
+    boxes = tuple(pane.box for pane in panes)
+    assert all(box is not None and box.glyphs and box.dimensions for box in boxes)
+    assert any(glyph.outline for glyph in boxes[0].glyphs)
+    if font_path is not None:
+        assert any(glyph.glyph for glyph in boxes[1].glyphs)
+    document_before = (editor.flow, editor.style, editor.page, editor.source_session.atom_ids)
+    settings = GlobalDefaultsStore.make_settings()
+    defaults_before = settings.value(GlobalDefaultsStore.KEY)
+    system_scheme = app.styleHints().colorScheme()
+    dialog.select("appearance")
+    theme = dialog.pages["appearance"].theme
+    assert theme.currentData() == "system"
+    reports = {}
+    try:
+        for scheme in (QtCore.Qt.ColorScheme.Light, QtCore.Qt.ColorScheme.Dark):
+            theme.setCurrentIndex(theme.findData(scheme.name.lower()))
+            assert dialog.apply(), dialog.error.text()
+            assert theme_preference(settings) == scheme.name.lower()
+            app.processEvents()
+            surface = dialog.palette().color(QtGui.QPalette.ColorRole.Window)
+            dark = scheme == QtCore.Qt.ColorScheme.Dark
+            assert app.styleHints().colorScheme() == scheme
+            assert (surface.lightness() < 128) == dark
+            assert dialog.grab().save(str(out / f"theme-{scheme.name.lower()}.png"))
+            dialog.select("math")
+            app.processEvents()
+            assert tuple(pane.box for pane in panes) == boxes
+            for control in (math.categories, math.controls[math.active_key]):
+                assert (control.palette().base().color().lightness() < 128) == dark
+            canvas_colors = []
+            for pane in panes:
+                image = pane.grab().toImage()
+                background = image.pixelColor(2, 2)
+                ink = pane.palette().text().color()
+                assert background == pane.palette().base().color()
+                assert (background.lightness() < 128) == dark
+                assert (ink.lightness() > 128) == dark
+                canvas_colors.append({"background": background.name(), "ink": ink.name()})
+            assert dialog.grab().save(str(out / f"formula-{scheme.name.lower()}.png"))
+            dialog.select("body")
+            app.processEvents()
+            option = QtWidgets.QStyleOptionSpinBox()
+            spin.initStyleOption(option)
+            step = spin.style().subControlRect(
+                QtWidgets.QStyle.ComplexControl.CC_SpinBox, option,
+                QtWidgets.QStyle.SubControl.SC_SpinBoxUp, spin,
+            )
+            before = spin.value()
+            QtTest.QTest.mouseClick(spin, QtCore.Qt.MouseButton.LeftButton, pos=step.center())
+            assert not step.isEmpty() and spin.value() == before + spin.singleStep()
+            spin.setValue(before)
+            reports[scheme.name] = {"surface": surface.name(), "stepper": [step.width(), step.height()],
+                                    "formula": canvas_colors}
+            dialog.select("appearance")
+        dialog.reset_current()
+        assert theme.currentData() == "system"
+        assert dialog.apply(), dialog.error.text()
+        app.processEvents()
+        assert theme_preference(settings) == "system"
+        assert app.styleHints().colorScheme() == system_scheme
+        assert settings.value(GlobalDefaultsStore.KEY) == defaults_before
+        assert document_before == (editor.flow, editor.style, editor.page, editor.source_session.atom_ids)
+        record = {
+            "app_version": APP_VERSION, "frozen": bool(getattr(sys, "frozen", False)),
+            "platform": app.platformName(), "style": app.property("inkstructDesktopStyle"),
+            "profile": "focused-qss" if app.styleSheet() else "native",
+            "dpr": dialog.devicePixelRatio(), "schemes": reports,
+            "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
+            "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
+        }
+        (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    finally:
+        dialog.reject()
+        window.editor.timer.stop()
+        if window.editor.cancelled:
+            window.editor.cancelled.set()
+        window.editor.pool.waitForDone()
+        QtCore.QThreadPool.globalInstance().waitForDone()
+        window.editor.dirty = False
+        window.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
@@ -957,6 +1059,7 @@ def main():
     parser.add_argument('--generation-profile', type=Path)
     parser.add_argument('--candidate-check', action='store_true')
     parser.add_argument('--math-settings-check', action='store_true')
+    parser.add_argument('--windows-style-check', action='store_true')
     parser.add_argument('--large-font-check', action='store_true')
     parser.add_argument('--large-font', action='append', type=Path, default=[])
     parser.add_argument("--writer", default="scx")
@@ -965,7 +1068,14 @@ def main():
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
-    if args.large_font_check:
+    if args.windows_style_check:
+        if sys.platform != "win32" or any((args.samples, args.generation_profile,
+                                           args.candidate_check, args.math_settings_check,
+                                           args.large_font_check, args.large_font, args.export_only)):
+            parser.error('--windows-style-check is a separate Windows-only check')
+        if args.font is not None and not args.font.is_file():
+            parser.error('--windows-style-check requires an existing --font when supplied')
+    elif args.large_font_check:
         if (len(args.large_font) != 2 or len({p.resolve() for p in args.large_font}) != 2
                 or any(not p.is_file() for p in args.large_font)):
             parser.error('--large-font-check requires two distinct existing --large-font archives')
@@ -980,7 +1090,7 @@ def main():
         parser.error('--font and --samples are required unless --generation-profile is supplied')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    if args.large_font_check or args.math_settings_check:
+    if args.large_font_check or args.math_settings_check or args.windows_style_check:
         # Recovery files must be private too, not only Qt preferences/workspace.
         os.environ['INKSTRUCT_LAYOUT_PREVIEW_HOME'] = str(out / 'private')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["InkStructCheck"])
@@ -1016,6 +1126,9 @@ def main():
     QtWidgets.QMessageBox.critical = lambda *a: notices.append(str(a[2]))
     w = InkStructWindow(workspace=out / "workspace")
     w.show()
+    if args.windows_style_check:
+        verify_windows_style(w, app, out, args.font)
+        return
     assert app.styleHints().colorScheme() != QtCore.Qt.ColorScheme.Dark
     assert app.palette().color(QtGui.QPalette.Window).lightness() > 230
     assert app.palette().color(QtGui.QPalette.Base).lightness() > 230

@@ -21,7 +21,7 @@ _PATHS = {
 }
 
 
-def line_icon(name, color='#475569'):
+def line_icon(name, color):
     """Render bundled vector paths at multiple pixel ratios without platform emoji."""
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
            f'fill="none" stroke="{color}" stroke-width="1.7" '
@@ -39,39 +39,47 @@ def line_icon(name, color='#475569'):
     return icon
 
 
-SHELL_STYLE = """
-QWidget#inkstruct_shell { background: #ffffff; }
-QFrame#app_navigation { background: #f1f4f8; border-right: 1px solid #e2e8f0; }
-QToolButton[inkRole="navigation"] { text-align: left; padding: 8px 12px; min-height: 26px; border: 1px solid transparent; background: transparent; color: #475569; }
-QToolButton[inkRole="navigation"]:hover { background: #e8edf5; }
-QToolButton[inkRole="navigation"]:checked { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; font-weight: 600; }
-QToolButton[inkRole="navigation"]:focus { border-color: #2563eb; }
-QToolButton#unified_settings_button { font-size: 14px; padding: 8px 12px; min-height: 26px; }
-QWidget#inkstruct_shell QTabWidget::pane { border: none; background: #ffffff; }
-QWidget#inkstruct_shell QTabBar::tab { background: transparent; border: none; border-bottom: 2px solid transparent; padding: 8px 14px; color: #64748b; }
-QWidget#inkstruct_shell QTabBar::tab:selected { color: #1d4ed8; border-bottom: 2px solid #2563eb; }
-QWidget#capture_workspace, QWidget#generation_workspace, QWidget#writing_workspace { background: #ffffff; }
-QListWidget#template_library_list { background: #f1f4f8; border: 1px solid #e2e8f0; padding: 8px; }
-QLabel#template_selected_summary { color: #334155; font-size: 16px; font-weight: 600; }
-QPlainTextEdit#template_resource_info { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px; }
-QWidget#capture_writer_panel { background: #f1f4f8; border: 1px solid #e2e8f0; border-radius: 5px; }
-QWidget#capture_writer_panel QLabel { border: none; background: transparent; }
-QLabel[inkRole="hint"] { color: #64748b; font-size: 12px; }
-QGroupBox[inkRole="workflowSection"] { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 5px; margin-top: 12px; padding: 16px 10px 10px; }
-QGroupBox[inkRole="workflowSection"]::title { color: #334155; font-weight: 600; }
-QPlainTextEdit#generation_log { border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 4px; }
-QMainWindow#layout_workspace::separator { background: #e2e8f0; width: 1px; height: 1px; }
-QMainWindow#layout_workspace QDockWidget { border: none; }
-QMainWindow#layout_workspace QDockWidget::title { background: #f1f4f8; padding: 8px; color: #334155; }
-QStatusBar { border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; }
-"""
+def _on_accent(accent):
+    channels = [value / 12.92 if value <= .04045 else ((value + .055) / 1.055) ** 2.4
+                for value in accent.getRgbF()[:3]]
+    luminance = sum(channel * weight for channel, weight in zip(channels, (.2126, .7152, .0722)))
+    return "#000000" if luminance >= .179 else "#ffffff"
+
+
+class PaletteIcon(QtCore.QObject):
+    """Keep a button icon in the same palette as its label."""
+
+    def __init__(self, button, name):
+        super().__init__(button)
+        self.name = name
+        self.color = None
+        button.installEventFilter(self)
+        if button.property("inkRole") == "navigation":
+            button.toggled.connect(self.refresh)
+        self.refresh()
+
+    def refresh(self):
+        button = self.parent()
+        palette = button.palette()
+        group = QtGui.QPalette.ColorGroup.Active
+        color = palette.color(group, QtGui.QPalette.ColorRole.ButtonText).name()
+        if (button.property("inkRole") == "navigation" and button.isChecked()
+                and QtWidgets.QApplication.instance().property("inkstructDesktopStyle") == "windows11"):
+            color = _on_accent(palette.color(group, QtGui.QPalette.ColorRole.Accent))
+        if color != self.color:
+            self.color = color
+            button.setIcon(line_icon(self.name, color))
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QtCore.QEvent.Type.PaletteChange, QtCore.QEvent.Type.Polish):
+            self.refresh()
+        return False
 
 
 def install_shell(window, about):
     """Use existing module indexes and widgets, with persistent external navigation."""
     shell = QtWidgets.QWidget()
     shell.setObjectName('inkstruct_shell')
-    shell.setStyleSheet(SHELL_STYLE)
     body = QtWidgets.QHBoxLayout(shell)
     body.setContentsMargins(0, 0, 0, 0)
     body.setSpacing(0)
@@ -98,7 +106,7 @@ def install_shell(window, about):
         item.setObjectName('navigate_' + key)
         item.setProperty('inkRole', 'navigation')
         item.setText(title)
-        item.setIcon(line_icon(key))
+        PaletteIcon(item, key)
         item.setIconSize(QtCore.QSize(20, 20))
         item.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         item.setCheckable(True)
@@ -113,7 +121,8 @@ def install_shell(window, about):
     button = window.settings_button
     button.setText('设置')
     button.setProperty('inkRole', 'navigation')
-    button.setIcon(line_icon('settings'))
+    button.setFont(window.navigation_buttons[0].font())
+    PaletteIcon(button, 'settings')
     button.setIconSize(QtCore.QSize(20, 20))
     button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     button.setMinimumSize(0, 0)
@@ -129,6 +138,19 @@ def install_shell(window, about):
     button.setToolTip('设置 (Ctrl+,) · 侧栏右键查看关于 InkStruct (F1)')
     group.idClicked.connect(window.tabs.setCurrentIndex)
     window.tabs.currentChanged.connect(lambda index: window.navigation_buttons[index].setChecked(True))
+    page_policies = [window.tabs.widget(i).sizePolicy().horizontalPolicy() for i in range(window.tabs.count())]
+
+    def active_page_width(index):
+        # An inactive editor dock must not determine the minimum width of generation or capture.
+        for i, horizontal in enumerate(page_policies):
+            page = window.tabs.widget(i)
+            policy = page.sizePolicy()
+            policy.setHorizontalPolicy(horizontal if i == index else QtWidgets.QSizePolicy.Policy.Ignored)
+            page.setSizePolicy(policy)
+        window.tabs.updateGeometry()
+
+    window.tabs.currentChanged.connect(active_page_width)
+    active_page_width(window.tabs.currentIndex())
     window.navigation_buttons[window.tabs.currentIndex()].setChecked(True)
     # Keep the tab widget as the module owner and API; only its obsolete top bar is hidden.
     window.tabs.tabBar().hide()
@@ -172,7 +194,7 @@ def style_module_pages(window):
     for widget in (collector.single_widget, collector.symbol_widget):
         for control, name in ((widget.import_button, 'import'), (widget.save_button, 'check'),
                               (widget.undo_button, 'undo')):
-            control.setIcon(line_icon(name, '#ffffff' if control is widget.save_button else '#475569'))
+            PaletteIcon(control, name)
         widget.task_help.setProperty('inkRole', 'hint')
     workflow = window.generator.centralWidget()
     workflow.setObjectName('generation_workspace')
@@ -181,16 +203,16 @@ def style_module_pages(window):
     for section in workflow.findChildren(QtWidgets.QGroupBox):
         section.setProperty('inkRole', 'workflowSection')
     for control, name in ((workflow.generate_button, 'play'), (workflow.publish_button, 'library')):
-        control.setIcon(line_icon(name, '#ffffff' if control.property('inkRole') == 'primary' else '#475569'))
+        PaletteIcon(control, name)
     workflow.target_summary.setProperty('inkRole', 'hint')
     workflow.candidate_hint.setProperty('inkRole', 'hint')
     workflow.log.setObjectName('generation_log')
     editor = window.editor
     editor.setObjectName('layout_workspace')
-    editor.machine_export.setIcon(line_icon('export', '#ffffff'))
     editor.machine_export.setProperty('inkRole', 'primary')
+    PaletteIcon(editor.machine_export, 'export')
     paste = editor.findChild(QtWidgets.QToolButton, 'paste_source')
-    paste.setIcon(line_icon('paste'))
+    PaletteIcon(paste, 'paste')
     paste.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     # This is the existing toolbar; no extra row, document action, or layout state.
     title = QtWidgets.QLabel('排版')

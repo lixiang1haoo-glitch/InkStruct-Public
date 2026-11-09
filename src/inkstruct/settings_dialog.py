@@ -11,16 +11,20 @@ from .document.styles import FlowStyle
 from .global_defaults import GlobalDefaultsStore, LayoutDefaults, apply_to_document
 from .settings_elements import ElementPage
 from .settings_pages import (
+    AppearancePage,
     CapturePage,
     CompactSpinBox,
     ProfileForm,
     acceptable,
+    align_form_labels,
     compact_form_parameters,
     embed,
     label,
 )
+from .theme import set_tone
 
 CATEGORIES = (
+    ("appearance", "应用设置", "主题", "外观 深色 浅色 跟随系统 明暗 颜色"),
     ("preview", "应用设置", "预览绘制", "CPU GPU 栅格化 缓存 显卡 加速"),
     ("capture", "采集设置", "书写显示", "书写格 参考格 比例 田字格 配置"),
     (
@@ -120,7 +124,6 @@ class BodyPage(QtWidgets.QWidget):
             self.upgrade_natural = QtWidgets.QPushButton("使用新版自然书写")
             self.upgrade_natural.clicked.connect(self.choose_natural_version)
             natural_form.addRow(self.upgrade_natural)
-        form.addRow(natural)
         column.addLayout(form)
         self.style = ProfileForm(
             owner.style,
@@ -154,6 +157,7 @@ class BodyPage(QtWidgets.QWidget):
             ],
         )
         column.addWidget(self.flow)
+        column.addWidget(natural)
         headings = QtWidgets.QWidget()
         heading_form = QtWidgets.QFormLayout(headings)
         self.headings, self.initial_headings = [], []
@@ -172,6 +176,7 @@ class BodyPage(QtWidgets.QWidget):
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
         column.addStretch()
         compact_form_parameters(self)
+        align_form_labels(form, self.style.layout(), self.flow.layout(), heading_form)
 
     def configuration(self):
         acceptable(self)
@@ -250,11 +255,6 @@ class SettingsDialog(QtWidgets.QDialog):
         self.setWindowTitle("设置 · InkStruct")
         self.setModal(True)
         self.setSizeGripEnabled(True)
-        self.setStyleSheet(
-            "QCheckBox::indicator:unchecked {background: transparent; border: 1px solid #8995a5;} "
-            "QTreeWidget::item {min-height: 28px;} "
-            '*[settingsSearchHit="true"] {border: 1px solid #d4982e;}'
-        )
         self.preferences = GlobalDefaultsStore.make_settings()
         outer = QtWidgets.QVBoxLayout(self)
         self.search = QtWidgets.QLineEdit()
@@ -263,7 +263,7 @@ class SettingsDialog(QtWidgets.QDialog):
         outer.addWidget(self.search)
         if self.defaults_warning:
             warning = label(self.defaults_warning)
-            warning.setStyleSheet("color: #9a6010;")
+            set_tone(warning, "warning")
             outer.addWidget(warning)
         splitter = QtWidgets.QSplitter()
         outer.addWidget(splitter, 1)
@@ -276,7 +276,7 @@ class SettingsDialog(QtWidgets.QDialog):
         right = QtWidgets.QWidget()
         column = QtWidgets.QVBoxLayout(right)
         self.heading = label("")
-        self.heading.setStyleSheet("font-size: 19px; font-weight: bold;")
+        self.heading.setProperty("inkRole", "title")
         column.addWidget(self.heading)
         self.scope_info = label("")
         column.addWidget(self.scope_info)
@@ -285,12 +285,14 @@ class SettingsDialog(QtWidgets.QDialog):
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
         self.error = label("")
-        self.error.setStyleSheet("color: #c44d4d;")
+        self.error.setProperty("inkRole", "status")
+        set_tone(self.error, "danger")
         outer.addWidget(self.error)
         self.has_current_document = bool(editor.session_path or editor.dirty or editor.source_session.source
                                          or editor.document_started)
         footer = QtWidgets.QHBoxLayout()
         self.reset = QtWidgets.QPushButton("恢复本分类初始值")
+        self.reset.setAutoDefault(False)
         self.reset.clicked.connect(self.reset_current)
         footer.addWidget(self.reset)
         footer.addStretch()
@@ -303,8 +305,13 @@ class SettingsDialog(QtWidgets.QDialog):
             button.setMinimumWidth(72)
             button.clicked.connect(callback)
             button.setAutoDefault(False)
+            if text == ("应用并保存" if self.has_current_document else "存为默认"):
+                button.setProperty("inkRole", "primary")
+            if text == "存为默认":
+                self.save_button = button
             actions.addWidget(button)
             if text == "应用并保存":
+                self.apply_document = button
                 hint = "更新当前文档，并保存为新文档默认"
                 button.setToolTip(hint)
                 button.setAccessibleDescription(hint)
@@ -331,8 +338,8 @@ class SettingsDialog(QtWidgets.QDialog):
         available = (parent or editor).screen().availableGeometry().size()
         self.setMinimumSize(min(840, available.width() - 40), min(640, available.height() - 64))
         self.resize(
-            min(max(1480, size.width()), available.width() - 40),
-            min(max(900, size.height()), available.height() - 64),
+            min(max(self.minimumWidth(), size.width()), available.width() - 40),
+            min(max(self.minimumHeight(), size.height()), available.height() - 64),
         )
         initial = category or self.preferences.value("last_layout_category", "body", str)
         self.select(initial if initial in self.items else "body")
@@ -355,9 +362,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
         self.heading.setText(f"{group} › {title}")
+        self.apply_document.setVisible(self.has_current_document and key != "appearance")
+        self.save_button.setText("保存" if key == "appearance" else "存为默认")
+        role = "primary" if self.apply_document.isHidden() else None
+        if self.save_button.property("inkRole") != role:
+            self.save_button.setProperty("inkRole", role)
+            self.save_button.style().unpolish(self.save_button)
+            self.save_button.style().polish(self.save_button)
         self.scope_info.setText(
             "生效范围：本机采集显示"
             if key == "capture"
+            else "生效范围：本机应用界面，保存后立即切换。"
+            if key == "appearance"
             else "生效范围：本机预览，下次启动应用生效；不修改文档。"
             if key == "preview"
             else "生效范围：全局默认，保存后新文档使用；已有文档保持原设置。"
@@ -371,7 +387,9 @@ class SettingsDialog(QtWidgets.QDialog):
             self.preferences.setValue("last_layout_category", key)
 
     def make_page(self, key):
-        if key == "preview":
+        if key == "appearance":
+            page = AppearancePage(self.preferences)
+        elif key == "preview":
             from .editor.preview_settings import PreviewSettingsPage
             page = PreviewSettingsPage()
         elif key == "capture":
@@ -483,6 +501,12 @@ class SettingsDialog(QtWidgets.QDialog):
             flow, style, paper, mode, capture = self.collect()
             w = self.editor
             defaults = LayoutDefaults(paper, style, flow, mode, self.run, self.symbols)
+            appearance = self.pages.get("appearance")
+            theme_changed = appearance is not None and appearance.changed
+            save_defaults = (
+                not theme_changed or to_document
+                or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
+            )
             inspector = getattr(w, "element_inspector", None)
             if to_document and not self.has_current_document:
                 raise ValueError("没有当前文档。")
@@ -499,7 +523,8 @@ class SettingsDialog(QtWidgets.QDialog):
             if capture_changed:
                 self.collector.ui_settings_store.save(capture)
             try:
-                self.defaults_store.save(defaults)
+                if save_defaults:
+                    self.defaults_store.save(defaults)
             except (ValueError, OSError, TypeError) as error:
                 if capture_changed:
                     try:
@@ -515,11 +540,17 @@ class SettingsDialog(QtWidgets.QDialog):
             self.flow, self.style, self.page, self.mode = flow, style, paper, mode
             if 'preview' in self.pages:
                 self.pages['preview'].save()
-            self.error.setStyleSheet("color: #236747;")
-            self.error.setText("已更新当前文档并存为默认。" if to_document else "已保存为新文档默认。")
+            if theme_changed:
+                appearance.save()
+            set_tone(self.error, "success")
+            self.error.setText(
+                "已更新当前文档并存为默认。" if to_document
+                else "已保存应用主题。" if theme_changed and not save_defaults
+                else "已保存为新文档默认。"
+            )
             return True
         except (ValueError, OSError, TypeError) as error:
-            self.error.setStyleSheet("color: #c44d4d;")
+            set_tone(self.error, "danger")
             self.error.setText(str(error))
             return False
 
