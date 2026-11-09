@@ -1,4 +1,6 @@
-# InkStruct 0.1.68 Windows 使用说明
+# InkStruct 0.1.69 Windows 使用说明
+
+安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.69) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 
 1. 打开「采集」并创建书写者，再创建任务。按提示用数位笔录制独立样本。
 2. 在「生成」选择书写者、样本目录、目标字和方法。开始生成时会按当前样本准备档案。生成结果中可制作该批次的字体。

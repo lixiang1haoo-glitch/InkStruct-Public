@@ -23,6 +23,9 @@ UninstPage instfiles
 
 Var Isolated
 
+!define VC_RUNTIME_KEY "Software\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+!define VC_RUNTIME_URL "https://aka.ms/vc14/vc_redist.x64.exe"
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "InkStruct requires 64-bit Windows."
@@ -36,6 +39,24 @@ Function .onInit
   ${IfNot} ${Errors}
     StrCpy $Isolated 1
   ${EndIf}
+  ReadRegDWORD $0 HKLM "${VC_RUNTIME_KEY}" "Installed"
+  ReadRegDWORD $1 HKLM "${VC_RUNTIME_KEY}" "Major"
+  ReadRegDWORD $2 HKLM "${VC_RUNTIME_KEY}" "Minor"
+  ${If} $0 == 1
+  ${AndIf} $1 == 14
+  ${AndIf} $2 >= 51
+  ${AndIf} ${FileExists} "$WINDIR\Sysnative\msvcp140.dll"
+  ${AndIf} ${FileExists} "$WINDIR\Sysnative\vcruntime140.dll"
+  ${AndIf} ${FileExists} "$WINDIR\Sysnative\vcruntime140_1.dll"
+    Return
+  ${EndIf}
+
+  IfSilent missing_runtime
+  MessageBox MB_ICONEXCLAMATION|MB_YESNO "InkStruct 需要 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。是否打开微软官方下载？运行库安装完成后，请重新运行 InkStruct 安装程序。" IDNO missing_runtime
+  ExecShell "open" "${VC_RUNTIME_URL}"
+missing_runtime:
+  SetErrorLevel 10
+  Quit
 FunctionEnd
 
 Function un.onInit

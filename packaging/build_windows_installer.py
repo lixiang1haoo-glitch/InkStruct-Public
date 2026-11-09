@@ -60,7 +60,7 @@ def main():
                    "APP_ICON": ROOT / "src/inkstruct/editor/resources/inkstruct.ico",
                    "REMOVE_FILES": remove}
         with (output / "nsis-build.log").open("wb") as log:
-            subprocess.run([str(nsis / "makensis.exe"), "/V3",
+            subprocess.run([str(nsis / "makensis.exe"), "/V3", "/INPUTCHARSET", "UTF8",
                             *(f"/D{key}={value}" for key, value in defines.items()),
                             str(ROOT / "packaging/InkStruct.nsi")],
                            cwd=nsis, stdout=log, stderr=subprocess.STDOUT, timeout=180, check=True)

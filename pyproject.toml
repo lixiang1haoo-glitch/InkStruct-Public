@@ -17,7 +17,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-desktop = ["PySide6==6.9.2", "matplotlib>=3.9,<4"]
+desktop = [
+  "PySide6==6.9.2",
+  "matplotlib>=3.9,<4",
+  "winrt-Windows.Data.Pdf==4!10.0.28000.2957; sys_platform == 'win32'",
+]
 train = ["torch>=2.7,<3", "h5py>=3.12,<4", "lmdb>=2.1,<3"]
 dev = ["pytest>=8.3,<10", "ruff>=0.9,<1"]
 experiment = ["matplotlib>=3.9,<4"]

@@ -1,12 +1,12 @@
 # Windows 构建与分发
 
-0.1.68 是 InkStruct 的首个公开源码版本。应用源码、采集器代码、图标及项目贡献按仓库的 MIT 声明发布。第三方资源和依赖适用各自的许可。 [MIT 许可](../LICENSE) · [第三方声明](../THIRD_PARTY_NOTICES.md)
+0.1.69 提供 Windows 安装程序、免安装 ZIP 和对应源码。应用源码、采集器代码、图标及项目贡献按仓库的 MIT 声明发布。第三方资源和依赖适用各自的许可。[发行页与 SHA-256](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.69) · [MIT 许可](../LICENSE) · [第三方声明](../THIRD_PARTY_NOTICES.md)
 
 ## 构建产物和验证
 
-- `InkStruct-0.1.68-Windows-x64.zip` 可解压后直接运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.68-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
-- 0.1.68 应用构建对应提交 `cee88ceb315fa3c12598c7b6d21b76f260632888`。在 Windows 11 x64 上，295 项源码回归全部通过。两个随包程序均通过公式与主题自检。隔离安装检查逐项核对了安装文件、启动程序，并确认卸载保留合成用户文件。
-- 验证使用已有 Visual C++ x64 运行库的 Windows 11 环境。隔离模式跳过开始菜单与卸载注册。安装器尚未签名。验证记录中的二进制哈希供核对本地候选。 [构建验证记录](releases/0.1.68-windows.json) · [本机依赖清单](releases/0.1.68-native-components.json)
+- 解压 `InkStruct-0.1.69-Windows-x64.zip` 后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.69-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
+- 安装和免安装版本依赖 Microsoft Visual C++ x64 运行库 14.51 或更新版本。安装程序在运行库缺失或版本过低时提供微软下载入口。静默安装返回退出码 10。安装好运行库后重新运行安装程序。[微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
+- 发行页附构建提交、依赖哈希和回归记录。隔离安装验收会跳过开始菜单与卸载注册。安装器未签名。
 
 ## 字形结构库
 
@@ -24,11 +24,14 @@ Windows 构建通过 PySide6 动态加载 Qt。对应版本为 6.9.2，构建资
 | Core、Gui、Network、OpenGL、Test、Widgets、Windows 平台与样式插件 | [qtbase 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtbase-everywhere-src-6.9.2.tar.xz) |
 | Qml、Quick | [qtdeclarative 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtdeclarative-everywhere-src-6.9.2.tar.xz) |
 | Svg、SvgWidgets | [qtsvg 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtsvg-everywhere-src-6.9.2.tar.xz) |
-| Qt PDF 与 PDFium | [qtwebengine 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtwebengine-everywhere-src-6.9.2.tar.xz) · [Qt PDF 及内嵌组件许可](https://doc.qt.io/qt-6.8/qtpdf-licensing.html) |
 | 额外图片格式插件、翻译文件 | [Qt 6.9.2 组件归档](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/)中的 qtimageformats、qttranslations |
 
-用户可按 LGPL 条款修改适用组件，并为调试修改进行相关逆向工程。替换时先退出 InkStruct，在独立的免安装副本中备份 `_internal/PySide6` 和 `_internal/shiboken6`，再用同一架构及 ABI 兼容的动态库和插件替换对应文件。保留 PySide6 与 Shiboken 版本匹配。也可在源码环境中用自己构建的兼容 PySide6、Shiboken 和 Qt 运行应用。发布前应实际复验这一流程，并提供精确对应的构建配置、源码及随附组件通知。 [Qt 6.9 第三方组件](https://doc.qt.io/archives/qt-6.9/licenses-used-in-qt.html)
+应用包的 `_internal/licenses/QT_SOURCES.md` 提供替换说明。发行页附有上表的源码归档，清单记录上游地址和 SHA-256。[替换说明](../packaging/QT_SOURCES.md) · [源码清单](../packaging/qt-windows-sources.json) · [Qt 6.9 第三方组件](https://doc.qt.io/archives/qt-6.9/licenses-used-in-qt.html)
 
-## Windows 二进制分发状态
+## Windows 图像与运行库
 
-当前公开版本提供源码。0.1.68 候选的预编译安装程序与 ZIP 尚未作为公开附件发布。二进制分发前仍需补齐 Qt/PDFium 及随 wheel 提供的软件渲染器的对应源码和通知，验证动态库替换，并核实 NumPy wheel 内重命名的 Microsoft 运行库的再分发依据。独立的 Microsoft 运行库文件由 Windows 或用户安装的官方运行库提供。 [Visual C++ 文件的再分发条件](https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files)
+Windows PDF 底图由系统的 Windows.Data.Pdf 渲染。JPEG 参考图片由 Pillow 读取。预览可使用受支持的 GPU，GPU 不可用时回退到 CPU。Windows 构建会排除 Qt PDF、Qt JPEG 插件和 Qt 的 Mesa 软件渲染器。
+
+构建脚本将锁定的 NumPy wheel 中两个扩展的运行库导入名改为系统的 `msvcp140.dll`。ZIP 和安装程序都使用微软提供的系统运行库。[Windows PDF API](https://learn.microsoft.com/uwp/api/windows.data.pdf) · [构建依赖清单](../packaging/windows-x64-py313.lock)
+
+0.1.68 的源码和历史验证记录可从原发行页查阅。[0.1.68 发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.68) · [历史构建记录](releases/0.1.68-windows.json)

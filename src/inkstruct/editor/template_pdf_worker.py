@@ -13,7 +13,9 @@ MAX_MESSAGE_BYTES = 3 * 1024 * 1024
 
 
 def main():
-    app = QtWidgets.QApplication([])
+    # Windows PDF uses a multithreaded COM apartment. QApplication would
+    # initialize an incompatible single-threaded apartment on this worker.
+    app = QtWidgets.QApplication([]) if sys.platform != "win32" else None
     pdf = None
     try:
         while raw := sys.stdin.buffer.readline(MAX_MESSAGE_BYTES + 1):
@@ -25,6 +27,7 @@ def main():
                 if action in {"open", "import"}:
                     if pdf is not None:
                         pdf.close()
+                        pdf = None
                     pdf = PdfReference(request["path"])
                     result = {
                         "action": action,
@@ -55,12 +58,13 @@ def main():
                 response = {"ok": True, "result": result}
             except Exception as error:  # noqa: BLE001 - isolated worker boundary
                 response = {"ok": False, "error": str(error)}
-            sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
-            sys.stdout.flush()
+            line = json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n"
+            sys.stdout.buffer.write(line.encode("utf-8"))
+            sys.stdout.buffer.flush()
     finally:
         if pdf is not None:
             pdf.close()
-    return 0 if app else 1
+    return 0
 
 
 if __name__ == "__main__":

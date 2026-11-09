@@ -950,6 +950,8 @@ def verify_large_fonts(window, out, wait, paths):
 
 
 def verify_windows_style(window, app, out, font_path=None):
+    from PIL import Image
+    from inkstruct.document.images import RasterResource
     from inkstruct.global_defaults import GlobalDefaultsStore
     from inkstruct.settings_dialog import SettingsDialog
     from inkstruct.theme import theme_preference
@@ -958,6 +960,10 @@ def verify_windows_style(window, app, out, font_path=None):
     assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
     assert app.property("inkstructDesktopStyle") == "windows11"
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
+    jpeg = out / "synthetic-reference.jpg"
+    Image.new("RGB", (120, 60), (90, 20, 150)).save(jpeg)
+    raster = RasterResource.from_file(jpeg, jpeg.name)
+    assert (raster.width_px, raster.height_px) == (120, 60)
     dialog = SettingsDialog(window.editor, window.collector, window, category="body")
     dialog.show()
     spin = dialog.pages["body"].style.controls["em_mm"]
@@ -1039,6 +1045,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "dpr": dialog.devicePixelRatio(), "schemes": reports,
             "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
+            "jpeg_reference_imported": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:

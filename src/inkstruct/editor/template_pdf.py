@@ -2,13 +2,13 @@
 
 import io
 import math
+import sys
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
 from PIL import Image
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6.QtPdf import QPdfDocument
 
 from ..document.template import PageTemplate, Region, TemplateBackground, TemplateFace
 from ..document.template_authoring import pack_reference_image, parse_template, template_json
@@ -16,22 +16,15 @@ from ..document.template_authoring import pack_reference_image, parse_template, 
 MAX_PDF_BYTES = 50 * 1024 * 1024
 
 
-class PdfReference(QtCore.QObject):
-    def __init__(self, path, parent=None):
-        super().__init__(parent)
-        with Path(path).open("rb") as stream:
-            raw = stream.read(MAX_PDF_BYTES + 1)
-        if len(raw) > MAX_PDF_BYTES:
-            raise ValueError("PDF 不能超过 50 MiB")
-        self.source_sha256 = sha256(raw).hexdigest()
-        self.device = QtCore.QBuffer(self)
+class QtPdfDocument:
+    def __init__(self, raw):
+        from PySide6.QtPdf import QPdfDocument
+
+        self.device = QtCore.QBuffer()
         self.device.setData(raw)
         self.device.open(QtCore.QIODevice.ReadOnly)
-        self.document = QPdfDocument(self)
+        self.document = QPdfDocument()
         self.document.load(self.device)
-        self.closed = False
-        self.cached_page = None
-        self.cached_background = None
         if self.document.status() != QPdfDocument.Status.Ready:
             error = self.document.error()
             self.close()
@@ -42,36 +35,18 @@ class PdfReference(QtCore.QObject):
                 raise ValueError("暂不支持需要密码或特殊加密方式的 PDF")
             raise ValueError(f"无法读取 PDF：{error.name}")
         self.page_count = self.document.pageCount()
-        if not 1 <= self.page_count <= 1000:
-            self.close()
-            raise ValueError("PDF 须包含 1–1000 页")
 
     def close(self):
-        if not self.closed:
-            self.document.close()
-            self.device.close()
-            self.device.setData(QtCore.QByteArray())
-            self.cached_page = None
-            self.cached_background = None
-            self.closed = True
+        self.document.close()
+        self.device.close()
+        self.device.setData(QtCore.QByteArray())
 
     def page_size_mm(self, index):
-        if self.closed or not isinstance(index, int) or not 0 <= index < self.page_count:
-            raise ValueError("PDF 页码无效或文件已关闭")
         size = self.document.pagePointSize(index)
-        width, height = size.width() * 25.4 / 72, size.height() * 25.4 / 72
-        if not all(math.isfinite(v) and 0 < v <= 10000 for v in (width, height)):
-            raise ValueError("PDF 页面尺寸无效或超过 10000 mm 的导入范围")
-        return width, height
+        return size.width() * 25.4 / 72, size.height() * 25.4 / 72
 
-    def background(self, index):
-        width, height = self.page_size_mm(index)
-        if self.cached_page == index:
-            return self.cached_background
-        scale = 1600 / max(width, height)
-        image = self.document.render(
-            index, QtCore.QSize(max(1, round(width * scale)), max(1, round(height * scale)))
-        )
+    def render(self, index, width, height):
+        image = self.document.render(index, QtCore.QSize(width, height))
         if image.isNull():
             raise ValueError("PDF 页面渲染失败")
         data = QtCore.QByteArray()
@@ -81,7 +56,49 @@ class PdfReference(QtCore.QObject):
             raise ValueError("PDF 页面无法转换为参考 PNG")
         buffer.close()
         with Image.open(io.BytesIO(bytes(data))) as decoded:
-            background = pack_reference_image(decoded.convert("RGBA"))
+            return decoded.convert("RGBA")
+
+
+class PdfReference:
+    def __init__(self, path):
+        with Path(path).open("rb") as stream:
+            raw = stream.read(MAX_PDF_BYTES + 1)
+        if len(raw) > MAX_PDF_BYTES:
+            raise ValueError("PDF 不能超过 50 MiB")
+        self.source_sha256 = sha256(raw).hexdigest()
+        if sys.platform == "win32":
+            from .pdf_windows import WindowsPdfDocument
+
+            self.document = WindowsPdfDocument(raw)
+        else:
+            self.document = QtPdfDocument(raw)
+        self.cached_page = self.cached_background = None
+        self.page_count = self.document.page_count
+        if not 1 <= self.page_count <= 1000:
+            self.close()
+            raise ValueError("PDF 须包含 1–1000 页")
+
+    def close(self):
+        if self.document is not None:
+            document, self.document = self.document, None
+            self.cached_page = self.cached_background = None
+            document.close()
+
+    def page_size_mm(self, index):
+        if self.document is None or not isinstance(index, int) or not 0 <= index < self.page_count:
+            raise ValueError("PDF 页码无效或文件已关闭")
+        size = self.document.page_size_mm(index)
+        if not all(math.isfinite(v) and 0 < v <= 10000 for v in size):
+            raise ValueError("PDF 页面尺寸无效或超过 10000 mm 的导入范围")
+        return size
+
+    def background(self, index):
+        width, height = self.page_size_mm(index)
+        if self.cached_page == index:
+            return self.cached_background
+        scale = 1600 / max(width, height)
+        pixels = max(1, round(width * scale)), max(1, round(height * scale))
+        background = pack_reference_image(self.document.render(index, *pixels))
         self.cached_page, self.cached_background = index, background
         return background
 

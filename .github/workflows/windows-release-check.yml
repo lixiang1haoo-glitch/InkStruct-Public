@@ -1,0 +1,65 @@
+name: Windows release verification
+
+on:
+  push:
+    branches: ['codex/windows-public-0.1.69']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUTF8: '1'
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.16'
+          architecture: x64
+      - name: Restore exact build inputs
+        run: |
+          python -m pip --isolated install --index-url https://pypi.org/simple --only-binary=:all: --require-hashes -r packaging/windows-x64-py313.lock
+          python -B packaging/prepare_public_resources.py
+          $nsis = Get-Content packaging/nsis-win.lock.json -Raw | ConvertFrom-Json
+          Invoke-WebRequest -Uri $nsis.url -OutFile "$env:RUNNER_TEMP/nsis.zip"
+          "PYTHONPATH=$pwd/src;$pwd/artifacts/external/data_collection" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path release-check | Out-Null
+      - name: Run source regressions
+        run: python -B -m pytest -o addopts= -q -p no:cacheprovider --junitxml release-check/source-regression.xml
+      - name: Build and verify the portable bundle
+        run: |
+          python -B packaging/build_inkstruct_app.py --output "$env:RUNNER_TEMP/ib"
+          Copy-Item "$env:RUNNER_TEMP/ib/build-provenance.json" release-check/
+          python -B packaging/verify_public_windows.py --bundle "$env:RUNNER_TEMP/ib/dist/InkStruct" --output "$env:RUNNER_TEMP/iz"
+          Copy-Item "$env:RUNNER_TEMP/iz/verification.json" release-check/portable-verification.json
+          python -B packaging/build_windows_installer.py --verification "$env:RUNNER_TEMP/iz/verification.json" --nsis-zip "$env:RUNNER_TEMP/nsis.zip" --output "$env:RUNNER_TEMP/ii"
+          Copy-Item "$env:RUNNER_TEMP/ii/installer-build.json" release-check/
+      - name: Check missing runtime and install Microsoft's download
+        run: |
+          $record = Get-Content release-check/installer-build.json -Raw | ConvertFrom-Json
+          packaging/verify_clean_runtime.ps1 -Installer "$env:RUNNER_TEMP/ii/$($record.file)" -Output "$env:RUNNER_TEMP/ir"
+          Copy-Item "$env:RUNNER_TEMP/ir/clean-runtime.json" release-check/
+      - name: Install and uninstall on the verified runtime
+        run: |
+          $record = Get-Content release-check/portable-verification.json -Raw | ConvertFrom-Json
+          python -B packaging/verify_windows_installer.py --installer-build "$env:RUNNER_TEMP/ii/installer-build.json" --zip "$env:RUNNER_TEMP/iz/$($record.archive)" --output "$env:RUNNER_TEMP/it"
+          Copy-Item "$env:RUNNER_TEMP/it/installer-verification.json" release-check/
+          Copy-Item "$env:RUNNER_TEMP/iz/$($record.archive)" release-check/
+          Copy-Item "$env:RUNNER_TEMP/ii/*-Installer.exe" release-check/
+          "$env:GITHUB_SHA" | Set-Content release-check/commit.txt
+      - name: Archive verification records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkstruct-windows-release-check
+          path: release-check/
+          compression-level: 0
+          if-no-files-found: ignore

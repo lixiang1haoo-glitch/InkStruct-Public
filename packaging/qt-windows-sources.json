@@ -1,0 +1,36 @@
+{
+  "qt_version": "6.9.2",
+  "wheel_provenance": "https://www.mail-archive.com/pyside@qt-project.org/msg03210.html",
+  "archives": [
+    {
+      "file": "qtbase-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtbase-everywhere-src-6.9.2.tar.xz",
+      "sha256": "44be9c9ecfe04129c4dea0a7e1b36ad476c9cc07c292016ac98e7b41514f2440"
+    },
+    {
+      "file": "qtdeclarative-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtdeclarative-everywhere-src-6.9.2.tar.xz",
+      "sha256": "477f2d2c0bd98916107818725e6d498206e033dfb2859c52121e01a06ac42664"
+    },
+    {
+      "file": "qtsvg-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtsvg-everywhere-src-6.9.2.tar.xz",
+      "sha256": "d984cab8f26334aa1c15e5b8f0cd9f1b7c0c1289fe0b68c1c84ab469b75605a5"
+    },
+    {
+      "file": "qtimageformats-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtimageformats-everywhere-src-6.9.2.tar.xz",
+      "sha256": "8a023f7e2f57dedc02e2ab10c975f7cb3cccac9b8f0823c12fd6824834549139"
+    },
+    {
+      "file": "qttranslations-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qttranslations-everywhere-src-6.9.2.tar.xz",
+      "sha256": "c73bb6281ed365c0f954f4b1b6e1b13e1b3fefd94854f46fcd9a412f641f7ed6"
+    },
+    {
+      "file": "pyside-setup-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.9.2-src/pyside-setup-everywhere-src-6.9.2.tar.xz",
+      "sha256": "9ec087465342bdc9dbe492a30e58fdbbc5448655deacf5982a0fe7123f59222d"
+    }
+  ]
+}

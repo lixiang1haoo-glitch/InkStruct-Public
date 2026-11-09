@@ -170,11 +170,17 @@ class InkStructWindow(QtWidgets.QMainWindow):
             f"InkStruct {APP_VERSION} · 采集、生成、字体与排版 · 工作区：" + str(self.workspace)
         )
         about = QtGui.QAction("关于 InkStruct", self)
+        qt_notice = (
+            f"\n\n使用 Qt {QtCore.qVersion()}、PySide6 和 Shiboken（LGPLv3）。"
+            "\n对应源码及替换说明见安装目录 _internal/licenses/QT_SOURCES.md。"
+            if sys.platform == "win32" else ""
+        )
         about.triggered.connect(
             lambda: QtWidgets.QMessageBox.information(
                 self,
                 "InkStruct",
-                f"InkStruct {APP_VERSION}\n中心线手写采集、生成、字体与模板管理、Markdown 排版。\n默认 v6.2 exp；另可选 v6.1 exp 和 v4 adaptive。",
+                f"InkStruct {APP_VERSION}\n中心线手写采集、生成、字体与模板管理、Markdown 排版。"
+                f"\n默认 v6.2 exp；另可选 v6.1 exp 和 v4 adaptive。{qt_notice}",
             )
         )
         self.menuBar().addAction(about)
