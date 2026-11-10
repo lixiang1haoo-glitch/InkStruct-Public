@@ -2,7 +2,7 @@
 
 [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)提供带截图的[上手教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/first-document.html)和[常见问题](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html)。本页供快速查阅。
 
-安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.72) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
+安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.73) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 
 从 0.1.71 起，字体库预览和采集画布随深浅主题切换。深色采集画布为深灰底白色笔迹。公式设置的手写预览同时显示当前示例的各项实测毫米值，选中项高亮。
 
@@ -21,5 +21,11 @@
 **录制连笔汉字**时，在「采集 › 汉字样本」勾选「允许汉字连笔」，然后在「生成」选择 **v6.3 exp**。当前只有 v6.3 使用连笔供体，v6.2 继续处理分笔样本。建档分别报告可用的整字和部件。默认可跨字复用合格部件，需要保留同字整段连写时再勾选「允许回放同字的完整连笔样本」。
 
 0.1.68 移除了整行采集的旧入口及其运行组件。汉字单字任务和标点与扩展采集继续可用。旧整行任务与轨迹文件仍保存在原工作区。
+
+## 自定义模板纸张行格
+
+在模板工作台选中正文框，将「排版方式」设为「按纸张行格排版」。输入首行基线、末行基线（均从正文框顶部起算）和可用行数，用预览辅助线对齐纸面横线。首末基线都计入行数。
+
+高公式会占用连续行格。表格保持原有分行和重复表头规则，表后正文从下一条可用基线继续。辅助线仅用于配置，PDF 底图原有横线仍会显示。旧模板默认按内容排版。
 
 反馈问题时使用新建测试工作区与合成输入。仓库提供两份公式 Markdown 示例。Windows 构建方法见 [README](../README.md)。

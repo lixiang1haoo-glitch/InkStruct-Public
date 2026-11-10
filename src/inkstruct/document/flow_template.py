@@ -34,6 +34,27 @@ class NamedField:
 
 
 @dataclass(frozen=True)
+class PaperGrid:
+    first_mm: float
+    last_mm: float
+    rows: int
+
+    def __post_init__(self):
+        if (not _numbers((self.first_mm, self.last_mm)) or self.first_mm < 0
+                or type(self.rows) is not int or not 1 <= self.rows <= 1000
+                or (self.rows == 1 and self.first_mm != self.last_mm)
+                or (self.rows > 1 and self.pitch < 0.1)):
+            raise ValueError("行格须填写有效的首末基线和 1–1000 行；单行的首末基线相同")
+
+    @property
+    def pitch(self):
+        return (self.last_mm - self.first_mm) / (self.rows - 1) if self.rows > 1 else 0
+
+    def baselines(self):
+        return (self.first_mm + index * self.pitch for index in range(self.rows))
+
+
+@dataclass(frozen=True)
 class TextFrame:
     frame_id: str
     label: str
@@ -41,10 +62,13 @@ class TextFrame:
     role: str = "body"
     order: int = 1
     field_id: str = ""
+    paper_grid: PaperGrid | None = None
 
     def __post_init__(self):
         if isinstance(self.region, dict):
             object.__setattr__(self, "region", Region(**self.region))
+        if isinstance(self.paper_grid, dict):
+            object.__setattr__(self, "paper_grid", PaperGrid(**self.paper_grid))
         if (
             not isinstance(self.region, Region)
             or not self.frame_id
@@ -58,6 +82,11 @@ class TextFrame:
             or (self.role != "field" and self.field_id != "")
         ):
             raise ValueError("Invalid template text frame")
+        if self.paper_grid is not None and (
+            self.role != "body" or not isinstance(self.paper_grid, PaperGrid)
+            or self.paper_grid.last_mm > self.region.height_mm
+        ):
+            raise ValueError("纸张行格仅用于正文框，基线须位于框内")
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,8 @@ from .table_pages import TableChunk, table_boxes
 
 
 def paginate_regions(
-    table, capacity, seek, new_region, cursor, *, cancelled=None, pager=None, position=None
+    table, capacity, seek, new_region, cursor, *, cancelled=None, pager=None, position=None,
+    occupied_end=lambda y: y,
 ):
     model = table.model
     headers = tuple(range(model.header_rows))
@@ -51,7 +52,7 @@ def paginate_regions(
             if required + table.style.stroke_width_mm > ch + 1e-8:
                 break
             if pager and not pager.can_fit(
-                [boxes], position() + required + table.style.stroke_width_mm
+                [boxes], occupied_end(position() + required + table.style.stroke_width_mm)
             ):
                 if len(rows) > len(headers):
                     break
@@ -71,7 +72,7 @@ def paginate_regions(
             continue
         if pager:
             pager.accept(
-                table_boxes(table, rows), position() + height + table.style.stroke_width_mm
+                table_boxes(table, rows), occupied_end(position() + height + table.style.stroke_width_mm)
             )
         yield TableChunk(
             tuple(rows), False, not first and bool(headers) and table.style.repeat_header, height

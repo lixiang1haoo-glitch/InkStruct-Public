@@ -59,6 +59,13 @@ class FlowCanvas(QtWidgets.QWidget):
                 QtGui.QColor(37, 99, 235, 18) if f.role == "body" else QtGui.QColor(180, 83, 9, 18)
             )
             p.drawRect(QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm))
+            if f.paper_grid:
+                p.setPen(QtGui.QPen(QtGui.QColor("#0284c7"), 0.35, QtCore.Qt.PenStyle.DashLine))
+                for baseline in f.paper_grid.baselines():
+                    y = r.y_mm + baseline + t.offset_y_mm
+                    x = r.x_mm + t.offset_x_mm
+                    p.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(x + r.width_mm, y))
+                p.setPen(QtGui.QPen(color, 0.5))
             title = (
                 f"{f.order}. 正文"
                 if f.role == "body"

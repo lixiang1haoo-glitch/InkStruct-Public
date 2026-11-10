@@ -33,11 +33,22 @@ class TemplateRevision:
             raise ValueError("无效模板修订关系")
 
 
+def _content_record(template, record=None):
+    data = asdict(template) if record is None else record
+    data.pop('revision', None)
+    # Omit the new optional property from legacy records to preserve their hashes.
+    if data.get('schema_version') == 'inkstruct_page_template_v3':
+        for layout in data.get('layouts', ()):
+            for frame in layout['frames']:
+                if frame.get('paper_grid') is None:
+                    frame.pop('paper_grid', None)
+    return data
+
+
 def template_record(template, record=None):
     if template is None:
         return None
-    data = asdict(template) if record is None else record
-    data.pop('revision', None)
+    data = _content_record(template, record)
     revision = template.revision
     if revision is not None and revision.content_hash == digest(data):
         return {'schema_version': SCHEMA, 'revision': asdict(revision), 'template': data}
@@ -56,8 +67,7 @@ def template_revision(template):
 
 
 def version_template(template, *, parent=None):
-    data = asdict(template)
-    data.pop('revision', None)
+    data = _content_record(template)
     content_hash = digest(data)
     if parent is None:
         revision = TemplateRevision(str(uuid4()), str(uuid4()), None, 1, content_hash)

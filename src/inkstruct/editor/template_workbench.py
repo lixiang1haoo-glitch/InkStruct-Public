@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..document.flow_template import NamedField, PageLayout, TextFrame
+from ..document.flow_template import NamedField, PageLayout, PaperGrid, TextFrame
 from ..document.template import Region
 from ..document.template_authoring import parse_template, template_json
 
@@ -387,6 +387,7 @@ class WorkbenchUI:
         self.property_form.addWidget(self.layout_box)
         self.frame_box = QtWidgets.QGroupBox("所选文本框")
         frame_form = QtWidgets.QFormLayout(self.frame_box)
+        self.frame_form = frame_form
         self.frame_name = QtWidgets.QLineEdit()
         self.frame_name.editingFinished.connect(self.flush)
         frame_form.addRow("框名称", self.frame_name)
@@ -394,6 +395,26 @@ class WorkbenchUI:
         self.frame_order.setRange(1, 10000)
         self.frame_order.editingFinished.connect(self.flush)
         frame_form.addRow("正文顺序", self.frame_order)
+        self.frame_flow = QtWidgets.QComboBox()
+        self.frame_flow.addItem("按内容排版（默认）", "content")
+        self.frame_flow.addItem("按纸张行格排版", "paper")
+        self.frame_flow.setToolTip("在设计预览中用蓝色虚线标出纸面基线。使用原字号，较高内容会占用多格。")
+        self.frame_flow.currentIndexChanged.connect(self.frame_flow_changed)
+        frame_form.addRow("排版方式", self.frame_flow)
+        self.grid_first, self.grid_last = (QtWidgets.QDoubleSpinBox() for _ in range(2))
+        for label, control in (("首行基线（距框顶）", self.grid_first), ("末行基线（距框顶）", self.grid_last)):
+            control.setRange(0, 2000)
+            control.setDecimals(4)
+            control.setSuffix(" mm")
+            control.editingFinished.connect(self.flush)
+            frame_form.addRow(label, control)
+        self.grid_rows = QtWidgets.QSpinBox()
+        self.grid_rows.setRange(1, 1000)
+        self.grid_rows.valueChanged.connect(self.update_grid_rows)
+        self.grid_rows.editingFinished.connect(self.flush)
+        frame_form.addRow("可用行数", self.grid_rows)
+        self.grid_pitch = QtWidgets.QLabel()
+        frame_form.addRow("行格间距", self.grid_pitch)
         self.field_choice = QtWidgets.QComboBox()
         self.field_choice.setSizeAdjustPolicy(
             QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
@@ -626,6 +647,7 @@ class WorkbenchUI:
             control.setVisible(self.template.kind == "simple")
             self.paper_form.labelForField(control).setVisible(self.template.kind == "simple")
         if frame:
+            self.frame_box.setTitle("内容框" if frame.role == "body" else "所选文本框")
             self.frame_name.setText(frame.label)
             self.frame_order.setValue(frame.order)
             self.field_choice.setCurrentIndex(self.field_choice.findData(frame.field_id))
@@ -640,8 +662,43 @@ class WorkbenchUI:
                 )
             )
             self.frame_order.setEnabled(frame.role == "body")
+            self.frame_form.setRowVisible(self.frame_flow, frame.role == "body")
+            self.frame_flow.setCurrentIndex(1 if frame.paper_grid else 0)
+            height = frame.region.height_mm
+            first = min(7, height / 3)
+            last = height - min(2, height / 5)
+            rows = max(2, round((last - first) / 9) + 1)
+            if last - first < .1:
+                last, rows = first, 1
+            grid = frame.paper_grid
+            self.grid_first.setValue(grid.first_mm if grid else first)
+            self.grid_last.setValue(grid.last_mm if grid else last)
+            self.grid_rows.setValue(grid.rows if grid else rows)
+            self.grid_initial = self.grid_values()
+            self.update_grid_rows()
             self.field_choice.setEnabled(frame.role == "field")
             self.new_field_button.setVisible(frame.role == "field")
+
+    def grid_values(self):
+        first = self.grid_first.value()
+        rows = self.grid_rows.value()
+        return first, first if rows == 1 else self.grid_last.value(), rows
+
+    def update_grid_rows(self):
+        frame = self.selected_frame()
+        show = frame is not None and frame.role == "body" and self.frame_flow.currentData() == "paper"
+        first, last, rows = self.grid_values()
+        for control in (self.grid_first, self.grid_rows):
+            self.frame_form.setRowVisible(control, show)
+        for control in (self.grid_last, self.grid_pitch):
+            self.frame_form.setRowVisible(control, show and rows > 1)
+        if rows > 1:
+            self.grid_pitch.setText(f"{(last - first) / (rows - 1):.3f} mm")
+
+    def frame_flow_changed(self):
+        if self.ui_ready and not self.ui_loading:
+            self.update_grid_rows()
+            self.flush()
 
     def flush(self):
         if not self.ui_ready or self.ui_loading:
@@ -675,6 +732,11 @@ class WorkbenchUI:
                         for k, c in self.geometry_controls.items()
                         if c.value() != self.geometry_initial[k]
                     }
+                    paper_grid = None
+                    if frame.role == "body" and self.frame_flow.currentData() == "paper":
+                        grid_values = self.grid_values()
+                        paper_grid = (frame.paper_grid if frame.paper_grid and grid_values == self.grid_initial
+                                      else PaperGrid(*grid_values))
                     updated = replace(
                         frame,
                         label=self.frame_name.text(),
@@ -683,6 +745,7 @@ class WorkbenchUI:
                         if frame.role == "field"
                         else frame.field_id,
                         region=replace(frame.region, **values),
+                        paper_grid=paper_grid,
                     )
                     frames = tuple(updated if f.frame_id == frame.frame_id else f for f in frames)
                 updated_layout = replace(p, label=self.layout_label.text(), frames=frames)

@@ -38,5 +38,12 @@ def geometry_preview(template, layout_id):
                 f'<text x="{r.x_mm + 1}" y="{r.y_mm + 4}" font-size="3">{escape(label + " · " + f.label)}</text>',
             ]
         )
+        if f.paper_grid:
+            for baseline in f.paper_grid.baselines():
+                y = r.y_mm + baseline
+                lines.append(
+                    f'<path d="M {r.x_mm} {y} h {r.width_mm}" fill="none" stroke="#0284c7" '
+                    'stroke-width="0.3" stroke-dasharray="1.4 0.8"/>'
+                )
     lines.append("</g></svg>")
     return "\n".join(lines)

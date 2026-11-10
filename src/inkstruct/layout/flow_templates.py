@@ -11,7 +11,7 @@ from ..scene.schema import LayoutSnapshot, Page, PaintOp
 from .flow_regions import NoRegionProgress, RegionCursor
 from .inline import check_cancel
 
-VERSION = "template-single-flow-v3/named-fields-v1/partial-preview-v1"
+VERSION = "template-single-flow-v3/named-fields-v1/partial-preview-v1/paper-grid-v1"
 
 
 def layout_flow_template(document, resolver, *, page, style, flow, cancelled=None):
