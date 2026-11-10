@@ -63,7 +63,18 @@ def _interval_minimum(columns, constraints, base):
     return [b - a for a, b in pairwise(prefixes)]
 
 
-def _widths(model, style, constraints, preferred, issues):
+def _preferred_total(count, constraints, base, shares):
+    if shares is None:
+        return sum(_interval_minimum(count, constraints, base))
+    intervals = [*constraints, *((i, i + 1, base) for i in range(count))]
+    required = []
+    for start, end, width in intervals:
+        share = sum(shares[start:end])
+        required.append(width / share if share > 0 else float("inf"))
+    return max(required)
+
+
+def _widths(model, style, constraints, preferred, issues, available_widths):
     count, width = model.columns, style.width_mm
     if style.columns and len(style.columns) != count:
         raise ValueError(f"Table needs {count} column sizes")
@@ -71,6 +82,22 @@ def _widths(model, style, constraints, preferred, issues):
         raise ValueError(f"Table needs {count} column alignments")
     base = style.padding_left_mm + style.padding_right_mm + style.stroke_width_mm
     minimum = _interval_minimum(count, constraints, base)
+    if style.total_width_mode == "content":
+        shares = None
+        if style.width_mode == "equal":
+            shares = [1 / count] * count
+        elif style.width_mode == "ratio":
+            shares = [v / sum(style.columns) for v in style.columns]
+        preferred = [*constraints, *preferred]
+        needed = sum(minimum) if shares is None else _preferred_total(count, constraints, base, shares)
+        ideal = _preferred_total(count, preferred, base, shares)
+        limits = sorted({max(0.001, w - style.stroke_width_mm) for w in available_widths})
+        if limits:
+            # Keep the same columns on continuation pages. Frames too narrow to
+            # admit the minimum width are skipped by the regular region flow.
+            width = next((limit for limit in limits if limit + 1e-7 >= needed), limits[-1])
+        width = min(width, ideal)
+
     if style.width_mode == "equal":
         widths = [width / count] * count
     elif style.width_mode == "ratio":
@@ -96,7 +123,8 @@ def _widths(model, style, constraints, preferred, issues):
         remaining = max(0, width - sum(widths))
         widths = [v + remaining / count for v in widths]
         if sum(minimum) <= width + 1e-7:
-            widths = _balance(widths, constraints, preferred, base)
+            floors = preferred if style.total_width_mode == "content" and sum(wants) <= width + 1e-7 else constraints
+            widths = _balance(widths, floors, preferred, base)
         if sum(minimum) > width + 1e-7:
             issues.append(
                 Diagnostic(
@@ -161,6 +189,7 @@ def measure_table(
     latin_spacing="capture",
     punctuation_spacing="capture",
     han_variation=None,
+    available_widths=(),
 ):
     style = style or TableStyle()
     check_cancel(cancelled)
@@ -268,7 +297,7 @@ def measure_table(
         if left or right:
             constraints.append((column, column + 1, left + right + clearance))
             preferred.append(constraints[-1])
-    widths = _widths(model, style, constraints, preferred, issues)
+    widths = _widths(model, style, constraints, preferred, issues, available_widths)
     cells, heights = [], [style.min_row_height_mm] * model.rows
     for cell, boxes, minimum, wanted, align, before, after in raw:
         check_cancel(cancelled)
