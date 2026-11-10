@@ -1,6 +1,6 @@
 # 排版输入与模板
 
-本文描述 InkStruct **0.1.70** 的排版输入。用 UTF-8 Markdown 交换正文，用 [`.inkdoc`](./inkdoc) 一起保存页面设置、嵌入资源和冻结选样。接入时先检查结构，再检查资源，最后渲染。[CLI 与快速开始](./cli)
+本文描述 InkStruct **0.1.74** 的排版输入。用 UTF-8 Markdown 交换正文，用 [`.inkdoc`](./inkdoc) 一起保存页面设置、嵌入资源和冻结选样。接入时先检查结构，再检查资源，最后渲染。[CLI 与快速开始](./cli)
 
 ## Markdown 与公式
 
@@ -61,4 +61,20 @@
 
 这里假设模板声明了 `title`。字段块以单独一行 `:::` 结束。模板 v3 使用正文里的字段块。旧模板若使用节点绑定，可通过 `template inspect-content` 获取项目摘要和节点，再用 `template bind --bindings ... --output ...` 另存。两种入口的参数见 `document template --help`。
 
-对已有项目用 `document template validate-document file.inkdoc` 核对实际内容能否排进页面，检查报告的 `exportable`、`plotter_exportable` 和 `diagnostics`。模板几何有效只是其中一步，实体写字机还需要单独对位。[模板命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.70/src/inkstruct/document/template_authoring.py)
+对已有项目用 `document template validate-document file.inkdoc` 核对实际内容能否排进页面，检查报告的 `exportable`、`plotter_exportable` 和 `diagnostics`。模板几何有效只是其中一步，实体写字机还需要单独对位。[模板命令实现](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.74/src/inkstruct/document/template_authoring.py)
+
+### 纸张行格 {#paper-grid}
+
+自定义模板的正文框可在 `layouts[].frames[]` 中加入可选的 `paper_grid`。省略该字段时，正文框按内容高度排版。
+
+```json
+{
+  "paper_grid": {
+    "first_mm": 7,
+    "last_mm": 187,
+    "rows": 21
+  }
+}
+```
+
+首末基线从正文框顶部量起，单位为毫米，且都须在框内。`rows` 是 1 到 1000 的整数，包含首行和末行。多行时按等距分配，间距至少 0.1 mm。单行时两个位置相同。纸张行格只用于正文框。[模板字段与校验](https://github.com/lixiang1haoo-glitch/InkStruct-Public/blob/app-v0.1.74/src/inkstruct/document/flow_template.py)

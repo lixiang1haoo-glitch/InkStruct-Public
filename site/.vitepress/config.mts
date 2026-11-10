@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 const repository = 'https://github.com/lixiang1haoo-glitch/InkStruct-Public'
-const releases = `${repository}/releases`
+const releases = `${repository}/releases/latest`
 
 export default defineConfig({
   lang: 'zh-CN',

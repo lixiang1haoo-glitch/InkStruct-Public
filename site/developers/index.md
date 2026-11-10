@@ -4,7 +4,7 @@
 import { withBase } from 'vitepress'
 </script>
 
-从命令行检查手写文档、读取交换文件，或从源码参与开发。这里的参考页以 InkStruct 桌面应用 **0.1.70** 为验证基线。应用、Python 项目和各文件格式有各自的版本。
+从命令行检查手写文档、读取交换文件，或从源码参与开发。参考页标明对应的应用版本。0.1.74 的排版变更见[纸张行格](./layout-inputs#paper-grid)和[表格总宽设置](./inkdoc#table-total-width)。应用、Python 项目和各文件格式有各自的版本。
 
 | 我想做什么 | 从这里开始 |
 | --- | --- |

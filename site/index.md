@@ -14,7 +14,7 @@ hero:
       link: /guide/first-document
     - theme: alt
       text: 下载 Windows 版
-      link: https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases
+      link: https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/latest
 features:
   - title: 从一段短文起步
     details: 用「一二三」练习采集、生成和制包，做出自己的第一张手写页面。
@@ -33,6 +33,13 @@ features:
     link: /developers/
     linkText: 查看开发者文档
 ---
+
+## 0.1.74 排版更新
+
+- **按内容确定表格总宽。** 短表可随内容收窄，长表在正文框可用宽度内换行。普通排版和纸张行格排版都支持。[设置表格总宽](/guide/faq#table-total-width)
+- **按纸张行格排版。** 自定义模板可用首末基线和行数对齐信纸。表格横边框沿纸面横线排列，较高的表格行可占多格。[设置信纸行格](/guide/faq#paper-grid)
+
+[0.1.74 安装器、ZIP 和校验记录](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74)
 
 ## 平台
 
