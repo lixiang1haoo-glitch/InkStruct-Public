@@ -330,10 +330,11 @@ def layout_markdown(
         )
 
     region_left, region_top, region_right, region_bottom = page_bounds(0)
+    grid = _regions.grid if _regions else None
     content_width = region_right - region_left
     continuation_bounds = page_bounds(1)
     content_height = continuation_bounds[3] - continuation_bounds[1]
-    if min(content_width, content_height, region_bottom - region_top) <= style.stroke_width_mm:
+    if not grid and min(content_width, content_height, region_bottom - region_top) <= style.stroke_width_mm:
         raise ValueError("The brush leaves no usable page area")
     measured = []
     measured_tables = {}
@@ -557,7 +558,7 @@ def layout_markdown(
         )
 
     def new_page(*, physical=False):
-        nonlocal y, region_left, region_top, region_right, region_bottom, content_width, content_height
+        nonlocal y, region_left, region_top, region_right, region_bottom, content_width, content_height, grid
         if _regions:
             _regions.next_page() if physical else _regions.next()
         count=_regions.page_index+1 if _regions else len(fragments)+1
@@ -573,13 +574,24 @@ def layout_markdown(
         region_left, region_top, region_right, region_bottom = page_bounds(len(fragments) - 1)
         y = region_top
         if _regions:
+            grid = _regions.grid
             content_width=region_right-region_left
             content_height=region_bottom-region_top
 
-    def seek_fit(width,height):
-        target=_regions.fits_later(width,height)
+    def seek_fit(width, height, *, line=None, padding=0):
+        target = _regions.fits_later(width, height, line=line, padding=padding)
         while (_regions.page_index,_regions.frame_index)!=target:
             new_page()
+
+    def block_end(required):
+        return grid.block_end(required) if grid else required
+
+    def line_geometry(start, metric, *, align_baseline, padding):
+        ascent, descent, height = metric
+        if grid and align_baseline:
+            return grid.line(start, *metric)
+        inset = padding if grid else 0
+        return start + inset + (height - ascent - descent) / 2 + ascent, block_end(start + height + 2 * inset)
 
     if _regions:
         def capture_partial():
@@ -821,7 +833,7 @@ def layout_markdown(
             if block.node.node_id not in measured_images and block.node.node_id not in measured_tables and not block.rule:
                 lines,metrics=rewrap(block,lines,metrics,0,indent)
         gap = flow.heading_gap_mm if block.node.kind == "heading" else flow.paragraph_gap_mm
-        if y > region_top:
+        if y > region_top and not grid:
             required = metrics[0][2]
             if block.keep_next and block_index + 1 < len(measured):
                 required = sum(m[2] for m in metrics)
@@ -888,14 +900,15 @@ def layout_markdown(
                 y += gap
         if block.node.node_id in measured_images:
             figure = measured_images[block.node.node_id]
-            if _regions and (figure.width+indent>content_width+1e-8 or figure.total_height>region_bottom-y+1e-8):
+            if _regions and (figure.width+indent>content_width+1e-8 or block_end(y + figure.total_height)>region_bottom+1e-8):
                 seek_fit(figure.width+indent,figure.total_height)
             caption_boxes = [box for line in figure.lines for box in line]
             while True:
                 check_cancel(cancelled)
-                fits_geometry = y + figure.total_height <= region_bottom + 1e-9
+                end = block_end(y + figure.total_height)
+                fits_geometry = end <= region_bottom + 1e-9
                 fits_notes = not _footnotes or _footnotes.can_fit(
-                    [caption_boxes], y + figure.total_height
+                    [caption_boxes], end
                 )
                 if fits_geometry and fits_notes:
                     break
@@ -912,7 +925,7 @@ def layout_markdown(
                     continue
                 break  # Impossible empty-page combination: emit debug geometry once.
             if _footnotes:
-                _footnotes.accept(caption_boxes, y + figure.total_height)
+                _footnotes.accept(caption_boxes, end)
             capture = capture_start()
             if figure.total_height > region_bottom - region_top + 1e-9:
                 diagnostics.append(
@@ -1028,7 +1041,7 @@ def layout_markdown(
                         style.stroke_width_mm,
                     )
                 )
-            y += figure.total_height
+            y = end
             capture_end(capture, block.node.span)
             line_index += 1
             previous_heading_page = None
@@ -1037,8 +1050,12 @@ def layout_markdown(
             table = measured_tables[block.node.node_id]
             if _regions:
                 from .flow_tables import paginate_regions
-                chunks=paginate_regions(table,lambda indent=indent:table_capacity(indent),seek_fit,new_page,
-                                        _regions,cancelled=cancelled,pager=_footnotes,position=current_y)
+                chunks = paginate_regions(
+                    table, lambda indent=indent: table_capacity(indent),
+                    lambda width, height, indent=indent: seek_fit(width + indent, height),
+                    new_page, _regions, cancelled=cancelled, pager=_footnotes,
+                    position=current_y, occupied_end=block_end,
+                )
             elif _footnotes:
                 chunks = paginate_table_with_notes(
                     table,
@@ -1088,36 +1105,46 @@ def layout_markdown(
                             style.stroke_width_mm,
                         )
                     )
-                y += chunk.height + table.style.stroke_width_mm
+                y = block_end(y + chunk.height + table.style.stroke_width_mm)
                 capture_end(capture, block.node.span, table=table, x=x)
             previous_heading_page = None
             continue
         pos = 0
+        align_baseline = not block.rule and block.node.kind != "math_block"
+        padding = flow.paragraph_gap_mm / 2 if block.node.kind == "math_block" else 0
         while pos < len(lines):
             check_cancel(cancelled)
-            if _regions and block.rule and metrics[pos][2]>region_bottom-y+1e-8:
-                seek_fit(0,metrics[pos][2])
+            if _regions and block.rule and block_end(y + metrics[pos][2]) > region_bottom + 1e-8:
+                seek_fit(0, metrics[pos][2])
                 continue
             if _regions and not block.rule:
                 lines,metrics=rewrap(block,lines,metrics,pos,indent)
                 required_width=sum(b.advance for b in lines[pos])+indent+(block.first_indent if pos==0 else 0)
-                if required_width>content_width+1e-8 or metrics[pos][2]>region_bottom-y+1e-8:
-                    if y>region_top and required_width<=content_width+1e-8 and metrics[pos][2]<=content_height+1e-8:
+                end = line_geometry(y, metrics[pos], align_baseline=align_baseline, padding=padding)[1]
+                if required_width > content_width + 1e-8 or end > region_bottom + 1e-8:
+                    empty_end = line_geometry(
+                        region_top, metrics[pos], align_baseline=align_baseline, padding=padding
+                    )[1]
+                    if y > region_top and required_width <= content_width + 1e-8 and empty_end <= region_bottom + 1e-8:
                         new_page()
                     else:
-                        seek_fit(required_width,metrics[pos][2])
+                        seek_fit(required_width, metrics[pos][2],
+                                 line=metrics[pos] if align_baseline else None, padding=padding)
                     continue
-            available = region_bottom - y
-            count, height = 0, 0
+            count, candidate_start = 0, y
             probe = _footnotes.probe() if _footnotes else None
-            while pos + count < len(lines) and height + metrics[pos + count][2] <= available + 1e-9:
+            while pos + count < len(lines):
+                candidate_bottom = line_geometry(
+                    candidate_start, metrics[pos + count], align_baseline=align_baseline, padding=padding
+                )[1]
+                if candidate_bottom > region_bottom + 1e-9:
+                    break
                 if probe:
                     candidate = lines[pos + count]
-                    candidate_bottom = y + height + metrics[pos + count][2]
                     if not probe.can_fit([candidate], candidate_bottom):
                         break
                     probe.accept(candidate, candidate_bottom)
-                height += metrics[pos + count][2]
+                candidate_start = candidate_bottom
                 count += 1
             remaining = len(lines) - pos
             protected_heading = (
@@ -1157,6 +1184,8 @@ def layout_markdown(
             if count == 0 and _footnotes and _footnotes.can_advance():
                 new_page()
                 continue
+            if count == 0 and grid:
+                _regions.stop("正文行及其脚注无法同时放入纸张行格，排版已停止。")
             if count == 0:
                 count = 1  # Over-tall line: emit once with an error, never loop forever.
             for local in range(pos, pos + count):
@@ -1167,8 +1196,11 @@ def layout_markdown(
                     else None
                 )
                 ascent, descent, height = metrics[local]
+                baseline, end = line_geometry(
+                    y, metrics[local], align_baseline=align_baseline, padding=padding
+                )
                 if _footnotes:
-                    _footnotes.accept(line, y + height)
+                    _footnotes.accept(line, end)
                 if height > region_bottom - region_top + 1e-9:
                     diagnostics.append(
                         Diagnostic(
@@ -1208,7 +1240,6 @@ def layout_markdown(
                             block.node.span,
                         )
                     )
-                baseline = y + (height - ascent - descent) / 2 + ascent
                 x = region_left + indent + first_indent
                 if local in code_continuations.get(block.node.node_id, ()):
                     cy = baseline - flow.code.em_mm * 0.35
@@ -1346,11 +1377,11 @@ def layout_markdown(
                     ops[-1].append(
                         PaintOp(
                             f"{block.node.node_id}:quote:{depth}:{line_index}",
-                            ((qx, y + radius), (qx, y + height - radius)),
+                            ((qx, y + radius), (qx, end - radius)),
                             style.stroke_width_mm,
                         )
                     )
-                y += height
+                y = end
                 if capture is not None:
                     capture_end(capture, block.node.span)
                 line_index += 1
