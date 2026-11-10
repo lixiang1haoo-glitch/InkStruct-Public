@@ -2,7 +2,7 @@
 
 团队成员可先查看 [GitHub 协作与环境准备](COLLABORATION.md)。
 
-当前主应用源码为 **0.1.71**。Windows 安装包见 [0.1.70 交付记录](RELEASE_0_1_70_WINDOWS.md)。[AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) · [在线使用与开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
+当前 Windows 版本为 [0.1.71](RELEASE_0_1_71_WINDOWS.md)。[AI Markdown 生成规范](AI_MARKDOWN_SPEC.md) · [在线使用与开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
 
 历史交付：[0.1.45界面整理](RELEASE_0_1_45_WINDOWS.md)的验收与实验记录继续保留。
 
