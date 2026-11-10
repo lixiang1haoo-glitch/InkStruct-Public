@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
-from .capture_controls import canvas_slider_row
+from .capture_controls import canvas_slider_row, capture_display_controls
 from .capture_workflow_ui import CaptureLifecycleMixin, install_capture_management
 from .cli import PROJECT_ROOT
 from .stroke_reference import create_stroke_reference_widget_class
@@ -102,10 +102,13 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             super().__init__(output_root_provider, parent)
             self.stroke_reference = StrokeReferenceWidget(reference_for, self)
             canvas_index = self.layout().indexOf(self.canvas)
+            status_row = self.layout().itemAt(canvas_index - 1).layout()
+            self.display_controls = capture_display_controls(status_row, self.progress_bar)
             self.layout().removeWidget(self.canvas)
             size_row, self.canvas_size_slider, self.canvas_size_label = canvas_slider_row(
                 "画布大小", "汉字画布大小", "先保存或重写当前笔迹，再调整画布大小"
             )
+            self.display_controls.addLayout(size_row)
             self.canvas_size_slider.setObjectName("hanCanvasSizeSlider")
             self.canvas_size_slider.setRange(15, 30)  # 75%–150%, in 5% steps.
             self.canvas_size_slider.setPageStep(2)
@@ -132,8 +135,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.connected_mode.setToolTip("开启后按实际落笔和抬笔保存。生成时请选择 v6.3，由建档校验笔位是否完整。")
             self.connected_mode.setChecked(connected_capture)
             self.layout().insertWidget(canvas_index, self.stroke_count_label)
-            self.layout().insertLayout(canvas_index + 1, size_row)
-            self.layout().insertWidget(canvas_index + 2, self.connected_mode)
+            self.layout().insertWidget(canvas_index + 1, self.connected_mode)
             self.connected_mode.toggled.connect(self.refresh)
             self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
             self.boundary_guard = install_capture_boundary_guard(self, QtCore, QtGui, QtWidgets)
@@ -260,14 +262,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 slider.setSingleStep(5)
                 slider.setPageStep(25)
                 slider.setTracking(False)
-                canvas = widget.canvas if widget is self.single_widget else widget.canvas_scroll
-                layout = widget.layout()
-                index = layout.indexOf(canvas)
-                if widget is self.single_widget:
-                    index = next(i for i in range(layout.count())
-                                 if layout.itemAt(i).layout() is not None
-                                 and layout.itemAt(i).layout().indexOf(canvas) >= 0)
-                layout.insertLayout(index, row)
+                widget.display_controls.addLayout(row)
                 slider.valueChanged.connect(lambda value, tab=widget: self.change_stroke_width(tab, value))
             self.apply_ui_settings(self.ui_settings)
             self.setWindowTitle("InkStruct 墨构 · 连笔采集实验" if connected_capture

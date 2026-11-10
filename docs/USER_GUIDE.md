@@ -2,7 +2,7 @@
 
 [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)提供带截图的[上手教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/first-document.html)和[常见问题](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html)。本页供快速查阅。
 
-安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.71) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
+安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.72) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 
 从 0.1.71 起，字体库预览和采集画布随深浅主题切换。深色采集画布为深灰底白色笔迹。公式设置的手写预览同时显示当前示例的各项实测毫米值，选中项高亮。
 
@@ -11,6 +11,12 @@
 3. 制作字体时确认批次、类别和缺字，再等待完整验证与入库。用「字体库」可以管理已完成的字体包。
 4. 在「排版」导入 Markdown，选择字体并试排。保存文档会保留关联的排版和字形选择。
 5. 在「设置 › 应用设置 › 主题」可选择跟随系统、浅色和深色。
+
+采集时，进度显示在左侧，右侧可调画布大小和屏幕笔迹粗细。汉字的「允许汉字连笔」仍在画布上方左侧。
+
+生成的「计算方式」默认使用自动，小于 128 字时串行，较大任务最多用 4 个进程。需要提速时可选 8 至 32 进程档，或选「高并行（按本机资源）」。实际进程数受字数、可用逻辑处理器及内存限制，可在运行记录中查看。
+
+字体库中的带勾文档图标标出新文档默认字体，蓝线表示当前正在预览的字体。
 
 **录制连笔汉字**时，在「采集 › 汉字样本」勾选「允许汉字连笔」，然后在「生成」选择 **v6.3 exp**。当前只有 v6.3 使用连笔供体，v6.2 继续处理分笔样本。建档分别报告可用的整字和部件。默认可跨字复用合格部件，需要保留同字整段连写时再勾选「允许回放同字的完整连笔样本」。
 

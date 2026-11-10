@@ -5,6 +5,18 @@ from PySide6 import QtCore, QtWidgets
 from .ui_behavior import compact_field
 
 
+def capture_display_controls(status, progress_bar):
+    """Place the two canvas controls beside the existing target and progress."""
+    progress_bar.setMinimumWidth(210)
+    progress_bar.setMaximumWidth(300)
+    status.setStretch(1, 0)
+    status.addSpacing(18)
+    controls = QtWidgets.QVBoxLayout()
+    status.addLayout(controls)
+    status.addStretch()
+    return controls
+
+
 def canvas_slider_row(title, accessible_name, hint):
     row = QtWidgets.QHBoxLayout()
     label = QtWidgets.QLabel(title)

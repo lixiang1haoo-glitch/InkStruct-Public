@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
-from .capture_controls import canvas_slider_row
+from .capture_controls import canvas_slider_row, capture_display_controls
 from .capture_workflow_ui import CaptureLifecycleMixin
 from .symbol_capture import (
     FRAME,
@@ -106,6 +106,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             ):
                 detail.addWidget(widget)
             status.addLayout(detail, 1)
+            self.display_controls = capture_display_controls(status, self.progress_bar)
             root.addLayout(status)
             explanation = QtWidgets.QLabel(
                 "从竖虚线附近起笔：大写/数字参考大写字高，小写参考小写字高，g/p 等可伸到基线下；"
@@ -126,7 +127,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             except (TypeError, ValueError, OverflowError):
                 percent = 100
             self.canvas_size_slider.setValue(percent // 5)
-            root.addLayout(size_row)
+            self.display_controls.addLayout(size_row)
             self.canvas_scroll = QtWidgets.QScrollArea()
             self.canvas_scroll.setWidget(self.canvas)
             self.canvas_scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)

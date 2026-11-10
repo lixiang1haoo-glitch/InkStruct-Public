@@ -11,6 +11,28 @@ from inkstruct.generation_workflow import METHODS, VERSION, GenerationWorkflow, 
 from inkstruct.samples import sha256_file
 
 
+def test_generation_parallelism_respects_requested_cpu_memory_and_job_size(monkeypatch):
+    from inkstruct import generation_parallel
+    from inkstruct.plotter import parallel
+
+    monkeypatch.setattr(os, 'process_cpu_count', lambda: 20, raising=False)
+    monkeypatch.setattr(parallel, 'available_memory', lambda: 32 * 1024**3)
+    choose = generation_parallel.worker_count
+    assert choose(127, 'auto') == 1
+    assert choose(128, 'auto') == 4
+    assert choose(128, 8) == 8
+    assert choose(128, 32) == choose(128, 'max') == 18
+    assert choose(3, 'max') == 3
+    monkeypatch.setattr(os, 'process_cpu_count', lambda: 64)
+    assert choose(128, 'max') == generation_parallel.MAX_WORKERS
+    monkeypatch.setattr(parallel, 'available_memory', lambda: 4 * 1024**3)
+    assert choose(128, 'max') == 6
+    monkeypatch.setattr(parallel, 'available_memory', lambda: 1024**3)
+    assert choose(128, 8) == 1
+    with pytest.raises(ValueError, match='生成并发'):
+        choose(128, generation_parallel.MAX_WORKERS + 1)
+
+
 def test_missing_index_and_method_specific_state_do_not_enable_generation(tmp_path):
     source = tmp_path / 'samples'
     source.mkdir()
