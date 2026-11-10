@@ -4,7 +4,7 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 源码 0.1.71 · Python / Qt
+Windows x64 · 0.1.71 · Python / Qt
 
 0.1.71 修复字体库深色对比度、公式实测毫米值的显示，以及采集画布的深浅主题配色。
 
@@ -19,9 +19,9 @@ Android 采集端正在开发中，用于记录手写笔迹。
 
 ## 下载
 
-0.1.70 提供 Windows x64 安装程序和免安装 ZIP。安装程序会检查系统里的 Microsoft Visual C++ x64 运行库。若提示缺少运行库，按提示从微软下载并安装，再打开 InkStruct 安装程序。使用 ZIP 时，先解压完整目录，再运行 `InkStruct.exe`。两种方式都需要 14.51 或更新版本的运行库。[下载 InkStruct 0.1.70](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.70) · [Microsoft 运行库](https://aka.ms/vc14/vc_redist.x64.exe)
+0.1.71 提供 Windows x64 安装程序和免安装 ZIP。安装程序会检查系统里的 Microsoft Visual C++ x64 运行库。若提示缺少运行库，按提示从微软下载并安装，再打开 InkStruct 安装程序。使用 ZIP 时，先解压完整目录，再运行 `InkStruct.exe`。两种方式都需要 14.51 或更新版本的运行库。[下载 InkStruct 0.1.71](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.71) · [Microsoft 运行库](https://aka.ms/vc14/vc_redist.x64.exe)
 
-源码、Qt 对应源码及校验清单也在发行页提供。[源码标签](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.70) · [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)
+源码、Qt 对应源码及校验清单也在发行页提供。[源码标签](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.71) · [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)
 
 ## 从笔迹到文档
 

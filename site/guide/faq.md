@@ -4,7 +4,9 @@ description: 解决 Visual C++ 运行库、补录样本、制包缺字以及排�
 
 # 常见问题
 
-适用于 InkStruct **0.1.70 Windows x64**。第一次使用可以先跟着 [上手教程](./first-document) 做完一份短文。
+适用于 InkStruct **0.1.71 Windows x64**。第一次使用可以先跟着 [上手教程](./first-document) 做完一份短文。
+
+0.1.71 的字体库预览和采集画布随主题切换。公式设置的手写预览会同时显示当前示例的各项实测毫米值。[下载 0.1.71](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.71)
 
 ## 安装提示缺少 Visual C++ 运行库 {#runtime}
 

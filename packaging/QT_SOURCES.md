@@ -5,7 +5,7 @@ See the Qt LGPLv3 and GPLv3 texts in `runtime/`. For the exact source archive
 names, upstream URLs and SHA-256 hashes, see `qt-windows-sources.json`.
 These archives are also provided alongside the Windows ZIP and installer.
 
-[InkStruct 0.1.70 downloads and corresponding sources](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.70)
+[InkStruct 0.1.71 downloads and corresponding sources](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.71)
 
 The LGPL permits modification of the covered libraries and reverse engineering
 to debug those modifications. To run with compatible modified libraries, close
