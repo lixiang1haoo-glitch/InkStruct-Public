@@ -12,7 +12,7 @@ from ..theme import set_tone
 from ..ui_behavior import compact_field
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
-from .management_ui import FontManagement
+from .management_ui import DEFAULT_FONT_LABEL, DEFAULT_FONT_ROLE, FontList, FontManagement
 from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, display_coverage, generated_batches, publication_stamp,
                           require_publication_stamp, review_selection, rule_rows)
 from .publication_rules import PublicationRules
@@ -73,7 +73,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         heading.addWidget(self.import_button)
         heading.addWidget(self.create_button)
         layout.addLayout(heading)
-        self.list = QtWidgets.QListWidget()
+        self.list = FontList()
         self.list.setObjectName("installed_fonts")
         self.list.setSpacing(6)
         layout.addWidget(self.list, 1)
@@ -671,10 +671,13 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                         title += ' · 不可读取'
                     if data.get('archived'):
                         title += ' · 已移出'
-                    if defaults.run and str(p.resolve()) == str(Path(defaults.run).resolve()):
-                        title += ' · 新文档默认'
                     item = QtWidgets.QListWidgetItem(title)
-                    item.setToolTip(full_title + ('\n内容版本 ' + summary['manifest']['font_version'] if summary else '') + '\n' + str(p))
+                    tooltip = full_title + ('\n内容版本 ' + summary['manifest']['font_version'] if summary else '') + '\n' + str(p)
+                    if defaults.run and p.resolve() == Path(defaults.run).resolve():
+                        item.setData(DEFAULT_FONT_ROLE, True)
+                        item.setData(QtCore.Qt.ItemDataRole.AccessibleDescriptionRole, DEFAULT_FONT_LABEL)
+                        tooltip = DEFAULT_FONT_LABEL + '\n' + tooltip
+                    item.setToolTip(tooltip)
                     item.setData(QtCore.Qt.ItemDataRole.UserRole, str(p))
                     self.list.addItem(item)
                 except (ValueError, OSError, KeyError) as error:
