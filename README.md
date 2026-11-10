@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前版本为 **0.1.71**，修复字体库深色对比度、公式实测毫米值的显示，以及采集画布的深浅主题配色。[Windows 安装器与 ZIP](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.71)
+当前版本为 **0.1.72**，提供最高 32 进程的可选生成模式，调整采集页滑块布局，并改进字体库的选中与默认字体标记。[Windows 安装器与 ZIP](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.72)
 
 0.1.70 将 v6.3 连笔支持接入桌面采集、生成与制包，Windows 安装和卸载界面使用简体中文。[发行记录](docs/RELEASE_0_1_70_WINDOWS.md) · [在线文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
 

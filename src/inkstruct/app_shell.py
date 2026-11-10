@@ -15,6 +15,7 @@ _PATHS = {
     'import': '<path d="M4 8V4h16v16H4v-4M2 12h11m-4-4 4 4-4 4"/>',
     'export': '<path d="M9 4H4v16h16v-5M12 3h9v9M21 3l-11 11"/>',
     'check': '<path d="M5 12l4 4L19 6"/>',
+    'default_document': '<path d="M5 3h9l5 5v13H5zM14 3v5h5M8 14l2.5 2.5L16 11"/>',
     'play': '<path d="m8 4 12 8-12 8z"/>',
     'undo': '<path d="M8 4 3 9l5 5M3 9h10a7 7 0 0 1 0 14" transform="translate(0 -2)"/>',
     'paste': '<path d="M8 5H5v16h14V5h-3M8 3h8v4H8zM8 12h8M8 16h6"/>',

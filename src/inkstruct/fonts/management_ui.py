@@ -8,6 +8,7 @@ from zipfile import BadZipFile
 
 from PySide6 import QtCore, QtSvgWidgets, QtWidgets
 
+from ..app_shell import line_icon
 from ..resource_catalog import FontMetadata
 from ..ui_behavior import open_containing_folder
 from .library import fingerprint
@@ -16,6 +17,41 @@ from .management import GROUPS, inspect_font, summarize
 _PREVIEW_CACHE_ENTRIES = 12
 _PREVIEW_CACHE_SVG_LIMIT = 1024 * 1024
 _PREVIEW_COLOR = re.compile(rb'\b(fill|stroke)="(white|#24354b|#111827|#c44848|#dc2626)"')
+DEFAULT_FONT_ROLE = QtCore.Qt.ItemDataRole.UserRole + 1
+DEFAULT_FONT_LABEL = '新文档默认字体'
+
+
+class _FontRowDelegate(QtWidgets.QStyledItemDelegate):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.icon_color = None
+        self.default_icon = None
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        # Reserve the same space on every row so names stay aligned.
+        option.features |= QtWidgets.QStyleOptionViewItem.ViewItemFeature.HasDecoration
+        option.decorationSize = QtCore.QSize(17, 17)
+        if index.data(DEFAULT_FONT_ROLE):
+            color = option.palette.text().color().name()
+            if color != self.icon_color:
+                self.default_icon = line_icon('default_document', color)
+                self.icon_color = color
+            option.icon = self.default_icon
+
+
+class FontList(QtWidgets.QListWidget):
+    def __init__(self):
+        super().__init__()
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        self.setItemDelegate(_FontRowDelegate(self))
+        # The Windows 11 selection stroke can bleed past the row's dirty rect.
+        self.itemSelectionChanged.connect(self.viewport().update)
+
+    def selectionCommand(self, index, event=None):
+        # The selected font drives the detail pane even with Ctrl or Shift held.
+        flag = QtCore.QItemSelectionModel.SelectionFlag
+        return flag.ClearAndSelect if index.isValid() else flag.NoUpdate
 
 
 class FontPreview(QtSvgWidgets.QSvgWidget):
@@ -428,9 +464,12 @@ class FontManagement:
             summary = self.metadata_for(path)
             historical = bool(summary and newest.get(summary['manifest']['font_id'], (0, path.name))[1] != path.name)
             hay = item.text() + ' ' + str(path) + (' '+str(summary['manifest']) if summary else '')
+            is_default = item.data(DEFAULT_FONT_ROLE)
+            if is_default:
+                hay += ' ' + DEFAULT_FONT_LABEL
             owner = summary['manifest']['writer_alias'] if summary else ''
             item.setHidden(needle not in hay.casefold() or (writer and writer != owner)
-                           or (historical and not self.show_history.isChecked() and '新文档默认' not in item.text())
+                           or (historical and not self.show_history.isChecked() and not is_default)
                            or (data.get('archived', False) and not self.show_archived.isChecked()))
         selected = self.list.currentItem()
         if selected and selected.isHidden():

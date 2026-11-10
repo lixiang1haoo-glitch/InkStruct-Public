@@ -24,6 +24,17 @@ window = main(["InkStruct"], create_only=True, workspace=Path(sys.argv[1]))
 from handwriting_collector.models import TrajectoryPoint
 
 window.show()
+for index, tab in enumerate((window.single_widget, window.symbol_widget)):
+    window.tabs.setCurrentIndex(index)
+    app.processEvents()
+    position = lambda widget: widget.mapTo(tab, QtCore.QPoint())
+    progress_right = position(tab.progress_bar).x() + tab.progress_bar.width()
+    assert tab.progress_bar.width() <= 300
+    assert all(position(slider).x() > progress_right for slider in (tab.canvas_size_slider, tab.stroke_width_slider))
+    assert position(tab.canvas_size_slider).y() < position(tab.stroke_width_slider).y()
+    if index == 0:
+        assert position(tab.connected_mode).x() < position(tab.progress_bar).x()
+        assert position(tab.progress_bar).y() < position(tab.connected_mode).y() < position(tab.canvas).y()
 canvases = (window.single_widget.canvas, window.symbol_widget.canvas)
 saved = []
 for canvas in canvases:

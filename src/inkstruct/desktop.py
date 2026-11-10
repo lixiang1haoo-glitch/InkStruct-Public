@@ -190,9 +190,16 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             generation_layout.addWidget(target_container)
             self.parallelism = QtWidgets.QComboBox()
             self.parallelism.setObjectName('generation_parallelism')
-            for label, key in [('自动（小任务串行）', 'auto'), ('串行', 1), ('2 进程', 2), ('4 进程', 4)]:
-                self.parallelism.addItem(label, key)
-            self.parallelism.setToolTip('按汉字分配任务，每个进程复用完整档案。并发受 CPU 和可用内存限制；进程不可用时保留完成结果并串行恢复。v4 使用串行。')
+            from .generation_parallel import MAX_WORKERS, WORKER_PRESETS
+            self.parallelism.addItem('自动（小任务串行）', 'auto')
+            self.parallelism.addItem('串行', 1)
+            for count in WORKER_PRESETS:
+                self.parallelism.addItem(f'{count} 进程', count)
+            self.parallelism.addItem('高并行（按本机资源）', 'max')
+            self.parallelism.setToolTip(
+                f'自动模式最多 4 进程，高并行最多 {MAX_WORKERS} 进程。实际并发受目标字数、CPU 和可用内存限制。'
+                '进程不可用时保留完成结果并串行恢复。v4 使用串行。'
+            )
             generation_form.addRow('计算方式', compact_field(self.parallelism))
             self.candidate_preferences = QtCore.QSettings("InkStruct", "Generation")
             self.candidate_default = DEFAULT_CANDIDATES
@@ -602,7 +609,11 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                     self.log.appendPlainText("已取消；已完成字形保留，未完成部分未发布。")
                 execution = value.get('execution', {})
                 if execution:
-                    self.log.appendPlainText(f"计算工作者：{execution['workers']}；目标与来源身份见结果 protocol.json。")
+                    requested = execution['requested_workers']
+                    choice = {'auto': '自动', 'max': '高并行', 1: '串行'}.get(requested, f'{requested} 进程')
+                    self.log.appendPlainText(
+                        f"计算方式：{choice} · 本次进程数 {execution['workers']}；目标与来源身份见结果 protocol.json。"
+                    )
                     if execution.get('fallback'):
                         self.log.appendPlainText('已串行恢复；进程诊断：' + execution['fallback'])
                 if value.get("warning_characters"):

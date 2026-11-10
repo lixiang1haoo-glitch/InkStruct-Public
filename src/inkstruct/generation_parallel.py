@@ -14,6 +14,8 @@ from .generation_resources import FrozenStructureRepository, freeze_database
 from .samples import sha256_file
 
 _spawn_lock = threading.Lock()
+WORKER_PRESETS = (2, 4, 8, 12, 16, 24, 32)
+MAX_WORKERS = WORKER_PRESETS[-1]
 
 
 def _start(process):
@@ -35,13 +37,19 @@ def _start(process):
 
 def worker_count(count, requested='auto'):
     from .plotter.parallel import available_memory
-    if requested not in ('auto', 1, 2, 4):
-        raise ValueError('生成并发请选择自动、串行、2 或 4 进程')
+    if requested == 'auto':
+        limit = 1 if count < 128 else 4
+    elif requested == 'max':
+        limit = MAX_WORKERS
+    elif type(requested) is int and 1 <= requested <= MAX_WORKERS:
+        limit = requested
+    else:
+        raise ValueError(f'生成并发请选择自动、高并行或 1–{MAX_WORKERS} 个进程')
     # After resource identity reuse, ordinary short jobs rarely amortize spawn.
-    if requested == 1 or (requested == 'auto' and count < 128):
+    if limit == 1 or count <= 1:
         return 1
     cpus = getattr(os, 'process_cpu_count', os.cpu_count)() or 1
-    budget = min(count, 4 if requested == 'auto' else requested, max(1, cpus - 2))
+    budget = min(count, limit, max(1, cpus - 2))
     memory = available_memory()
     if memory is not None:
         budget = min(budget, max(1, (memory - 1024 * 1024**2) // (512 * 1024**2)))
@@ -147,10 +155,11 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
     validate_targets(target_manifest)
     if target_manifest['requested'] != characters:
         raise ValueError('任务字表与已确认目标不一致，未启动生成')
+    budget = worker_count(len(characters), workers)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
-    execution = {'requested_workers': workers, 'workers': worker_count(len(characters), workers),
+    execution = {'requested_workers': workers, 'workers': budget,
                  'fallback': None, 'transport': 'one character per worker; disk payload, compact pipe result',
                  'resource_policy': 'task-local SQLite backup including WAL; immutable logical rows; full logical SHA once per resource view',
                  'events': []}
@@ -239,6 +248,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
             try:
                 event = context.Event()
                 for index in range(execution['workers']):
+                    if cancelled():
+                        raise InterruptedError('生成已取消')
                     parent, child = context.Pipe()
                     process = context.Process(target=_worker, args=(child, config, event), daemon=True)
                     item = {'process': process, 'pipe': parent, 'child': child, 'current': None,
@@ -284,13 +295,17 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
             finally:
                 if event is not None:
                     event.set()
+                grace_deadline = time.monotonic() + .3
                 for item in items:
                     process = item['process']
                     if process.pid is not None:
-                        process.join(.3)
+                        process.join(max(0, grace_deadline - time.monotonic()))
                         if process.is_alive():
                             process.terminate()
-                            process.join(2)
+                for item in items:
+                    process = item['process']
+                    if process.pid is not None:
+                        process.join(2)
                         process.close()
                     item['pipe'].close()
                     item['child'].close()
