@@ -7,6 +7,105 @@ import sys
 import pytest
 
 
+def test_capture_canvas_palette_changes_without_changing_the_strokes(tmp_path):
+    program = r"""
+from dataclasses import asdict
+from pathlib import Path
+import sys
+from PySide6 import QtCore, QtWidgets
+from inkstruct.collector import main
+from inkstruct.theme import use_platform_theme
+
+app = QtWidgets.QApplication([])
+QtCore.QSettings.setDefaultFormat(QtCore.QSettings.IniFormat)
+QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, sys.argv[1])
+use_platform_theme(app, mode="light")
+window = main(["InkStruct"], create_only=True, workspace=Path(sys.argv[1]))
+from handwriting_collector.models import TrajectoryPoint
+
+window.show()
+canvases = (window.single_widget.canvas, window.symbol_widget.canvas)
+saved = []
+for canvas in canvases:
+    canvas.trajectory.start_stroke(TrajectoryPoint(30, 45, .5, 10))
+    canvas.trajectory.append_point(TrajectoryPoint(75, 45, .5, 30))
+    canvas.trajectory.start_stroke(TrajectoryPoint(45, 65, .5, 40))
+    saved.append(asdict(canvas.trajectory))
+for dark in (False, True, False):
+    use_platform_theme(app, mode="dark" if dark else "light")
+    for index, (canvas, original) in enumerate(zip(canvases, saved, strict=True)):
+        window.tabs.setCurrentIndex(index)
+        app.processEvents()
+        image = canvas.grab().toImage()
+        assert (image.pixelColor(12, 12).lightness() < 128) == dark
+        assert (image.pixelColor(50, 45).lightness() > 128) == dark
+        assert (image.pixelColor(45, 65).lightness() > 128) == dark
+        assert asdict(canvas.trajectory) == original
+    window.tabs.setCurrentIndex(0)
+    app.processEvents()
+    reference = window.single_widget.stroke_reference
+    assert (reference.grab().toImage().pixelColor(reference.width()//2-25, 55).lightness() < 128) == dark
+for canvas in canvases:
+    canvas.clear()
+window.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(tmp_path)],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_SCALE_FACTOR": "1"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_font_library_display_recolors_loaded_svg_when_theme_changes(tmp_path):
+    program = r"""
+import sys
+from pathlib import Path
+from PySide6 import QtGui, QtWidgets
+from inkstruct.fonts.ui import FontLibrary
+from inkstruct.theme import use_platform_theme
+
+app = QtWidgets.QApplication([])
+use_platform_theme(app, windows11_accents=True, mode="light")
+library = FontLibrary(Path(sys.argv[1]) / "fonts")
+svg = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 30">'
+       b'<rect width="90" height="30" fill="white"/>'
+       b'<path d="M 10,10 H 30" stroke="#24354b" stroke-width="4"/>'
+       b'<path d="M 40,10 H 60" stroke="#111827" stroke-width="4"/>'
+       b'<path d="M 70,10 H 80" stroke="#dc2626" stroke-width="4"/></svg>')
+for pane in (library.ink_preview, library.character_preview):
+    pane.set_preview(svg)
+for mode in ("light", "dark", "light"):
+    use_platform_theme(app, windows11_accents=True, mode=mode)
+    app.processEvents()
+    for pane in (library.ink_preview, library.character_preview):
+        assert pane.preview_svg == svg
+        image = QtGui.QImage(90, 30, QtGui.QImage.Format_RGB32)
+        painter = QtGui.QPainter(image)
+        pane.renderer().render(painter)
+        painter.end()
+        paper, ink, formula, missing = [image.pixelColor(x, y) for x, y in ((2, 2), (20, 10), (50, 10), (75, 10))]
+        assert (paper.lightness() < 128) == (mode == "dark")
+        assert (ink.lightness() > 128) == (formula.lightness() > 128) == (mode == "dark")
+        assert missing.red() > missing.green()
+library.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(tmp_path)],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.skipif(sys.platform != "win32" or sys.getwindowsversion().build < 22000,
                     reason="requires the Windows 11 Qt platform")
 def test_windows11_style_accepts_both_appearance_profiles(tmp_path):

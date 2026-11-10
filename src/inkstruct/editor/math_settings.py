@@ -169,9 +169,10 @@ class MathPreview(QtWidgets.QWidget):
         else:
             top, bottom = self.vertical_bounds()
             height = bottom - top
+            readout_height = 32 + len(self.annotation_keys) * (self.actual_row_height() + 4) if self.show_actual else 0
             self.setMinimumSize(
                 max(175, ceil(self.box.width * self.pixels_per_mm + 88 + self.actual_label_width())),
-                max(135, ceil(height * self.pixels_per_mm + 72)),
+                max(135, readout_height, ceil(height * self.pixels_per_mm + 72)),
             )
         self.updateGeometry()
         self.update()
@@ -238,23 +239,17 @@ class MathPreview(QtWidgets.QWidget):
     def actual_label_width(self):
         if not self.show_actual or not self.box:
             return 0
-        marks = self.annotation_marks(self.active_key)
-        if not marks:
-            return 0
-        return max(map(self.fontMetrics().horizontalAdvance,
-                       self.actual_text(marks, multiline=True).splitlines())) + 8
+        metrics = self.fontMetrics()
+        return max((metrics.horizontalAdvance(self.actual_readout(number, self.annotation_marks(key)))
+                    for number, key in enumerate(self.annotation_keys, 1)), default=0)
 
     @staticmethod
-    def actual_text(marks, *, multiline=False):
-        if multiline:
-            return "\n".join(f"{mark.actual:.2f} mm" for mark in marks)
-        return " / ".join(f"{mark.actual:.2f}" for mark in marks) + " mm"
+    def actual_readout(number, marks):
+        value = " / ".join(f"{mark.actual:.2f}" for mark in marks) + " mm" if marks else "—"
+        return f"{number}  {value}"
 
-    def paint_actual(self, painter, x, y, marks):
-        height = self.fontMetrics().lineSpacing() * len(marks) + 2
-        label = QtCore.QRectF(x, y - height / 2, self.actual_label_width(), height)
-        painter.drawText(label, QtCore.Qt.AlignVCenter, self.actual_text(marks, multiline=True))
-        self.record_measurement_tip(label, marks)
+    def actual_row_height(self):
+        return max(24, self.fontMetrics().height() + 6)
 
     def record_measurement_tip(self, area, marks):
         details = []
@@ -378,16 +373,20 @@ class MathPreview(QtWidgets.QWidget):
 
     def paint_annotations(self, painter, at, arrow, paper, guide, accent):
         rail = at(self.box.width, 0).x()
-        if self.show_actual and self.active_key in self.annotation_keys and not self.annotation_marks(self.active_key):
-            painter.setPen(guide)
-            painter.drawText(10, self.fontMetrics().height() + 4, "此示例未涉及所选尺寸")
         for number, key in enumerate(self.annotation_keys, 1):
             marks = self.annotation_marks(key)
-            if not marks:
-                continue
             active = key == self.active_key
             color = accent if active else guide
             painter.setPen(QtGui.QPen(color, 1.25 if active else 0.8))
+            row = self.annotation_rows.get(key)
+            if self.show_actual and row is not None:
+                painter.drawText(row, QtCore.Qt.AlignVCenter, self.actual_readout(number, marks))
+                if marks:
+                    self.record_measurement_tip(QtCore.QRectF(row), marks)
+                else:
+                    self.measurement_tips.append((QtCore.QRectF(row), "此示例未涉及此尺寸"))
+            if not marks:
+                continue
             x = rail + 6 + (number - 1) * 9
             mid = []
             for mark in marks:
@@ -404,7 +403,6 @@ class MathPreview(QtWidgets.QWidget):
                 self.record_measurement_tip(QtCore.QRectF(start, end).normalized(), [mark])
                 mid.append((start.y() + end.y()) / 2)
             anchor = QtCore.QPointF(x, sum(mid) / len(mid))
-            row = self.annotation_rows.get(key)
             if row is None:
                 badge = anchor + QtCore.QPointF(10, 0)
                 rect = QtCore.QRectF(badge.x() - 7, badge.y() - 7, 14, 14)
@@ -412,18 +410,12 @@ class MathPreview(QtWidgets.QWidget):
                 painter.drawEllipse(rect)
                 painter.drawText(rect, QtCore.Qt.AlignCenter, str(number))
                 painter.setBrush(QtCore.Qt.NoBrush)
-                if self.show_actual and active:
-                    self.paint_actual(painter, rect.right() + 4, rect.center().y(), marks)
                 self.record_measurement_tip(rect, marks)
                 continue
             endpoint = QtCore.QPointF(row.left() - 4, row.center().y())
             bend = QtCore.QPointF(endpoint.x() - 7, anchor.y())
             painter.drawLine(anchor, bend)
             painter.drawLine(bend, endpoint)
-            if self.show_actual:
-                text = f"{number}  {self.actual_text(marks)}" if active else str(number)
-                painter.drawText(row, QtCore.Qt.AlignVCenter, text)
-                self.record_measurement_tip(QtCore.QRectF(row), marks)
 
 
 class MathCategoryDelegate(QtWidgets.QStyledItemDelegate):
@@ -799,9 +791,7 @@ class MathSettingsDialog(QtWidgets.QDialog):
         cards = [self.annotation_cards[key] for key in keys]
         width = max(card.sizeHint().width() for card in cards)
         height = max(card.sizeHint().height() for card in cards)
-        actual = self.preview.annotation_marks(self.active_key)
-        readout = self.preview.actual_text(actual) if actual else "此示例未涉及"
-        gutters = width + 22, self.fontMetrics().horizontalAdvance("4  " + readout) + 22
+        gutters = width + 22, self.preview.actual_label_width() + 24
         # Keep the same preview scale. A long or tall formula uses the bottom
         # controls as well, so no editable field sits outside the visible canvas.
         viewport = self.parameter_scroll.viewport()
@@ -836,9 +826,10 @@ class MathSettingsDialog(QtWidgets.QDialog):
             preview_height = canvas_height if wide else min(285, max(156, required_height)) if len(pane.guide_rows) > 1 else 156
             if area.height() != preview_height:
                 area.setFixedHeight(preview_height)
-            pane.annotation_gutter = gutter if wide else 0
+            inline = wide or pane.show_actual
+            pane.annotation_gutter = gutter if inline else 0
             pane.annotation_rows = {}
-            if wide:
+            if inline and pane.box:
                 left = pane.width() - gutter + 12
                 _, oy = pane.origin()
                 anchors = {}
@@ -851,7 +842,7 @@ class MathSettingsDialog(QtWidgets.QDialog):
                         positions.append(y)
                     anchors[key] = (sum(positions) / len(positions) if positions
                                     else pane.height() * number / (len(keys) + 1))
-                row_height = height if pane is self.print_preview else 24
+                row_height = height if pane is self.print_preview else pane.actual_row_height()
                 top = 6
                 ordered = keys if self.categories.currentRow() == 1 else sorted(keys, key=anchors.get)
                 for index, key in enumerate(ordered):
@@ -882,7 +873,7 @@ class MathSettingsDialog(QtWidgets.QDialog):
                 control.style().polish(control)
         for pane in (self.print_preview, self.preview):
             pane.active_key = key
-            pane.update_geometry()
+            pane.update()
         self.annotation_timer.start(0)
     def example_source(self):
         examples = [self.example_choice.currentData()]

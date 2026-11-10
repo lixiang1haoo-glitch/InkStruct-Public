@@ -34,10 +34,6 @@ class TrajectoryCanvas(QWidget):
         self._timer = QElapsedTimer()
         self._clock_started = False
         self.setAttribute(Qt.WidgetAttribute.WA_TabletTracking)
-        self.setAutoFillBackground(True)
-        self.setStyleSheet(
-            "TrajectoryCanvas { background: white; border: 1px solid #CBD5E1; }"
-        )
         self.setMinimumSize(360, 260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -139,7 +135,10 @@ class TrajectoryCanvas(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#FFFFFF"))
+        palette = self.palette()
+        painter.fillRect(self.rect(), palette.base())
+        painter.setPen(palette.mid().color())
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
         if self.show_grid:
             self._draw_grid(painter)
         for stroke in self.trajectory.strokes:
@@ -157,9 +156,10 @@ class TrajectoryCanvas(QWidget):
         left = (self.width() - side) / 2
         top = (self.height() - side) / 2
         box = QRectF(left, top, side, side)
-        painter.setPen(QPen(QColor("#CBD5E1"), 1.2))
+        dark = self.palette().base().color().lightness() < 128
+        painter.setPen(QPen(QColor("#69727F" if dark else "#CBD5E1"), 1.2))
         painter.drawRect(box)
-        dashed = QPen(QColor("#E2E8F0"), 1.0, Qt.PenStyle.DashLine)
+        dashed = QPen(QColor("#505965" if dark else "#E2E8F0"), 1.0, Qt.PenStyle.DashLine)
         painter.setPen(dashed)
         painter.drawLine(QPointF(left + side / 2, top), QPointF(left + side / 2, top + side))
         painter.drawLine(QPointF(left, top + side / 2), QPointF(left + side, top + side / 2))
@@ -169,12 +169,13 @@ class TrajectoryCanvas(QWidget):
     def _draw_stroke(self, painter: QPainter, points: list[TrajectoryPoint]) -> None:
         if not points:
             return
+        ink = self.palette().text().color()
         if len(points) == 1:
             point = points[0]
             width = max(1.2, (1.0 + point.pressure * 4.0) * self.stroke_width_scale)
             painter.setPen(
                 QPen(
-                    QColor("#111827"),
+                    ink,
                     width,
                     Qt.PenStyle.SolidLine,
                     Qt.PenCapStyle.RoundCap,
@@ -191,7 +192,7 @@ class TrajectoryCanvas(QWidget):
             )
             painter.setPen(
                 QPen(
-                    QColor("#111827"),
+                    ink,
                     width,
                     Qt.PenStyle.SolidLine,
                     Qt.PenCapStyle.RoundCap,

@@ -3,6 +3,7 @@
 from collections import OrderedDict
 from itertools import pairwise
 from pathlib import Path
+import re
 from zipfile import BadZipFile
 
 from PySide6 import QtCore, QtSvgWidgets, QtWidgets
@@ -14,30 +15,57 @@ from .management import GROUPS, inspect_font, summarize
 
 _PREVIEW_CACHE_ENTRIES = 12
 _PREVIEW_CACHE_SVG_LIMIT = 1024 * 1024
+_PREVIEW_COLOR = re.compile(rb'\b(fill|stroke)="(white|#24354b|#111827|#c44848|#dc2626)"')
+
+
+class FontPreview(QtSvgWidgets.QSvgWidget):
+    """Recolor the generated display SVG when the window palette changes."""
+
+    def set_preview(self, svg):
+        self.preview_svg = svg
+        self.update_preview_palette()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QtCore.QEvent.Type.PaletteChange and hasattr(self, "preview_svg"):
+            self.update_preview_palette()
+
+    def update_preview_palette(self):
+        svg = self.preview_svg
+        palette = self.palette()
+        if palette.base().color().lightness() < 128:
+            paper = palette.base().color().name().encode("ascii")
+            ink = palette.text().color().name().encode("ascii")
+            colors = {b"white": paper, b"#24354b": ink, b"#111827": ink,
+                      b"#c44848": b"#ffabab", b"#dc2626": b"#ffabab"}
+            svg = _PREVIEW_COLOR.sub(lambda match: match[1] + b'="' + colors[match[2]] + b'"', svg)
+        self.load(svg)
+        self.renderer().setAspectRatioMode(QtCore.Qt.KeepAspectRatio)
 
 
 class FontManagement:
     def setup_management(self):
         self.setObjectName('font_library_browser')
         self.setStyleSheet('''
-            QWidget#font_browser_sidebar { background: #f1f4f8; border: 1px solid #e2e8f0; }
+            QWidget#font_browser_sidebar { background: palette(alternate-base); border: 1px solid palette(mid); }
             QListWidget#installed_fonts { background: transparent; border: none; }
-            QLabel#font_selected_title { font-size: 19px; font-weight: 600; color: #1f2937; }
-            QLabel#font_selected_meta { font-size: 12px; color: #64748b; }
-            QLabel#font_library_count { font-size: 12px; color: #64748b; }
+            QLabel#font_selected_title { font-size: 19px; font-weight: 600; color: palette(window-text); }
+            QLabel#font_selected_meta, QLabel#font_library_count { font-size: 12px; color: palette(window-text); }
             QTabWidget#font_detail_tabs::pane { border: none; }
             QTabWidget#font_detail_tabs QTabBar::tab {
                 background: transparent; border: none; border-bottom: 2px solid transparent;
                 padding: 7px 12px;
             }
             QTabWidget#font_detail_tabs QTabBar::tab:selected {
-                border-bottom-color: #2563eb; color: #1d4ed8;
+                border-bottom-color: palette(highlight); color: palette(link);
             }
-            QFrame#font_preview_surface { background: #eef1f5; border: 1px solid #e2e8f0; }
-            QSvgWidget#font_preview_paper { background: white; border: 1px solid #dde3eb; }
+            QFrame#font_preview_surface { background: palette(alternate-base); border: 1px solid palette(mid); }
+            QSvgWidget#font_preview_paper, QSvgWidget#font_character_preview {
+                background: palette(base); border: 1px solid palette(mid);
+            }
             QLabel#font_preview_message {
-                background: white; border: 1px solid #dde3eb;
-                color: #334155; font-weight: 600;
+                background: palette(base); border: 1px solid palette(mid);
+                color: palette(text); font-weight: 600;
             }
         ''')
         self.management = FontMetadata(self.root)
@@ -150,7 +178,7 @@ class FontManagement:
         surface.setObjectName('font_preview_surface')
         paper_col = QtWidgets.QVBoxLayout(surface)
         paper_col.setContentsMargins(16, 16, 16, 16)
-        self.ink_preview = QtSvgWidgets.QSvgWidget()
+        self.ink_preview = FontPreview()
         self.ink_preview.setObjectName('font_preview_paper')
         self.ink_preview.setMinimumSize(260, 170)
         self.preview_display = QtWidgets.QStackedWidget()
@@ -194,7 +222,8 @@ class FontManagement:
         self.character_list = QtWidgets.QListWidget()
         self.character_list.setAccessibleName('字体字符列表')
         char_col.addWidget(self.character_list, 1)
-        self.character_preview = QtSvgWidgets.QSvgWidget()
+        self.character_preview = FontPreview()
+        self.character_preview.setObjectName('font_character_preview')
         self.character_preview.setMinimumHeight(90)
         self.character_preview.setMaximumHeight(140)
         char_col.addWidget(self.character_preview)
@@ -289,7 +318,7 @@ class FontManagement:
         self.preview_message.clear()
         blank = b'<svg xmlns="http://www.w3.org/2000/svg"/>'
         for preview in (self.ink_preview, self.character_preview):
-            preview.load(blank)
+            preview.set_preview(blank)
         for label in (self.detail, self.resource_state, self.preview_state,
                       self.sample_count, self.character_count, self.font_title, self.font_meta):
             label.clear()
@@ -541,10 +570,8 @@ class FontManagement:
         if 'preview_text' in result and self.preview_mode.currentData() != 'custom':
             with QtCore.QSignalBlocker(self.preview_text):
                 self.preview_text.setPlainText(result['preview_text'])
-        self.ink_preview.load(result['svg'])
-        self.character_preview.load(result['svg'])
         for preview in (self.ink_preview, self.character_preview):
-            preview.renderer().setAspectRatioMode(QtCore.Qt.KeepAspectRatio)
+            preview.set_preview(result['svg'])
         self.preview_display.setCurrentWidget(self.ink_preview)
         label = '公式示例 · 非成品导出' if self.preview_mode.currentData() == 'formula' else '真实笔迹 · 已更新'
         self.preview_state.setText(label + (' · 缺字：' + result['missing'] if result['missing'] else '') +

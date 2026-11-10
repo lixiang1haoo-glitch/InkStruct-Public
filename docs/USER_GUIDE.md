@@ -1,5 +1,7 @@
 # InkStruct（墨构）完整使用手册
 
+0.1.71 源码中的字体库预览和采集画布随深浅主题切换。深色采集画布为深灰底白色笔迹。公式设置的手写预览同时显示当前示例的各项实测毫米值，选中项高亮。
+
 0.1.70 在「采集 › 汉字样本」提供「允许汉字连笔」。只有 v6.3 支持将连笔笔迹建档并用于生成。整字回放需要在生成页单独勾选，跨字部件仍须通过位置与来源校验。[Windows 交付记录](RELEASE_0_1_70_WINDOWS.md) · [连笔采集说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#connected-handwriting)
 
 0.1.67 在「设置 › 应用设置 › 主题」提供跟随系统、浅色和深色，保存后立即切换。公式设置及印刷参考、手写预览使用当前主题配色。见 [Windows 交付记录](RELEASE_0_1_67_WINDOWS.md)。
