@@ -334,6 +334,10 @@ def layout_markdown(
     content_width = region_right - region_left
     continuation_bounds = page_bounds(1)
     content_height = continuation_bounds[3] - continuation_bounds[1]
+    frame_widths = (
+        tuple(f.region.width_mm for p in _regions.template.effective_layouts for f in p.body_frames)
+        if _regions else (content_width, continuation_bounds[2] - continuation_bounds[0])
+    )
     if not grid and min(content_width, content_height, region_bottom - region_top) <= style.stroke_width_mm:
         raise ValueError("The brush leaves no usable page area")
     measured = []
@@ -348,24 +352,26 @@ def layout_markdown(
         if block.node.kind == "image":
             figure = measure_image(
                 block, resolver, style, flow,
-                (max(f.region.width_mm for p in _regions.template.effective_layouts for f in p.body_frames)
-                 if _regions else content_width) - block.indent, cancelled
+                (max(frame_widths) if _regions else content_width) - block.indent, cancelled
             )
             measured_images[block.node.node_id] = figure
             diagnostics.extend(figure.diagnostics)
             measured.append((block, figure.lines, [(0, 0, figure.total_height)], block.indent, []))
             continue
         if block.node.kind == "table":
+            table_style = flow.table_for(block.node.node_id)
             table = measure_table(
                 table_model(block.node),
                 resolver,
-                flow.table_for(block.node.node_id),
+                table_style,
                 cancelled=cancelled,
                 math_style=flow.math,
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
                 han_variation=flow.han_variation,
+                available_widths=(tuple(w - block.indent for w in frame_widths)
+                                  if table_style.total_width_mode == "content" else ()),
             )
             measured_tables[block.node.node_id] = table
             diagnostics.extend(table.diagnostics)

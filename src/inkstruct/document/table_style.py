@@ -28,6 +28,7 @@ class TableStyle:
     fixed_row_height: bool = False
     repeat_header: bool = True
     schema_version: str = "inkstruct_table_style_v1"
+    total_width_mode: str = "fixed"
 
     def __post_init__(self):
         if self.schema_version != "inkstruct_table_style_v1":
@@ -53,6 +54,10 @@ class TableStyle:
             raise ValueError("Table dimensions must be finite positive values; padding may be zero")
         if self.width_mode not in {"content", "equal", "ratio", "fixed"}:
             raise ValueError("Unknown table column width mode")
+        if self.total_width_mode not in {"fixed", "content"}:
+            raise ValueError("Unknown table total width mode")
+        if self.total_width_mode == "content" and self.width_mode == "fixed":
+            raise ValueError("固定列宽需要手动指定表格总宽")
         object.__setattr__(self, "columns", tuple(self.columns))
         object.__setattr__(self, "column_alignments", tuple(self.column_alignments))
         if len(self.columns) > 50 or any(not math.isfinite(v) or v <= 0 for v in self.columns):
@@ -69,6 +74,12 @@ class TableStyle:
             raise ValueError("A numeric profile provenance is required")
         if self.numeric_spacing not in {"compact-advance", "legacy-ink"}:
             raise ValueError("Unsupported numeric spacing profile")
+
+
+def omit_default_total_width_mode(flow_record):
+    for table in (flow_record["table"], *(style for _, style in flow_record["table_overrides"])):
+        if table["total_width_mode"] == "fixed":
+            table.pop("total_width_mode")
 
 
 def calibrate_tables(flow, symbols):

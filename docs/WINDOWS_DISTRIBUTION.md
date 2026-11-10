@@ -1,10 +1,10 @@
 # Windows 构建与分发
 
-0.1.73 提供 Windows 安装程序、免安装 ZIP 和对应源码。应用源码、采集器代码、图标及项目贡献按仓库的 MIT 声明发布。第三方资源和依赖适用各自的许可。[发行页与 SHA-256](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.73) · [MIT 许可](../LICENSE) · [第三方声明](../THIRD_PARTY_NOTICES.md)
+0.1.74 提供 Windows 安装程序、免安装 ZIP 和对应源码。应用源码、采集器代码、图标及项目贡献按仓库的 MIT 声明发布。第三方资源和依赖适用各自的许可。[发行页与 SHA-256](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74) · [MIT 许可](../LICENSE) · [第三方声明](../THIRD_PARTY_NOTICES.md)
 
 ## 构建产物和验证
 
-- 解压 `InkStruct-0.1.73-Windows-x64.zip` 后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.73-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
+- 解压 `InkStruct-0.1.74-Windows-x64.zip` 后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.74-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
 - 安装和免安装版本依赖 Microsoft Visual C++ x64 运行库 14.51 或更新版本。安装程序在运行库缺失或版本过低时提供微软下载入口。静默安装返回退出码 10。安装好运行库后重新运行安装程序。[微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 - 发行页附构建提交、依赖哈希和回归记录。隔离安装验收会跳过开始菜单与卸载注册。安装器未签名。
 

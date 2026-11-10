@@ -2,7 +2,7 @@
 
 [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)提供带截图的[上手教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/first-document.html)和[常见问题](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html)。本页供快速查阅。
 
-安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.73) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
+安装版会检查 Microsoft Visual C++ x64 运行库（14.51 或更新版本）。若提示缺失，打开微软下载，安装运行库后重新运行安装程序。免安装版请完整解压 ZIP 后运行 `InkStruct.exe`。它使用相同的系统运行库。[发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74) · [微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 
 从 0.1.71 起，字体库预览和采集画布随深浅主题切换。深色采集画布为深灰底白色笔迹。公式设置的手写预览同时显示当前示例的各项实测毫米值，选中项高亮。
 
@@ -27,5 +27,11 @@
 在模板工作台选中正文框，将「排版方式」设为「按纸张行格排版」。输入首行基线、末行基线（均从正文框顶部起算）和可用行数，用预览辅助线对齐纸面横线。首末基线都计入行数。
 
 高公式会占用连续行格。表格横边框对齐纸面横线，行高向上取整为行格间距的整数倍。续页可重复表头，表后正文从下一条可用基线继续。辅助线仅用于配置，PDF 底图原有横线仍会显示。旧模板默认按内容排版。
+
+## 按内容确定表格总宽
+
+在「设置 › 排版默认设置 › 表格」可设置新文档的默认方式。修改单张表时，在排版右侧「元素属性 › 表格与图片」选中表格并开启「独立设置」。将「总宽方式」设为「按内容确定」，短表会随内容收窄，较长内容在正文框可用宽度内换行。
+
+「列宽方式」仍控制各列在总宽内的分配，可选择按内容分配、等宽或按比例。固定列宽需要手动总宽。跨页续表沿用同一列宽。
 
 反馈问题时使用新建测试工作区与合成输入。仓库提供两份公式 Markdown 示例。Windows 构建方法见 [README](../README.md)。

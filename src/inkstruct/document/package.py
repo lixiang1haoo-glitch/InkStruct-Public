@@ -94,8 +94,10 @@ def package_bytes(
         raise ValueError("Cannot save while a selected resource is unavailable")
     members = {}
     from ..math.style import math_style_record
+    from .table_style import omit_default_total_width_mode
 
     flow_record = asdict(flow or FlowStyle())
+    omit_default_total_width_mode(flow_record)
     if flow and flow.template:
         flow_record['template'] = template_record(flow.template, flow_record['template'])
     flow_record["han_variation"] = variation_record((flow or FlowStyle()).han_variation)

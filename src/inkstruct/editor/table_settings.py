@@ -44,6 +44,11 @@ class TableSettingsDialog(QtWidgets.QDialog):
         self.scope_info = QtWidgets.QLabel()
         self.scope_info.setWordWrap(True)
         form.addRow(self.scope_info)
+        self.total_mode = QtWidgets.QComboBox()
+        self.total_mode.addItem("手动指定", "fixed")
+        self.total_mode.addItem("按内容确定", "content")
+        self.total_mode.setToolTip("按内容确定时，表格随内容收窄，最多占用正文框的可用宽度。")
+        form.addRow("总宽方式", self.total_mode)
         self.controls = {}
         for key, label in (
             ("width_mm", "表格总宽"),
@@ -68,18 +73,8 @@ class TableSettingsDialog(QtWidgets.QDialog):
             widget.setSingleStep(0.1 if key.startswith("padding") else 0.5)
             form.addRow(label, widget)
             self.controls[key] = widget
-        self.mode = QtWidgets.QComboBox()
-        for key, label in [
-            ("content", "按内容分配"),
-            ("equal", "等宽"),
-            ("ratio", "按比例"),
-            ("fixed", "固定列宽"),
-        ]:
-            self.mode.addItem(label, key)
-        form.addRow("列宽方式", self.mode)
-        self.sizes = QtWidgets.QLineEdit()
-        self.sizes.setPlaceholderText("逗号分隔；固定列宽单位 mm，合计须等于表宽")
-        form.addRow("列宽或比例", self.sizes)
+            if key == "width_mm":
+                self.add_column_width_controls(form)
         self.alignments = QtWidgets.QLineEdit()
         self.alignments.setPlaceholderText("如：左,小数点,中；留空沿用源码单元格对齐")
         form.addRow("各列对齐", self.alignments)
@@ -105,7 +100,24 @@ class TableSettingsDialog(QtWidgets.QDialog):
         layout.addWidget(buttons)
         self.scope.currentIndexChanged.connect(self.load_style)
         self.inherit.toggled.connect(self.update_controls)
+        self.total_mode.currentIndexChanged.connect(self.update_controls)
+        self.mode.currentIndexChanged.connect(self.update_controls)
         self.load_style()
+
+    def add_column_width_controls(self, form):
+        self.mode = QtWidgets.QComboBox()
+        for key, label in (
+            ("content", "按内容分配"),
+            ("equal", "等宽"),
+            ("ratio", "按比例"),
+            ("fixed", "固定列宽"),
+        ):
+            self.mode.addItem(label, key)
+        self.mode.setToolTip("在表格总宽内决定各列宽度。固定列宽需要手动指定总宽。")
+        form.addRow("列宽方式", self.mode)
+        self.sizes = QtWidgets.QLineEdit()
+        self.sizes.setPlaceholderText("逗号分隔；固定列宽单位 mm，合计须等于表宽")
+        form.addRow("列宽或比例", self.sizes)
 
     def load_style(self):
         target = self.scope.currentData()
@@ -125,7 +137,9 @@ class TableSettingsDialog(QtWidgets.QDialog):
                 widget.setMinimum(min(widget.minimum(), value))
                 widget.setValue(value)
             self.initial[key] = widget.value()
-        self.mode.setCurrentIndex(self.mode.findData(self.original.width_mode))
+        with QtCore.QSignalBlocker(self.total_mode), QtCore.QSignalBlocker(self.mode):
+            self.total_mode.setCurrentIndex(self.total_mode.findData(self.original.total_width_mode))
+            self.mode.setCurrentIndex(self.mode.findData(self.original.width_mode))
         self.sizes.setText(", ".join(str(v) for v in self.original.columns))
         self.alignments.setText(", ".join(LABELS[v] for v in self.original.column_alignments))
         self.fixed.setChecked(self.original.fixed_row_height)
@@ -134,16 +148,26 @@ class TableSettingsDialog(QtWidgets.QDialog):
 
     def update_controls(self):
         enabled = not (self.scope.currentData() and self.inherit.isChecked())
-        for control in (*self.controls.values(), self.mode, self.sizes, self.alignments, self.fixed, self.repeat):
+        manual_width = self.total_mode.currentData() == "fixed"
+        fixed_item = self.mode.findData("fixed")
+        if not manual_width and self.mode.currentIndex() == fixed_item:
+            with QtCore.QSignalBlocker(self.mode):
+                self.mode.setCurrentIndex(self.mode.findData("content"))
+        self.mode.model().item(fixed_item).setEnabled(manual_width)
+        for control in (*self.controls.values(), self.total_mode, self.mode, self.alignments, self.fixed, self.repeat):
             control.setEnabled(enabled)
+        self.controls["width_mm"].setEnabled(enabled and manual_width)
+        self.sizes.setEnabled(enabled and self.mode.currentData() in {"ratio", "fixed"})
 
     def configuration(self):
         target = self.scope.currentData()
         if target and self.inherit.isChecked():
             return target, None
         changes = {k: c.value() for k, c in self.controls.items() if c.value() != self.initial[k]}
-        sizes = tuple(
-            float(v.strip()) for v in self.sizes.text().replace("，", ",").split(",") if v.strip()
+        mode = self.mode.currentData()
+        sizes = (
+            tuple(float(v.strip()) for v in self.sizes.text().replace("，", ",").split(",") if v.strip())
+            if mode in {"ratio", "fixed"} else ()
         )
         lookup = {**{v: k for k, v in LABELS.items()}, **{k: k for k in LABELS}}
         try:
@@ -154,13 +178,13 @@ class TableSettingsDialog(QtWidgets.QDialog):
             )
         except KeyError as error:
             raise ValueError("列对齐请填写：沿用、左、中、右、小数点") from error
-        mode = self.mode.currentData()
         style = replace(
             self.original,
             **changes,
-            columns=sizes if mode in {"ratio", "fixed"} else (),
+            columns=sizes,
             column_alignments=alignments,
             width_mode=mode,
+            total_width_mode=self.total_mode.currentData(),
             fixed_row_height=self.fixed.isChecked(),
             repeat_header=self.repeat.isChecked(),
         )

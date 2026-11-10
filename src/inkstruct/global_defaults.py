@@ -159,7 +159,10 @@ class GlobalDefaultsStore:
             return LayoutDefaults(), f"全局默认未载入，暂用初始值；原配置保留：{error}"
 
     def save(self, defaults):
+        from .document.table_style import omit_default_total_width_mode
+
         record = asdict(defaults)
+        omit_default_total_width_mode(record["flow"])
         if defaults.flow.template:
             record['flow']['template'] = template_record(defaults.flow.template, record['flow']['template'])
         record["flow"]["han_variation"] = variation_record(defaults.flow.han_variation)
