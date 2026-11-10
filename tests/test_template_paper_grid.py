@@ -37,6 +37,14 @@ def find(snapshot, text):
     return next(item for item in snapshot.fragments if item.text == text)
 
 
+def horizontal_table_rules(page):
+    return sorted({
+        round(op.points[0][1], 6)
+        for op in page.paint_ops
+        if ":border:" in op.occurrence_id and op.points[0][1] == op.points[-1][1]
+    })
+
+
 def test_default_frame_record_and_revision_are_unchanged():
     original = version_template(template())
     record = json.loads(template_json(original))
@@ -75,12 +83,32 @@ def test_repeat_table_header_counts_toward_grid_and_next_text_resumes_on_a_basel
     source = "| 表 | 头 |\n| --- | --- |\n" + "| 一 | 二 |\n" * 11 + "\n后"
     result = layout(source, template(PaperGrid(7, 43, 5), 48))
     headers = [f for f in result.fragments if f.text == "表"]
-    assert len(headers) > 1
+    assert [f.page_index for f in headers] == [0, 1, 2, 3]
     assert not headers[0].repeated and all(f.repeated for f in headers[1:])
+    assert horizontal_table_rules(result.pages[0]) == pytest.approx([17, 26, 35, 44, 53])
+    assert horizontal_table_rules(result.pages[3]) == pytest.approx([17, 26, 35, 44])
     following = find(result, "后")
-    assert (following.baseline_mm - 17) % 9 == pytest.approx(0)
-    assert following.page_index >= headers[-1].page_index
+    assert following.baseline_mm == pytest.approx(53)
+    assert following.page_index == headers[-1].page_index
     assert not any(d.code == "template-body-no-progress" for d in result.diagnostics)
+
+
+def test_tall_cell_rounds_up_and_remeasures_in_the_next_frame():
+    paper = template(PaperGrid(7, 61, 7), 66)
+    continuation = paper.layouts[0].frames[0]
+    first = replace(continuation, frame_id="first", region=Region("body", 5, 5, 90, 9),
+                    paper_grid=PaperGrid(5, 5, 1))
+    second = replace(continuation, order=2, region=Region("body", 5, 14, 90, 66))
+    paper = replace(paper, height_mm=85, layouts=(replace(paper.layouts[0], frames=(first, second)),))
+    source = f"| 表 | 头 |\n| --- | --- |\n| ${FRACTION}$ | 甲 |\n\n后"
+    result = layout(source, paper)
+    assert result.exportable
+    assert len(result.pages) == 1
+    rules = horizontal_table_rules(result.pages[0])
+    assert rules[:2] == pytest.approx([21, 30])
+    assert rules[-1] - rules[-2] > 9
+    assert (rules[-1] - rules[-2]) % 9 == pytest.approx(0)
+    assert find(result, "后").baseline_mm == pytest.approx(rules[-1] + 9)
 
 
 def test_impossible_formula_stops_with_location_and_required_size():
