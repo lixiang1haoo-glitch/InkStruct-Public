@@ -28,13 +28,16 @@ class GridBands:
         first_end = self.first + self.tail
         return first_end + max(0, ceil((required - first_end - 1e-9) / self.pitch)) * self.pitch
 
+    def next_baseline(self, required):
+        index = max(0, ceil((required - self.first - 1e-9) / self.pitch))
+        return self.first + index * self.pitch
+
     def line(self, start, ascent, descent, height):
         if not self.pitch:
             if self.first - ascent < start - 1e-9:
                 return self.first, float('inf')
             return self.first, self.block_end(max(start + height, self.first + descent))
-        index = max(0, ceil((start + ascent - self.first - 1e-9) / self.pitch))
-        baseline = self.first + index * self.pitch
+        baseline = self.next_baseline(start + ascent)
         end = self.block_end(max(start + height, baseline + descent, baseline + self.tail))
         return baseline, end
 
@@ -114,16 +117,21 @@ class RegionCursor:
             self.stop("后续页面没有正文框，未排完内容无法继续；请修正循环页组。")
         self.page_index, self.frame_index = found[0]
 
-    def fits_later(self, width, height, *, line=None, padding=0):
+    def fits_later(self, width, height, *, line=None, padding=0, fits_frame=None):
         for page, index in self.candidates(include_current=False):
             frame = self.template.layout(page).body_frames[index]
+            if width > frame.region.width_mm + 1e-8:
+                continue
             grid = self._grid(frame)
-            fits = height <= frame.region.height_mm + 1e-8
-            if grid:
+            if fits_frame:
+                fits = fits_frame(frame, grid)
+            elif grid:
                 end = (grid.line(grid.top, *line)[1] if line else
                        grid.block_end(grid.top + height + 2 * padding))
                 fits = end <= grid.bottom + 1e-8
-            if width <= frame.region.width_mm + 1e-8 and fits:
+            else:
+                fits = height <= frame.region.height_mm + 1e-8
+            if fits:
                 return page, index
         required = height + 2 * padding
         self.stop(

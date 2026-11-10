@@ -578,8 +578,8 @@ def layout_markdown(
             content_width=region_right-region_left
             content_height=region_bottom-region_top
 
-    def seek_fit(width, height, *, line=None, padding=0):
-        target = _regions.fits_later(width, height, line=line, padding=padding)
+    def seek_fit(width, height, *, line=None, padding=0, fits_frame=None):
+        target = _regions.fits_later(width, height, line=line, padding=padding, fits_frame=fits_frame)
         while (_regions.page_index,_regions.frame_index)!=target:
             new_page()
 
@@ -655,9 +655,6 @@ def layout_markdown(
 
     def current_page_position():
         return y, region_top, region_bottom
-
-    def table_capacity(indent):
-        return content_width-indent,region_bottom-y
 
     def current_y():
         return y
@@ -1051,10 +1048,8 @@ def layout_markdown(
             if _regions:
                 from .flow_tables import paginate_regions
                 chunks = paginate_regions(
-                    table, lambda indent=indent: table_capacity(indent),
-                    lambda width, height, indent=indent: seek_fit(width + indent, height),
-                    new_page, _regions, cancelled=cancelled, pager=_footnotes,
-                    position=current_y, occupied_end=block_end,
+                    table, indent, current_y, seek_fit, new_page, _regions,
+                    cancelled=cancelled, pager=_footnotes,
                 )
             elif _footnotes:
                 chunks = paginate_table_with_notes(
@@ -1074,9 +1069,16 @@ def layout_markdown(
                     cancelled=cancelled,
                 )
                 diagnostics.extend(issues)
-            for chunk in chunks:
-                if chunk.new_page:
-                    new_page()
+            for entry in chunks:
+                if _regions:
+                    active_table, chunk, table_top, table_end = entry
+                else:
+                    chunk = entry
+                    if chunk.new_page:
+                        new_page()
+                    active_table = table
+                    table_top = y + table.style.stroke_width_mm / 2
+                    table_end = y + chunk.height + table.style.stroke_width_mm
                 capture = capture_start()
                 # Width is the distance between outside border centrelines.
                 x = (
@@ -1087,10 +1089,10 @@ def layout_markdown(
                     )
                 )
                 line_index = paint_table(
-                    table,
+                    active_table,
                     chunk,
                     x,
-                    y + table.style.stroke_width_mm / 2,
+                    table_top,
                     place_box,
                     ops[-1],
                     line_index,
@@ -1101,12 +1103,13 @@ def layout_markdown(
                     ops[-1].append(
                         PaintOp(
                             f"{block.node.node_id}:quote:{depth}:{len(fragments)}",
-                            ((qx, y + radius), (qx, y + chunk.height - radius)),
+                            ((qx, table_top - table.style.stroke_width_mm / 2 + radius),
+                             (qx, table_top - table.style.stroke_width_mm / 2 + chunk.height - radius)),
                             style.stroke_width_mm,
                         )
                     )
-                y = block_end(y + chunk.height + table.style.stroke_width_mm)
-                capture_end(capture, block.node.span, table=table, x=x)
+                y = table_end
+                capture_end(capture, block.node.span, table=active_table, x=x)
             previous_heading_page = None
             continue
         pos = 0
