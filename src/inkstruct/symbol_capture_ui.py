@@ -37,18 +37,22 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             painter.save()
             painter.scale(self.canvas_percent / 100, self.canvas_percent / 100)
             baseline, em = FRAME["baseline_y_px"], FRAME["em_px"]
+            palette = self.palette()
+            dark = palette.base().color().lightness() < 128
+            neutral = QtGui.QColor("#AEB9C7" if dark else "#64748B")
+            axis = QtGui.QColor("#D8B4FE" if dark else "#9333EA")
             for title, level, color in [
-                ("大写字高", FRAME["cap_height_em"], "#94a3b8"),
-                ("小写字高", FRAME["x_height_em"], "#94a3b8"),
-                ("数学轴", FRAME["math_axis_em"], "#c084fc"),
-                ("基线", 0, "#2563eb"),
-                ("下伸线", -FRAME["descender_em"], "#94a3b8"),
+                ("大写字高", FRAME["cap_height_em"], neutral),
+                ("小写字高", FRAME["x_height_em"], neutral),
+                ("数学轴", FRAME["math_axis_em"], axis),
+                ("基线", 0, palette.link().color()),
+                ("下伸线", -FRAME["descender_em"], neutral),
             ]:
                 y = baseline - level * em
-                painter.setPen(QtGui.QPen(QtGui.QColor(color), 1, QtCore.Qt.PenStyle.DashLine))
+                painter.setPen(QtGui.QPen(color, 1, QtCore.Qt.PenStyle.DashLine))
                 painter.drawLine(QtCore.QPointF(95, y), QtCore.QPointF(525, y))
                 painter.drawText(QtCore.QPointF(8, y - 3), title)
-            painter.setPen(QtGui.QPen(QtGui.QColor("#94a3b8"), 1, QtCore.Qt.PenStyle.DotLine))
+            painter.setPen(QtGui.QPen(neutral, 1, QtCore.Qt.PenStyle.DotLine))
             x = FRAME["origin_x_px"]
             painter.drawLine(QtCore.QPointF(x, 25), QtCore.QPointF(x, 305))
             painter.restore()

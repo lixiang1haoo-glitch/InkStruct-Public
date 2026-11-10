@@ -162,7 +162,13 @@ def create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets):
             del event
             painter = QtGui.QPainter(self)
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            painter.fillRect(self.rect(), QtGui.QColor("#F8FAFC"))
+            palette = self.palette()
+            paper = palette.base().color()
+            dark = paper.lightness() < 128
+            active_color = "#86EFAC" if dark else "#16A34A"
+            muted_color = "#AEB9C7" if dark else "#64748B"
+            guide_color = "#69727F" if dark else "#CBD5E1"
+            painter.fillRect(self.rect(), palette.window())
 
             margin = 14.0
             title_height = 32.0
@@ -177,7 +183,7 @@ def create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets):
             title_font.setPointSize(11)
             title_font.setWeight(QtGui.QFont.Weight.DemiBold)
             painter.setFont(title_font)
-            painter.setPen(QtGui.QColor("#334155"))
+            painter.setPen(palette.windowText().color())
             title = f"笔顺提示  ·  {self._character}" if self._character else "笔顺提示"
             painter.drawText(
                 QtCore.QRectF(margin, margin, self.width() - 2 * margin, title_height),
@@ -185,11 +191,11 @@ def create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets):
                 title,
             )
 
-            painter.fillRect(box, QtGui.QColor("#FFFFFF"))
-            painter.setPen(QtGui.QPen(QtGui.QColor("#94A3B8"), 1.25))
+            painter.fillRect(box, paper)
+            painter.setPen(QtGui.QPen(QtGui.QColor(guide_color if dark else "#94A3B8"), 1.25))
             painter.drawRect(box)
             grid_pen = QtGui.QPen(
-                QtGui.QColor("#CBD5E1"),
+                QtGui.QColor(guide_color),
                 1.0,
                 QtCore.Qt.PenStyle.DashLine,
             )
@@ -233,19 +239,19 @@ def create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets):
                 if stroke_index == highlight:
                     continue
                 if stroke_index < completed:
-                    draw_stroke(stroke_index, "#64748B", 4.5)
+                    draw_stroke(stroke_index, muted_color, 4.5)
                 else:
-                    draw_stroke(stroke_index, "#CBD5E1", 3.6)
+                    draw_stroke(stroke_index, guide_color, 3.6)
             if highlight is not None:
-                draw_stroke(highlight, "#16A34A", 7.0)
+                draw_stroke(highlight, active_color, 7.0)
                 if self._strokes[highlight]:
                     start = self._strokes[highlight][0]
                     start_point = QtCore.QPointF(
                         box.left() + start[0] * box.width(),
                         box.top() + start[1] * box.height(),
                     )
-                    painter.setBrush(QtGui.QColor("#16A34A"))
-                    painter.setPen(QtGui.QPen(QtGui.QColor("#FFFFFF"), 1.5))
+                    painter.setBrush(QtGui.QColor(active_color))
+                    painter.setPen(QtGui.QPen(paper, 1.5))
                     painter.drawEllipse(start_point, 4.2, 4.2)
 
             status_rect = QtCore.QRectF(
@@ -258,21 +264,19 @@ def create_stroke_reference_widget_class(QtCore, QtGui, QtWidgets):
             status_font.setPointSize(10)
             status_font.setWeight(QtGui.QFont.Weight.DemiBold)
             painter.setFont(status_font)
+            status_color = "#86EFAC" if dark else "#15803D"
             if not self._character:
                 status = "载入任务后显示"
-                status_color = "#64748B"
+                status_color = muted_color
             elif not self._strokes:
                 status = "暂无标准笔顺参考"
-                status_color = "#B45309"
+                status_color = "#FCD38B" if dark else "#B45309"
             elif highlight is None:
                 status = f"笔画已完成：{min(self._written_stroke_count, expected)} / {expected}"
-                status_color = "#15803D"
             elif self._pen_down:
                 status = f"正在书写：第 {highlight + 1} / {expected} 笔"
-                status_color = "#15803D"
             else:
                 status = f"下一笔：第 {highlight + 1} / {expected} 笔"
-                status_color = "#15803D"
             painter.setPen(QtGui.QColor(status_color))
             painter.drawText(
                 status_rect,
