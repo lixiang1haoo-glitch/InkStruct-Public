@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 
 const repository = 'https://github.com/lixiang1haoo-glitch/InkStruct-Public'
 const releases = `${repository}/releases/latest`
+const notesPractice = `${repository}/releases/download/app-v0.1.74/student-notes-practice.zip`
 
 export default defineConfig({
   lang: 'zh-CN',
@@ -10,11 +11,16 @@ export default defineConfig({
   base: '/InkStruct-Public/',
   head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/InkStruct-Public/inkstruct.svg' }]],
   lastUpdated: true,
+  transformPageData(page) {
+    if (page.relativePath === 'guide/student-notes.md') {
+      page.frontmatter.practiceDownload = process.env.INKSTRUCT_STUDENT_PRACTICE_URL || notesPractice
+    }
+  },
   themeConfig: {
     logo: { src: '/inkstruct.svg', alt: 'InkStruct 墨构' },
     nav: [
       { text: '文档首页', link: '/' },
-      { text: '上手教程', link: '/guide/first-document' },
+      { text: '上手教程', link: '/guide/student-notes' },
       { text: '常见问题', link: '/guide/faq' },
       { text: '开发者文档', link: '/developers/', activeMatch: '^/developers/' },
       { text: '下载', link: releases },
@@ -22,7 +28,8 @@ export default defineConfig({
     sidebar: [
       { text: '开始使用', items: [
         { text: '文档首页', link: '/' },
-        { text: '做出第一份手写文档', link: '/guide/first-document' },
+        { text: '笔记篇 · A4 物理笔记', link: '/guide/student-notes' },
+        { text: '三字采集练习', link: '/guide/first-document' },
       ] },
       { text: '帮助与参考', items: [
         { text: '常见问题', link: '/guide/faq' },
