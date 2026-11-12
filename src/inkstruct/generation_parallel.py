@@ -118,8 +118,15 @@ def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit
     payload = json.loads(gzip.decompress(path.read_bytes()))
     if (payload.get('checks') != {'protocol': [], 'source_integrity': []}
             or row.get('checks') != payload['checks']
-            or payload.get('source_profile_sha256') != profile_hash
-            or payload.get('glyph', {}).get('character') != character
+            or payload.get('source_profile_sha256') != profile_hash):
+        raise ValueError('生成产物协议或来源记录不一致')
+    if payload.get('replay_only') is True:
+        from .v63_package import verify_connected_candidates
+
+        verify_connected_candidates(payload, row, writer, character,
+                                    candidate_limit if connected else None, same_character)
+        return path
+    if (payload.get('glyph', {}).get('character') != character
             or row.get('stroke_sources') != payload.get('stroke_sources')
             or row.get('missing') != payload.get('missing')
             or row.get('author_only_ready') != payload.get('author_only_ready')):

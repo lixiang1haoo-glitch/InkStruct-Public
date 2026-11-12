@@ -146,9 +146,10 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             connected_hint = QtWidgets.QLabel("当前仅 v6.3 支持连笔。请在采集页开启「允许汉字连笔」。")
             connected_hint.setWordWrap(True)
             form.addRow("", connected_hint)
-            self.same_character = QtWidgets.QCheckBox("允许回放同字的完整连笔样本")
+            self.same_character = QtWidgets.QCheckBox("优先使用已录同字")
             self.same_character.setObjectName("sameCharacterConnected")
-            self.same_character.setToolTip("仅限已通过整字校验的同作者连笔样本。默认使用跨字部件复用。")
+            self.same_character.setChecked(True)
+            self.same_character.setToolTip("使用通过整字校验的同作者分笔或连笔原稿。取消勾选可评估跨字生成。")
             form.addRow("", self.same_character)
             generation_group = QtWidgets.QGroupBox("2 · 生成汉字")
             generation_layout = QtWidgets.QVBoxLayout(generation_group)
@@ -218,6 +219,17 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.candidate_hint = QtWidgets.QLabel()
             self.candidate_hint.setWordWrap(True)
             generation_form.addRow("", self.candidate_hint)
+            score_options = QtWidgets.QHBoxLayout()
+            self.source_score = QtWidgets.QCheckBox("计算来源分")
+            self.source_score.setObjectName("generation_source_score")
+            self.source_score.setToolTip("按标准笔位的来源计分。v4 缺少逐笔来源记录。")
+            self.diversity_score = QtWidgets.QCheckBox("计算多样性分")
+            self.diversity_score.setObjectName("generation_diversity_score")
+            self.diversity_score.setToolTip("按默认排版实际可轮换的不同字形数计分。")
+            score_options.addWidget(self.source_score)
+            score_options.addWidget(self.diversity_score)
+            score_options.addStretch()
+            generation_form.addRow("生成指标", score_options)
             generation_layout.addLayout(generation_form)
             layout.addWidget(generation_group)
             self.status = QtWidgets.QLabel()
@@ -244,6 +256,11 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.result_summary.setWordWrap(True)
             summary_layout = QtWidgets.QVBoxLayout()
             summary_layout.addWidget(self.result_summary)
+            self.score_summary = QtWidgets.QLabel()
+            self.score_summary.setObjectName("generation_score_summary")
+            self.score_summary.setWordWrap(True)
+            self.score_summary.hide()
+            summary_layout.addWidget(self.score_summary)
             self.publish_batch_summary = QtWidgets.QLabel()
             self.publish_batch_summary.setWordWrap(True)
             self.publish_batch_summary.hide()
@@ -450,6 +467,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
             self.same_character.setVisible(self.method.currentData() == "v63")
             self.same_character.setEnabled(not self.busy)
+            self.source_score.setEnabled(not self.busy and self.method.currentData() != 'v4')
+            self.diversity_score.setEnabled(not self.busy)
             multiple = self.method.currentData() in MULTI_CANDIDATE_METHODS
             with QtCore.QSignalBlocker(self.candidate_limit):
                 self.candidate_limit.setValue(self.preferred_candidate_limit() if multiple else 1)
@@ -584,6 +603,16 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
                 self.target_summary.setText(f"{title} · 目标 {len(manifest['requested'])} 字{note}")
                 self.target_summary.setToolTip(str(origin.get("path") or identity.get("path") or ""))
             if "output" in value:
+                scores = value.get("scores", {})
+                lines = []
+                if "source_score" in scores:
+                    lines.append(f"来源分 {scores['source_score']:.2f} · 整字回放 {scores['replayed_count']} 字")
+                if "diversity_score" in scores:
+                    covered, total = scores['covered_count'], scores['target_count']
+                    lines.append(f"多样性分 {scores['diversity_score']:.2f} · 生成覆盖 {covered}/{total} 字"
+                                 f"（{covered / total:.1%}）· 可轮换 {scores['rotatable_count']} 字")
+                self.score_summary.setText("\n".join(lines))
+                self.score_summary.setVisible(bool(lines))
                 if value["completed_count"]:
                     self.last_generated_run = value["output"]
                     self.last_generated_writer = value["writer"]
@@ -677,6 +706,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             workers = self.parallelism.currentData()
             candidate_limit = self.candidate_limit.value() if values[2] in MULTI_CANDIDATE_METHODS else 1
             same_character = values[2] == "v63" and self.same_character.isChecked()
+            source_score = values[2] != "v4" and self.source_score.isChecked()
+            diversity_score = self.diversity_score.isChecked()
+            self.score_summary.hide()
             self.cancel_event.clear()
             self.generation_active = True
             self.generation_error = ""
@@ -685,6 +717,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.status.hide()
             self.submit(lambda: service.generate(*values, text,
                 workers=workers, targets=targets, candidate_limit=candidate_limit, same_character=same_character,
+                source_score=source_score, diversity_score=diversity_score,
                 progress=self.generation_progress.emit, preparation=self.generation_preparation.emit,
                 cancelled=self.cancel_event.is_set), cancellable=True)
 

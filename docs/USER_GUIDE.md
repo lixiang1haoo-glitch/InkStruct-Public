@@ -1,5 +1,9 @@
 # InkStruct（墨构）完整使用手册
 
+0.1.76 在 v6.3 生成页默认勾选「优先使用已录同字」。同一书写者录过目标字且通过整字校验时，分笔和连笔原稿均可优先使用。自动排版在通过校验的原稿间轮换，已保存文档继续按冻结的候选排版。取消勾选可评估跨字生成。
+
+可分别勾选「计算来源分」和「计算多样性分」。来源分给同字回放计 100 分，给跨字候选的完整作者部件、作者单笔及标准骨架按笔位计 80、60、0 分。多样性分按默认排版可轮换的不同字形数计分，0 或 1 份计 0 分，2 份约为 20.63 分。两项均按目标字等权平均。
+
 0.1.75 在排版预览中支持图片标注。选中图片，在「元素属性 › 表格与图片」点「编辑图片标注…」。在独立窗口中可添加单行文字或行内公式，例如 `$F_1$`，并拖动位置、单独调整字号。标注沿用文档手写字体，保存到 `.inkdoc` 后仍可编辑，写字机 SVG 会输出标注笔迹。[图片标注教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/lesson-plan-template.html)
 
 0.1.74 新增表格总宽「按内容确定」。在排版右侧的「表格与图片」选中表格并开启「独立设置」，可分别设置总宽方式和列宽方式。短表随内容收窄，长内容在正文框可用宽度内换行。全局默认入口在「设置 › 排版默认设置 › 表格」。[在线说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#table-total-width)
@@ -10,7 +14,7 @@
 
 从 0.1.71 起，字体库预览和采集画布随深浅主题切换。深色采集画布为深灰底白色笔迹。公式设置的手写预览同时显示当前示例的各项实测毫米值，选中项高亮。[Windows 下载与交付记录](RELEASE_0_1_71_WINDOWS.md)
 
-0.1.70 在「采集 › 汉字样本」提供「允许汉字连笔」。只有 v6.3 支持将连笔笔迹建档并用于生成。整字回放需要在生成页单独勾选，跨字部件仍须通过位置与来源校验。[Windows 交付记录](RELEASE_0_1_70_WINDOWS.md) · [连笔采集说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#connected-handwriting)
+0.1.70 在「采集 › 汉字样本」提供「允许汉字连笔」。只有 v6.3 支持将连笔笔迹建档并用于生成，跨字部件须通过位置与来源校验。[Windows 交付记录](RELEASE_0_1_70_WINDOWS.md) · [连笔采集说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#connected-handwriting)
 
 0.1.67 在「设置 › 应用设置 › 主题」提供跟随系统、浅色和深色，保存后立即切换。公式设置及印刷参考、手写预览使用当前主题配色。见 [Windows 交付记录](RELEASE_0_1_67_WINDOWS.md)。
 

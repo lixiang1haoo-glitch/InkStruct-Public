@@ -2,7 +2,9 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.75**。在独立窗口中可添加图片标注，沿用文档手写字体，并拖动位置、单独调整字号。[图片标注教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/lesson-plan-template.html)
+当前源码版本为 **0.1.76**。v6.3 默认优先使用通过整字校验的同字分笔或连笔原稿。生成页可独立计算来源分和多样性分。[生成评分说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#generation-scores)
+
+0.1.75 增加图片标注。独立编辑窗口沿用文档手写字体，支持拖动定位和单独调整字号。[图片标注教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/lesson-plan-template.html)
 
 0.1.74 支持表格总宽随内容收窄，适用于普通排版和纸张行格排版。[0.1.74 Windows 安装器与 ZIP](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74)
 

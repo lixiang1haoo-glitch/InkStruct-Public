@@ -47,9 +47,10 @@ def setup(tmp_path):
     return repo, graph, (graphics, dictionary, config)
 
 
-def record(path, graph, *, join, omit=()):
+def record(path, graph, *, join=None, omit=()):
     traces = [[(x*80+10, y*80+10) for x, y in s.median] for s in graph.strokes]
-    traces[join:join+2] = [traces[join]+traces[join+1]]
+    if join is not None:
+        traces[join:join+2] = [traces[join]+traces[join+1]]
     clock = 0
     strokes = []
     for index, trace in enumerate(traces):
@@ -160,13 +161,15 @@ def test_desktop_workflow_uses_connected_index_and_candidate_budget(setup, tmp_p
     write(second, variant)
     service = GenerationWorkflow(tmp_path / "work", repo.path)
     stages = []
-    def run(cap, same, cancel=lambda: False):
+    def run(cap, same, **options):
         return service.generate("alice", source, "v63", "明", workers=1, candidate_limit=cap,
                                 same_character=same, preparation=lambda stage, _: stages.append(stage),
-                                cancelled=cancel)
+                                **options)
 
-    result = run(4, True)
+    result = run(4, True, diversity_score=True)
     assert result["candidate_count"] == 3 and "建档完成" in stages
+    assert result["scores"] == {"target_count": 1, "covered_count": 1, "rotatable_count": 1,
+                                "diversity_score": pytest.approx(20.629947)}
     state = service.state("alice", source)
     assert state["profiles"]["v63"]["effective_donors"] == 2
     assert state["profiles"]["v63"]["source_samples"] == 0
@@ -179,7 +182,100 @@ def test_desktop_workflow_uses_connected_index_and_candidate_budget(setup, tmp_p
     only = list(generated_records(Path(run(1, True)["output"]), "alice"))
     assert len(only) == 1 and only[0][0]["method"] == "same_character"
     assert "沿用档案" in stages
-    assert list(generated_records(Path(run(4, False)["output"]), "alice"))[0][0].get("segments") is None
+    both = list(generated_records(Path(run(2, True)["output"]), "alice"))
+    assert [r[0].get("method") for r in both] == ["same_character", "same_character"]
+    off = run(4, False, source_score=True)
+    assert list(generated_records(Path(off["output"]), "alice"))[0][0].get("segments") is None
+    assert off["scores"] == {"target_count": 1, "covered_count": 1, "source_score": 0, "replayed_count": 0}
     with pytest.raises(ValueError, match="可靠笔画映射"):
         service.generate("alice", source, "v62", "明", workers=1, preparation=lambda *_: None)
     assert service.state("alice", source) == state
+
+
+def test_split_original_is_default_and_higher_priority_than_generated_backup(setup, tmp_path, monkeypatch):
+    from inkstruct import generation_workflow
+    from inkstruct.assets.resolver import SelectedAsset
+    from inkstruct.fonts.importer import generated_records
+
+    repo, graph, refs = setup
+    monkeypatch.setattr(generation_workflow, "corrections", lambda: refs)
+    source = tmp_path / "samples" / "split.json"
+    sample = record(source, graph)
+    service = GenerationWorkflow(tmp_path / "work", repo.path)
+
+    def run(**options):
+        return service.generate("alice", source.parent, "v63", "明明", workers=1,
+                                preparation=lambda *_: None, **options)
+
+    def pack(result, name):
+        batch = Path(result["output"])
+        review = review_selection("alice", batch, None, name, {"han"})
+        report = publish_font(tmp_path / "library", writer="alice", run=batch, symbols=None, name=name,
+                              package_kind="user", groups={"han"}, stamp=publication_stamp("alice", batch, None),
+                              expected=review["coverage"], progress=lambda _: None)
+        assert not report["difference"]
+        return list(FontPackage(Path(report["path"])).glyphs())
+
+    fallback = pack(run(same_character=False), "cross")
+    session = SourceSession("明" * 24)
+    old_resolver = AssetResolver(embedded=fallback)
+    old_layout = layout_markdown(parse_markdown(session), old_resolver)
+    old_resolver.accept_usage_warnings()
+    document = tmp_path / "frozen.inkdoc"
+    save_package(document, session, old_resolver, PageProfile(), StyleProfile())
+
+    capped = run(candidate_limit=1, source_score=True)
+    assert capped["scores"] == {"target_count": 1, "covered_count": 1, "source_score": 100, "replayed_count": 1}
+    records = list(generated_records(Path(capped["output"]), "alice"))
+    assert len(records) == 1 and records[0][0]["method"] == "same_character"
+    segments = records[0][0]["segments"]
+    assert [segment["standard_slots"] for segment in segments] == [["s1"], ["s2"], ["s3"], ["s4"]]
+    assert [[p["pressure"] for p in s["points"]] for s in segments] == [
+        [p.pressure for p in stroke.points] for stroke in sample.strokes
+    ]
+
+    mixed = run(candidate_limit=4, source_score=True, diversity_score=True)
+    assert mixed["scores"] == {"target_count": 1, "covered_count": 1, "source_score": 100,
+                               "replayed_count": 1, "diversity_score": 0, "rotatable_count": 0}
+    assert read(Path(mixed["output"]) / "generation-scores.json") == mixed["scores"]
+    assets = pack(mixed, "mix")
+    assert len(assets) == 2
+    original = next(a for a in assets if a.font_metadata["summary"]["generation_mode"] == "same_character")
+    backup = next(a for a in assets if a is not original)
+    assert original.font_metadata["record"]["priority"] < backup.font_metadata["record"]["priority"]
+    resolver = AssetResolver(embedded=assets)
+    layout_markdown(parse_markdown(session), resolver)
+    assert {r["sample_id"] for r in resolver.selection_records()} == {original.sample_id}
+
+    reopened = load_package(document)
+    parsed = parse_markdown(reopened.session)
+    assert layout_markdown(parsed, reopened.resolver).pages == old_layout.pages
+    frozen = AssetResolver(embedded=[*fallback, *assets],
+                           selections=[SelectedAsset(**r) for r in reopened.resolver.selection_records()])
+    assert layout_markdown(parsed, frozen).pages == old_layout.pages
+    assert frozen.selection_records() == reopened.resolver.selection_records()
+
+
+def test_scores_deduplicate_geometry_and_count_unfinished_targets(monkeypatch):
+    from inkstruct import generation_scores
+
+    replay = {"character": "明", "method": "same_character"}
+    generated = {"character": "明"}
+    cross_character = {"character": "照", "method": "cross_character", "segments": [
+        {"kind": "author_group", "standard_slots": ["s1", "s2"]},
+        {"kind": "author_split", "standard_slots": ["s3"]},
+        {"kind": "reference", "standard_slots": ["s4"]},
+    ]}
+
+    def candidate(glyph, point):
+        return glyph, None, {"strokes": [{"points": [{"x": point, "y": 0}]}]}, None
+
+    records = [candidate(replay, 0), candidate(replay, 0), candidate(replay, 1), candidate(generated, 2),
+               candidate(cross_character, 0)]
+    monkeypatch.setattr(generation_scores, "generated_records", lambda *_: iter(records))
+    monkeypatch.setattr(generation_scores, "make_generated", lambda glyph, _, trajectory, __:
+                        (trajectory, {}, {"source_kind": "generated", "generation_mode": glyph.get("method")}))
+    result = generation_scores.evaluate(None, "alice", "明明照月", source=True, diversity=True, completed=2)
+    assert result == {"target_count": 3, "covered_count": 2, "replayed_count": 1, "rotatable_count": 1,
+                      "source_score": pytest.approx((100 + 55) / 3),
+                      "diversity_score": pytest.approx(20.629947 / 3)}

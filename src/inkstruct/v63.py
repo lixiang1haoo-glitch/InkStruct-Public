@@ -216,6 +216,58 @@ def physical_points(segments):
     return result
 
 
+def same_character_candidates(writer, graph, split_samples, connected_units, *, limit, cancelled):
+    from .generation_variants import geometry_key
+    from .source_trajectory import MIN_MAPPING_CONFIDENCE
+    from .v61_author_strokes import valid_source
+    from .v63_package import validate_grouped_glyph
+
+    standard = [stroke.stroke_id for stroke in graph.strokes]
+    identity = {slot: slot for slot in standard}
+
+    def originals():
+        for sample in split_samples:
+            if cancelled():
+                return
+            if (sample.character != graph.character
+                    or sample.stroke_order_status not in {"declared", "corrected"}
+                    or [stroke.standard_stroke_id for stroke in sample.strokes] != standard
+                    or sorted(stroke.user_order for stroke in sample.strokes) != list(range(1, len(standard) + 1))
+                    or not all(stroke.confidence >= MIN_MAPPING_CONFIDENCE and valid_source(stroke)
+                               for stroke in sample.strokes)):
+                continue
+            yield [{"standard_slots": [stroke.standard_stroke_id], "kind": "author_split",
+                    "source_character": sample.character, "source_sha256": sample.source_sha256,
+                    "source_raw_order": stroke.user_order,
+                    "points": [{"x": xy[0], "y": xy[1], "pressure": pressure, "t_ms": time}
+                               for xy, pressure, time in zip(stroke.points, stroke.pressure, stroke.t_ms, strict=True)]}
+                   for stroke in sample.strokes]
+        for unit in connected_units:
+            if cancelled():
+                return
+            if (unit["path"] == "whole" and unit["character"] == graph.character
+                    and [slot for stroke in unit["strokes"] for slot in stroke["slots"]] == standard):
+                yield mapped_segments(unit, identity)
+
+    result, seen = [], set()
+    for segments in originals():
+        signature = geometry_key({"strokes": segments})
+        if signature in seen:
+            continue
+        glyph = {"schema_version": GLYPH, "writer_id": writer, "character": graph.character,
+                 "generator": CONNECTED_METHOD, "method": "same_character",
+                 "standard_slots": standard, "segments": physical_points(segments)}
+        try:
+            validate_grouped_glyph(glyph, writer, graph.character)
+        except ValueError:
+            continue
+        seen.add(signature)
+        result.append(glyph)
+        if len(result) == limit:
+            break
+    return result
+
+
 def candidates_for(target_graph, corrected, base_segments, units, source_repo, *, same_character,
                    cancelled=lambda: False):
     target_ids = [s.stroke_id for s in target_graph.strokes]
@@ -266,6 +318,7 @@ def candidates_for(target_graph, corrected, base_segments, units, source_repo, *
 
 def connected_candidates(writer, graph, corrected, base_glyph, source_rows, units, repo, *,
                          same_character, limit, cancelled=lambda: False):
+    from .generation_variants import geometry_key
     from .v63_package import validate_grouped_glyph
 
     if not units:
@@ -277,11 +330,12 @@ def connected_candidates(writer, graph, corrected, base_glyph, source_rows, unit
         if segment["kind"] == "author_split":
             segment["source_sha256"] = origin["source_sha256"]
             segment["source_character"] = origin["character"]
+            segment["source_kind"] = origin["kind"]
         base.append(segment)
     result, seen = [], set()
     for method, segments in candidates_for(graph, corrected, base, units, repo,
                                             same_character=same_character, cancelled=cancelled):
-        signature = tuple(tuple((p["x"], p["y"]) for p in s["points"]) for s in segments)
+        signature = geometry_key({"strokes": segments})
         if signature in seen:
             continue
         seen.add(signature)
