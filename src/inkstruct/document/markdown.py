@@ -8,6 +8,10 @@ from ..math.schema import MATH_VERSION, MathNode
 from ._markdown_mapping import LocatedString, located, make_parser
 from .cancellation import check_cancel
 from .editing import SourceSession
+from .image_labels import (
+    PATTERN as IMAGE_LABEL_PATTERN, PREFIX as IMAGE_LABEL_PREFIX, ImageLabel,
+    bind_image_labels, validate_label_text,
+)
 from .limits import bounded_parse, validate_nodes
 from .obsidian import OBSIDIAN_VERSION
 from .schema import Diagnostic, Occurrence, SourceSpan, digest
@@ -82,6 +86,8 @@ def parse_markdown(
     line_starts.append(len(source))
     diagnostics = []
     html_sources = {}
+    label_parser = None
+    has_image_labels = False
 
     def source_span(token, fallback):
         if "source_span" in token.meta:
@@ -97,6 +103,7 @@ def parse_markdown(
         return fallback
 
     def build(tokens, fallback):
+        nonlocal label_parser, has_image_labels
         roots, stack = [], []
         for token in tokens:
             check_cancel(cancelled)
@@ -187,6 +194,27 @@ def parse_markdown(
                     attrs,
                     str(token.content),
                 )
+            elif token.type == "html_block" and token.content.lstrip().startswith(IMAGE_LABEL_PREFIX):
+                has_image_labels = True
+                comment = token.content.strip()
+                match = IMAGE_LABEL_PATTERN.fullmatch(comment)
+                try:
+                    if not match:
+                        raise ValueError("图片标注格式无效。")
+                    x, y, size = match.group("x", "y", "size")
+                    ImageLabel.from_fields(x, y, size)
+                    text = comment[match.start("text"):match.end("text")]
+                    validate_label_text(text)
+                except ValueError as error:
+                    diagnostics.append(Diagnostic("image-label-syntax", str(error), span))
+                    node = SemanticNode(node_id, "image_label", span)
+                else:
+                    if label_parser is None:
+                        label_parser = make_parser(cancelled=cancelled)
+                        label_parser.inline.ruler.enableOnly(["text", "escape", "entity", "math_inline"])
+                    children = build(label_parser.inline.parse(text, label_parser, {}, []), span)
+                    node = SemanticNode(node_id, "image_label", span, children,
+                                        attributes=(("x", x), ("y", y), ("size", size)), raw_content=str(text))
             else:
                 occurrences = []
                 ranges = token.meta.get("display_ranges")
@@ -279,6 +307,8 @@ def parse_markdown(
     check_cancel(cancelled)
     nodes = build(tokens, SourceSpan(0, len(session.source)))
     validate_nodes(nodes, cancelled=cancelled)
+    if has_image_labels:
+        nodes = bind_image_labels(nodes, diagnostics)
     from .tables import expand_html_tables
 
     nodes = expand_html_tables(nodes, session, diagnostics, html_sources)

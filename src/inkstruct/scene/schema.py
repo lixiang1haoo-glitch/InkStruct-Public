@@ -40,6 +40,7 @@ class Fragment:
     source_resource_id: str | None = None
     glyph_origin_offset_mm: float = 0
     glyph_em_mm: float = 0
+    image_label: tuple[str, str] | None = None
 
     @property
     def selection_bounds(self):

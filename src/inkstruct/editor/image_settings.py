@@ -196,10 +196,12 @@ class ImageSettingsDialog(QtWidgets.QDialog):
     def update_info(self):
         source = dict(self.current.attributes).get("src", "") if self.current else ""
         resource = next((r for r in self.flow.images if r.source == source), None)
+        digest = resource.original_sha256 if resource else ""
+        self.info.setToolTip(f"SHA-256 {digest}" if digest else "")
         self.info.setText(
-            f"单线 SVG · 原尺寸 {resource.width_mm:g} × {resource.height_mm:g} mm · SHA-256 {resource.original_sha256}"
+            f"单线 SVG · 原尺寸 {resource.width_mm:g} × {resource.height_mm:g} mm · SHA-256 {digest[:12]}…"
             if isinstance(resource, LineSvgResource)
-            else f"已嵌入 {resource.width_px} × {resource.height_px} px · 原文件 SHA-256 {resource.original_sha256}"
+            else f"已嵌入 {resource.width_px} × {resource.height_px} px · SHA-256 {digest[:12]}…"
             if resource
             else "尚未嵌入图片文件"
             if self.current

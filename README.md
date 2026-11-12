@@ -2,7 +2,9 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前版本为 **0.1.74**，表格总宽可以随内容收窄，适用于普通排版和纸张行格排版。[Windows 安装器与 ZIP](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74)
+当前源码版本为 **0.1.75**。在独立窗口中可添加图片标注，沿用文档手写字体，并拖动位置、单独调整字号。[图片标注教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/lesson-plan-template.html)
+
+0.1.74 支持表格总宽随内容收窄，适用于普通排版和纸张行格排版。[0.1.74 Windows 安装器与 ZIP](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74)
 
 0.1.70 将 v6.3 连笔支持接入桌面采集、生成与制包，Windows 安装和卸载界面使用简体中文。[发行记录](docs/RELEASE_0_1_70_WINDOWS.md) · [在线文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)
 

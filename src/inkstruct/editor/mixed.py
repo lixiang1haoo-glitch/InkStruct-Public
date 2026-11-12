@@ -1103,8 +1103,9 @@ class MixedWindow(ReviewWindow):
         super().select_fragment(fragment, sync_source=sync_source)
         if hasattr(self, "glyph_inspector") and self.canvas.isEnabled():
             self.glyph_inspector.select(fragment)
-            if fragment.asset_id and sync_source:
-                self.properties_tabs.setCurrentIndex(1)
+            is_image = fragment.status in {"image-vector", "image-reference", "image-missing"}
+            if sync_source and (fragment.asset_id or is_image):
+                self.properties_tabs.setCurrentIndex(0 if is_image else 1)
                 self.element_properties_dock.show()
                 self.element_properties_dock.raise_()
 

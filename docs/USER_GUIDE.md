@@ -1,5 +1,7 @@
 # InkStruct（墨构）完整使用手册
 
+0.1.75 在排版预览中支持图片标注。选中图片，在「元素属性 › 表格与图片」点「编辑图片标注…」。在独立窗口中可添加单行文字或行内公式，例如 `$F_1$`，并拖动位置、单独调整字号。标注沿用文档手写字体，保存到 `.inkdoc` 后仍可编辑，写字机 SVG 会输出标注笔迹。[图片标注教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/lesson-plan-template.html)
+
 0.1.74 新增表格总宽「按内容确定」。在排版右侧的「表格与图片」选中表格并开启「独立设置」，可分别设置总宽方式和列宽方式。短表随内容收窄，长内容在正文框可用宽度内换行。全局默认入口在「设置 › 排版默认设置 › 表格」。[在线说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#table-total-width)
 
 0.1.73 支持自定义模板的纸张行格。在模板工作台选中正文框，将排版方式设为「按纸张行格排版」，填写首末基线距框顶的距离和可用行数，再用辅助线对齐底图。高公式占用连续行格。表格横边框与纸面横线对齐，行高取行格间距的整数倍。续页可重复表头，表后正文回到下一条可用基线。底图原有横线仍会显示。[在线说明](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html#paper-grid)
