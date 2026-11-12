@@ -1,5 +1,5 @@
 ---
-description: 用两张 183 × 259 mm 预印教案纸制作模板，通过《椭圆焦点的性质》练习正文续排和字段绑定。
+description: 用两张 183 × 259 mm 预印教案纸制作模板，通过《椭圆焦点的性质》练习正文续排、字段绑定和 SVG 线图排版。
 ---
 
 <script setup>
@@ -94,6 +94,10 @@ import { withBase } from 'vitepress'
 
 ## 5. 填写《椭圆焦点的性质》并试排
 
+<p><a :href="withBase('/downloads/lesson-plan/ellipse-foci.svg')" download>下载椭圆焦点线图 SVG</a></p>
+
+以下两份 Markdown 都会引用这张线图。下载后，把 SVG 和要导入的 Markdown 放在同一个文件夹里，保留文件名 `ellipse-foci.svg`。导入 Markdown 时，InkStruct 会一并读取线图。
+
 ### 用自己刚做的模板
 
 <p><a :href="withBase('/downloads/lesson-plan/ellipse-lesson-body.md')" download>下载仅含教学过程的 Markdown</a></p>
@@ -129,17 +133,30 @@ import { withBase } from 'vitepress'
 
 自己新建的字段会有软件分配的稳定标识。需要手写字段块时，在 **字段声明** 选中该字段，点 **复制字段写法**。用 **填写字段…** 会自动写入正确的标识。
 
+### 让 SVG 线图随正文排版
+
+两份 Markdown 都已在第二节末尾插入以下一行。前后各留一个空行，让线图独占一段。方括号里的文字会排成手写图题，和线图一起留在同一页。
+
+```markdown
+![图1 椭圆的焦点和焦半径](ellipse-foci.svg)
+```
+
+1. 在右侧 **元素属性 › 表格与图片** 的下拉列表中选中 **图片 1**，点 **独立设置**。
+2. **尺寸依据** 选 **按高度，宽度按比例**，高度填 **34 mm**，**图片对齐** 选 **居中**，**图片与图题间距** 填 **1.5 mm**，点 **应用元素属性**。软件会按原比例计算宽度，本例约为 **55.5 mm**。
+
+图中的椭圆、两条焦半径和字母标注都由线条构成。导出写字机 SVG 时，InkStruct 会用文档笔宽把这些线条和手写图题一起输出。保存 `.inkdoc` 后，线图也会保存在项目里。
+
 ### 核对两页
 
-给文档应用覆盖所需汉字和公式的字体。本例试排使用 **字大小 4.2 mm**、**行高 6.0 mm**、**笔宽 0.27 mm**、**公式字号 4.4 mm**。
+给文档应用覆盖所需汉字和公式的字体。本例试排使用 **字高 4.2 mm**、**行高 6.0 mm**、**笔宽 0.27 mm**、**公式字号 4.4 mm**，**段距**与**标题段距**均为 **1 mm**。
 
-- 第 1 页有课题、目标，以及「拉线画椭圆」「从定义到坐标」。
+- 第 1 页有课题、目标，以及「拉线画椭圆」「从定义到坐标」。椭圆线图和图题位于首页正文框底部。
 - 第 2 页从「求焦点和焦半径」开始，底部是独立的作业和小结。
 - 字段内容本身不会新增续页。要使用续页底部的栏位，请让正文进入续页。正文若排到第 3 页，当前循环设置会再次使用续页，并重复该版式里的作业和小结。
 - 字段内容放不下时，可缩短该栏内容，或在纸面允许的范围内调大该框。正文仍按正文框的顺序续排。
 
 | 教案首页 | 教案续页 |
 | --- | --- |
-| [![首页成稿，课题和日期在固定栏位，教学过程从首页下半部开始](/screenshots/lesson-plan/lesson-page-1.png)](/screenshots/lesson-plan/lesson-page-1.png) | [![续页成稿，焦半径例题在正文区，作业和小结位于底部](/screenshots/lesson-plan/lesson-page-2.png)](/screenshots/lesson-plan/lesson-page-2.png) |
+| [![首页成稿，课题和日期在固定栏位，椭圆线图和图题位于正文框底部](/screenshots/lesson-plan/lesson-page-1.png)](/screenshots/lesson-plan/lesson-page-1.png) | [![续页成稿，焦半径例题在正文区，作业和小结位于底部](/screenshots/lesson-plan/lesson-page-2.png)](/screenshots/lesson-plan/lesson-page-2.png) |
 
 预览合适后，点 **文件 › 保存项目**。用写字机时，在 **导出 SVG…** 中先只选第 **1** 页，在实物纸张上核对课题和正文的落点。若与印刷栏线有偏差，先复测纸宽、纸高及纸边到栏线的距离，再调整纸张参数、框位置或校准值。
