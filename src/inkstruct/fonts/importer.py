@@ -274,7 +274,8 @@ def make_generated(glyph, row, payload, protocol):
 
 
 def font_candidate_priority(summary):
-    priority = 0 if (summary["source_kind"] == "recorded" or summary.get("generation_mode") == "same_character") else 1
+    whole_replay = summary.get("generation_mode") == "same_character" and "v63_standard_slots" in summary
+    priority = 0 if summary["source_kind"] == "recorded" or whole_replay else 1
     if (summary.get("symbol_construction", {}).get("rule") == "hbar-from-h-and-minus"
             and summary["symbol_construction"]["sources"][1]["character"] == "-"):
         priority += 1
