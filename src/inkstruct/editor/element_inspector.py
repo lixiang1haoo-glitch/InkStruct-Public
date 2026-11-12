@@ -8,6 +8,7 @@ from ..document.source import utf16_to_scalar
 from ..global_defaults import GlobalDefaultsStore, apply_to_document
 from ..settings_elements import ElementPage
 from ..settings_pages import label
+from .image_labels import ImageLabelControls
 
 
 class ElementInspector(QtWidgets.QWidget):
@@ -27,6 +28,8 @@ class ElementInspector(QtWidgets.QWidget):
         self.selector.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.selector.setMinimumContentsLength(12)
         column.addWidget(self.selector)
+        self.image_labels = ImageLabelControls(self)
+        column.addWidget(self.image_labels)
         self.stack = QtWidgets.QStackedWidget()
         self.empty = label("在预览中点击表格或图片，或将源码光标放入元素内。也可从上方列表选择。")
         self.stack.addWidget(self.empty)
@@ -109,6 +112,7 @@ class ElementInspector(QtWidgets.QWidget):
         self.revert.setEnabled(ready)
         self.selector.setEnabled(ready)
         self.stack.setEnabled(ready)
+        self.image_labels.setEnabled(ready)
         if not ready:
             self.context.setText("预览正在更新，暂不可编辑元素属性。")
 
@@ -127,6 +131,7 @@ class ElementInspector(QtWidgets.QWidget):
         node = next(
             (n for root in self.document.nodes for n in root.walk() if n.node_id == key), None
         )
+        self.image_labels.set_image(node)
         if node is None:
             self.stack.setCurrentWidget(self.empty)
             self.context.setText("未选择表格或图片")

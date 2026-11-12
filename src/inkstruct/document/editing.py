@@ -52,7 +52,7 @@ class SourceSession:
             }
         )
 
-    def apply(self, start: int, end: int, inserted: str, *, expected_revision=None) -> Edit:
+    def apply(self, start: int, end: int, inserted: str, *, expected_revision=None, inserted_ids=None) -> Edit:
         if expected_revision is not None and expected_revision != self.revision:
             raise ValueError("Edit belongs to a stale source revision")
         if not (
@@ -63,12 +63,19 @@ class SourceSession:
             raise ValueError("Edit range outside source")
         source = self.source[:start] + inserted + self.source[end:]
         self._validate_source(source)
+        if inserted_ids is None:
+            inserted_ids = tuple(new_id() for _ in inserted)
+        else:
+            inserted_ids = tuple(inserted_ids)
+            if (len(inserted_ids) != len(inserted) or len(set(inserted_ids)) != len(inserted_ids)
+                    or set(inserted_ids).intersection(self.atom_ids[:start] + self.atom_ids[end:])):
+                raise ValueError("Edit contains invalid or repeated source identities")
         edit = Edit(
             start,
             self.source[start:end],
             inserted,
             self.atom_ids[start:end],
-            tuple(new_id() for _ in inserted),
+            inserted_ids,
         )
         self.source = source
         self.atom_ids = self.atom_ids[:start] + edit.inserted_ids + self.atom_ids[end:]

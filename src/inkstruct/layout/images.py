@@ -1,11 +1,20 @@
 """Atomic raster figure and handwritten alt-caption measurement."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from ..document.image_labels import ImageLabel
 from ..document.line_svg import LineSvgResource
 from ..document.schema import Diagnostic
-from .inline import break_lines, measure_runs
+from .inline import break_lines, inline_runs, measure_runs
 from .plain import CLOSING, OPENING
+
+
+@dataclass(frozen=True)
+class MeasuredImageLabel:
+    node_id: str
+    x: float
+    baseline: float
+    boxes: tuple
 
 
 @dataclass(frozen=True)
@@ -20,6 +29,36 @@ class MeasuredImage:
     alignment: str
     diagnostics: tuple
     paths: tuple = ()
+    labels: tuple[MeasuredImageLabel, ...] = ()
+
+
+def measure_labels(node, resolver, style, flow, width, height, cancelled):
+    labels, diagnostics = [], []
+    for label in node.children:
+        if label.kind != "image_label" or not label.children:
+            continue
+        settings = ImageLabel.from_node(label)
+        em = settings.em_mm or style.em_mm
+        boxes, issues = measure_runs(
+            tuple(run for child in label.children for run in inline_runs(child)),
+            resolver, replace(style, em_mm=em), cancelled=cancelled,
+            math_style=flow.math if settings.em_mm is None else replace(flow.math, em_mm=em),
+            latin_spacing=flow.latin_spacing, punctuation_spacing=flow.punctuation_spacing,
+            han_variation=flow.han_variation,
+        )
+        diagnostics.extend(issues)
+        if not boxes:
+            continue
+        label_width = sum(box.advance for box in boxes)
+        ascent = max(box.ascent for box in boxes)
+        descent = max(box.descent for box in boxes)
+        x = width * settings.x / 100 - label_width / 2
+        baseline = height * settings.y / 100 + (ascent - descent) / 2
+        if x < -1e-9 or x + label_width > width + 1e-9 or baseline - ascent < -1e-9 or baseline + descent > height + 1e-9:
+            diagnostics.append(Diagnostic("image-label-overflow", "图片标注超出图片边缘，可移动标注或减小字号。",
+                                          label.span, "warning"))
+        labels.append(MeasuredImageLabel(label.node_id, x, baseline, tuple(boxes)))
+    return tuple(labels), diagnostics
 
 
 def measure_image(block, resolver, style, flow, width, cancelled):
@@ -117,6 +156,8 @@ def measure_image(block, resolver, style, flow, width, cancelled):
                 "warning",
             )
         )
+    labels, label_issues = measure_labels(block.node, resolver, style, flow, iw, ih, cancelled)
+    issues.extend(label_issues)
     gap = image_style.caption_gap_mm if lines else 0
     return MeasuredImage(
         resource,
@@ -129,4 +170,5 @@ def measure_image(block, resolver, style, flow, width, cancelled):
         image_style.align,
         tuple(issues),
         paths,
+        labels,
     )

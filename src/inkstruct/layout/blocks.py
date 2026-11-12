@@ -50,7 +50,7 @@ from .table_pages import (
 )
 from .tables import measure_table
 
-LAYOUT_VERSION = "markdown-mixed-mm-v4/code-grid-v1/marker-identity-v2/page-frame-breaks-v2/justify-natural-v2"
+LAYOUT_VERSION = "markdown-mixed-mm-v4/code-grid-v1/marker-identity-v2/page-frame-breaks-v2/justify-natural-v2/image-labels-v1"
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
                 result.append(
                     BodyBlock(
                         image,
-                        tuple(r for child in image.children for r in inline_runs(child)),
+                        tuple(r for child in image.children if child.kind != "image_label" for r in inline_runs(child)),
                         indent,
                         quote,
                     )
@@ -684,7 +684,8 @@ def layout_markdown(
                 )
             )
 
-    def place_box(box, x, baseline, index, *, stroke_width=None, repeated=False, container_id=None):
+    def place_box(box, x, baseline, index, *, stroke_width=None, repeated=False,
+                  container_id=None, image_label=None):
         stroke_width = style.stroke_width_mm if stroke_width is None else stroke_width
         if box.math:
             for item in box.math.glyphs:
@@ -706,6 +707,7 @@ def layout_markdown(
                     stroke_width=stroke_width,
                     repeated=repeated,
                     container_id=container_id,
+                    image_label=image_label,
                 )
             for rule in box.math.rules:
                 ops[-1].append(
@@ -776,6 +778,7 @@ def layout_markdown(
                 container_id,
                 glyph_origin_offset_mm=box.origin_offset if glyph else 0,
                 glyph_em_mm=box.em if glyph else 0,
+                image_label=image_label,
             )
         )
         return x + box.advance
@@ -1003,6 +1006,12 @@ def layout_markdown(
                     ),
                 )
             )
+            for label in figure.labels:
+                label_x = x + label.x
+                for box in label.boxes:
+                    label_x = place_box(box, label_x, y + label.baseline, line_index, container_id=label.node_id,
+                                        image_label=(block.node.node_id, label.node_id))
+                line_index += 1
             caption_y = y + figure.height + figure.gap
             for caption, (ascent, descent, height) in zip(figure.lines, figure.metrics):
                 cx = x + max(0, (figure.width - sum(b.advance for b in caption)) / 2)
@@ -1439,6 +1448,8 @@ def layout_markdown(
     for block, lines, _, _, prefix in measured:
         if block.node.node_id in measured_images:
             expected.extend(o.occurrence_id for o in block.node.occurrences)
+            expected.extend(o.occurrence_id for label in measured_images[block.node.node_id].labels
+                            for box in label.boxes for o in box_occurrences(box))
         if block.node.node_id in measured_tables:
             boxes = [
                 b

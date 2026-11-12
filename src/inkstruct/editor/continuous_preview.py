@@ -77,6 +77,10 @@ class RasterWorker(QtCore.QRunnable):
 class ContinuousPageCanvas(QtWidgets.QWidget):
     selected = QtCore.Signal(object)
     task_activated = QtCore.Signal(object)
+    label_placed = QtCore.Signal(str, float, float)
+    label_placement_cancelled = QtCore.Signal()
+    label_selected = QtCore.Signal(str, str)
+    label_moved = QtCore.Signal(str, str, float, float)
     first_page_painted = QtCore.Signal(object)
     margin = 12
     gap = 24
@@ -90,6 +94,10 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self.page_index = 0
         self.scale = 3.0
         self.reviews, self.selected_id, self.show_marks = {}, None, True
+        self._label_placement = None
+        self._label_highlight = None
+        self._label_drag = None
+        self._label_offset = QtCore.QPointF()
         # Keys contain an epoch, not a page/snapshot: cached pixels never retain
         # old documents or their potentially large trajectory catalogs.
         self.preview_cache = BoundedCache(max_entries=256, max_weight=96 * 1024**2)
@@ -148,6 +156,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self._errors.clear()
         self._startup_background = None
         self.snapshot = self.selected_id = None
+        self.highlight_image_label(None, None)
+        self.cancel_label_interaction()
         self.page_index = 0
         self.setFixedSize(1, 1)
         self.update()
@@ -185,6 +195,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self.resize_page()
 
     def resize_page(self):
+        self.cancel_label_interaction()
         if self._job:
             self._job.cancelled.set()
         self._rects.clear()
@@ -211,6 +222,40 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             self._rects[index] = tuple((f, self.rect_for(f)) for f in self.snapshot.pages[index].fragments)
         self._rects.move_to_end(index)
         return self._rects[index]
+
+    def place_image_label(self, image_id):
+        self._label_placement = image_id
+        self.setCursor(QtCore.Qt.CursorShape.CrossCursor if image_id else QtCore.Qt.CursorShape.PointingHandCursor)
+        if image_id:
+            self.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+
+    def highlight_image_label(self, image_id, label_id):
+        self._label_highlight = (image_id, label_id) if image_id and label_id else None
+        self.update()
+
+    def cancel_label_interaction(self):
+        if self._label_placement:
+            self.place_image_label(None)
+            self.label_placement_cancelled.emit()
+        if self._label_drag:
+            self._label_drag = None
+            self._label_offset = QtCore.QPointF()
+            self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            self.update()
+
+    def _image_rect(self, geometry, image_id, position):
+        return min((rect for fragment, rect in geometry if fragment.node_id == image_id
+                    and fragment.status in {"image-vector", "image-reference"}),
+                   key=lambda rect: (not rect.contains(position), (rect.center() - position).manhattanLength()),
+                   default=QtCore.QRectF())
+
+    def _highlight_rect(self, geometry):
+        bounds = {}
+        for fragment, rect in geometry:
+            if fragment.image_label == self._label_highlight:
+                key = fragment.repeated, fragment.line_index
+                bounds[key] = bounds.get(key, QtCore.QRectF()).united(rect)
+        return bounds
 
     def _spec(self):
         return (*self.page_size(), self.devicePixelRatioF())
@@ -373,7 +418,14 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 painter.drawText(page, QtCore.Qt.AlignmentFlag.AlignCenter, message)
             elif index == 0 and self._first_painted_generation != self._generation:
                 first_painted = not page.intersected(dirty).intersected(self.viewport_rect()).isEmpty()
-            for fragment, rect in self._geometry(index):
+            geometry = self._geometry(index)
+            if self._label_highlight:
+                for highlight in self._highlight_rect(geometry).values():
+                    highlight.translate(self._label_offset)
+                    painter.setPen(QtGui.QPen(self.palette().highlight().color(), 2))
+                    painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+                    painter.drawRect(highlight.adjusted(-3, -3, 3, 3))
+            for fragment, rect in geometry:
                 if not rect.adjusted(-3, -3, 3, 3).intersects(dirty):
                     continue
                 record = self.reviews.get(fragment.asset_id)
@@ -400,17 +452,60 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
     def mousePressEvent(self, event):
         if not self.snapshot or not self.isEnabled():
             return
-        index = self.page_at(event.position().y())
-        if not self.page_rect(index).contains(event.position()):
+        position = event.position()
+        index = self.page_at(position.y())
+        geometry = self._geometry(index)
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and self._label_placement:
+            image_id = self._label_placement
+            rect = self._image_rect(geometry, image_id, position)
+            self.cancel_label_interaction()
+            if rect.contains(position):
+                self.label_placed.emit(image_id, 100 * (position.x() - rect.left()) / rect.width(),
+                                       100 * (position.y() - rect.top()) / rect.height())
             return
-        for fragment, rect in self._geometry(index):
-            if fragment.status not in ('space', 'line-break') and rect.contains(event.position()):
+        if not self.page_rect(index).contains(position):
+            return
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            for fragment, rect in reversed(geometry):
+                if fragment.image_label and rect.adjusted(-3, -3, 3, 3).contains(position):
+                    image_id, label_id = fragment.image_label
+                    image_rect = self._image_rect(geometry, image_id, position)
+                    if not image_rect.isEmpty():
+                        self.label_selected.emit(image_id, label_id)
+                        self._label_drag = (image_id, label_id, image_rect, position)
+                        self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+                        return
+        for fragment, rect in geometry:
+            if fragment.status not in ('space', 'line-break') and rect.contains(position):
                 self.selected.emit(fragment)
                 if event.button() == QtCore.Qt.MouseButton.LeftButton and fragment.status in {
                     'task-checked', 'task-unchecked'
                 }:
                     self.task_activated.emit(fragment)
                 return
+
+    def mouseMoveEvent(self, event):
+        if self._label_drag:
+            self._label_offset = event.position() - self._label_drag[3]
+            self.update()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if not self._label_drag or event.button() != QtCore.Qt.MouseButton.LeftButton:
+            return super().mouseReleaseEvent(event)
+        image_id, label_id, rect, start = self._label_drag
+        delta = event.position() - start
+        self.cancel_label_interaction()
+        if self.isEnabled() and delta.manhattanLength() >= QtWidgets.QApplication.startDragDistance():
+            self.label_moved.emit(image_id, label_id, 100 * delta.x() / rect.width(), 100 * delta.y() / rect.height())
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key.Key_Escape and (self._label_placement or self._label_drag):
+            self.cancel_label_interaction()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def statistics(self):
         return {'raster_cache': self.preview_cache.statistics(), 'render_jobs': self.render_jobs,
