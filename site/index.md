@@ -34,12 +34,17 @@ features:
     linkText: 查看开发者文档
 ---
 
+## 0.1.76 生成更新
+
+- **同字原稿优先。** v6.3 可直接使用通过整字校验的分笔或连笔原稿，保留同字的多种写法。[同字原稿设置](/guide/faq#connected-handwriting)
+- **生成评分。** 可分别计算来源分和多样性分，并查看覆盖与轮换情况。[查看评分说明](/guide/faq#generation-scores)
+
+[Windows 安装器、ZIP 和校验记录](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/latest)
+
 ## 0.1.74 排版更新
 
 - **按内容确定表格总宽。** 短表可随内容收窄，长表在正文框可用宽度内换行。普通排版和纸张行格排版都支持。[设置表格总宽](/guide/faq#table-total-width)
 - **按纸张行格排版。** 自定义模板可用首末基线和行数对齐信纸。表格横边框沿纸面横线排列，较高的表格行可占多格。[设置信纸行格](/guide/faq#paper-grid)
-
-[0.1.74 安装器、ZIP 和校验记录](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74)
 
 ## 平台
 

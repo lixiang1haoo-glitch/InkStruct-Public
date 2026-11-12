@@ -4,7 +4,9 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 0.1.75 · Python / Qt
+Windows x64 · 0.1.76 · Python / Qt
+
+0.1.76 在 v6.3 中默认优先使用通过校验的同字分笔或连笔原稿。生成时可独立选择计算来源分和多样性分。
 
 0.1.75 支持图片标注。可在图上放置单行文字和行内公式，沿用文档字体，拖动定位并单独调整字号。
 
@@ -19,9 +21,9 @@ Android 采集端正在开发中，用于记录手写笔迹。
 
 ## 下载
 
-已发布的 0.1.74 提供 Windows x64 安装程序和免安装 ZIP。安装程序会检查系统里的 Microsoft Visual C++ x64 运行库。若提示缺少运行库，按提示从微软下载并安装，再打开 InkStruct 安装程序。使用 ZIP 时，先解压完整目录，再运行 `InkStruct.exe`。两种方式都需要 14.51 或更新版本的运行库。[下载 InkStruct 0.1.74](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.74) · [Microsoft 运行库](https://aka.ms/vc14/vc_redist.x64.exe)
+Windows x64 提供安装程序和免安装 ZIP。安装程序会检查系统里的 Microsoft Visual C++ x64 运行库。若提示缺少运行库，按提示从微软下载并安装，再打开 InkStruct 安装程序。使用 ZIP 时，先解压完整目录，再运行 `InkStruct.exe`。两种方式都需要 14.51 或更新版本的运行库。[下载 InkStruct](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/latest) · [Microsoft 运行库](https://aka.ms/vc14/vc_redist.x64.exe)
 
-源码、Qt 对应源码及校验清单也在发行页提供。[源码标签](https://github.com/lixiang1haoo-glitch/InkStruct-Public/tree/app-v0.1.74) · [Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)
+源码、Qt 对应源码及校验清单也在发行页提供。[Windows 分发说明](docs/WINDOWS_DISTRIBUTION.md)
 
 ## 从笔迹到文档
 
@@ -54,15 +56,15 @@ $python = ".\.venv\Scripts\python.exe"
 $env:PYTHONPATH = "$PWD/src;$PWD/artifacts/external/data_collection"
 & $python -B packaging/prepare_public_resources.py
 & $python -B -m pytest -p no:cacheprovider
-& $python -B packaging/build_inkstruct_app.py --output build/0.1.75
-& $python -B packaging/verify_public_windows.py --bundle build/0.1.75/dist/InkStruct --output build/verification
+& $python -B packaging/build_inkstruct_app.py --output build/0.1.76
+& $python -B packaging/verify_public_windows.py --bundle build/0.1.76/dist/InkStruct --output build/verification
 ```
 
 从源码启动可运行 `python -m inkstruct.application --workspace workspace`。构建安装程序时，从 [NSIS 锁](packaging/nsis-win.lock.json) 下载编译器 ZIP，保持原样，并执行：
 
 ```powershell
 & $python -B packaging/build_windows_installer.py --verification build/verification/verification.json --nsis-zip nsis-3.13.zip --output build/installer
-& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.75-Windows-x64.zip --output build/installer-check
+& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.76-Windows-x64.zip --output build/installer-check
 ```
 
 ## 许可与贡献

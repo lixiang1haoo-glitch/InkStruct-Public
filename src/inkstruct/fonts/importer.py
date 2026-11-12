@@ -111,11 +111,17 @@ def generated_records(run, writer):
             if sha(target.read_bytes()) != h:
                 raise ValueError("产物哈希不符：" + char)
         payload = _read(stem.with_suffix(".json.gz"))
-        if payload["glyph"].get("character") != char or payload["glyph"].get("writer_id") != writer:
-            raise ValueError("轨迹身份不符")
-        candidates = candidate_payloads(payload, row, writer=writer, character=char,
-                                        profile_hash=protocol.get("profile", {}).get("sha256"), limit=limit)
-        if "connected_candidates" in protocol or "connected_candidates" in payload:
+        profile_hash = protocol.get("profile", {}).get("sha256")
+        replay_only = payload.get("replay_only") is True
+        if replay_only:
+            if not profile_hash or payload.get("source_profile_sha256") != profile_hash:
+                raise ValueError("同字原稿与档案不符")
+        else:
+            if payload["glyph"].get("character") != char or payload["glyph"].get("writer_id") != writer:
+                raise ValueError("轨迹身份不符")
+            candidates = candidate_payloads(payload, row, writer=writer, character=char,
+                                            profile_hash=profile_hash, limit=limit)
+        if "connected_candidates" in protocol or "connected_candidates" in payload or replay_only:
             from ..v63_package import verify_connected_candidates
             connected = protocol.get("connected_candidates", {})
             if connected and connected.get("limit") != limit:
@@ -124,7 +130,7 @@ def generated_records(run, writer):
                                                  connected.get("limit"), connected.get("same_character", False))
             for group in groups:
                 yield group, None, {"grouped": True, "legacy_source_hash": sha(encoded(group))}, protocol
-            if groups and limit == 1:
+            if replay_only or (groups and limit == 1):
                 continue
         primary = {k: v for k, v in payload.items() if k != "candidate_pool"} if limit > 1 else payload
         yield primary["glyph"], row, primary, protocol
@@ -265,6 +271,14 @@ def make_generated(glyph, row, payload, protocol):
             }
         )
     return t, asdict(GlyphMetrics()), summary
+
+
+def font_candidate_priority(summary):
+    priority = 0 if (summary["source_kind"] == "recorded" or summary.get("generation_mode") == "same_character") else 1
+    if (summary.get("symbol_construction", {}).get("rule") == "hbar-from-h-and-minus"
+            and summary["symbol_construction"]["sources"][1]["character"] == "-"):
+        priority += 1
+    return priority
 
 
 def symbol_records(path):
@@ -554,11 +568,8 @@ def build_font(
                 if letter_style in ("upright", "italic")
                 else "unknown",
                 "enabled": True,
-                "priority": 0 if s["source_kind"] == "recorded" else 1,
+                "priority": font_candidate_priority(s),
             }
-            if (s.get("symbol_construction", {}).get("rule") == "hbar-from-h-and-minus"
-                    and s["symbol_construction"]["sources"][1]["character"] == "-"):
-                r["priority"] += 1
             candidates.append(r)
             metrics[cid] = m
             provenance[cid] = s

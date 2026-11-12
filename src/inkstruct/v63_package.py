@@ -39,6 +39,11 @@ def validate_grouped_glyph(glyph, writer, character):
         ):
             raise ValueError("物理抬笔边界无效")
     validate_trajectory(trajectory_for(glyph))
+    if glyph.get("method") == "same_character":
+        if (any(s["kind"] == "reference" or s.get("source_character") != character for s in segments)
+                or len({s["source_sha256"] for s in segments}) != 1
+                or {s.get("source_raw_order") for s in segments} != set(range(1, len(segments) + 1))):
+            raise ValueError("同字回放必须来自一份完整原稿")
 
 
 def trajectory_for(glyph):
@@ -70,21 +75,29 @@ def grouped_records(root, writer):
 
 def verify_connected_candidates(payload, row, writer, character, limit, same_character):
     groups = payload.get("connected_candidates", [])
+    replay_only = payload.get("replay_only") is True
     if not groups:
-        if "connected_count" in row or "total_candidate_count" in row or row.get("same_character_reuse"):
+        if replay_only or "connected_count" in row or "total_candidate_count" in row or row.get("same_character_reuse"):
             raise ValueError("连笔候选与逐字记录不符")
         return []
     if type(limit) is not int or limit < 1 or not isinstance(groups, list):
         raise ValueError("生成协议不支持连笔候选")
-    count = len(groups) + (row.get("candidate_count", 1) if limit > 1 else 0)
+    count = len(groups) + (row.get("candidate_count", 1) if limit > 1 and not replay_only else 0)
     if count > limit or row.get("connected_count") != len(groups) or row.get("total_candidate_count") != count:
         raise ValueError("连笔候选数量不符")
-    standard = [stroke["standard_stroke_id"] for stroke in payload["glyph"]["strokes"]]
+    standard = (payload["standard_slots"] if replay_only else
+                [stroke["standard_stroke_id"] for stroke in payload["glyph"]["strokes"]])
+    if replay_only and (not same_character or row.get("strokes") != len(standard)
+                        or row.get("source_strokes") != len(standard) or row.get("reference_strokes") != 0
+                        or row.get("missing") != [] or row.get("author_only_ready") is not True):
+        raise ValueError("整字回放来源统计不符")
     for glyph in groups:
         validate_grouped_glyph(glyph, writer, character)
-        allowed = {"cross_character", "same_character"} if same_character else {"cross_character"}
-        if (glyph.get("method") not in allowed or glyph["standard_slots"] != standard
-                or not any(len(s["standard_slots"]) == 2 for s in glyph["segments"])):
+        method = glyph.get("method")
+        if (glyph["standard_slots"] != standard
+                or (method == "same_character" and not same_character)
+                or (method != "same_character" and (replay_only or method != "cross_character"
+                    or not any(len(s["standard_slots"]) == 2 for s in glyph["segments"])))):
             raise ValueError("连笔候选缺少标准笔位、来源或同字授权")
     if bool(row.get("same_character_reuse")) != any(g["method"] == "same_character" for g in groups):
         raise ValueError("同字连笔来源记录不符")

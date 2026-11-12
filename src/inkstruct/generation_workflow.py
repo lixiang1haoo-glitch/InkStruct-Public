@@ -19,7 +19,7 @@ from .samples import sha256_file
 METHODS = {"v63": "v6.3 exp（支持连笔）", "v62": "v6.2 exp", "v61": "v6.1 exp", "v4": "v4 adaptive"}
 VERSION = "desktop-corrected-v61-20261014.1"
 V62_VERSION = "desktop-semantic-v62-20261020.1"
-V63_VERSION = "desktop-connected-v63-1"
+V63_VERSION = "desktop-connected-v63-2"
 MULTI_CANDIDATE_METHODS = {"v62", "v63"}
 SOURCE_METHODS = {"v61", *MULTI_CANDIDATE_METHODS}
 
@@ -273,7 +273,8 @@ class GenerationWorkflow:
         return record, {"message": f"建档完成：{profile.sample_count} 份，{profile.character_count} 字；有效供体 {record['effective_donors']} 份。", "profile": str(path)}
 
     def generate(self, writer, source, method, text, *, all_supported=False, progress=None, cancelled=lambda: False,
-                 workers='auto', targets=None, candidate_limit=None, preparation=None, same_character=False):
+                 workers='auto', targets=None, candidate_limit=None, preparation=None, same_character=None,
+                 source_score=False, diversity_score=False):
         from .generation_variants import DEFAULT_CANDIDATES, candidate_attempt_limit
         from .structures import StructureRepository
         if candidate_limit is None:
@@ -281,8 +282,12 @@ class GenerationWorkflow:
         candidate_attempt_limit(candidate_limit)
         if method not in MULTI_CANDIDATE_METHODS and candidate_limit != 1:
             raise ValueError('v6.2 和 v6.3 支持同字多候选，其他方法每字保留一份。')
+        if same_character is None:
+            same_character = method == "v63"
         if same_character and method != "v63":
-            raise ValueError("只有 v6.3 支持同字连笔回放。")
+            raise ValueError("只有 v6.3 支持同字原稿回放。")
+        if source_score and method == "v4":
+            raise ValueError("v4 缺少逐笔来源记录，无法计算来源分。")
         self.require("start" if preparation is not None else "generate", writer, source, method)
         repository = StructureRepository(self.database)
         from .generation_targets import structure_targets, target_manifest, validate_targets
@@ -333,6 +338,15 @@ class GenerationWorkflow:
                                   semantic=method in MULTI_CANDIDATE_METHODS, workers=workers, target_manifest=manifest,
                                   candidate_limit=candidate_limit, same_character=same_character)
             completed_characters = result.get("completed_preview", "")
+        if source_score or diversity_score:
+            from .generation_scores import evaluate
+
+            if preparation is not None:
+                preparation("计算生成指标", "按本次目标字和可选字形统计")
+            scores = evaluate(output, writer, requested, source=source_score, diversity=diversity_score,
+                              completed=result['completed_count'])
+            result['scores'] = scores
+            write(output / 'generation-scores.json', scores)
         variants = result.get("variant_character_count", 0)
         note = f"其中 {variants} 字有多份可用字形。" if variants else ""
         status = "已取消，保留已完成部分。 " if result.get("status") == "cancelled" else ""
@@ -395,12 +409,19 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
     profile = load_profile(Path(profile_record["path"]))
     connected = profile_record.get("connected")
     units = []
+    split_by_character, whole_by_character = {}, {}
     if connected is not None:
-        from .v63 import ARCHIVE, CONNECTED_METHOD, connected_candidates
+        from .v63 import ARCHIVE, CONNECTED_METHOD, connected_candidates, same_character_candidates
         archive = read(connected["path"])
         if archive.get("schema_version") != ARCHIVE or archive.get("writer") != writer:
             raise ValueError("连笔档案格式或作者不符")
         units = archive["units"]
+        if same_character:
+            for sample in profile.source_trajectories.values():
+                split_by_character.setdefault(sample.character, []).append(sample)
+            for unit in units:
+                if unit["path"] == "whole":
+                    whole_by_character.setdefault(unit["character"], []).append(unit)
     engine = generator_class(profile, base, target, split_rules=True)
     if cancelled():
         raise InterruptedError("生成已取消")
@@ -436,14 +457,42 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
     engine.rule_log = []
     count = 0
 
+    def save_payload(output, stem, row, payload):
+        path = stem.with_suffix(".json.gz")
+        path.write_bytes(gzip.compress(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode(), mtime=0))
+        row["files"][str(path.relative_to(output))] = sha256_file(path)
+
+    def save_replays(output, stem, row, replays, *, cross_error=None):
+        n = len(replays)
+        checks = {"protocol": [], "source_integrity": []}
+        standard = replays[0]["standard_slots"]
+        row.update(status="complete", strokes=len(standard), source_strokes=len(standard), reference_strokes=0,
+                   missing=[], same_character_reuse=True, connected_count=n, total_candidate_count=n,
+                   checks=checks, author_only_ready=True)
+        payload = {"replay_only": True, "connected_candidates": replays, "standard_slots": standard,
+                   "source_profile_sha256": profile_record["sha256"], "checks": checks}
+        if cross_error is not None:
+            payload["cross_character_error"] = f"{type(cross_error).__name__}: {cross_error}"
+        save_payload(output, stem, row, payload)
+        write(stem.with_suffix(".json"), row)
+        return row
+
     def compute(character, output):
         nonlocal count
         output = Path(output)
         folder = output / writer
         folder.mkdir(parents=True, exist_ok=True)
         stem = folder / f"{ord(character):04X}"
-        row = {"writer": writer, "character": character, "files": {}, "warnings": [], "same_character_reuse": False}
+        identity = {"writer": writer, "character": character}
+        row = {**identity, "files": {}, "warnings": [], "same_character_reuse": False}
+        replays = []
         try:
+            if character in split_by_character or character in whole_by_character:
+                replays = same_character_candidates(writer, base.get(character), split_by_character.get(character, ()),
+                                                    whole_by_character.get(character, ()), limit=candidate_limit,
+                                                    cancelled=cancelled)
+                if len(replays) == candidate_limit:
+                    return save_replays(output, stem, row, replays)
             ctx = engine.prepare(character)
             plan = ctx.baseline_plan
             logs = {}
@@ -488,33 +537,35 @@ def prepare_generation(writer, base, profile_record, *, semantic=False, referenc
                 "fallback": fill, "rule_log": engine.rule_log, "checks": checks, "missing": gaps,
                 "author_only_ready": not gaps, "source_profile_sha256": profile_record["sha256"],
                 "structure_correction": target.events.get(character), "reference_identity": target.identity}
+            remaining = candidate_limit - len(replays)
             if candidate_limit > 1:
                 logs["variant_trials"] = []
                 alternatives = alternative_candidates(engine, ctx, glyph, plan, sources,
-                                                      limit=candidate_limit, cancelled=cancelled,
+                                                      limit=remaining, cancelled=cancelled,
                                                       diagnostics=logs["variant_trials"])
                 for candidate in alternatives:
                     candidate["source_profile_sha256"] = profile_record["sha256"]
                 payload["candidate_pool"] = {"version": POOL_VERSION, "alternatives": alternatives}
                 row["candidate_count"] = 1 + len(alternatives)
-            if units:
-                groups = connected_candidates(writer, base.get(character), ctx.graph, payload["glyph"], rows,
-                                              units, base, same_character=same_character,
-                                              limit=max(1, candidate_limit - row.get("candidate_count", 1)),
-                                              cancelled=cancelled)
-                if groups:
-                    if candidate_limit > 1:
-                        alternatives = payload["candidate_pool"]["alternatives"]
-                        del alternatives[max(0, candidate_limit - len(groups) - 1):]
-                        row["candidate_count"] = 1 + len(alternatives)
-                    payload["connected_candidates"] = groups
-                    row["connected_count"] = len(groups)
-                    row["total_candidate_count"] = len(groups) + (row.get("candidate_count", 1) if candidate_limit > 1 else 0)
-                    row["same_character_reuse"] = any(g["method"] == "same_character" for g in groups)
-            path = stem.with_suffix(".json.gz")
-            path.write_bytes(gzip.compress(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode(), mtime=0))
-            row["files"][str(path.relative_to(output))] = sha256_file(path)
+            groups = replays
+            if units and (remaining > 1 or candidate_limit == 1):
+                groups = replays + connected_candidates(
+                    writer, base.get(character), ctx.graph, payload["glyph"], rows, units, base,
+                    same_character=False, limit=max(1, remaining - row.get("candidate_count", 1)),
+                    cancelled=cancelled)
+            if groups:
+                if candidate_limit > 1:
+                    del alternatives[max(0, candidate_limit - len(groups) - 1):]
+                    row["candidate_count"] = 1 + len(alternatives)
+                payload["connected_candidates"] = groups
+                row["connected_count"] = len(groups)
+                row["total_candidate_count"] = len(groups) + (row.get("candidate_count", 1) if candidate_limit > 1 else 0)
+                row["same_character_reuse"] = bool(replays)
+            save_payload(output, stem, row, payload)
         except Exception as error:  # noqa: BLE001 - isolate glyph failures; never publish invalid geometry
+            if replays and not isinstance(error, OSError):
+                engine.rule_log = []
+                return save_replays(output, stem, {**identity, "warnings": [], "files": {}}, replays, cross_error=error)
             row.update(status="failed", error=f"{type(error).__name__}: {error}")
         write(stem.with_suffix(".json"), row)
         engine.rule_log = []
