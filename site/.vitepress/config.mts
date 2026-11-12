@@ -33,6 +33,7 @@ export default defineConfig({
       ] },
       { text: '进阶教程', items: [
         { text: '从 PDF 制作 A4 笔记模板', link: '/guide/physics-a4-template' },
+        { text: '用两张预印纸制作教案模板', link: '/guide/lesson-plan-template' },
       ] },
       { text: '帮助与参考', items: [
         { text: '常见问题', link: '/guide/faq' },
