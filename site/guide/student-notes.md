@@ -64,3 +64,5 @@ SVG 是记录笔迹路径的文件，写字机可以沿着这些路径写字。�
 3. 先用一张 A4 草稿纸试写，检查字的大小和第一行的落笔位置。若大小合适但位置有偏差，先核对纸张放置方向和机器的起笔位置。若整页写得偏大或偏小，再调整 InkStruct 导出时的横向或纵向比例。每次只试写第一页，确认效果后再导出其余页。
 
 [![炽写 3.0.310 示例对应的 InkStruct 导出设置，两项比例均为 132.293%](/screenshots/student-notes/svg-export.png)](/screenshots/student-notes/svg-export.png)
+
+想为自己的纸张配置正文区，可以跟做进阶教程 [从 PDF 制作 A4 笔记模板](./physics-a4-template)。

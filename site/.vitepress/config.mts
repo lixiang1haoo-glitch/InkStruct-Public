@@ -31,6 +31,9 @@ export default defineConfig({
         { text: '笔记篇 · A4 物理笔记', link: '/guide/student-notes' },
         { text: '三字采集练习', link: '/guide/first-document' },
       ] },
+      { text: '进阶教程', items: [
+        { text: '从 PDF 制作 A4 笔记模板', link: '/guide/physics-a4-template' },
+      ] },
       { text: '帮助与参考', items: [
         { text: '常见问题', link: '/guide/faq' },
         { text: '仓库速查页', link: `${repository}/blob/main/docs/USER_GUIDE.md` },
