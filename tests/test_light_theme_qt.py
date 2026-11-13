@@ -78,7 +78,9 @@ def test_han_actions_fit_between_reference_and_canvas(tmp_path, scale):
 from pathlib import Path
 import sys
 from PySide6 import QtCore, QtWidgets
+from PySide6.QtTest import QTest
 from handwriting_collector.models import TrajectoryPoint
+from handwriting_collector.tasks import CollectionTask, TaskRepository
 from inkstruct.collector import main
 
 app = QtWidgets.QApplication([])
@@ -91,17 +93,25 @@ app.processEvents()
 tab = window.single_widget
 assert window.width() == 980
 buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
-reference = tab.stroke_reference.geometry()
-canvas = tab.canvas.geometry()
-assert canvas.width() >= tab.canvas.minimumWidth()
-for i, button in enumerate(buttons):
-    box = button.geometry()
-    assert button.isVisible() and box.height() >= 38
-    assert reference.right() < box.left() < box.right() < canvas.left()
-    assert canvas.top() <= box.top() < box.bottom() <= canvas.bottom()
-    if i:
-        assert buttons[i - 1].geometry().bottom() < box.top()
-    assert not button.isEnabled()
+def position(button):
+    return QtCore.QRect(button.mapTo(tab, QtCore.QPoint()), button.size())
+
+for step in (15, 20, 27, 30):
+    tab.canvas_size_slider.setValue(step)
+    QTest.qWait(30)
+    reference = tab.stroke_reference.geometry()
+    canvas = tab.canvas.geometry()
+    assert canvas.width() >= tab.canvas.minimumWidth()
+    column = position(buttons[0]).united(position(buttons[-1]))
+    assert abs(column.center().y() - canvas.center().y()) <= 1, (step, column, canvas)
+    for i, button in enumerate(buttons):
+        box = position(button)
+        assert button.isVisible() and box.width() >= 112 and box.height() >= 48
+        assert reference.right() < box.left() < box.right() < canvas.left()
+        assert button.text().splitlines()[1] == ("Ctrl+Z", "Delete", "Shift+Enter", "Enter")[i]
+        if i:
+            assert position(buttons[i - 1]).bottom() < box.top()
+        assert not button.isEnabled()
 
 tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 10))
 tab.canvas.trajectory_changed.emit()
@@ -113,6 +123,20 @@ tab.canvas.trajectory_changed.emit()
 tab.clear_button.click()
 assert tab.canvas.trajectory.point_count == 0
 assert not tab.save_button.isEnabled() and not tab.skip_button.isEnabled()
+writer = tab._capture_catalog.create_writer("演示书写者")
+tab.writer_picker.reload(writer)
+task = CollectionTask.create("快捷键验证", "synthetic", writer, [("永", 1, 0), ("中", 1, 1), ("人", 1, 2)])
+TaskRepository(window.output_root).save(task)
+tab.set_task(task)
+tab.skip_button.setFocus()
+app.processEvents()
+QTest.keyClick(tab.skip_button, QtCore.Qt.Key.Key_Return, QtCore.Qt.KeyboardModifier.ShiftModifier)
+assert task.current_item().character == "中" and task.items[0].status == "skipped"
+window.tabs.setCurrentIndex(1)
+window.symbol_widget.canvas_size_slider.setFocus()
+app.processEvents()
+QTest.keyClick(window.symbol_widget.canvas_size_slider, QtCore.Qt.Key.Key_Return, QtCore.Qt.KeyboardModifier.ShiftModifier)
+assert task.current_item().character == "中"
 window.close()
 """
     result = subprocess.run(
