@@ -72,6 +72,57 @@ window.close()
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.parametrize("scale", ["1", "1.5"])
+def test_han_actions_fit_between_reference_and_canvas(tmp_path, scale):
+    program = r"""
+from pathlib import Path
+import sys
+from PySide6 import QtCore, QtWidgets
+from handwriting_collector.models import TrajectoryPoint
+from inkstruct.collector import main
+
+app = QtWidgets.QApplication([])
+QtCore.QSettings.setDefaultFormat(QtCore.QSettings.IniFormat)
+QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, sys.argv[1])
+window = main(["InkStruct"], create_only=True, workspace=Path(sys.argv[1]))
+window.resize(980, 680)
+window.show()
+app.processEvents()
+tab = window.single_widget
+assert window.width() == 980
+buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
+reference = tab.stroke_reference.geometry()
+canvas = tab.canvas.geometry()
+assert canvas.width() >= tab.canvas.minimumWidth()
+for i, button in enumerate(buttons):
+    box = button.geometry()
+    assert button.isVisible() and box.height() >= 38
+    assert reference.right() < box.left() < box.right() < canvas.left()
+    assert canvas.top() <= box.top() < box.bottom() <= canvas.bottom()
+    if i:
+        assert buttons[i - 1].geometry().bottom() < box.top()
+    assert not button.isEnabled()
+
+tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 10))
+tab.canvas.trajectory_changed.emit()
+assert tab.undo_button.isEnabled() and tab.clear_button.isEnabled()
+tab.undo_button.click()
+assert tab.canvas.trajectory.point_count == 0
+tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 20))
+tab.canvas.trajectory_changed.emit()
+tab.clear_button.click()
+assert tab.canvas.trajectory.point_count == 0
+assert not tab.save_button.isEnabled() and not tab.skip_button.isEnabled()
+window.close()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(tmp_path)],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_SCALE_FACTOR": scale},
+        capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_font_library_display_recolors_loaded_svg_when_theme_changes(tmp_path):
     program = r"""
 import sys

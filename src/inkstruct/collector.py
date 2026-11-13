@@ -104,7 +104,17 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             canvas_index = self.layout().indexOf(self.canvas)
             status_row = self.layout().itemAt(canvas_index - 1).layout()
             self.display_controls = capture_display_controls(status_row, self.progress_bar)
+            footer_actions = self.layout().itemAt(canvas_index + 1).layout()
             self.layout().removeWidget(self.canvas)
+            actions = QtWidgets.QVBoxLayout()
+            actions.setSpacing(8)
+            for button in (self.undo_button, self.clear_button, self.skip_button, self.save_button):
+                footer_actions.removeWidget(button)
+                button.setMinimumHeight(38)
+                actions.addWidget(button)
+            actions.addStretch()
+            self.layout().removeItem(footer_actions)
+            footer_actions.deleteLater()
             size_row, self.canvas_size_slider, self.canvas_size_label = canvas_slider_row(
                 "画布大小", "汉字画布大小", "先保存或重写当前笔迹，再调整画布大小"
             )
@@ -126,6 +136,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             writing_row = QtWidgets.QHBoxLayout()
             writing_row.setSpacing(16)
             writing_row.addWidget(self.stroke_reference)
+            writing_row.addLayout(actions)
             writing_row.addWidget(self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignTop)
             self.layout().insertLayout(canvas_index, writing_row, 1)
             self.stroke_count_label = QtWidgets.QLabel("笔画数量：等待书写")
