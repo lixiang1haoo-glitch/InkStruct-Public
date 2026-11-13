@@ -3,15 +3,16 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QElapsedTimer, QEvent, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QTabletEvent
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QTabletEvent
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from .models import Trajectory, TrajectoryPoint
 
 
 class TrajectoryCanvas(QWidget):
-    """Tablet-only trajectory canvas shared by single and line modes."""
+    """Tablet-only trajectory canvas with incremental, pressure-sensitive ink."""
 
+    # UI state changes at pen-down/up, undo and clear. Motion only affects the ink.
     trajectory_changed = Signal()
 
     def __init__(
@@ -33,7 +34,11 @@ class TrajectoryCanvas(QWidget):
         self._pen_down = False
         self._timer = QElapsedTimer()
         self._clock_started = False
+        self._render_cache = None
+        self._render_key = None
+        self._drawn_strokes = []
         self.setAttribute(Qt.WidgetAttribute.WA_TabletTracking)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setMinimumSize(360, 260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -51,17 +56,16 @@ class TrajectoryCanvas(QWidget):
                 self._timer.start()
                 self._clock_started = True
             self._pen_down = True
-            self.trajectory.start_stroke(self._point(position, pressure))
+            point = self._point(position, pressure)
+            self.trajectory.start_stroke(point)
             self.trajectory_changed.emit()
-            self.update()
+            self._update_ink(point, point)
         elif (
             event_type == QEvent.Type.TabletMove
             and self._pen_down
             and pressure > self.pen_threshold
         ):
-            self.trajectory.append_point(self._point(position, pressure))
-            self.trajectory_changed.emit()
-            self.update()
+            self._append_ink(self._point(position, pressure))
         elif event_type == QEvent.Type.TabletRelease:
             self.finish_stroke(position, pressure)
         event.accept()
@@ -74,6 +78,21 @@ class TrajectoryCanvas(QWidget):
             t_ms=self._timer.elapsed(),
         )
 
+    def _update_ink(self, first: TrajectoryPoint, second: TrajectoryPoint) -> None:
+        radius = max(self._ink_width(first.pressure), self._ink_width(second.pressure)) / 2 + 2
+        dirty = QRectF(QPointF(first.x, first.y), QPointF(second.x, second.y)).normalized()
+        self.update(dirty.adjusted(-radius, -radius, radius, radius).toAlignedRect())
+
+    def _append_ink(self, point: TrajectoryPoint) -> None:
+        if not self.trajectory.strokes:
+            self.trajectory.start_stroke(point)
+            self.trajectory_changed.emit()
+            self._update_ink(point, point)
+            return
+        previous = self.trajectory.strokes[-1].points[-1]
+        self.trajectory.append_point(point)
+        self._update_ink(previous, point)
+
     def finish_stroke(self, position: QPointF, pressure: float = 0.0) -> bool:
         """Finish an active stroke and preserve a distinct release position."""
         was_active = self._pen_down
@@ -85,12 +104,11 @@ class TrajectoryCanvas(QWidget):
                 release_point.x - previous.x, release_point.y - previous.y
             )
             if distance >= self.release_distance_threshold:
-                self.trajectory.append_point(release_point)
+                self._append_ink(release_point)
                 appended = True
         self._pen_down = False
         if was_active:
             self.trajectory_changed.emit()
-            self.update()
         return appended
 
     def undo_last_stroke(self) -> None:
@@ -133,16 +151,63 @@ class TrajectoryCanvas(QWidget):
         return True
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         palette = self.palette()
-        painter.fillRect(self.rect(), palette.base())
-        painter.setPen(palette.mid().color())
-        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
-        if self.show_grid:
-            self._draw_grid(painter)
-        for stroke in self.trajectory.strokes:
-            self._draw_stroke(painter, stroke.points)
+        dpr = self.devicePixelRatioF()
+        key = (self.size(), dpr, palette.cacheKey(), self.font().key(),
+               self.show_grid, self.grid_scale, self.stroke_width_scale)
+        strokes = self.trajectory.strokes
+        old = self._drawn_strokes
+        # Stroke edits and a change in the render surface require replay. Normal
+        # tablet motion only extends the current stroke's already painted prefix.
+        rebuild = key != self._render_key or len(old) > len(strokes) or any(
+            stroke is not saved or len(stroke.points) < count
+            or (count and stroke.points[count - 1] is not last)
+            for stroke, (saved, count, last) in zip(strokes, old)
+        )
+        if rebuild:
+            self._render_cache = QPixmap(math.ceil(self.width() * dpr), math.ceil(self.height() * dpr))
+            self._render_cache.setDevicePixelRatio(dpr)
+            self._render_cache.fill(palette.base().color())
+            self._render_key = key
+            old = []
+
+        ink = palette.text().color()
+        if rebuild or len(old) != len(strokes) or any(
+            len(stroke.points) != count for stroke, (_, count, _) in zip(strokes, old)
+        ):
+            cache_painter = QPainter(self._render_cache)
+            cache_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if rebuild:
+                cache_painter.setFont(self.font())
+                cache_painter.setPen(palette.mid().color())
+                cache_painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
+                if self.show_grid:
+                    self._draw_grid(cache_painter)
+            pen = self._ink_pen(ink)
+            for i, stroke in enumerate(strokes):
+                start = max(1, old[i][1]) if i < len(old) else 1
+                points = stroke.points
+                for j in range(start, len(points)):
+                    first, second = points[j - 1], points[j]
+                    pen.setWidthF(self._ink_width((first.pressure + second.pressure) / 2))
+                    cache_painter.setPen(pen)
+                    cache_painter.drawLine(QPointF(first.x, first.y), QPointF(second.x, second.y))
+            cache_painter.end()
+            self._drawn_strokes = [(stroke, len(stroke.points), stroke.points[-1] if stroke.points else None)
+                                   for stroke in strokes]
+
+        painter = QPainter(self)
+        painter.drawPixmap(0, 0, self._render_cache)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = self._ink_pen(ink)
+        # Keep single-point strokes out of the cache so the first segment can
+        # replace the temporary dot without retaining its different width.
+        for stroke in strokes:
+            if len(stroke.points) == 1:
+                point = stroke.points[0]
+                pen.setWidthF(self._ink_width(point.pressure))
+                painter.setPen(pen)
+                painter.drawPoint(QPointF(point.x, point.y))
         if self.char_ends:
             painter.setPen(QPen(QColor("#16A34A"), 3.0))
             flat_points = list(self.trajectory.iter_points())
@@ -166,37 +231,9 @@ class TrajectoryCanvas(QWidget):
         painter.drawLine(QPointF(left, top), QPointF(left + side, top + side))
         painter.drawLine(QPointF(left + side, top), QPointF(left, top + side))
 
-    def _draw_stroke(self, painter: QPainter, points: list[TrajectoryPoint]) -> None:
-        if not points:
-            return
-        ink = self.palette().text().color()
-        if len(points) == 1:
-            point = points[0]
-            width = max(1.2, (1.0 + point.pressure * 4.0) * self.stroke_width_scale)
-            painter.setPen(
-                QPen(
-                    ink,
-                    width,
-                    Qt.PenStyle.SolidLine,
-                    Qt.PenCapStyle.RoundCap,
-                    Qt.PenJoinStyle.RoundJoin,
-                )
-            )
-            painter.drawPoint(QPointF(point.x, point.y))
-            return
-        for first, second in zip(points, points[1:]):
-            width = max(
-                1.2,
-                (1.0 + (first.pressure + second.pressure) * 2.0)
-                * self.stroke_width_scale,
-            )
-            painter.setPen(
-                QPen(
-                    ink,
-                    width,
-                    Qt.PenStyle.SolidLine,
-                    Qt.PenCapStyle.RoundCap,
-                    Qt.PenJoinStyle.RoundJoin,
-                )
-            )
-            painter.drawLine(QPointF(first.x, first.y), QPointF(second.x, second.y))
+    def _ink_width(self, pressure: float) -> float:
+        return max(1.2, (1.0 + pressure * 4.0) * self.stroke_width_scale)
+
+    @staticmethod
+    def _ink_pen(ink: QColor) -> QPen:
+        return QPen(ink, 1.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)

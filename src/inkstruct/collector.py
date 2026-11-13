@@ -162,7 +162,6 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.layout().insertWidget(canvas_index, self.stroke_count_label)
             self.layout().insertWidget(canvas_index + 1, self.connected_mode)
             self.connected_mode.toggled.connect(self.refresh)
-            self.canvas.trajectory_changed.connect(self._sync_stroke_reference)
             self.boundary_guard = install_capture_boundary_guard(self, QtCore, QtGui, QtWidgets)
             self.refresh()
 
