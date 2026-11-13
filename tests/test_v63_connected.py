@@ -273,9 +273,17 @@ def test_scores_deduplicate_geometry_and_count_unfinished_targets(monkeypatch):
     records = [candidate(replay, 0), candidate(replay, 0), candidate(replay, 1), candidate(generated, 2),
                candidate(cross_character, 0)]
     monkeypatch.setattr(generation_scores, "generated_records", lambda *_: iter(records))
-    monkeypatch.setattr(generation_scores, "make_generated", lambda glyph, _, trajectory, __:
-                        (trajectory, {}, {"source_kind": "generated", "generation_mode": glyph.get("method")}))
+    def make_generated(glyph, _, trajectory, __):
+        summary = {"source_kind": "generated", "generation_mode": glyph.get("method")}
+        if glyph is replay:
+            summary["v63_standard_slots"] = ["s1"]
+        return trajectory, {}, summary
+
+    monkeypatch.setattr(generation_scores, "make_generated", make_generated)
     result = generation_scores.evaluate(None, "alice", "明明照月", source=True, diversity=True, completed=2)
     assert result == {"target_count": 3, "covered_count": 2, "replayed_count": 1, "rotatable_count": 1,
                       "source_score": pytest.approx((100 + 55) / 3),
                       "diversity_score": pytest.approx(20.629947 / 3)}
+    assert generation_scores.font_candidate_priority(
+        {"source_kind": "generated", "generation_mode": "same_character"}
+    ) == 1
