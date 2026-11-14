@@ -642,8 +642,17 @@ def install_capture_management(window, root):
         row.addWidget(widget.writer_picker, 1)
         new = QtWidgets.QPushButton('新建书写者…')
         rename = QtWidgets.QPushButton('修改名称…')
+        profiles = QtWidgets.QPushButton('书写者资料')
+        profile_menu = QtWidgets.QMenu(profiles)
+        profile_menu.addAction('导入书写者资料…', lambda _checked=False, w=widget: transfer_writer_profile(w, importing=True))
+        profile_menu.addAction('导出当前书写者资料…', lambda _checked=False, w=widget: transfer_writer_profile(w, importing=False))
+        profile_menu.addSeparator()
+        profile_menu.addAction('导入样本文件或 ZIP 到当前书写者…', lambda _checked=False, w=widget: import_writer_samples(w))
+        profile_menu.addAction('导入样本目录到当前书写者…', lambda _checked=False, w=widget: import_writer_samples(w, directory=True))
+        profiles.setMenu(profile_menu)
         row.addWidget(new)
         row.addWidget(rename)
+        row.addWidget(profiles)
         column.addLayout(row)
         widget.task_help = QtWidgets.QLabel('先选择或新建书写者，再创建任务。任务列表可恢复历史任务，关闭与取消不删除样本。')
         widget.task_help.setWordWrap(True)
@@ -686,3 +695,78 @@ def install_capture_management(window, root):
         widget.pause_button.clicked.connect(widget.pause_task)
         widget.cancel_task_button.clicked.connect(widget.cancel_task)
         widget.refresh()
+
+
+def transfer_writer_profile(widget, *, importing):
+    catalog = widget._capture_catalog
+    key = widget.writer_picker.text()
+    filters = 'InkStruct 书写者资料 (*.inkwriter)'
+    try:
+        if importing:
+            path, _ = QtWidgets.QFileDialog.getOpenFileName(widget, '导入书写者资料', '', filters)
+            if path:
+                key = catalog.import_writer(path)
+                widget.writer_picker.reload(key)
+                widget.choose_writer(key)
+        elif key:
+            path, _ = QtWidgets.QFileDialog.getSaveFileName(widget, '导出书写者资料', key + '.inkwriter', filters)
+            if path:
+                catalog.export_writer(key, path)
+        else:
+            raise ValueError('请先选择要导出的书写者')
+    except (OSError, ValueError) as error:
+        widget._capture_error(error)
+
+
+def import_writer_samples(widget, *, directory=False):
+    from .fonts.ui import Job
+    from .writer_samples import SampleImports, inspect_samples
+
+    if getattr(widget, '_writer_import_job', None) is not None:
+        return
+    writer = widget.writer_picker.text()
+    if not writer:
+        widget._capture_error(ValueError('请先选择接收样本的书写者'))
+        return
+    if directory:
+        path = QtWidgets.QFileDialog.getExistingDirectory(widget, '选择样本目录')
+    else:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(widget, '选择样本文件或 ZIP', '', '样本 (*.json *.zip)')
+    if not path:
+        return
+    catalog, kind = widget._capture_catalog, widget._capture_kind
+
+    def start(function, completed):
+        job = widget._writer_import_job = Job(function)
+        job.signals.completed.connect(completed, QtCore.Qt.ConnectionType.QueuedConnection)
+        job.signals.failed.connect(failed, QtCore.Qt.ConnectionType.QueuedConnection)
+        QtCore.QThreadPool.globalInstance().start(job)
+
+    def failed(error):
+        widget._writer_import_job = None
+        widget._capture_error(ValueError(error))
+
+    def finished(count):
+        widget._writer_import_job = None
+        widget.task_help.setText(f'已向 {writer} 导入 {count} 份新样本。')
+
+    def confirm(selection):
+        if widget._capture_catalog is not catalog or widget.writer_picker.text() != writer:
+            widget._writer_import_job = None
+            return
+        box = QtWidgets.QMessageBox(widget)
+        box.setWindowTitle('确认样本归属')
+        box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+        box.setText(f'原书写者 ID  {selection.writer}\n目标书写者 ID  {writer}\n'
+                    f'{len(selection.records)} 份样本，{len(selection.characters)} 个字符\n\n'
+                    '确认样本由目标书写者录制。导入副本会记录原书写者、原样本 ID 和哈希。')
+        box.setDetailedText(f'{path}\n\n字符范围\n{selection.characters}')
+        buttons = QtWidgets.QMessageBox.StandardButton
+        box.setStandardButtons(buttons.Yes | buttons.Cancel)
+        box.setDefaultButton(buttons.Cancel)
+        if box.exec() == buttons.Yes and widget._capture_catalog is catalog and widget.writer_picker.text() == writer:
+            start(lambda _: SampleImports(catalog).add(kind, writer, selection), finished)
+        else:
+            widget._writer_import_job = None
+
+    start(lambda _: inspect_samples(path, kind), confirm)

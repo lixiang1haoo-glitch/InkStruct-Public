@@ -3,8 +3,11 @@
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from ..document.schema import digest
 from ..punctuation import SHARED_PUNCTUATION
+from ..samples import sha256_file
 from ..symbol_catalog import SYMBOL_GROUPS, symbol_group
+from ..writer_links import WriterLink, WriterLinkRequired
 from .publication_rules import PublicationRules, RuleEvidence, RuleRow
 
 
@@ -153,6 +156,26 @@ def require_publication_stamp(writer, run, symbols, stamp):
         raise PublicationInputsChanged("批次、样本或复用配置已变化，请重新核对待制包清单。")
 
 
+def writer_authorizer(writer, run, links):
+    if not run or links is None:
+        return None
+
+    def authorize(scope):
+        root = Path(run).resolve()
+        # A legacy writer ID is only meaningful within these exact batch files.
+        files = sorted(path for path in root.rglob('*')
+                       if path.is_file() and (path.suffix == '.json' or path.name.endswith('.json.gz')))
+        if not files:
+            raise ValueError('无法核验目标汉字批次的来源文件')
+        batch_hash = digest([(path.relative_to(root).as_posix(), sha256_file(path)) for path in files])
+        link = WriterLink(writer, batch_hash, scope)
+        if not links.allows(link):
+            raise WriterLinkRequired(link)
+        return link
+
+    return authorize
+
+
 def candidate_coverage(records, provenance):
     coverage = Counter()
     for record in records:
@@ -253,7 +276,7 @@ def rule_rows(coverage, groups, evidence, issues, has_symbols, rules=Publication
     return rows
 
 
-def review_selection(writer, run, symbols, name, groups=None, *, rules=PublicationRules()):
+def review_selection(writer, run, symbols, name, groups=None, *, rules=PublicationRules(), writer_links=None):
     from ..capture_management import valid_writer
     from ..generation_variants import MAX_CANDIDATES
     from .importer import _read, build_font
@@ -267,7 +290,8 @@ def review_selection(writer, run, symbols, name, groups=None, *, rules=Publicati
     evidence = RuleEvidence()
     records, provenance = build_font(None, writer=writer, name=name, symbols=symbols,
                                      symbol_groups=groups, diagnostics=diagnostics,
-                                     rules=rules, rule_evidence=evidence)
+                                     rules=rules, rule_evidence=evidence,
+                                     authorize_symbols=writer_authorizer(writer, run, writer_links))
     coverage = candidate_coverage(records, provenance)
     if batch and (groups is None or "han" in groups):
         for char in batch["characters"]:
