@@ -15,6 +15,7 @@ import tempfile
 import time
 import uuid
 import zipfile
+import re
 from pathlib import Path, PurePosixPath
 
 from ..assets.glyph_provider import GlyphMetrics
@@ -174,6 +175,23 @@ def trajectory_hashes(t):
 
 
 def validate_summary(summary, count):
+    if 'writer_link' in summary or 'imported_from' in summary:
+        from ..capture_management import valid_writer
+
+        link = summary.get('writer_link')
+        if 'writer_link' in summary and (not isinstance(link, dict)
+                or set(link) != {'source_writer', 'target_writer', 'batch_sha256', 'samples_sha256'}
+                or not all(valid_writer(link[k]) for k in ('source_writer', 'target_writer'))
+                or link['source_writer'] == link['target_writer']
+                or not all(isinstance(link[k], str) and re.fullmatch(r'[0-9a-f]{64}', link[k])
+                           for k in ('batch_sha256', 'samples_sha256'))):
+            raise ValueError('无效的书写者关联信息')
+        origin = summary.get('imported_from')
+        if 'imported_from' in summary and (not isinstance(origin, dict)
+                or set(origin) != {'writer_id', 'sample_id', 'sha256'} or not valid_writer(origin['writer_id'])
+                or not isinstance(origin['sample_id'], str) or not origin['sample_id']
+                or not isinstance(origin['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', origin['sha256'])):
+            raise ValueError('无效的样本导入来源')
     construction = summary.get('symbol_construction', {})
     if isinstance(construction, dict) and 'math_axis_em' in construction:
         axis = construction['math_axis_em']

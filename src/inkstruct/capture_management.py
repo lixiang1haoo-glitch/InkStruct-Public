@@ -89,6 +89,34 @@ class CaptureCatalog:
         value['writers'][key] = {'name': name.strip()}
         atomic_json(self.index, value)
 
+    def export_writer(self, key, path):
+        writers = self.writers()
+        if not portable_writer(key) or key not in writers:
+            raise ValueError('请选择具有可迁移 ID 的书写者。旧 ID 可通过新建书写者并导入样本迁移。')
+        profile = {'schema_version': 'inkstruct_writer_profile_v1', 'writer_id': key,
+                   'display_name': writers[key]['name']}
+        with Path(path).open('x', encoding='utf-8') as output:
+            json.dump(profile, output, ensure_ascii=False, indent=2)
+
+    @catalog_write
+    def import_writer(self, path):
+        with Path(path).open('rb') as source:
+            raw = source.read(4097)
+        if len(raw) > 4096:
+            raise ValueError('书写者资料文件过大')
+        profile = json.loads(raw)
+        if (not isinstance(profile, dict) or set(profile) != {'schema_version', 'writer_id', 'display_name'}
+                or profile['schema_version'] != 'inkstruct_writer_profile_v1'
+                or not portable_writer(profile['writer_id']) or not isinstance(profile['display_name'], str)
+                or not 1 <= len(profile['display_name'].strip()) <= 80):
+            raise ValueError('书写者资料格式无效')
+        key = profile['writer_id']
+        value = self.read()
+        if key not in value['writers']:
+            value['writers'][key] = {'name': profile['display_name'].strip()}
+            atomic_json(self.index, value)
+        return key
+
     @catalog_write
     def set_state(self, kind, task_id, state):
         if state not in ('active', 'paused', 'cancelled', 'archived'):
@@ -103,6 +131,10 @@ class CaptureCatalog:
 
 def valid_writer(value):
     return isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}', value) is not None
+
+
+def portable_writer(value):
+    return isinstance(value, str) and re.fullmatch(r'w_[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}', value) is not None
 
 
 def check_capture_paths(root, writer):
