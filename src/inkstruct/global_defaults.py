@@ -47,6 +47,7 @@ class GlobalDefaultsStore:
     PUNCTUATION_DEFAULT_KEY = "punctuation_handwriting_default_v1"
     MATH_DEFAULT_KEY = "compact_math_default_v1"
     JUSTIFY_DEFAULT_KEY = "justify_wrapped_default_v1"
+    DIGIT_DEFAULT_KEY = "body_digit_spacing_default_v1"
 
     @staticmethod
     def make_settings():
@@ -155,7 +156,8 @@ class GlobalDefaultsStore:
             if ("paragraph_align" not in data["flow"]
                     and not self.settings.value(self.JUSTIFY_DEFAULT_KEY, False, type=bool)):
                 result = replace(result, flow=replace(result.flow, paragraph_align="justify"))
-            if "digits_follow_latin" not in data["flow"]:
+            if ("digits_follow_latin" not in data["flow"]
+                    and not self.settings.value(self.DIGIT_DEFAULT_KEY, False, type=bool)):
                 result = replace(result, flow=replace(result.flow, digits_follow_latin=True))
             return result,None
         except (ValueError, TypeError, KeyError, AttributeError) as error:
@@ -186,6 +188,7 @@ class GlobalDefaultsStore:
         current.setValue(self.PUNCTUATION_DEFAULT_KEY, True)
         current.setValue(self.MATH_DEFAULT_KEY, True)
         current.setValue(self.JUSTIFY_DEFAULT_KEY, True)
+        current.setValue(self.DIGIT_DEFAULT_KEY, True)
         current.sync()
         if current.status() != QtCore.QSettings.Status.NoError:
             raise OSError("全局默认保存失败，请检查配置目录的写入权限")

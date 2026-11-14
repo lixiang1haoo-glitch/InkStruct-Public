@@ -497,7 +497,7 @@ class SettingsDialog(QtWidgets.QDialog):
                     capture = page.configuration()
                 elif key == "body":
                     style, changes = page.configuration()
-                    flow = replace(flow, **changes)
+                    flow = replace(flow, digits_follow_latin=True, **changes)
                     mode = page.mode.currentData()
                 elif key in {"table", "image"}:
                     flow = replace(flow, **page.configuration())
