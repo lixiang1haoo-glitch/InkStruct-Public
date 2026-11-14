@@ -67,6 +67,7 @@ class BodyBlock:
     first_indent: float = 0
     task: SemanticNode | None = None
     note_label: SemanticNode | None = None
+    paragraph_align: str = ""
 
 
 def marker_occurrence(block, index, character, resolver):
@@ -163,6 +164,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
             attrs = dict(node.attributes)
             level = int(attrs.get("tag", "h1")[1:]) if node.kind == "heading" else 1
             scale = flow.heading_scales[level - 1]
+            alignment = attrs.get("paragraph_align", flow.paragraph_align) if node.kind == "paragraph" else ""
             append_text(
                 BodyBlock(
                     node,
@@ -175,9 +177,10 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
                     task=task,
                     first_indent=(
                         flow.first_line_indent_mm
-                        if node.kind == "paragraph" and indent == 0 and not marker
+                        if alignment in {"left", "justify"} and indent == 0 and not marker
                         else 0
                     ),
+                    paragraph_align=alignment,
                 )
             )
         elif node.kind in {"blockquote", "callout"}:
@@ -1246,7 +1249,8 @@ def layout_markdown(
                         )
                     )
                 first_indent = block.first_indent if local == 0 else 0
-                if sum(b.advance for b in line) > content_width - indent - first_indent + 1e-9:
+                line_width = sum(b.advance for b in line)
+                if line_width > content_width - indent - first_indent + 1e-9:
                     code_line = block.node.kind in {"fence", "code_block"}
                     span = (
                         SourceSpan(
@@ -1279,6 +1283,14 @@ def layout_markdown(
                         )
                     )
                 x = region_left + indent + first_indent
+                if block.paragraph_align in {"center", "right"}:
+                    trailing = len(line)
+                    while trailing and line[trailing - 1].status in {"space", "line-break", "break-hint"}:
+                        trailing -= 1
+                    used = line_width - sum(box.advance for box in line[trailing:])
+                    line = [*line[:trailing], *(replace(box, advance=0) for box in line[trailing:])]
+                    spare = max(0, content_width - indent - used)
+                    x += spare / 2 if block.paragraph_align == "center" else spare
                 if local in code_continuations.get(block.node.node_id, ()):
                     cy = baseline - flow.code.em_mm * 0.35
                     ops[-1].append(
@@ -1369,7 +1381,7 @@ def layout_markdown(
                         )
                 decoration = []
                 extra = [0.0] * len(line)
-                if (flow.paragraph_align == "justify" and block.node.kind == "paragraph"
+                if (block.paragraph_align == "justify"
                         and local+1 < len(lines) and line and line[-1].status != "line-break"):
                     line, extra = justify_line(line, content_width-indent-first_indent)
                 for box, gap_after in zip(line, extra):
