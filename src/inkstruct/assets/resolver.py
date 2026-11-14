@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+from copy import copy
 from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 
@@ -74,6 +75,14 @@ class AssetResolver:
         self.resource_key = digest(resource_ids if indexed is None else [
             resource_ids, indexed.token[2], tuple(indexed.pools),
         ])
+
+    def copy_choices(self):
+        """Copy mutable choices and pool membership while sharing immutable glyphs."""
+        result = copy(self)
+        result._pools = self._pools.copy()
+        result.pools = MappingProxyType(result._pools)
+        result.selections = self.selections.copy()
+        return result
 
     def candidate_index(self, character):
         records = self.indexed.pools.get(character) if self.indexed else None
