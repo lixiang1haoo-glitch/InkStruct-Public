@@ -12,12 +12,13 @@ class GridBands:
         grid = frame.paper_grid
         _, top, _, bottom = frame.region.bounds
         self.first = top + offset + grid.first_mm
+        self.last = top + offset + grid.last_mm
+        self.line_bottom = bottom + offset
         self.pitch = grid.pitch
         if self.pitch:
-            last = top + offset + grid.last_mm
-            self.tail = min(self.pitch / 4, bottom + offset - last)
+            self.tail = min(self.pitch / 4, max(0, self.line_bottom - self.last))
             self.top = max(top + offset, self.first + self.tail - self.pitch)
-            self.bottom = last + self.tail
+            self.bottom = self.last + self.tail
         else:
             self.top = top + offset
             self.bottom = bottom + offset
@@ -32,13 +33,15 @@ class GridBands:
         index = max(0, ceil((required - self.first - 1e-9) / self.pitch))
         return self.first + index * self.pitch
 
-    def line(self, start, ascent, descent, height):
-        if not self.pitch:
-            if self.first - ascent < start - 1e-9:
-                return self.first, float('inf')
-            return self.first, self.block_end(max(start + height, self.first + descent))
-        baseline = self.next_baseline(start + ascent)
-        end = self.block_end(max(start + height, baseline + descent, baseline + self.tail))
+    def line(self, start, ascent, descent, *, previous=None):
+        required = start + ascent
+        if previous is not None:
+            previous_baseline, minimum_height = previous
+            required = max(required, previous_baseline + max(self.pitch, minimum_height))
+        baseline = self.next_baseline(required) if self.pitch else self.first
+        end = baseline + descent
+        if baseline < required - 1e-9 or baseline > self.last + 1e-9:
+            end = float('inf')
         return baseline, end
 
 
@@ -126,9 +129,9 @@ class RegionCursor:
             if fits_frame:
                 fits = fits_frame(frame, grid)
             elif grid:
-                end = (grid.line(grid.top, *line)[1] if line else
+                end = (grid.line(grid.top, *line[:2])[1] if line else
                        grid.block_end(grid.top + height + 2 * padding))
-                fits = end <= grid.bottom + 1e-8
+                fits = end <= (grid.line_bottom if line else grid.bottom) + 1e-8
             else:
                 fits = height <= frame.region.height_mm + 1e-8
             if fits:

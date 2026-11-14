@@ -528,6 +528,7 @@ def layout_markdown(
                 _footnotes.finish()
                 _footnotes.start(i+1)
     y, line_index = region_top, 0
+    previous_grid_line = None
     previous_heading_page = None
     if resume:
         state = previous.checkpoints[resume]
@@ -565,6 +566,7 @@ def layout_markdown(
 
     def new_page(*, physical=False):
         nonlocal y, region_left, region_top, region_right, region_bottom, content_width, content_height, grid
+        nonlocal previous_grid_line
         if _regions:
             _regions.next_page() if physical else _regions.next()
         count=_regions.page_index+1 if _regions else len(fragments)+1
@@ -579,6 +581,7 @@ def layout_markdown(
                 _footnotes.start(len(fragments)-1)
         region_left, region_top, region_right, region_bottom = page_bounds(len(fragments) - 1)
         y = region_top
+        previous_grid_line = None
         if _regions:
             grid = _regions.grid
             content_width=region_right-region_left
@@ -592,10 +595,10 @@ def layout_markdown(
     def block_end(required):
         return grid.block_end(required) if grid else required
 
-    def line_geometry(start, metric, *, align_baseline, padding):
+    def line_geometry(start, metric, *, align_baseline, padding, previous=None):
         ascent, descent, height = metric
         if grid and align_baseline:
-            return grid.line(start, *metric)
+            return grid.line(start, ascent, descent, previous=previous)
         inset = padding if grid else 0
         return start + inset + (height - ascent - descent) / 2 + ascent, block_end(start + height + 2 * inset)
 
@@ -838,6 +841,10 @@ def layout_markdown(
             _regions.span=block.node.span
             if block.node.node_id not in measured_images and block.node.node_id not in measured_tables and not block.rule:
                 lines,metrics=rewrap(block,lines,metrics,0,indent)
+        align_baseline = not (block.rule or block.node.kind in {'math_block', 'image', 'table'})
+        if previous_grid_line is not None and not align_baseline:
+            y = block_end(y)
+            previous_grid_line = None
         gap = flow.heading_gap_mm if block.node.kind == "heading" else flow.paragraph_gap_mm
         if y > region_top and not grid:
             required = metrics[0][2]
@@ -1128,34 +1135,39 @@ def layout_markdown(
             previous_heading_page = None
             continue
         pos = 0
-        align_baseline = not block.rule and block.node.kind != "math_block"
+        minimum_height = (flow.code.line_height_mm if block.node.kind in {'fence', 'code_block'}
+                          else style.line_height_mm * block.scale)
         padding = flow.paragraph_gap_mm / 2 if block.node.kind == "math_block" else 0
         while pos < len(lines):
             check_cancel(cancelled)
+            line_bottom = grid.line_bottom if grid and align_baseline else region_bottom
             if _regions and block.rule and block_end(y + metrics[pos][2]) > region_bottom + 1e-8:
                 seek_fit(0, metrics[pos][2])
                 continue
             if _regions and not block.rule:
                 lines,metrics=rewrap(block,lines,metrics,pos,indent)
                 required_width=sum(b.advance for b in lines[pos])+indent+(block.first_indent if pos==0 else 0)
-                end = line_geometry(y, metrics[pos], align_baseline=align_baseline, padding=padding)[1]
-                if required_width > content_width + 1e-8 or end > region_bottom + 1e-8:
+                end = line_geometry(y, metrics[pos], align_baseline=align_baseline, padding=padding,
+                                    previous=previous_grid_line)[1]
+                if required_width > content_width + 1e-8 or end > line_bottom + 1e-8:
                     empty_end = line_geometry(
                         region_top, metrics[pos], align_baseline=align_baseline, padding=padding
                     )[1]
-                    if y > region_top and required_width <= content_width + 1e-8 and empty_end <= region_bottom + 1e-8:
+                    if y > region_top and required_width <= content_width + 1e-8 and empty_end <= line_bottom + 1e-8:
                         new_page()
                     else:
                         seek_fit(required_width, metrics[pos][2],
                                  line=metrics[pos] if align_baseline else None, padding=padding)
                     continue
             count, candidate_start = 0, y
+            candidate_previous = previous_grid_line
             probe = _footnotes.probe() if _footnotes else None
             while pos + count < len(lines):
-                candidate_bottom = line_geometry(
-                    candidate_start, metrics[pos + count], align_baseline=align_baseline, padding=padding
-                )[1]
-                if candidate_bottom > region_bottom + 1e-9:
+                candidate_baseline, candidate_bottom = line_geometry(
+                    candidate_start, metrics[pos + count], align_baseline=align_baseline, padding=padding,
+                    previous=candidate_previous,
+                )
+                if candidate_bottom > line_bottom + 1e-9:
                     break
                 if probe:
                     candidate = lines[pos + count]
@@ -1163,6 +1175,8 @@ def layout_markdown(
                         break
                     probe.accept(candidate, candidate_bottom)
                 candidate_start = candidate_bottom
+                if grid and align_baseline:
+                    candidate_previous = (candidate_baseline, minimum_height)
                 count += 1
             remaining = len(lines) - pos
             protected_heading = (
@@ -1215,11 +1229,12 @@ def layout_markdown(
                 )
                 ascent, descent, height = metrics[local]
                 baseline, end = line_geometry(
-                    y, metrics[local], align_baseline=align_baseline, padding=padding
+                    y, metrics[local], align_baseline=align_baseline, padding=padding,
+                    previous=previous_grid_line,
                 )
                 if _footnotes:
                     _footnotes.accept(line, end)
-                if height > region_bottom - region_top + 1e-9:
+                if not (grid and align_baseline) and height > region_bottom - region_top + 1e-9:
                     diagnostics.append(
                         Diagnostic(
                             "line-height-overflow", "Line exceeds empty page", block.node.span
@@ -1400,6 +1415,8 @@ def layout_markdown(
                         )
                     )
                 y = end
+                if grid and align_baseline:
+                    previous_grid_line = (baseline, minimum_height)
                 if capture is not None:
                     capture_end(capture, block.node.span)
                 line_index += 1

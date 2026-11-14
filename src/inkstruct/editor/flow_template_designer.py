@@ -27,6 +27,13 @@ class FlowCanvas(QtWidgets.QWidget):
         self.setMinimumSize(300, 350)
         self.setAccessibleName("页面版式画布，显示正文框编号与连接顺序")
 
+    def paper_scale(self):
+        t = self.owner.template
+        return min((self.width() - 20) / t.width_mm, (self.height() - 20) / t.height_mm)
+
+    def display_frame(self, frame):
+        return frame
+
     def paintEvent(self, event):
         p = QtGui.QPainter(self)
         p.fillRect(self.rect(), QtGui.QColor("#e7ebf0"))
@@ -34,7 +41,7 @@ class FlowCanvas(QtWidgets.QWidget):
         layout = self.owner.current_layout()
         if not layout:
             return
-        scale = min((self.width() - 20) / t.width_mm, (self.height() - 20) / t.height_mm)
+        scale = self.paper_scale()
         p.translate(10, 10)
         p.scale(scale, scale)
         p.fillRect(QtCore.QRectF(0, 0, t.width_mm, t.height_mm), QtCore.Qt.GlobalColor.white)
@@ -51,7 +58,8 @@ class FlowCanvas(QtWidgets.QWidget):
         font = QtGui.QFont()
         font.setPointSizeF(3)
         p.setFont(font)
-        for f in layout.frames:
+        for frame in layout.frames:
+            f = self.display_frame(frame)
             r = f.region
             color = QtGui.QColor("#2563eb" if f.role == "body" else "#b45309")
             p.setPen(QtGui.QPen(color, 0.5))
