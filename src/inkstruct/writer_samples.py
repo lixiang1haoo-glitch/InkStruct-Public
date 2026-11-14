@@ -46,9 +46,6 @@ def sample_bytes(source):
 
 
 def inspect_samples(path, kind):
-    from .fonts.importer import make_symbol
-    from .fonts.core import validate_summary, validate_trajectory
-
     records, writers = {}, set()
     total = 0
     for count, (member, raw) in enumerate(sample_bytes(Path(path)), 1):
@@ -58,17 +55,7 @@ def inspect_samples(path, kind):
         value = json.loads(raw)
         if not isinstance(value, dict) or value.get('schema_version') != SCHEMAS[kind]:
             continue
-        writer, sample_id, char = (value.get(key) for key in ('writer_id', 'sample_id', 'character'))
-        if (not valid_writer(writer) or not isinstance(sample_id, str) or not sample_id
-                or not isinstance(char, str) or len(char) != 1):
-            raise ValueError('样本缺少有效的书写者、样本 ID 或字符')
-        char.encode('utf-8')
-        if kind == 'han':
-            parse_raw_sample(raw, member, expected_writer=writer)
-        else:
-            trajectory, _, summary = make_symbol(raw, value)
-            validate_trajectory(trajectory)
-            validate_summary(summary, len(trajectory['strokes']))
+        writer, sample_id, _ = validate_sample(kind, raw, value, member)
         key = sha256(raw).hexdigest()
         if sample_id in records and key != records[sample_id][0]:
             raise ValueError('来源含重复且内容不同的样本 ID')
@@ -79,6 +66,46 @@ def inspect_samples(path, kind):
     ordered = tuple(records[key] for key in sorted(records))
     return SampleImport(writers.pop(), ''.join(sorted({v['character'] for _, v in ordered})),
                         digest([key for key, _ in ordered]), ordered)
+
+
+def sample_identity(value):
+    writer, sample_id, char = (value.get(key) for key in ('writer_id', 'sample_id', 'character'))
+    if (not valid_writer(writer) or not isinstance(sample_id, str) or not sample_id or len(sample_id) > 256
+            or not isinstance(char, str) or len(char) != 1):
+        raise ValueError('样本缺少有效的书写者、样本 ID 或字符')
+    char.encode('utf-8')
+    return writer, sample_id, char
+
+
+def validate_sample(kind, raw, value, member):
+    from .fonts.core import validate_summary, validate_trajectory
+    from .fonts.importer import make_symbol
+
+    if not isinstance(value, dict) or value.get('schema_version') != SCHEMAS[kind]:
+        raise ValueError('样本类别或格式无效')
+    writer, sample_id, char = sample_identity(value)
+    if kind == 'han':
+        parse_raw_sample(raw, member, expected_writer=writer)
+    else:
+        trajectory, _, summary = make_symbol(raw, value)
+        validate_trajectory(trajectory)
+        validate_summary(summary, len(trajectory['strokes']))
+    return writer, sample_id, char
+
+
+def attributed_sample(kind, writer, key, original):
+    source_writer, original_id, char = sample_identity(original)
+    sample_id = (original_id if source_writer == writer and UUID_FILENAME.fullmatch(original_id) else
+                 str(uuid.uuid5(uuid.NAMESPACE_URL, f'inkstruct:import:{writer}:{key}')))
+    value = {**original, 'writer_id': writer, 'sample_id': sample_id,
+             'codepoint': f'U+{ord(char):04X}',
+             'capture': {**(original.get('capture') or {}), 'imported_from': {
+                 'writer_id': source_writer, 'sample_id': original_id, 'sha256': key}}}
+    value.pop('task', None)
+    value.pop('legacy_export', None)
+    if kind == 'symbol' and 'variant' in value:
+        value['variant'] = {**value['variant'], 'selection_group': [writer, char]}
+    return value
 
 
 class SampleImports:
@@ -106,21 +133,12 @@ class SampleImports:
             stage = Path(folder) / 'samples'
             stage.mkdir()
             for key, original in selection.records:
-                char = original['character']
                 original_id = original['sample_id']
                 same_writer = selection.writer == writer
-                sample_id = (original_id if same_writer and UUID_FILENAME.fullmatch(original_id) else
-                             str(uuid.uuid5(uuid.NAMESPACE_URL, f'inkstruct:import:{writer}:{key}')))
+                value = attributed_sample(kind, writer, key, original)
+                sample_id = value['sample_id']
                 if sample_id in existing or (same_writer and original_id in existing):
                     continue
-                value = {**original, 'writer_id': writer, 'sample_id': sample_id,
-                         'codepoint': f'U+{ord(char):04X}',
-                         'capture': {**(original.get('capture') or {}), 'imported_from': {
-                             'writer_id': selection.writer, 'sample_id': original_id, 'sha256': key}}}
-                value.pop('task', None)
-                value.pop('legacy_export', None)
-                if kind == 'symbol' and 'variant' in value:
-                    value['variant'] = {**value['variant'], 'selection_group': [writer, char]}
                 path = stage / (sample_id + '.json')
                 path.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False), encoding='utf-8')
                 existing.add(sample_id)
