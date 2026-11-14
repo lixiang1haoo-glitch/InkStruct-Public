@@ -15,13 +15,14 @@ from .line_svg import LineSvgResource
 from .table_style import TableStyle
 from .template import PageTemplate, TemplateBinding, template_from_record
 
-FLOW_STYLE_VERSIONS = tuple(f"inkstruct_flow_style_v{version}" for version in range(1, 7))
+FLOW_STYLE_VERSIONS = tuple(f"inkstruct_flow_style_v{version}" for version in range(1, 8))
 
 
 def omit_versioned_fields(record):
     version = FLOW_STYLE_VERSIONS.index(record["schema_version"]) + 1
     for introduced, keys in ((3, ("latin_spacing",)), (4, ("punctuation_spacing",)),
-                             (5, ("paragraph_align", "han_variation")), (6, ("han_spacing",))):
+                             (5, ("paragraph_align", "han_variation")), (6, ("han_spacing",)),
+                             (7, ("digits_follow_latin",))):
         if version < introduced:
             for key in keys:
                 record.pop(key)
@@ -53,11 +54,14 @@ class FlowStyle:
     paragraph_align: str = "left"
     han_variation: HanVariation = field(default_factory=HanVariation)
     han_spacing: str = "full"
+    digits_follow_latin: bool = False
 
     def layout_record(self):
         record = asdict(self)
         if self.han_spacing == "full":
             record.pop("han_spacing")
+        if not self.digits_follow_latin:
+            record.pop("digits_follow_latin")
         return record
 
     def __post_init__(self):
@@ -75,9 +79,13 @@ class FlowStyle:
             raise ValueError("Unknown punctuation spacing policy")
         if self.latin_spacing not in {"capture", "handwriting"}:
             raise ValueError("Unknown Latin spacing policy")
+        if type(self.digits_follow_latin) is not bool:
+            raise ValueError("Invalid body digit spacing policy")
         version = FLOW_STYLE_VERSIONS.index(self.schema_version)
-        if self.han_spacing == "handwriting":
-            version = 5
+        if self.digits_follow_latin:
+            version = 6
+        elif self.han_spacing == "handwriting":
+            version = max(version, 5)
         elif self.paragraph_align != "left" or self.han_variation != HanVariation():
             version = max(version, 4)
         elif self.punctuation_spacing != "capture":
