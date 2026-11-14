@@ -369,6 +369,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_spacing=flow.han_spacing,
                 han_variation=flow.han_variation,
                 available_widths=(tuple(w - block.indent for w in frame_widths)
                                   if table_style.total_width_mode == "content" else ()),
@@ -405,6 +406,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_spacing=flow.han_spacing,
                 han_variation=flow.han_variation,
             )
             diagnostics.extend(issues)
@@ -423,7 +425,8 @@ def layout_markdown(
             if block.note_label:
                 runs = [InlineRun(o, role="footnote-label") for o in block.note_label.occurrences]
             prefix, issues = measure_runs(runs, resolver, style, cancelled=cancelled,
-                                          latin_spacing=flow.latin_spacing, punctuation_spacing=flow.punctuation_spacing)
+                                          latin_spacing=flow.latin_spacing, punctuation_spacing=flow.punctuation_spacing,
+                                          han_spacing=flow.han_spacing)
             diagnostics.extend(issues)
             indent += max(0, sum(b.advance for b in prefix) + 1.5 - flow.list_indent_mm)
         if block.task:
@@ -459,6 +462,7 @@ def layout_markdown(
                 footnote_style=flow.footnote,
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
+                han_spacing=flow.han_spacing,
                 han_variation=flow.han_variation,
             )
         if width <= 0:
@@ -621,7 +625,8 @@ def layout_markdown(
             remaining,issues=measure_runs(block.runs,resolver,style,scale=block.scale,
                                          cancelled=cancelled,math_style=flow.math,math_width=width,
                                          footnote_style=flow.footnote,latin_spacing=flow.latin_spacing,
-                                         punctuation_spacing=flow.punctuation_spacing)
+                                         punctuation_spacing=flow.punctuation_spacing,
+                                         han_spacing=flow.han_spacing)
             if sum(b.advance for b in remaining)<=width+1e-8:
                 diagnostics.extend(issues)
         if block.node.kind in {'fence','code_block'}:
@@ -1490,7 +1495,7 @@ def layout_markdown(
             "source": document.content_key,
             "page": asdict(page),
             "style": asdict(style),
-            "flow": asdict(flow),
+            "flow": flow.layout_record(),
             "resources": resolver.resource_key,
             "selections": resolver.selection_records(),
             "layout": LAYOUT_VERSION,

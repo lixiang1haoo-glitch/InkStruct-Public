@@ -327,7 +327,7 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
             "body_layout": result.layout_version,
             "page": asdict(result.page_profile),
             "style": asdict(style),
-            "flow": asdict(flow),
+            "flow": flow.layout_record(),
             "fields": VERSION,
             "diagnostic_targets": "v1",
             "resources": resolver.resource_key,

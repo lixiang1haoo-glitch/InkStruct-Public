@@ -31,7 +31,7 @@ CATEGORIES = (
         "body",
         "排版默认设置",
         "正文与段落",
-        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 英文 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
+        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 汉字间距 英文 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
     ),
     (
         "math",
@@ -62,6 +62,14 @@ class BodyPage(QtWidgets.QWidget):
         self.dialect.setCurrentIndex(self.dialect.findData(owner.flow.markdown_dialect))
         form.addRow("内容模式", self.mode)
         form.addRow("Markdown 格式", self.dialect)
+        self.han_spacing = QtWidgets.QComboBox()
+        self.han_spacing.setObjectName("han_spacing")
+        self.han_spacing.setAccessibleName("汉字间距")
+        self.han_spacing.addItem("整字宽", "full")
+        self.han_spacing.addItem("按笔迹紧凑排列", "handwriting")
+        self.han_spacing.setCurrentIndex(self.han_spacing.findData(owner.flow.han_spacing))
+        self.han_spacing.setToolTip("按笔迹宽度安排汉字，保留字形大小和基线。自然书写可独立调节字距变化。")
+        form.addRow("汉字间距", self.han_spacing)
         self.latin_spacing = QtWidgets.QComboBox()
         self.latin_spacing.addItem("按笔迹宽度（推荐）", "handwriting")
         self.latin_spacing.addItem("保留采集位置留白（旧版）", "capture")
@@ -190,6 +198,7 @@ class BodyPage(QtWidgets.QWidget):
         return self.style.configuration(), {k: getattr(flow, k) for k in self.flow.controls} | {
             "heading_scales": headings,
             "markdown_dialect": self.dialect.currentData(),
+            "han_spacing": self.han_spacing.currentData(),
             "latin_spacing": self.latin_spacing.currentData(),
             "punctuation_spacing": self.punctuation_spacing.currentData(),
             "paragraph_align": self.paragraph_align.currentData(),
@@ -215,6 +224,7 @@ class BodyPage(QtWidgets.QWidget):
         self.flow.reset_defaults()
         self.mode.setCurrentIndex(0)
         self.dialect.setCurrentIndex(0)
+        self.han_spacing.setCurrentIndex(0)
         self.latin_spacing.setCurrentIndex(0)
         self.punctuation_spacing.setCurrentIndex(0)
         self.paragraph_align.setCurrentIndex(0)
