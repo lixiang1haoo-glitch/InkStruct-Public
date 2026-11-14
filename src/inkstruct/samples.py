@@ -36,7 +36,10 @@ def _finite(value: object, field: str) -> float:
 
 def load_raw_sample(path: Path, *, expected_writer: str | None = None) -> RawSample:
     path = Path(path).resolve()
-    raw = path.read_bytes()
+    return parse_raw_sample(path.read_bytes(), path, expected_writer=expected_writer)
+
+
+def parse_raw_sample(raw: bytes, path: Path, *, expected_writer: str | None = None) -> RawSample:
     value = json.loads(raw.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("sample must be a JSON object")

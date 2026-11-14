@@ -361,14 +361,19 @@ def make_symbol(raw, value):
         # The source summary is part of the hashed core, including user exports
         # and frozen documents; development-only data cannot supply layout.
         summary['capture_guides'] = {'math_axis_em': value['guides']['math_axis_em']}
+    imported_from = value.get('capture', {}).get('imported_from')
+    if imported_from is not None:
+        summary['imported_from'] = imported_from
     metrics = asdict(asset.metrics)
     if asset.character in CHINESE_PUNCTUATION or asset.character in SHARED_PUNCTUATION:
         metrics['advance'] = max(1.0, metrics['advance'])
     return t, metrics, summary
 
 
-def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidence):
+def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidence, authorize_symbols):
+    from ..capture_management import valid_writer
     from ..symbol_reuse import REUSE_POLICY, declarations, reuse_options
+    from ..writer_links import SymbolScope
     from .publication import symbol_group, symbol_input
 
     def selected(group):
@@ -381,9 +386,12 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
                             "source": source, "invalid": True})
 
     by_id = {}
+    writers = set()
     for raw, value in symbol_records(symbol_input(symbols, writer)):
-        if value.get("writer_id") != writer:
-            raise ValueError("扩展样本含有其他书写者，请选择同一作者的目录或 ZIP")
+        source_writer = value.get("writer_id")
+        if not valid_writer(source_writer):
+            raise ValueError("扩展样本含有无效书写者身份")
+        writers.add(source_writer)
         character = value.get("character")
         if not isinstance(character, str) or len(character) != 1:
             raise ValueError("扩展样本含有无效字符身份")
@@ -392,12 +400,25 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
             raise ValueError("扩展样本身份无效或重复，请选择单一采集库")
         by_id[sample_id] = (raw, value)
 
+    source_writer = writer
+    link = None
+    if writers - {writer}:
+        if len(writers) != 1 or authorize_symbols is None:
+            raise ValueError("扩展样本含有其他书写者，请选择同一作者的目录或 ZIP")
+        source_writer = next(iter(writers))
+        scope = SymbolScope(source_writer, semantic_hash(sorted(sha(raw) for raw, _ in by_id.values())),
+                            len(by_id), ''.join(sorted({value['character'] for _, value in by_id.values()})))
+        link = authorize_symbols(scope)
+
     prepared = {}
 
     def prepare(sample_id):
         if sample_id not in prepared:
             raw, value = by_id[sample_id]
             t, m, s = make_symbol(raw, value)
+            if link is not None:
+                s = {**s, 'writer_link': {'target_writer': link.target_writer, 'source_writer': source_writer,
+                                          'batch_sha256': link.batch_sha256, 'samples_sha256': link.symbols.sha256}}
             validate_trajectory(t)
             validate_summary(s, len(t["strokes"]))
             prepared[sample_id] = t, m, s
@@ -466,7 +487,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
                {marker: sharing, "original_sample": value},
                sha(encoded([policy, sha(raw), target, target_style])), target_style)
 
-    reuse_records = [item for item in declarations(symbols, writer)
+    reuse_records = [item for item in declarations(symbols, source_writer)
                      if (item["group"], item["target"]) not in choices]
     reuse_records.extend({"group": group, "target": target, "source": mappings[group, target],
                           "source_style": "upright", "sample_ids": [choice.sample_id], "confirmed": True}
@@ -521,6 +542,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
 def build_font(
     output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
     symbol_groups=None, diagnostics=None, phase=None, rules=PublicationRules(), rule_evidence=None,
+    authorize_symbols=None,
 ):
     """Prepare the same candidates for review (output=None) or for packaging."""
     from .publication import symbol_group
@@ -598,7 +620,7 @@ def build_font(
                 )
                 protocol_record = protocol
         if symbols:
-            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, rules, rule_evidence)
+            _append_symbols(writer, symbols, symbol_groups, append, diagnostics, rules, rule_evidence, authorize_symbols)
         from .symbol_rules import POLICY as CONSTRUCTION_POLICY
         from .symbol_rules import constructions
 
