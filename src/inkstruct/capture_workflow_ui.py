@@ -660,6 +660,10 @@ def install_capture_management(window, root):
         actions = QtWidgets.QHBoxLayout()
         task_list = QtWidgets.QPushButton('任务列表…')
         task_list.setObjectName('capture_task_list_button')
+        samples = QtWidgets.QPushButton('样本库…')
+        samples.setObjectName('capture_sample_library')
+        samples.clicked.connect(lambda _checked=False, w=widget: open_sample_library(w))
+        actions.addWidget(samples)
         widget.pause_button = QtWidgets.QPushButton('暂停并关闭')
         widget.pause_button.setObjectName('capture_pause_task')
         widget.cancel_task_button = QtWidgets.QPushButton('取消任务…')
@@ -695,6 +699,13 @@ def install_capture_management(window, root):
         widget.pause_button.clicked.connect(widget.pause_task)
         widget.cancel_task_button.clicked.connect(widget.cancel_task)
         widget.refresh()
+
+
+def open_sample_library(widget):
+    from .sample_library_ui import SampleLibraryDialog
+
+    dialog = SampleLibraryDialog(widget._capture_catalog, widget.writer_picker.text(), widget)
+    dialog.exec()
 
 
 def transfer_writer_profile(widget, *, importing):

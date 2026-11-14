@@ -959,10 +959,46 @@ def verify_windows_style(window, app, out, font_path=None):
     from inkstruct.settings_dialog import SettingsDialog
     from inkstruct.theme import theme_preference
 
+    from inkstruct.capture_management import CaptureCatalog
+    from inkstruct.sample_library import SampleLibrary, export_bundle, inventory, open_bundle
+    from inkstruct.sample_library_ui import SampleLibraryDialog
+
     assert app.platformName() == "windows"
     assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
     assert app.property("inkstructDesktopStyle") == "windows11"
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
+    assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
+               for tab in (window.collector.single_widget, window.collector.symbol_widget))
+    source = CaptureCatalog(out / 'sample-source')
+    target = CaptureCatalog(out / 'sample-target')
+    writer = source.create_writer('Synthetic sample writer')
+    reader = target.create_writer('Synthetic receiving writer')
+    path = source.task_root('symbol') / 'samples' / writer / 'U+0031' / 'source.json'
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({'schema_version': 'inkstruct_symbol_sample_v1', 'character': '1',
+                               'sample_id': 'synthetic-1', 'writer_id': writer,
+                               'capture': {'coordinate_space': 'logical_px'},
+                               'guides': {'em_px': 100, 'origin_x_px': 10, 'baseline_y_px': 80},
+                               'strokes': [{'points': [{'x': 20, 'y': 20}, {'x': 40, 'y': 60}]}]}), encoding='utf-8')
+    library = SampleLibraryDialog(source, writer, window)
+    library.show()
+    for _ in range(500):
+        app.processEvents()
+        if library.job is None:
+            break
+        QtTest.QTest.qWait(10)
+    assert library.model.rowCount() == 1, library.status.text()
+    library.table.setCurrentIndex(library.model.index(0, 0))
+    assert library.preview.value['character'] == '1'
+    library.reject()
+    rows, errors = inventory(source, writer)
+    assert not errors
+    bundle_path = out / 'synthetic.inkcapture'
+    assert export_bundle(bundle_path, writer, 'Synthetic sample writer', rows) == 1
+    bundle = open_bundle(bundle_path)
+    destination = SampleLibrary(target)
+    assert destination.import_confirmed(bundle, reader, destination.review(bundle, reader)) == 1
+    assert len(destination.review(bundle, reader).duplicates) == 1
     jpeg = out / "synthetic-reference.jpg"
     Image.new("RGB", (120, 60), (90, 20, 150)).save(jpeg)
     raster = RasterResource.from_file(jpeg, jpeg.name)
@@ -1048,7 +1084,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "dpr": dialog.devicePixelRatio(), "schemes": reports,
             "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
-            "jpeg_reference_imported": True,
+            "jpeg_reference_imported": True, "sample_library_handoff": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:

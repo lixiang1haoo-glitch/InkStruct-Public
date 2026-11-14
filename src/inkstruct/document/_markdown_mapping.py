@@ -16,6 +16,7 @@ from markdown_it.rules_inline.state_inline import StateInline
 
 from ._math_mapping import block_math, inline_math
 from .break_commands import block_flow_break, inline_break
+from .paragraph_align import block_paragraph_align
 from .cancellation import check_cancel
 from .footnotes import footnote_definition, footnote_reference
 from .schema import SourceSpan
@@ -147,6 +148,7 @@ class LocatedBlockParser(ParserBlock):
             "fence", "flow_break", block_flow_break,
             {"alt": ["paragraph", "reference", "blockquote", "list"]},
         )
+        self.ruler.before("fence", "paragraph_align", block_paragraph_align, {"alt": ["paragraph", "reference"]})
         self.ruler.before(
             "reference",
             "footnote_definition",
