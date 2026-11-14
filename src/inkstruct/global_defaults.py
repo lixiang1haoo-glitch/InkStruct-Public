@@ -16,7 +16,9 @@ from .math.style import MathStyle, math_style_record
 class LayoutDefaults:
     page: PageProfile = field(default_factory=PageProfile)
     style: StyleProfile = field(default_factory=StyleProfile)
-    flow: FlowStyle = field(default_factory=lambda: FlowStyle(paragraph_align="justify", latin_spacing="handwriting", punctuation_spacing="handwriting", math=MathStyle.handwriting()))
+    flow: FlowStyle = field(default_factory=lambda: FlowStyle(
+        paragraph_align="justify", latin_spacing="handwriting", digits_follow_latin=True,
+        punctuation_spacing="handwriting", math=MathStyle.handwriting()))
     mode: str = "markdown"
     run: str = ""
     symbols: str = ""
@@ -45,6 +47,7 @@ class GlobalDefaultsStore:
     PUNCTUATION_DEFAULT_KEY = "punctuation_handwriting_default_v1"
     MATH_DEFAULT_KEY = "compact_math_default_v1"
     JUSTIFY_DEFAULT_KEY = "justify_wrapped_default_v1"
+    DIGIT_DEFAULT_KEY = "body_digit_spacing_default_v1"
 
     @staticmethod
     def make_settings():
@@ -153,6 +156,9 @@ class GlobalDefaultsStore:
             if ("paragraph_align" not in data["flow"]
                     and not self.settings.value(self.JUSTIFY_DEFAULT_KEY, False, type=bool)):
                 result = replace(result, flow=replace(result.flow, paragraph_align="justify"))
+            if ("digits_follow_latin" not in data["flow"]
+                    and not self.settings.value(self.DIGIT_DEFAULT_KEY, False, type=bool)):
+                result = replace(result, flow=replace(result.flow, digits_follow_latin=True))
             return result,None
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             # Preserve the original record. Only an explicit Apply can replace it.
@@ -182,6 +188,7 @@ class GlobalDefaultsStore:
         current.setValue(self.PUNCTUATION_DEFAULT_KEY, True)
         current.setValue(self.MATH_DEFAULT_KEY, True)
         current.setValue(self.JUSTIFY_DEFAULT_KEY, True)
+        current.setValue(self.DIGIT_DEFAULT_KEY, True)
         current.sync()
         if current.status() != QtCore.QSettings.Status.NoError:
             raise OSError("全局默认保存失败，请检查配置目录的写入权限")
@@ -202,9 +209,12 @@ def document_flow(defaults, current, *, apply_template=False):
     )
 
 
-def apply_to_document(editor, defaults, *, resources=None, apply_template=False, apply_page=False):
+def apply_to_document(editor, defaults, *, resources=None, apply_template=False, apply_page=False,
+                      apply_digit_spacing=False):
     """Explicitly copy default parameters, retaining per-element state and assets."""
     flow = document_flow(defaults, editor.flow, apply_template=apply_template)
+    if not apply_digit_spacing and not editor.flow.digits_follow_latin:
+        flow = replace(flow, digits_follow_latin=False, schema_version=editor.flow.schema_version)
     page = defaults.page if apply_page else editor.page
     changed = (flow, defaults.style, page, defaults.mode) != (
         editor.flow,

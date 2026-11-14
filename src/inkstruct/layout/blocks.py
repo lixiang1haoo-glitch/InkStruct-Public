@@ -410,6 +410,8 @@ def layout_markdown(
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
                 han_spacing=flow.han_spacing,
+                digits_follow_latin=(flow.digits_follow_latin and block.node.kind == "paragraph"
+                                     and not _references_only),
                 han_variation=flow.han_variation,
             )
             diagnostics.extend(issues)
