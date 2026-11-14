@@ -7,7 +7,7 @@ from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
 
-from .generation_workflow import METHODS, MULTI_CANDIDATE_METHODS, GenerationWorkflow, identity, resources
+from .generation_workflow import CONNECTED_METHODS, METHODS, MULTI_CANDIDATE_METHODS, GenerationWorkflow, identity, resources
 
 
 def _qt():
@@ -127,7 +127,8 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             for key, label in METHODS.items():
                 self.method.addItem(label, key)
             info = QtWidgets.QLabel("ⓘ")
-            info.setToolTip("v6.3 exp：在 v6.2 的分笔规则上增加连笔供体。\n"
+            info.setToolTip("v6.3.1：独立实现的连笔生成，兼容现有 v6.3 档案。\n"
+                "v6.3 exp：在 v6.2 的分笔规则上增加连笔供体。\n"
                 "v6.2 exp：增加竖弯钩、止部关键笔语义准入与不兼容来源重试，保留真实原笔迹。\n"
                 "作者来源完整的字可按所选上限保留多份真实供体候选，制作字体后按出现位置稳定选样。\n"
                 "v6.1 exp：参考修正、完整部件、受限关键笔替换及作者单笔回退；保留完整来源轨迹与缺口。\n"
@@ -143,7 +144,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             form.addRow("样本与档案", self.sample_summary)
             form.addRow("", self.sample_notice)
             form.addRow("生成方式", method_row)
-            connected_hint = QtWidgets.QLabel("当前仅 v6.3 支持连笔。请在采集页开启「允许汉字连笔」。")
+            connected_hint = QtWidgets.QLabel("v6.3 和 v6.3.1 支持连笔。请在采集页开启「允许汉字连笔」。")
             connected_hint.setWordWrap(True)
             form.addRow("", connected_hint)
             self.same_character = QtWidgets.QCheckBox("优先使用已录同字")
@@ -211,7 +212,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.candidate_limit.setSuffix(" 份")
             self.candidate_limit.setValue(self.preferred_candidate_limit())
             self.candidate_limit.setToolTip(
-                "v6.2 和 v6.3 支持多候选。实际份数取决于真实来源和完整检查；"
+                "v6.2 和 v6.3 系列支持多候选。实际份数取决于真实来源和完整检查；"
                 "增加上限会增加尝试次数、生成时间和包体。"
             )
             generation_form.addRow("每字成品上限", compact_field(self.candidate_limit))
@@ -434,9 +435,9 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
 
             method = self.method.currentData()
             if method not in MULTI_CANDIDATE_METHODS:
-                self.candidate_hint.setText("当前生成方式只保留 1 份主字形。v6.2 和 v6.3 支持多候选。")
+                self.candidate_hint.setText("当前生成方式只保留 1 份主字形。v6.2 和 v6.3 系列支持多候选。")
             elif self.candidate_limit.value() == 1:
-                self.candidate_hint.setText("每字只保留 1 份。" + ("有合格连笔时优先使用。" if method == "v63" else ""))
+                self.candidate_hint.setText("每字只保留 1 份。" + ("有合格连笔时优先使用。" if method in CONNECTED_METHODS else ""))
             else:
                 attempts = candidate_attempt_limit(self.candidate_limit.value())
                 self.candidate_hint.setText(
@@ -465,7 +466,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.target_actions.setEnabled(not self.busy)
             self.target_current_button.setEnabled(bool(self.current_document_provider) and not self.busy)
             self.parallelism.setEnabled(not self.busy and self.method.currentData() != 'v4')
-            self.same_character.setVisible(self.method.currentData() == "v63")
+            self.same_character.setVisible(self.method.currentData() in CONNECTED_METHODS)
             self.same_character.setEnabled(not self.busy)
             self.source_score.setEnabled(not self.busy and self.method.currentData() != 'v4')
             self.diversity_score.setEnabled(not self.busy)
@@ -705,7 +706,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             values, text = self.values(), "".join(targets["requested"])
             workers = self.parallelism.currentData()
             candidate_limit = self.candidate_limit.value() if values[2] in MULTI_CANDIDATE_METHODS else 1
-            same_character = values[2] == "v63" and self.same_character.isChecked()
+            same_character = values[2] in CONNECTED_METHODS and self.same_character.isChecked()
             source_score = values[2] != "v4" and self.source_score.isChecked()
             diversity_score = self.diversity_score.isChecked()
             self.score_summary.hide()
