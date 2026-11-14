@@ -911,10 +911,10 @@ def layout_markdown(
             caption_boxes = [box for line in figure.lines for box in line]
             while True:
                 check_cancel(cancelled)
-                end = block_end(y + figure.total_height)
-                fits_geometry = end <= region_bottom + 1e-9
+                figure_end = block_end(y + figure.total_height)
+                fits_geometry = figure_end <= region_bottom + 1e-9
                 fits_notes = not _footnotes or _footnotes.can_fit(
-                    [caption_boxes], end
+                    [caption_boxes], figure_end
                 )
                 if fits_geometry and fits_notes:
                     break
@@ -931,7 +931,7 @@ def layout_markdown(
                     continue
                 break  # Impossible empty-page combination: emit debug geometry once.
             if _footnotes:
-                _footnotes.accept(caption_boxes, end)
+                _footnotes.accept(caption_boxes, figure_end)
             capture = capture_start()
             if figure.total_height > region_bottom - region_top + 1e-9:
                 diagnostics.append(
@@ -1053,7 +1053,7 @@ def layout_markdown(
                         style.stroke_width_mm,
                     )
                 )
-            y = end
+            y = figure_end
             capture_end(capture, block.node.span)
             line_index += 1
             previous_heading_page = None

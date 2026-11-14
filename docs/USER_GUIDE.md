@@ -1,5 +1,7 @@
 # InkStruct Windows 使用说明
 
+0.1.80 修复带图题的 Markdown 图片与后续正文重叠或间距过大的问题。排版会先留出图片和图题所需的空间，再接排后续内容。
+
 0.1.75 在排版预览中支持图片标注。选中图片，在「元素属性 › 表格与图片」点「编辑图片标注…」。在打开的窗口中点「添加文字…」，再点击图内的放置位置。可输入一行文字或行内公式，例如 `焦点$F_1$`。标注沿用文档字体，可在图上拖动，也可单独调整字号。点「应用」后保存项目，重新打开仍可编辑。写字机 SVG 会输出标注笔迹，单线 SVG 的图形也会随之输出。
 
 [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/)提供带截图的[上手教程](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/first-document.html)和[常见问题](https://lixiang1haoo-glitch.github.io/InkStruct-Public/guide/faq.html)。本页供快速查阅。
