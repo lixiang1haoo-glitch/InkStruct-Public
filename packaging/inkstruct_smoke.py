@@ -1062,6 +1062,117 @@ def verify_windows_style(window, app, out, font_path=None):
         window.close()
 
 
+def verify_v631(window, out):
+    from inkstruct.application import database_path
+    from inkstruct.assets.resolver import AssetResolver
+    from inkstruct.document.editing import SourceSession
+    from inkstruct.document.schema import PageProfile, StyleProfile
+    from inkstruct.fonts.importer import build_font, generated_records
+    from inkstruct.generation_workflow import GenerationWorkflow, read, write
+    from inkstruct.samples import sha256_file
+    from inkstruct.structures import StructureRepository
+    from inkstruct.v631.engine import ENGINE_VERSION
+
+    widget = window.generator.centralWidget()
+    assert widget.method.currentData() == 'v63'
+    assert [widget.method.itemData(i) for i in range(widget.method.count())] == [
+        'v63', 'v62', 'v61', 'v4', 'v631',
+    ]
+    for method in ('v63', 'v631'):
+        widget.method.setCurrentIndex(widget.method.findData(method))
+        assert widget.candidate_limit.isEnabled() and widget.candidate_limit.maximum() == 64
+        assert widget.same_character.isChecked() and not widget.same_character.isHidden()
+
+    database = database_path()
+    repo = StructureRepository(database)
+    source = out / 'samples'
+    writer = 'fixture'
+    characters = '明林休'
+    for character in characters:
+        graph = repo.get(character)
+        for variant in range(2):
+            traces = [stroke.median for stroke in graph.strokes]
+            if character == '明' and variant:
+                traces[:2] = [tuple(traces[0]) + tuple(traces[1])]
+            strokes, stamp = [], 0
+            for trace in traces:
+                points = []
+                for i, (x, y) in enumerate(trace):
+                    points.append({'x': x * 80 + 10, 'y': y * 80 + 10 + (i % 2) * variant * 1.2,
+                                   'pressure': 0.45, 't_ms': stamp})
+                    stamp += 20
+                strokes.append({'points': points})
+                stamp += 60
+            sample_id = f'{ord(character):04x}-{variant}'
+            write(source / f'{sample_id}.json', {'schema_version': 'handwriting_single_v1',
+                  'sample_id': sample_id, 'character': character, 'writer_id': writer,
+                  'capture': {'canvas_width': 100, 'canvas_height': 100}, 'strokes': strokes})
+
+    service = GenerationWorkflow(out / 'old-workspace', database)
+    legacy = service.generate(writer, source, 'v63', characters, workers=1, candidate_limit=4,
+                              preparation=lambda *_: None)
+    assert read(Path(legacy['output']) / 'protocol.json')['method'] == 'v6.3 exp'
+    state = service.state(writer, source)
+    profile = state['profiles']['v63']
+    paths = [Path(path) for path in (profile['path'], profile['connected']['path'], state['import']['index'],
+                                     service.state_path(writer, source))]
+    hashes = {path: sha256_file(path) for path in paths}
+    fresh = GenerationWorkflow(out / 'new-workspace', database)
+    fresh.update_samples(writer, source, 'v631')
+    fresh_profile = fresh.state(writer, source)['profiles']['v631']
+    assert fresh_profile['workflow_version'] == 'desktop-connected-v63-2'
+    assert fresh_profile['connected']['whole'] >= 1
+
+    outputs = []
+    for workers in (1, 2):
+        stages = []
+        result = service.generate(writer, source, 'v631', characters, workers=workers, candidate_limit=4,
+                                  preparation=lambda stage, _: stages.append(stage))
+        assert '沿用档案' in stages and result['failed_count'] == 0
+        assert result['completed_count'] == len(characters)
+        folder = Path(result['output'])
+        protocol = read(folder / 'protocol.json')
+        assert protocol['method'] == 'v6.3.1' and protocol['version'] == ENGINE_VERSION
+        assert protocol['execution']['workers'] == workers and protocol['execution']['fallback'] is None, protocol['execution']
+        code = {name: digest for name, digest in protocol['code'].items() if name.startswith('v631/')}
+        package = Path(getattr(sys, '_MEIPASS', repo.path.parents[2] / 'src')) / 'inkstruct/v631'
+        assert code == {f'v631/{path.name}': sha256_file(path) for path in package.glob('*.py')}
+        assert 'v631/engine.py' in code
+        outputs.append(folder)
+
+    def character_files(folder):
+        return {path.name: sha256_file(path) for path in (folder / writer).glob('*.json*')}
+
+    serial, parallel = outputs
+    files = character_files(parallel)
+    assert len(files) == 2 * len(characters) and character_files(serial) == files
+    assert all(sha256_file(path) == digest for path, digest in hashes.items())
+    records = [record for record, *_ in generated_records(parallel, writer)]
+    assert len(records) > len(characters)
+    assert any(record.get('method') == 'same_character' and record.get('segments') for record in records)
+    assert any(not record.get('segments') for record in records)
+    font_path = out / 'v631.inkfont'
+    build_font(font_path, writer=writer, name='Synthetic v6.3.1', run=parallel)
+    font = FontPackage(font_path)
+    font.verify()
+    assets = list(font.glyphs())
+    assert {asset.font_metadata['summary']['generation_method'] for asset in assets} == {'v6.3.1'}
+    session = SourceSession(characters * 2)
+    resolver = AssetResolver(embedded=assets)
+    layout = layout_markdown(parse_markdown(session), resolver)
+    assert layout.exportable
+    path = out / 'v631.inkdoc'
+    save_package(path, session, resolver, PageProfile(), StyleProfile())
+    saved = load_package(path)
+    assert layout_markdown(parse_markdown(saved.session), saved.resolver) == layout
+    assert saved.resolver.selection_records() == resolver.selection_records()
+    return {'app_version': APP_VERSION, 'frozen': bool(getattr(sys, 'frozen', False)),
+            'method': 'v6.3.1', 'engine': ENGINE_VERSION, 'characters': len(characters),
+            'candidates': len(assets), 'implementation_hashes': code, 'workers': [1, 2],
+            'fallback': None, 'matching_character_files': len(files), 'old_archive_reused': True,
+            'fresh_archive_verified': True, 'frozen_document_reopened': True}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
@@ -1071,6 +1182,7 @@ def main():
     parser.add_argument('--candidate-check', action='store_true')
     parser.add_argument('--math-settings-check', action='store_true')
     parser.add_argument('--windows-style-check', action='store_true')
+    parser.add_argument('--v631-check', action='store_true')
     parser.add_argument('--large-font-check', action='store_true')
     parser.add_argument('--large-font', action='append', type=Path, default=[])
     parser.add_argument("--writer", default="demo_writer")
@@ -1079,7 +1191,11 @@ def main():
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
-    if args.windows_style_check:
+    if args.v631_check:
+        if any((args.font, args.samples, args.generation_profile, args.candidate_check, args.math_settings_check,
+                args.windows_style_check, args.large_font_check, args.large_font, args.export_only)):
+            parser.error('--v631-check is a separate synthetic generation check')
+    elif args.windows_style_check:
         if sys.platform != "win32" or any((args.samples, args.generation_profile,
                                            args.candidate_check, args.math_settings_check,
                                            args.large_font_check, args.large_font, args.export_only)):
@@ -1101,7 +1217,7 @@ def main():
         parser.error('--font and --samples are required unless --generation-profile is supplied')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    if args.large_font_check or args.math_settings_check or args.windows_style_check:
+    if args.large_font_check or args.math_settings_check or args.windows_style_check or args.v631_check:
         # Recovery files must be private too, not only Qt preferences/workspace.
         os.environ['INKSTRUCT_LAYOUT_PREVIEW_HOME'] = str(out / 'private')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["InkStructCheck"])
@@ -1137,6 +1253,13 @@ def main():
     QtWidgets.QMessageBox.critical = lambda *a: notices.append(str(a[2]))
     w = InkStructWindow(workspace=out / "workspace")
     w.show()
+    if args.v631_check:
+        try:
+            result = verify_v631(w, out)
+            (out / 'verification.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+        finally:
+            w.close()
+        return
     if args.windows_style_check:
         verify_windows_style(w, app, out, args.font)
         return
