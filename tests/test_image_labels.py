@@ -19,6 +19,29 @@ from inkstruct.plotter.adapters import plan_from_snapshot
 from test_document_layout import provider
 
 
+@pytest.mark.parametrize("caption", ["人", "*人*~~人~~"])
+def test_body_after_image_starts_below_caption(tmp_path, caption):
+    image = tmp_path / "diagram.png"
+    Image.new("RGB", (40, 40), "white").save(image)
+    source = f"人\n\n![{caption}]({image.name})\n\n人"
+    document = parse_markdown(source)
+    flow = FlowStyle(images=(import_image_file(image, image.name),))
+    result = layout_markdown(document, AssetResolver(generated=provider()),
+                             page=PageProfile(150, 160, 10), style=StyleProfile(), flow=flow)
+
+    assert result.exportable and len(result.pages) == 1
+    picture, = result.pages[0].images
+    captions = [f for f in result.fragments if f.status == "ready" and f.span.start < picture.span.end
+                and f.span.start >= picture.span.start]
+    following, = [f for f in result.fragments if f.status == "ready" and f.span.start >= picture.span.end]
+    assert captions and min(f.logical_bounds[1] for f in captions) >= picture.bounds[3]
+    assert following.logical_bounds[1] >= max(f.logical_bounds[3] for f in captions)
+    if caption.startswith("*"):
+        operations = result.pages[0].paint_ops
+        assert any(":caption-underline:" in op.occurrence_id for op in operations)
+        assert any(":caption-strike:" in op.occurrence_id for op in operations)
+
+
 @pytest.mark.parametrize("format_name", ["svg", "png"])
 def test_label_follows_picture_and_keeps_frozen_ink(tmp_path, format_name):
     name = "diagram." + format_name
