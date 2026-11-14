@@ -97,16 +97,39 @@ def interactive_canvas(owner):
     from .flow_template_designer import FlowCanvas
 
     class Canvas(FlowCanvas):
+        HANDLE_SIZE = 8
+        HANDLE_HIT_SIZE = 16
+
         def __init__(self):
             super().__init__(owner)
             self.setFocusPolicy(QtCore.Qt.StrongFocus)
+            self.setMouseTracking(True)
             self.start = self.original = self.ghost = None
+            self.preview_frame = None
             self.resize_drag = False
 
         def millimeters(self, pos):
-            t = owner.template
-            scale = min((self.width() - 20) / t.width_mm, (self.height() - 20) / t.height_mm)
+            scale = self.paper_scale()
             return QtCore.QPointF((pos.x() - 10) / scale, (pos.y() - 10) / scale)
+
+        def handle(self, rect, size):
+            scale = self.paper_scale()
+            return QtCore.QRectF(10 + rect.right() * scale - size / 2,
+                                 10 + rect.bottom() * scale - size / 2, size, size)
+
+        def handle_at(self, pos):
+            frame = owner.selected_frame()
+            if owner.template.kind == 'custom' and not owner.draw_role and frame:
+                r = frame.region
+                rect = QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm)
+                if self.handle(rect, self.HANDLE_HIT_SIZE).contains(pos):
+                    return frame
+            return None
+
+        def display_frame(self, frame):
+            if self.preview_frame is not None and frame.frame_id == self.preview_frame.frame_id:
+                return self.preview_frame
+            return frame
 
         def mousePressEvent(self, event):
             if (
@@ -120,56 +143,63 @@ def interactive_canvas(owner):
             if owner.draw_role:
                 self.original = None
                 return
-            selected = None
-            for frame in reversed(owner.current_layout().frames):
-                r = frame.region
-                if QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm).contains(self.start):
-                    selected = frame
-                    break
+            selected = self.handle_at(event.position())
+            self.resize_drag = selected is not None
+            if not selected:
+                for frame in reversed(owner.current_layout().frames):
+                    r = frame.region
+                    if QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm).contains(self.start):
+                        selected = frame
+                        break
             owner.select_frame(selected.frame_id if selected else None)
             self.original = selected
-            if selected:
-                r = selected.region
-                self.resize_drag = (
-                    abs(self.start.x() - r.x_mm - r.width_mm) < 3
-                    and abs(self.start.y() - r.y_mm - r.height_mm) < 3
-                )
 
         def mouseMoveEvent(self, event):
             if self.start is None:
+                if self.handle_at(event.position()):
+                    self.setCursor(QtCore.Qt.CursorShape.SizeFDiagCursor)
+                else:
+                    self.unsetCursor()
                 return
             point = self.millimeters(event.position())
             if owner.draw_role:
                 self.ghost = QtCore.QRectF(self.start, point).normalized()
             elif self.original:
-                r = self.original.region
+                frame = self.original
+                r, grid = frame.region, frame.paper_grid
                 dx, dy = point.x() - self.start.x(), point.y() - self.start.y()
-                self.ghost = (
-                    QtCore.QRectF(
-                        r.x_mm, r.y_mm, max(0.1, r.width_mm + dx), max(0.1, r.height_mm + dy)
-                    )
-                    if self.resize_drag
-                    else QtCore.QRectF(r.x_mm + dx, r.y_mm + dy, r.width_mm, r.height_mm)
-                )
+                if self.resize_drag:
+                    # Keep at least the first paper line. Existing paper lines
+                    # retain their positions when the bottom edge is dragged.
+                    height = max(round(max(0.1, r.height_mm + dy), 3), grid.first_mm if grid else 0)
+                    region = replace(r, width_mm=round(max(0.1, r.width_mm + dx), 3), height_mm=height)
+                    if grid and height < grid.last_mm:
+                        baselines = [baseline for baseline in grid.baselines() if baseline <= height]
+                        grid = replace(grid, last_mm=baselines[-1], rows=len(baselines))
+                else:
+                    region = replace(r, x_mm=round(r.x_mm + dx, 3), y_mm=round(r.y_mm + dy, 3))
+                self.preview_frame = replace(frame, region=region, paper_grid=grid)
+                self.ghost = QtCore.QRectF(region.x_mm, region.y_mm, region.width_mm, region.height_mm)
             self.update()
 
         def mouseReleaseEvent(self, event):
-            rect = self.ghost
+            rect, frame = self.ghost, self.preview_frame
             self.start = self.ghost = None
+            self.preview_frame = None
             if rect:
                 values = [round(v, 3) for v in (rect.x(), rect.y(), rect.width(), rect.height())]
                 if owner.draw_role:
                     role = owner.draw_role
                     owner.draw_role = None
                     owner.guard(lambda: owner.create_frame(role, values))
-                elif self.original:
-                    frame = self.original
-                    owner.guard(
-                        lambda: owner.replace_frame(
-                            replace(frame, region=Region(frame.region.name, *values))
-                        )
-                    )
+                elif frame:
+                    owner.guard(lambda: owner.replace_frame(frame))
             self.original = None
+            self.resize_drag = False
+            if self.handle_at(event.position()):
+                self.setCursor(QtCore.Qt.CursorShape.SizeFDiagCursor)
+            else:
+                self.unsetCursor()
             self.update()
 
         def keyPressEvent(self, event):
@@ -187,18 +217,17 @@ def interactive_canvas(owner):
                 rect = QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm)
             if rect:
                 painter = QtGui.QPainter(self)
-                scale = min(
-                    (self.width() - 20) / owner.template.width_mm,
-                    (self.height() - 20) / owner.template.height_mm,
-                )
-                painter.translate(10, 10)
-                painter.scale(scale, scale)
+                scale = self.paper_scale()
                 painter.setPen(QtGui.QPen(QtGui.QColor("#1d4ed8"), 1))
-                painter.drawRect(rect)
-                painter.fillRect(
-                    QtCore.QRectF(rect.right() - 1.2, rect.bottom() - 1.2, 2.4, 2.4),
-                    QtGui.QColor("#1d4ed8"),
-                )
+                painter.drawRect(QtCore.QRectF(10 + rect.x() * scale, 10 + rect.y() * scale,
+                                               rect.width() * scale, rect.height() * scale))
+                if frame and not owner.draw_role:
+                    painter.fillRect(self.handle(rect, self.HANDLE_SIZE), QtGui.QColor("#1d4ed8"))
+                if self.resize_drag and self.preview_frame and self.preview_frame.paper_grid:
+                    corner = self.handle(rect, self.HANDLE_SIZE).topLeft()
+                    painter.drawText(QtCore.QRectF(corner.x() - 80, corner.y() - 21, 76, 18),
+                                     QtCore.Qt.AlignmentFlag.AlignRight,
+                                     f"{self.preview_frame.paper_grid.rows} 行")
 
     return Canvas()
 
