@@ -14,6 +14,7 @@ from .image_labels import (
 )
 from .limits import bounded_parse, validate_nodes
 from .obsidian import OBSIDIAN_VERSION
+from .paragraph_align import resolve_paragraph_alignment
 from .schema import Diagnostic, Occurrence, SourceSpan, digest
 from .source import clusters
 from .source_map import MappedText, parser_view
@@ -306,6 +307,7 @@ def parse_markdown(
     tokens = parser.parse(source)
     check_cancel(cancelled)
     nodes = build(tokens, SourceSpan(0, len(session.source)))
+    nodes = resolve_paragraph_alignment(nodes, diagnostics, cancelled)
     validate_nodes(nodes, cancelled=cancelled)
     if has_image_labels:
         nodes = bind_image_labels(nodes, diagnostics)
