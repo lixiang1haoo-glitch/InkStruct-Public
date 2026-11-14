@@ -135,8 +135,13 @@ project.write_bytes(valid_bytes)
 
 # Even non-layout changes made while saving remain dirty, with the saved state frozen.
 real_save = mixed.save_package
+class SaveEdit(QtCore.QObject):
+    requested = QtCore.Signal()
+
+save_edit = SaveEdit()
+save_edit.requested.connect(lambda: w.optimize.setChecked(True), QtCore.Qt.ConnectionType.BlockingQueuedConnection)
 def editing_save(*a, **k):
-    w.optimize.setChecked(True)
+    save_edit.requested.emit()
     return real_save(*a, **k)
 mixed.save_package = editing_save
 assert w.save_project()
