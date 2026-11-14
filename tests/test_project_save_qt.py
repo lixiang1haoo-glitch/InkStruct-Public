@@ -8,7 +8,8 @@ import pytest
 
 
 @pytest.mark.skipif(find_spec('PySide6') is None, reason='desktop extra missing')
-def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
+@pytest.mark.parametrize('mode', ['markdown', 'plain-text'])
+def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path, mode):
     program = r'''
         import sys
         import threading
@@ -18,22 +19,26 @@ def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
 
         from inkstruct.document.package import load_package
         from inkstruct.editor import mixed
+        from inkstruct.editor.review import load_session
 
         root = Path(sys.argv[1])
+        mode = sys.argv[2]
+        markdown = mode == 'markdown'
         app = QtWidgets.QApplication([])
         QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
         QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Scope.UserScope, str(root))
-        window = mixed.MixedWindow(source='1')
+        window = mixed.MixedWindow(source='1', mode=mode)
         window.show()
         window.activateWindow()
         window.workspace_views.focus_source()
         window.editor.setFocus()
         QtTest.QTest.qWait(50)
         window.recovery_timer.setInterval(60000)
-        path = root / 'body.inkdoc'
+        path = root / ('body.inkdoc' if markdown else 'body.inkreview')
         dialogs, errors, writes, finished = [], [], [], []
         entered, release = threading.Event(), threading.Event()
-        original_save = mixed.save_package
+        save_function = 'save_package' if markdown else 'session_bytes'
+        original_save = getattr(mixed, save_function)
         gui_thread = threading.get_ident()
 
         def choose_file(*args):
@@ -42,7 +47,7 @@ def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
 
         def save(*args, **kwargs):
             assert threading.get_ident() != gui_thread
-            writes.append(args[1].source)
+            writes.append(args[1].source if markdown else kwargs['source'])
             if len(writes) == 1:
                 entered.set()
                 assert release.wait(8)
@@ -61,7 +66,9 @@ def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
         QtWidgets.QFileDialog.getSaveFileName = choose_file
         window.message_error = errors.append
         window.project_save_finished.connect(finished.append)
-        mixed.save_package = save
+        setattr(mixed, save_function, save)
+        read = (lambda saved: load_package(saved).session.source) if markdown else (
+            lambda saved: load_session(saved)[0].raw)
         try:
             ctrl_s()
             wait_for(entered.is_set)
@@ -81,10 +88,15 @@ def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
         wait_for(lambda: window.project_save is None and finished == [True])
         assert not errors and not window.dirty
         assert writes == ['1', '123']
-        assert load_package(path).session.source == '123', window.status.text()
-        assert load_package(path.with_name(path.name + '.previous.inkdoc')).session.source == '1'
+        assert read(path) == '123', window.status.text()
+        if markdown:
+            previous = load_package(path.with_name(path.name + '.previous.inkdoc')).session
+            current = load_package(path).session
+            assert previous.source == '1' and previous.atom_ids == current.atom_ids[:1]
+            assert current.atom_ids == window.source_session.atom_ids
         for _ in range(25):
             ctrl_s()
+        assert window.save_project()
         assert window.project_save is None and writes == ['1', '123']
 
         window.editor.insertPlainText('4')
@@ -98,11 +110,13 @@ def test_project_save_coalesces_shortcuts_without_blocking_editor(tmp_path):
 
         QtWidgets.QMessageBox.question = lambda *args: QtWidgets.QMessageBox.StandardButton.Save
         assert window.close()
-        assert load_package(path).session.source == '1234'
-        assert writes == ['1', '123', '1234']
+        assert read(path) == '1234'
+        # Markdown checks the previous package before serialization. A review
+        # project detects the conflict inside the atomic write after encoding.
+        assert writes == (['1', '123', '1234'] if markdown else ['1', '123', '1234', '1234'])
     '''
     result = subprocess.run(
-        [sys.executable, '-B', '-c', textwrap.dedent(program), str(tmp_path)],
+        [sys.executable, '-B', '-c', textwrap.dedent(program), str(tmp_path), mode],
         env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'INKSTRUCT_LAYOUT_PREVIEW_HOME': str(tmp_path)},
         capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30, check=False,
     )

@@ -883,7 +883,7 @@ class ReviewWindow(QtWidgets.QMainWindow):
         else:
             expected = self.session_hash
         try:
-            data = session_bytes(self.buffer.raw, self.run_path, self.book, self.page, self.style)
+            data = session_bytes(self.buffer.raw, self.run_path, self.book.records.values(), self.page, self.style)
             self.session_hash = atomic_write(path, data, expected)
             self.session_path = path
             self.dirty = False

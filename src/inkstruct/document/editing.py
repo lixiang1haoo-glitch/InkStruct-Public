@@ -144,6 +144,12 @@ class SourceSession:
             "atom_ids": list(self.atom_ids),
         }
 
+    def snapshot(self) -> SourceSession:
+        """Copy the current source and identities without sharing edit history."""
+        result = SourceSession(document_id=self.document_id)
+        result.source, result.atom_ids, result.revision = self.source, self.atom_ids, self.revision
+        return result
+
     @classmethod
     def restore(cls, source: str, record: dict) -> SourceSession:
         if record.get("schema_version") != IDENTITY_VERSION:

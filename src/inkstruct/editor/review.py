@@ -5,6 +5,7 @@ import io
 import json
 import os
 import tempfile
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -177,7 +178,7 @@ class ReviewBook:
 
 
 def session_bytes(
-    source: str, run: str, book: ReviewBook, page: PageProfile, style: StyleProfile
+    source: str, run: str, reviews: Iterable[Review], page: PageProfile, style: StyleProfile
 ) -> bytes:
     return json.dumps(
         {
@@ -186,7 +187,7 @@ def session_bytes(
             "run_path": run,
             "page": asdict(page),
             "style": asdict(style),
-            "reviews": [asdict(r) for r in book.records.values()],
+            "reviews": [asdict(r) for r in reviews],
         },
         ensure_ascii=False,
         indent=2,

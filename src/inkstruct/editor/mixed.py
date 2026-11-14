@@ -44,7 +44,7 @@ from .build_cache import (
     snapshot_weight,
     source_key,
 )
-from .review import RATINGS, Review, ReviewBook, SourceBuffer, atomic_write, file_hash, load_session
+from .review import RATINGS, Review, ReviewBook, SourceBuffer, atomic_write, file_hash, load_session, session_bytes
 from .wrapping import WrappingLayout
 
 
@@ -317,31 +317,37 @@ class ProjectSaveWorker(QtCore.QRunnable):
     def run(self):
         result = {}
         try:
-            path = self.path
-            expected = file_hash(path) if self.inspect_destination else self.expected
-            args = self.arguments
-            try:
-                resolver = build_markdown(**args)["resolver"]
-            except DocumentLimitError:
-                result['limited'] = True
-                resolver = args['resolver']
-            try:
-                old_data = path.read_bytes()
-            except FileNotFoundError:
-                old_data = None
-            if (sha256(old_data).hexdigest() if old_data is not None else None) != expected:
-                raise ValueError("文件已被其他程序修改，请另存为新文件")
-            if old_data is not None:
-                previous = path.with_name(path.name + ".previous.inkdoc")
-                atomic_write(previous, old_data, file_hash(previous))
-            del old_data
-            result['hash'] = save_package(path, args['session'], resolver, args['page'], args['style'],
-                                          flow=args['flow'], optimize=self.optimize,
-                                          expected_hash=expected, reviews=self.reviews)
-            result['resolver'] = resolver
+            expected = file_hash(self.path) if self.inspect_destination else self.expected
+            if self.optimize is None:
+                data = session_bytes(reviews=self.reviews, **self.arguments)
+                result['hash'] = atomic_write(self.path, data, expected)
+            else:
+                self.save_markdown(expected, result)
         except Exception as error:  # noqa: BLE001 - report failure on the GUI thread
             result['error'] = str(error)
         self.signals.finished.emit(result)
+
+    def save_markdown(self, expected, result):
+        path, args = self.path, self.arguments
+        try:
+            resolver = build_markdown(**args)["resolver"]
+        except DocumentLimitError:
+            result['limited'] = True
+            resolver = args['resolver']
+        try:
+            old_data = path.read_bytes()
+        except FileNotFoundError:
+            old_data = None
+        if (sha256(old_data).hexdigest() if old_data is not None else None) != expected:
+            raise ValueError("文件已被其他程序修改，请另存为新文件")
+        if old_data is not None:
+            previous = path.with_name(path.name + ".previous.inkdoc")
+            atomic_write(previous, old_data, file_hash(previous))
+        del old_data
+        result['hash'] = save_package(path, args['session'], resolver, args['page'], args['style'],
+                                      flow=args['flow'], optimize=self.optimize, expected_hash=expected,
+                                      reviews=[asdict(review) for review in self.reviews])
+        result['resolver'] = resolver
 
 
 class MixedWindow(ReviewWindow):
@@ -717,6 +723,8 @@ class MixedWindow(ReviewWindow):
             return
         self.mode = self.mode_picker.currentData()
         self.session_path = self.session_hash = None
+        self.recovery_path = self.recovery_hash = None
+        self.recovery_epoch += 1
         self.mark_dirty()
         self.schedule_layout()
 
@@ -919,9 +927,7 @@ class MixedWindow(ReviewWindow):
 
     def build_arguments(self):
         return {
-            "session": SourceSession.restore(
-                self.source_session.source, self.source_session.identity_record()
-            ),
+            "session": self.source_session.snapshot(),
             "revision": self.revision,
             "resolver": self.resolver,
             "run": self.run_path,
@@ -1492,33 +1498,36 @@ class MixedWindow(ReviewWindow):
             except (ValueError, OSError) as error:
                 self.message_error(error)
 
-    def request_project_save(self, *, save_as=False, force=False):
+    def project_save_matches(self, request):
+        return (request.epoch == self.recovery_epoch and self.mode == request.mode
+                and (self.session_path, self.session_hash) == (request.bound_path, request.bound_hash))
+
+    def request_project_save(self, *, save_as=False):
         if self.project_save_dialog or self.closed:
             return False
         if self.project_save is not None:
-            if save_as or self.mode == 'plain-text':
+            if save_as or not self.project_save_matches(self.project_save):
                 self.status.setText('正在保存项目，请保存完成后重试。')
                 return False
             if self.edit_generation != self.project_save.generation:
                 self.project_save_pending = True
             return True
-        if not self.integrated or self.mode == 'plain-text':
-            return super().save_project_as() if save_as else super().save_project()
         if self.source_error:
             self.message_error(self.source_error)
             return False
         bound_path, expected = self.session_path, self.session_hash
-        if bound_path and not self.dirty and not save_as and not force:
+        if bound_path and not self.dirty and not save_as:
             self.status.setText('项目已是最新版本。')
             return True
         path = None if save_as else bound_path
         inspect_destination = not path
+        markdown = self.mode == 'markdown'
         if inspect_destination:
+            destination = ("保存排版项目", "正文.inkdoc", "排版项目 (*.inkdoc)") if markdown else (
+                "保存检查项目", "检查项目.inkreview", "检查项目 (*.inkreview)")
             self.project_save_dialog = True
             try:
-                selected, _ = QtWidgets.QFileDialog.getSaveFileName(
-                    self, "保存排版项目", "正文.inkdoc", "排版项目 (*.inkdoc)"
-                )
+                selected, _ = QtWidgets.QFileDialog.getSaveFileName(self, *destination)
             finally:
                 self.project_save_dialog = False
             if not selected:
@@ -1529,16 +1538,20 @@ class MixedWindow(ReviewWindow):
                 raise ValueError(self.source_error)
             # A Save As to the currently open file still honors its saved hash.
             inspect_destination = inspect_destination and (bound_path is None or path.resolve() != bound_path.resolve())
-            args = self.build_arguments()
-            args['resolver'] = args['resolver'].copy_choices()
-            job = ProjectSaveWorker(path, expected, inspect_destination, args, self.optimize.isChecked(),
-                                    [asdict(r) for r in self.book.records.values()])
+            if markdown:
+                args = self.build_arguments()
+                args['resolver'] = args['resolver'].copy_choices()
+            else:
+                args = dict(source=self.buffer.raw, run=self.run_path, page=self.page, style=self.style)
+            job = ProjectSaveWorker(path, expected, inspect_destination, args,
+                                    self.optimize.isChecked() if markdown else None,
+                                    tuple(self.book.records.values()))
         except (ValueError, OSError, KeyError, TypeError) as error:
             self.message_error(error)
             return False
         job.signals.finished.connect(self.project_save_completed)
         self.project_save = SimpleNamespace(generation=self.edit_generation, path=path, bound_path=bound_path,
-                                            bound_hash=expected, epoch=self.recovery_epoch)
+                                            bound_hash=expected, epoch=self.recovery_epoch, mode=self.mode)
         self.recovery_timer.stop()
         self.status.setText(f'正在保存项目：{path}')
         self.pool.start(job)
@@ -1555,13 +1568,12 @@ class MixedWindow(ReviewWindow):
             self.message_error(result['error'])
             self.project_save_finished.emit(False)
             return
-        same_document = (request.epoch == self.recovery_epoch and self.mode == 'markdown'
-                         and (self.session_path, self.session_hash) == (request.bound_path, request.bound_hash))
+        same_document = self.project_save_matches(request)
         if same_document:
             self.session_path, self.session_hash = request.path, result['hash']
             self.project_migration_notice = ''
             if request.generation == self.edit_generation:
-                self.resolver = result["resolver"]
+                self.resolver = result.get("resolver", self.resolver)
                 self.dirty = False
                 self.recovery_timer.stop()
                 self.update_mode_controls()
@@ -1600,7 +1612,7 @@ class MixedWindow(ReviewWindow):
             self.project_save_waiting = False
 
     def save_project(self):
-        return self.request_project_save(force=True) and self.wait_for_project_save()
+        return self.request_project_save() and self.wait_for_project_save()
 
     def save_project_as(self):
         return self.request_project_save(save_as=True) and self.wait_for_project_save()
@@ -1706,9 +1718,7 @@ class MixedWindow(ReviewWindow):
         # The worker owns mutable session/selection maps. Glyphs and profiles
         # are immutable and can be shared with concurrent layout and editing.
         return {
-            'session': SourceSession.restore(
-                self.source_session.source, self.source_session.identity_record()
-            ),
+            'session': self.source_session.snapshot(),
             'resolver': AssetResolver(
                 embedded=tuple(g for pool in self.resolver.pools.values() for g in pool),
                 selections=tuple(self.resolver.selections.values()), seed=self.resolver.seed,
