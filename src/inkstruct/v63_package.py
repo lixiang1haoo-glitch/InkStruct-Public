@@ -111,12 +111,13 @@ def make_grouped(glyph):
     author = [i for i, s in enumerate(segments, 1) if s["kind"] != "reference"]
     references = [i for i, s in enumerate(segments, 1) if s["kind"] == "reference"]
     status = "reference_only" if not author else "partial" if references else "complete"
+    generator = "v6.3.1" if glyph.get("generator") == "v6.3.1" else "v6.3 exp"
     summary = {
         "source_kind": "generated", "task_status": "completed", "author_source_status": status,
         "protocol_status": "valid", "review_status": "unreviewed", "author_strokes": author,
         "reference_strokes": references, "unknown_strokes": [],
         "gaps": [{"order": i, "reason": "v6.2 参考替代"} for i in references],
-        "generator": "v6.3 exp", "generation_method": "v6.3 exp", "generation_mode": glyph["method"],
+        "generator": generator, "generation_method": generator, "generation_mode": glyph["method"],
         "same_character_sources_excluded": glyph["method"] != "same_character",
         "warnings": ["含参考替代笔画"] if references else [],
         "v63_standard_slots": glyph["standard_slots"],

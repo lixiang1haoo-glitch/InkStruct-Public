@@ -61,6 +61,7 @@ data = [(str(root/'LICENSE'), 'licenses/inkstruct'),
 # Exact source identities are used by reference correction and generation manifests.
 data += [(str(p), 'inkstruct') for p in (root/'src/inkstruct').glob('*.py')
          if p.stem not in ('train', 'model', 'dataset')]
+data += [(str(p), 'inkstruct/v631') for p in (root/'src/inkstruct/v631').glob('*.py')]
 for package in ('numpy','Pillow','markdown-it-py','PySide6','matplotlib'):
     data += copy_metadata(package, recursive=True)
 if sys.platform == 'win32':

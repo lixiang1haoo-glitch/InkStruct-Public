@@ -682,7 +682,10 @@ def verify_generation(w, out, wait, profile_path):
     wait(lambda: not widget.busy)
     assert widget.target_manifest['requested'] == list('孔正止')
     assert w.editor.source_session.source == source and w.editor.source_session.identity_record() == record
-    assert widget.parallelism.count() == 4
+    from inkstruct.generation_parallel import WORKER_PRESETS
+    assert [widget.parallelism.itemData(i) for i in range(widget.parallelism.count())] == [
+        "auto", 1, *WORKER_PRESETS, "max"
+    ]
     widget.grab().save(str(out/'generation-controls.png'))
     return {'real_profile_sha256': profile['sha256'], 'results': reports,
             'builtin_sets': {'counts': {e['id']: e['count'] for e in catalog.entries},
@@ -814,7 +817,7 @@ def verify_large_fonts(window, out, wait, paths):
 
     workflow = window.generator.centralWidget()
     count = workflow.candidate_limit
-    assert workflow.method.currentData() == 'v62' and count.minimum() == 1 and count.maximum() == 64
+    assert workflow.method.currentData() == 'v63' and count.minimum() == 1 and count.maximum() == 64
     window.tabs.setCurrentIndex(1)
     for value, attempts in ((8, 32), (64, 256)):
         count.setValue(value)
@@ -1294,7 +1297,10 @@ def main():
     export_plan(plan_from_snapshot(axis_after),out/'operator-axis-svg')
     # Both pipelines start from real captures, using the actual UI worker handlers.
     workflow = w.generator.centralWidget()
-    assert workflow.method.count() == 3 and workflow.method.currentData() == "v62"
+    assert [workflow.method.itemData(i) for i in range(workflow.method.count())] == [
+        "v63", "v62", "v61", "v4", "v631"
+    ]
+    assert workflow.method.currentData() == "v63"
     assert not workflow.generate_button.isEnabled()
     workflow.writer.setText(args.writer)
     workflow.samples.setText(str(args.samples))
