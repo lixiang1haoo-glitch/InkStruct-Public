@@ -39,7 +39,7 @@ def test_missing_index_and_method_specific_state_do_not_enable_generation(tmp_pa
     db = tmp_path / 'structure'
     db.write_bytes(b'db')
     flow = GenerationWorkflow(tmp_path/'work', db)
-    assert list(METHODS) == ['v63', 'v62', 'v61', 'v4']
+    assert list(METHODS) == ['v63', 'v62', 'v61', 'v4', 'v631']
     ready = flow.readiness('alice', str(source), 'v4')
     assert ready['import'] and ready['start'] and not ready['profile'] and not ready['generate']
     with pytest.raises(ValueError, match='导入'):
@@ -206,8 +206,9 @@ from inkstruct.generation_targets import target_manifest
 app=QtWidgets.QApplication([])
 w=main(['check'], create_only=True, workspace=Path(sys.argv[1]), database=Path(sys.argv[1])/'no-db')
 f=w.centralWidget()
-assert f.method.count()==4 and f.method.currentData()=='v63'
-assert '仅 v6.3' in ''.join(x.text() for x in f.findChildren(QtWidgets.QLabel))
+assert [f.method.itemData(i) for i in range(f.method.count())] == ['v63', 'v62', 'v61', 'v4', 'v631']
+assert f.method.currentData()=='v63'
+assert 'v6.3 和 v6.3.1 支持连笔' in ''.join(x.text() for x in f.findChildren(QtWidgets.QLabel))
 assert f.candidate_limit.isEnabled()
 assert f.same_character.isChecked()
 assert not f.source_score.isChecked() and not f.diversity_score.isChecked()

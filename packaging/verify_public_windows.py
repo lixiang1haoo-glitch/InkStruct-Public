@@ -55,8 +55,10 @@ def verify(executable, name, flag, font, output):
     env = system_environment()
     env["QT_QPA_PLATFORM"] = "windows" if flag == "--windows-style-check" else "offscreen"
     with (output / f"{name}.log").open("wb") as log:
-        subprocess.run([str(executable), "--inkstruct-check", flag, "--font", str(font),
-                        "--output", str(directory)], cwd=executable.parent, env=env,
+        arguments = [str(executable), "--inkstruct-check", flag, "--output", str(directory)]
+        if font is not None:
+            arguments.extend(("--font", str(font)))
+        subprocess.run(arguments, cwd=executable.parent, env=env,
                        stdout=log, stderr=subprocess.STDOUT, timeout=120,
                        creationflags=subprocess.CREATE_NO_WINDOW, check=True)
     report = json.loads((directory / "verification.json").read_bytes())
@@ -168,13 +170,14 @@ def main():
             raise ValueError(f"Native smoke did not cover both themed previews: {app}")
         reports[app] = {"math": math, "native": native}
     tool = extracted / "InkStruct/InkStructTool.exe"
+    generation = verify(tool, "v631-generation", "--v631-check", None, output)
     pdf = verify_pdf_worker(tool, output)
     raster = verify_cpu_preview(tool, output)
     with archive_path.open("rb") as stream:
         sha256 = file_digest(stream, "sha256").hexdigest()
     report = {"app_version": APP_VERSION, "archive": archive_path.name,
               "archive_sha256": sha256, "archive_bytes": archive_path.stat().st_size,
-              "checks": reports, "pdf": pdf, "gpu_fallback": raster}
+              "checks": reports, "pdf": pdf, "gpu_fallback": raster, "v631_generation": generation}
     (output / "verification.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 
