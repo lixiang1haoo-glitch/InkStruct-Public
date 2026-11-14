@@ -26,10 +26,10 @@ def template(grid=None, height=44):
     return FlowTemplate(kind="custom", width_mm=100, height_mm=80, layouts=(layout,), loop_pages=("paper",))
 
 
-def layout(source, paper):
+def layout(source, paper, style=STYLE):
     resolver = AssetResolver(generated=provider("甲乙丙丁后一二三表头"), builtin_numbers=True)
     return layout_markdown(parse_markdown(source), resolver,
-                           style=STYLE, flow=FlowStyle(template=paper, table=TableStyle(width_mm=80),
+                           style=style, flow=FlowStyle(template=paper, table=TableStyle(width_mm=80),
                                                        math=MathStyle(fraction_source="geometric")))
 
 
@@ -64,6 +64,22 @@ def test_ordinary_baselines_follow_grid_and_keep_original_size():
     lined = layout(source, replace(template(PaperGrid(7, 34, 4)), offset_y_mm=1))
     assert [find(lined, c).baseline_mm for c in "甲乙丙"] == pytest.approx([18, 27, 36])
     assert [find(lined, c).glyph_em_mm for c in "甲乙丙"] == [find(plain, c).glyph_em_mm for c in "甲乙丙"]
+
+
+@pytest.mark.parametrize("height, first_page_rows", [(43, 4), (45, 5)])
+def test_tight_bottom_only_affects_the_final_line(height, first_page_rows):
+    paper = template(PaperGrid(7, 43, 5), height)
+    result = layout("\n\n".join(["甲"] * 6), paper, replace(STYLE, line_height_mm=9))
+    baselines = [[f.baseline_mm for f in page.fragments if f.text == "甲"] for page in result.pages]
+    assert baselines == [[17 + 9 * i for i in range(first_page_rows)],
+                         [17 + 9 * i for i in range(6 - first_page_rows)]]
+    assert result.exportable
+
+
+def test_minimum_line_height_larger_than_pitch_requires_another_slot():
+    paper = template(PaperGrid(7, 43, 5), 45)
+    result = layout("甲\n\n乙\n\n丙", paper, replace(STYLE, line_height_mm=10))
+    assert [find(result, c).baseline_mm for c in "甲乙丙"] == pytest.approx([17, 35, 53])
 
 
 def test_display_formula_moves_to_next_page_and_inline_line_uses_multiple_slots():
@@ -120,3 +136,48 @@ def test_impossible_formula_stops_with_location_and_required_size():
     assert "正文框 1" in error.message and "需要" in error.message and "mm" in error.message
     assert source[error.span.start:error.span.end].lstrip().startswith("$$")
     assert not result.exportable
+
+
+def test_workbench_handle_trims_only_the_bottom_paper_lines():
+    from PySide6 import QtCore, QtTest, QtWidgets
+    from inkstruct.editor.flow_template_designer import FlowTemplateDesigner
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    dialog = FlowTemplateDesigner(template(PaperGrid(7, 43, 5), 48))
+    dialog.show()
+    app.processEvents()
+    dialog.select_frame('body')
+    canvas = dialog.interactive
+    original = dialog.selected_frame()
+
+    def drag(dx, dy, remaining):
+        frame = dialog.selected_frame()
+        region = frame.region
+        rect = QtCore.QRectF(region.x_mm, region.y_mm, region.width_mm, region.height_mm)
+        handle = canvas.handle(rect, canvas.HANDLE_SIZE)
+        outside = handle.center().toPoint() + QtCore.QPoint(3, 3)
+        assert handle.contains(outside) and not rect.contains(canvas.millimeters(outside))
+        QtTest.QTest.mouseMove(canvas, outside)
+        assert canvas.cursor().shape() == QtCore.Qt.CursorShape.SizeFDiagCursor
+        QtTest.QTest.mousePress(canvas, QtCore.Qt.MouseButton.LeftButton, pos=outside)
+        assert canvas.resize_drag
+        scale = canvas.paper_scale()
+        end = outside + QtCore.QPoint(round(dx * scale), round(dy * scale))
+        QtTest.QTest.mouseMove(canvas, end)
+        assert canvas.preview_frame.paper_grid.rows == remaining
+        assert dialog.selected_frame() == frame
+        QtTest.QTest.mouseRelease(canvas, QtCore.Qt.MouseButton.LeftButton, pos=end)
+        return dialog.selected_frame()
+
+    try:
+        shorter = drag(0, -17, 3)
+        assert shorter.region.width_mm == original.region.width_mm
+        assert list(shorter.paper_grid.baselines()) == list(original.paper_grid.baselines())[:3]
+        assert dialog.grid_rows.value() == 3
+        wider = drag(-5, 0, 3)
+        assert wider.region.width_mm < shorter.region.width_mm
+        assert wider.region.height_mm == shorter.region.height_mm and wider.paper_grid == shorter.paper_grid
+        taller = drag(0, 12, 3)
+        assert taller.region.height_mm > shorter.region.height_mm and taller.paper_grid == shorter.paper_grid
+    finally:
+        dialog.reject()
