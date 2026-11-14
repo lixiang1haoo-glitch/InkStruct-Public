@@ -44,6 +44,7 @@ def measure_labels(node, resolver, style, flow, width, height, cancelled):
             resolver, replace(style, em_mm=em), cancelled=cancelled,
             math_style=flow.math if settings.em_mm is None else replace(flow.math, em_mm=em),
             latin_spacing=flow.latin_spacing, punctuation_spacing=flow.punctuation_spacing,
+            han_spacing=flow.han_spacing,
             han_variation=flow.han_variation,
         )
         diagnostics.extend(issues)
@@ -75,6 +76,7 @@ def measure_image(block, resolver, style, flow, width, cancelled):
         footnote_style=flow.footnote,
         latin_spacing=flow.latin_spacing,
         punctuation_spacing=flow.punctuation_spacing,
+        han_spacing=flow.han_spacing,
         han_variation=flow.han_variation,
     )
     lines = break_lines(boxes, iw, cancelled=cancelled) if boxes else []

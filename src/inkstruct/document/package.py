@@ -29,7 +29,7 @@ from .package_validation import (
     validate_selections,
 )
 from .schema import PageProfile, StyleProfile
-from .styles import FlowStyle
+from .styles import FLOW_STYLE_VERSIONS, FlowStyle, omit_versioned_fields
 from .template_revision import template_record
 
 VERSION = "inkstruct_document_package_v1"
@@ -105,13 +105,7 @@ def package_bytes(
     for image_style in [flow_record["image"], *(v for _, v in flow_record["image_overrides"])]:
         if image_style["schema_version"] == "inkstruct_image_style_v1":
             image_style.pop("height_mm")
-    if flow_record["schema_version"] not in {"inkstruct_flow_style_v3", "inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
-        flow_record.pop("latin_spacing")
-    if flow_record["schema_version"] not in {"inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
-        flow_record.pop("punctuation_spacing")
-    if flow_record["schema_version"] != "inkstruct_flow_style_v5":
-        flow_record.pop("paragraph_align")
-        flow_record.pop("han_variation")
+    omit_versioned_fields(flow_record)
     for record in flow_record["images"]:
         for prefix in (
             ("original",)
@@ -312,7 +306,7 @@ def load_package(path: Path) -> LoadedDocument:
         if flow.named_fields != (manifest["schema_version"] == TEMPLATE_VERSION):
             raise ValueError("Template and project protocol versions disagree")
         if flow.named_fields and (manifest.get("template_content_protocol") != "inkstruct_named_fields_v1"
-                                  or styles['flow'].get('schema_version') not in {'inkstruct_flow_style_v2', 'inkstruct_flow_style_v3', 'inkstruct_flow_style_v4', 'inkstruct_flow_style_v5'}):
+                                  or styles['flow'].get('schema_version') not in FLOW_STYLE_VERSIONS[1:]):
             raise ValueError("Unsupported named-field project protocol")
         if flow.math.delimiter_source == "sample" and any(
             ":math-rule:" in s.occurrence_id for s in selections
