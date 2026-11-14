@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import copy
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 
 from ..document.footnote_style import FootnoteStyle
 from ..document.schema import Diagnostic, PageProfile, SourceSpan, digest
@@ -426,6 +426,7 @@ def layout_footnotes(document, resolver, *, page, style, flow, cancelled=None, f
             [InlineRun(o) for o in node.occurrences], resolver, note_style, cancelled=cancelled,
             latin_spacing=flow.latin_spacing,
             punctuation_spacing=flow.punctuation_spacing,
+            han_spacing=flow.han_spacing,
         )
         issues.extend(label_issues)
         entry_flow = replace(
@@ -730,7 +731,7 @@ def layout_footnotes(document, resolver, *, page, style, flow, cancelled=None, f
         {
             "body": result.job_key,
             "version": VERSION,
-            "flow": asdict(flow),
+            "flow": flow.layout_record(),
             "source": document.content_key,
             "selections": resolver.selection_records(),
         }

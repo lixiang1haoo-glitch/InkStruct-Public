@@ -61,7 +61,7 @@ def layout_key(source, resolver, page, style, flow):
     # Python equality conflates 1/1.0/True and signed zero; serialized profiles
     # distinguish them in snapshot IDs. Use the same exact JSON representation.
     settings = digest(
-        {"page": asdict(page), "style": asdict(style), "flow": asdict(flow), "seed": resolver.seed}
+        {"page": asdict(page), "style": asdict(style), "flow": flow.layout_record(), "seed": resolver.seed}
     )
     return (
         source,

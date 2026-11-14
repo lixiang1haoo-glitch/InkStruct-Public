@@ -220,7 +220,7 @@ def layout_flow_template(document, resolver, *, page, style, flow, cancelled=Non
     key = digest(
         {
             "source": document.content_key,
-            "flow": asdict(flow),
+            "flow": flow.layout_record(),
             "style": asdict(style),
             "resources": resolver.resource_key,
             "selections": resolver.selection_records(),

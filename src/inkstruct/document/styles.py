@@ -1,7 +1,7 @@
 """Versioned flow settings; independent from the legacy plain-text style profile."""
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from ..math.style import MathStyle
 from .code_style import CodeStyle
@@ -14,6 +14,17 @@ from .line_svg import SCHEMA as SVG_SCHEMA
 from .line_svg import LineSvgResource
 from .table_style import TableStyle
 from .template import PageTemplate, TemplateBinding, template_from_record
+
+FLOW_STYLE_VERSIONS = tuple(f"inkstruct_flow_style_v{version}" for version in range(1, 7))
+
+
+def omit_versioned_fields(record):
+    version = FLOW_STYLE_VERSIONS.index(record["schema_version"]) + 1
+    for introduced, keys in ((3, ("latin_spacing",)), (4, ("punctuation_spacing",)),
+                             (5, ("paragraph_align", "han_variation")), (6, ("han_spacing",))):
+        if version < introduced:
+            for key in keys:
+                record.pop(key)
 
 
 @dataclass(frozen=True)
@@ -41,10 +52,16 @@ class FlowStyle:
     punctuation_spacing: str = "capture"
     paragraph_align: str = "left"
     han_variation: HanVariation = field(default_factory=HanVariation)
+    han_spacing: str = "full"
+
+    def layout_record(self):
+        record = asdict(self)
+        if self.han_spacing == "full":
+            record.pop("han_spacing")
+        return record
 
     def __post_init__(self):
-        versions = {"inkstruct_flow_style_v1", "inkstruct_flow_style_v2", "inkstruct_flow_style_v3", "inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}
-        if self.schema_version not in versions:
+        if self.schema_version not in FLOW_STYLE_VERSIONS:
             raise ValueError("Unsupported flow style version")
         if self.paragraph_align not in {"left", "justify"}:
             raise ValueError("Unknown paragraph alignment")
@@ -52,18 +69,22 @@ class FlowStyle:
             object.__setattr__(self, "han_variation", HanVariation(**self.han_variation))
         if not isinstance(self.han_variation, HanVariation):
             raise ValueError("Invalid Chinese variation configuration")  # noqa: TRY004 - serialized configuration
-        if self.paragraph_align != "left" or self.han_variation != HanVariation():
-            object.__setattr__(self, "schema_version", "inkstruct_flow_style_v5")
+        if self.han_spacing not in {"full", "handwriting"}:
+            raise ValueError("Unknown Han spacing policy")
         if self.punctuation_spacing not in {"capture", "handwriting"}:
             raise ValueError("Unknown punctuation spacing policy")
-        if self.schema_version not in versions:
-            raise ValueError("Unsupported flow style version")
-        if self.punctuation_spacing != "capture" and self.schema_version != "inkstruct_flow_style_v5":
-            object.__setattr__(self, "schema_version", "inkstruct_flow_style_v4")
         if self.latin_spacing not in {"capture", "handwriting"}:
             raise ValueError("Unknown Latin spacing policy")
-        if self.latin_spacing != "capture" and self.schema_version not in {"inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
-            object.__setattr__(self, "schema_version", "inkstruct_flow_style_v3")
+        version = FLOW_STYLE_VERSIONS.index(self.schema_version)
+        if self.han_spacing == "handwriting":
+            version = 5
+        elif self.paragraph_align != "left" or self.han_variation != HanVariation():
+            version = max(version, 4)
+        elif self.punctuation_spacing != "capture":
+            version = max(version, 3)
+        elif self.latin_spacing != "capture":
+            version = max(version, 2)
+        object.__setattr__(self, "schema_version", FLOW_STYLE_VERSIONS[version])
         corrections = tuple(GlyphCorrection(**v) if isinstance(v, dict) else v
                             for v in self.glyph_corrections)
         if (len(corrections) > 4096 or any(not isinstance(v, GlyphCorrection) for v in corrections)
@@ -160,8 +181,6 @@ class FlowStyle:
         ):
             raise ValueError("Invalid table style overrides")
         object.__setattr__(self, "table_overrides", overrides)
-        if self.schema_version not in versions:
-            raise ValueError("Unsupported flow style version")
         values = (
             self.paragraph_gap_mm,
             self.heading_gap_mm,

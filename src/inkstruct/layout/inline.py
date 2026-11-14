@@ -99,6 +99,7 @@ def measure_runs(
     footnote_style=None,
     latin_spacing="capture",
     punctuation_spacing="capture",
+    han_spacing="full",
     han_variation=None,
 ):
     boxes, diagnostics = [], []
@@ -121,6 +122,7 @@ def measure_runs(
                 cancelled=cancelled,
                 latin_spacing=latin_spacing,
                 punctuation_spacing=punctuation_spacing,
+                han_spacing=han_spacing,
             )
             reference_em = style.em_mm * scale * note_style.reference_scale
             rise = style.em_mm * scale * note_style.reference_raise_em
@@ -231,11 +233,12 @@ def measure_runs(
                 bounds, metrics = glyph.layout_bounds, glyph.layout_metrics
                 offset = radius + max(0, -bounds[0] * em)
                 advance = max(metrics.advance, bounds[2]) * em + offset + radius
-                if (latin_spacing == "handwriting" and run.kind != "code_inline"
-                        and len(o.text) == 1 and o.text.isascii() and o.text.isalpha()):
-                    # A single-letter capture's horizontal position is not a
-                    # side bearing. Retain its size and guide baseline, placing
-                    # ink with 0.04 em clearance on each side plus pen radius.
+                compact_latin = (latin_spacing == "handwriting" and len(o.text) == 1
+                                 and o.text.isascii() and o.text.isalpha())
+                compact_han = han_spacing == "handwriting" and is_han(o.text)
+                if run.kind != "code_inline" and (compact_latin or compact_han):
+                    # Retain size and baseline, placing the pen envelope with
+                    # 0.04 em clearance on each side.
                     # Use the frozen optical frame so saved ink corrections do
                     # not get normalized away or applied a second time.
                     offset = radius + (0.04 - bounds[0]) * em

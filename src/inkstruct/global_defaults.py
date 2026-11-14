@@ -7,7 +7,7 @@ from PySide6 import QtCore
 
 from .document.han_variation import variation_record
 from .document.schema import PageProfile, StyleProfile
-from .document.styles import FlowStyle
+from .document.styles import FlowStyle, omit_versioned_fields
 from .document.template_revision import template_record
 from .math.style import MathStyle, math_style_record
 
@@ -169,13 +169,7 @@ class GlobalDefaultsStore:
         record["flow"]["math"] = math_style_record(defaults.flow.math)
         if record["flow"]["image"]["schema_version"] == "inkstruct_image_style_v1":
             record["flow"]["image"].pop("height_mm")
-        if defaults.flow.schema_version not in {"inkstruct_flow_style_v3", "inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
-            record["flow"].pop("latin_spacing")
-        if defaults.flow.schema_version not in {"inkstruct_flow_style_v4", "inkstruct_flow_style_v5"}:
-            record["flow"].pop("punctuation_spacing")
-        if defaults.flow.schema_version != "inkstruct_flow_style_v5":
-            record["flow"].pop("paragraph_align")
-            record["flow"].pop("han_variation")
+        omit_versioned_fields(record["flow"])
         raw = json.dumps({"version": 2 if defaults.flow.named_fields else 1, **record}, ensure_ascii=False, allow_nan=False)
         if len(raw) > (16_000_000 if defaults.flow.named_fields else 4_000_000):
             raise ValueError("全局默认超过容量限制")
