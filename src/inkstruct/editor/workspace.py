@@ -37,8 +37,11 @@ def organize_workspace(w):
     action(file_menu, "新建文档", w.new_document, QtGui.QKeySequence.StandardKey.New)
     action(file_menu, "打开项目…", w.open_project, QtGui.QKeySequence.StandardKey.Open)
     action(file_menu, "导入 Markdown / 文本…", w.open_text)
-    action(file_menu, "保存项目", w.save_project, QtGui.QKeySequence.StandardKey.Save)
-    action(file_menu, "另存项目…", w.save_project_as, QtGui.QKeySequence.StandardKey.SaveAs)
+    save = action(file_menu, "保存项目", w.request_project_save, QtGui.QKeySequence.StandardKey.Save)
+    save.setAutoRepeat(False)
+    save_as = action(file_menu, "另存项目…", lambda: w.request_project_save(save_as=True),
+                     QtGui.QKeySequence.StandardKey.SaveAs)
+    save_as.setAutoRepeat(False)
     action(file_menu, "保存 Markdown / 文本…", w.save_text)
     file_menu.addSeparator()
     action(file_menu, "打开恢复副本…", w.open_recovery)
