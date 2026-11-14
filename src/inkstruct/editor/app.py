@@ -906,8 +906,11 @@ class ReviewWindow(QtWidgets.QMainWindow):
             buttons.Save,
         )
         if result == buttons.Save:
-            return self.save_project()
+            return self.save_before_discard()
         return result == buttons.Discard
+
+    def save_before_discard(self):
+        return self.save_project()
 
     def save_project_as(self):
         old_path, old_hash = self.session_path, self.session_hash
