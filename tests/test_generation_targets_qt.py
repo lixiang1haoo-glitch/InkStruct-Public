@@ -14,7 +14,12 @@ from inkstruct.generation_targets import target_manifest
 app=QtWidgets.QApplication([])
 w=main(['test'],create_only=True,workspace=Path(sys.argv[1]),database=Path('artifacts/structures/characters.sqlite3'))
 f=w.centralWidget()
-assert f.parallelism.currentData()=='auto' and f.parallelism.count()==4
+from inkstruct.generation_parallel import WORKER_PRESETS
+assert f.parallelism.currentData()=='auto'
+assert [f.parallelism.itemData(i) for i in range(f.parallelism.count())] == ['auto', 1, *WORKER_PRESETS, 'max']
+f.method.setCurrentIndex(f.method.findData('v631'))
+assert not f.same_character.isHidden() and f.same_character.isChecked()
+assert f.candidate_limit.isEnabled()
 assert not f.target_current_button.isEnabled()
 source='孔正孔 $U_{正}=1$ [止](https://example.org/网址)'
 f.current_document_provider=lambda:(source,FlowStyle(),{'document_id':'unchanged','revision':4})
@@ -31,7 +36,8 @@ while f.busy and time.monotonic()<end:app.processEvents();time.sleep(.01)
 assert f.target_manifest['requested']==list('孔正')
 assert '目标 2 字' in f.target_summary.text()
 assert not hasattr(f,'text') and not hasattr(f,'generate_all')
-f.method.setCurrentIndex(2);assert not f.parallelism.isEnabled()
+f.method.setCurrentIndex(f.method.findData('v4'))
+assert not f.parallelism.isEnabled() and f.same_character.isHidden()
 QtWidgets.QFileDialog.getOpenFileName=lambda *a:('','')
 before=f.target_manifest;f.choose_target_file();assert f.target_manifest is before
 QtWidgets.QApplication.processEvents()

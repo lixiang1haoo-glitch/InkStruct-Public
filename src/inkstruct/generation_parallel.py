@@ -57,17 +57,22 @@ def worker_count(count, requested='auto'):
 
 
 def _session(config, cancelled=lambda: False):
-    from .generation_workflow import prepare_generation
     for name, expected in config['hashes'].items():
         if cancelled():
             raise InterruptedError('生成已取消')
         if sha256_file(Path(name)) != expected:
             raise ValueError('任务资源快照已改变，停止生成')
     base = FrozenStructureRepository(config['database'], cancelled)
-    return prepare_generation(config['writer'], base, config['profile'], semantic=config['semantic'],
-                              reference_paths=config['references'], cancelled=cancelled,
-                              candidate_limit=config.get('candidate_limit', 1),
-                              same_character=config.get('same_character', False))
+    arguments = dict(reference_paths=config['references'], cancelled=cancelled,
+                     candidate_limit=config.get('candidate_limit', 1),
+                     same_character=config.get('same_character', False))
+    if config.get('engine') == 'v631':
+        from .v631.engine import prepare_generation
+
+        return prepare_generation(config['writer'], base, config['profile'], **arguments)
+    from .generation_workflow import prepare_generation
+
+    return prepare_generation(config['writer'], base, config['profile'], semantic=config['semantic'], **arguments)
 
 
 def _worker(connection, config, cancel_event):
@@ -143,13 +148,15 @@ def verify_row(staging, writer, character, row, profile_hash, *, candidate_limit
 
 def run_generation(output, writer, characters, base, profile_record, progress, cancelled, *,
                    semantic=False, workers='auto', target_manifest=None, candidate_limit=1, _context=None,
-                   timeout=300, same_character=False):
+                   timeout=300, same_character=False, engine=None):
     from .generation_workflow import corrections, write
     from .generation_variants import MAX_CANDIDATES
     if type(candidate_limit) is not int or not 1 <= candidate_limit <= (MAX_CANDIDATES if semantic else 1):
         raise ValueError("无效的生成候选数量")
     characters = list(characters)
     connected = profile_record.get('connected')
+    if engine is not None and (engine != 'v631' or not semantic or not connected):
+        raise ValueError('生成引擎与作者档案不兼容')
     if not characters or len(set(characters)) != len(characters) or any(len(c) != 1 for c in characters):
         raise ValueError('生成目标必须是非空、去重的受支持单字符列表')
     if target_manifest is None:
@@ -240,6 +247,8 @@ def run_generation(output, writer, characters, base, profile_record, progress, c
                   'profile': {**profile_record, 'path': str(copied[0]), 'original_path': str(paths[0])},
                   'references': [str(p) for p in copied[1:1+len(references)]],
                   'hashes': {str(p): sha256_file(p) for p in [database, *copied]}}
+        if engine is not None:
+            config['engine'] = engine
         if connected is not None:
             if sha256_file(copied[-1]) != connected['sha256']:
                 raise ValueError('作者连笔档案已改变，请重新建档')

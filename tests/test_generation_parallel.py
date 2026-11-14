@@ -125,12 +125,13 @@ def test_incomplete_or_changed_payload_is_rejected(tiny, tmp_path):
 
 
 def test_auto_does_not_spawn_for_small_tasks_and_respects_memory(monkeypatch):
+    from inkstruct.generation_parallel import MAX_WORKERS
     import inkstruct.plotter.parallel as export
     assert worker_count(32, 'auto') == 1
     monkeypatch.setattr(export, 'available_memory', lambda: 1100*1024**2)
     assert worker_count(500, 4) == 1
     with pytest.raises(ValueError):
-        worker_count(32, 8)
+        worker_count(32, MAX_WORKERS + 1)
 
 
 def test_child_thread_environment_is_restored_even_when_spawn_fails(monkeypatch):

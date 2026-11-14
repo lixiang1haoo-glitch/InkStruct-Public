@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.80**。修复 Markdown 图片带图题时，后续正文可能与图片重叠或留下过大空白的问题。
+当前源码版本为 **0.1.81**。生成页新增独立的 v6.3.1，可沿用通过校验的 v6.3 作者档案。默认仍为 v6.3。
 
 0.1.78 起，汉字采集的四个常用按钮加大为两行，与画布纵向居中。按 Shift+Enter 可暂时跳过当前字。
 

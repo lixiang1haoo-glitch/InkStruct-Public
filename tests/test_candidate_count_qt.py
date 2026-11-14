@@ -91,7 +91,7 @@ else:
         assert calls[-1][1]['candidate_limit'] == 1
     f.method.setCurrentIndex(f.method.findData('v62'))
     count.setValue(1)
-    assert '不尝试额外成品' in f.candidate_hint.text()
+    assert '每字只保留 1 份' in f.candidate_hint.text()
     count.setValue(MAX_CANDIDATES)
     assert '256' in f.candidate_hint.text()
     count.setValue(8)

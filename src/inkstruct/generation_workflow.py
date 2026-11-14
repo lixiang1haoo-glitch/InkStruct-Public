@@ -16,16 +16,27 @@ from pathlib import Path
 
 from .samples import sha256_file
 
-METHODS = {"v63": "v6.3 exp（支持连笔）", "v62": "v6.2 exp", "v61": "v6.1 exp", "v4": "v4 adaptive"}
+METHODS = {"v63": "v6.3 exp（支持连笔）", "v62": "v6.2 exp", "v61": "v6.1 exp", "v4": "v4 adaptive",
+           "v631": "v6.3.1（支持连笔）"}
 VERSION = "desktop-corrected-v61-20261014.1"
 V62_VERSION = "desktop-semantic-v62-20261020.1"
 V63_VERSION = "desktop-connected-v63-2"
-MULTI_CANDIDATE_METHODS = {"v62", "v63"}
+CONNECTED_METHODS = {"v63", "v631"}
+MULTI_CANDIDATE_METHODS = {"v62", *CONNECTED_METHODS}
 SOURCE_METHODS = {"v61", *MULTI_CANDIDATE_METHODS}
 
 
 def workflow_version(method):
+    if method == "v631":
+        # v6.3.1 preserves the layout of both split and connected profiles.
+        return V63_VERSION
     return {"v62": V62_VERSION, "v63": V63_VERSION}.get(method, VERSION)
+
+
+def profile_for_method(profiles, method):
+    if method == "v631":
+        return profiles.get("v631") or profiles.get("v63", {})
+    return profiles.get(method, {})
 
 
 def connected_profile_valid(profile):
@@ -101,7 +112,7 @@ class GenerationWorkflow:
             raise ValueError("样本目录不存在")
         state = self.state(writer, source)
         batch = state.get("import", {})
-        profile = state.get("profiles", {}).get(method, {})
+        profile = profile_for_method(state.get("profiles", {}), method)
         index = Path(batch.get("index", ""))
         stamp = []
         for path in sorted(source.rglob("*.json")):
@@ -151,7 +162,7 @@ class GenerationWorkflow:
             if not batch.get("accepted_count") or not Path(batch.get("index", "")).is_file():
                 raise ValueError("尚未导入可用的汉字样本。开始生成时自动导入并建档。")
             result["profile"] = True
-            profile = state.get("profiles", {}).get(method, {})
+            profile = profile_for_method(state.get("profiles", {}), method)
             if profile.get("index_sha256") != batch["index_sha256"] or not Path(profile.get("path", "")).is_file():
                 raise ValueError("样本已导入。开始生成时会为所选方法建立档案。")
             if profile.get("workflow_version") != workflow_version(method):
@@ -199,13 +210,13 @@ class GenerationWorkflow:
                     and sha256_file(index) == batch.get("index_sha256")
                     and set(map(sample_identity, iter_index(index))) == set(map(sample_identity, samples)))
         if reusable:
-            profile = profiles.get(method, {})
+            profile = profile_for_method(profiles, method)
             path = Path(profile.get("path", ""))
             if (profile.get("index_sha256") == batch["index_sha256"]
                     and profile.get("workflow_version") == workflow_version(method)
                     and path.is_file() and sha256_file(path) == profile.get("sha256")
                     and sha256_file(self.database) == profile.get("database_sha256")
-                    and (method != "v63" or connected_profile_valid(profile))):
+                    and (method not in CONNECTED_METHODS or connected_profile_valid(profile))):
                 notify("沿用档案", str(path))
                 return profile
         else:
@@ -256,8 +267,11 @@ class GenerationWorkflow:
                                       self.root / "profiles" / identity(),
                                       retain_source_trajectories=method in SOURCE_METHODS)
         connected = None
-        if method == "v63":
-            from .v63 import build_connected_profile
+        if method in CONNECTED_METHODS:
+            if method == "v631":
+                from .v631.connected import build_connected_profile
+            else:
+                from .v63 import build_connected_profile
             connected = build_connected_profile(writer, index, repo, profile, path)
         donors = len(profile.source_trajectories) if method in SOURCE_METHODS else profile.sample_count
         donors += connected["samples"] if connected else 0
@@ -281,11 +295,11 @@ class GenerationWorkflow:
             candidate_limit = DEFAULT_CANDIDATES if method in MULTI_CANDIDATE_METHODS else 1
         candidate_attempt_limit(candidate_limit)
         if method not in MULTI_CANDIDATE_METHODS and candidate_limit != 1:
-            raise ValueError('v6.2 和 v6.3 支持同字多候选，其他方法每字保留一份。')
+            raise ValueError('v6.2 和 v6.3 系列支持同字多候选，其他方法每字保留一份。')
         if same_character is None:
-            same_character = method == "v63"
-        if same_character and method != "v63":
-            raise ValueError("只有 v6.3 支持同字原稿回放。")
+            same_character = method in CONNECTED_METHODS
+        if same_character and method not in CONNECTED_METHODS:
+            raise ValueError("只有 v6.3 系列支持同字原稿回放。")
         if source_score and method == "v4":
             raise ValueError("v4 缺少逐笔来源记录，无法计算来源分。")
         self.require("start" if preparation is not None else "generate", writer, source, method)
@@ -313,11 +327,13 @@ class GenerationWorkflow:
             preparation("生成字形", f"目标 {len(requested)} 字")
         else:
             state = self.state(writer, source)
-            profile = state["profiles"][method]
+            profile = profile_for_method(state["profiles"], method)
             if sha256_file(Path(profile["path"])) != profile["sha256"] or sha256_file(self.database) != profile["database_sha256"]:
                 raise ValueError("档案或结构库已改变，请重新建档。")
             if sha256_file(Path(state["import"]["index"])) != profile["index_sha256"]:
                 raise ValueError("导入索引已改变，请重新导入并建档。")
+            if method == "v631" and not connected_profile_valid(profile):
+                raise ValueError("连笔档案已改变，请重新建档。")
         started_at = datetime.now(UTC).isoformat()
         run_id = identity()
         if method == "v4":
@@ -334,9 +350,17 @@ class GenerationWorkflow:
             completed_characters = result.get("completed_characters", "")
         else:
             output = self.root / "outputs" / run_id
-            result = generate_v61(output, writer, requested, repository, profile, progress, cancelled,
-                                  semantic=method in MULTI_CANDIDATE_METHODS, workers=workers, target_manifest=manifest,
-                                  candidate_limit=candidate_limit, same_character=same_character)
+            if method == "v631":
+                from .generation_parallel import run_generation
+
+                result = run_generation(output, writer, requested, repository, profile, progress, cancelled,
+                                        semantic=True, workers=workers, target_manifest=manifest,
+                                        candidate_limit=candidate_limit, same_character=same_character,
+                                        engine="v631")
+            else:
+                result = generate_v61(output, writer, requested, repository, profile, progress, cancelled,
+                                      semantic=method in MULTI_CANDIDATE_METHODS, workers=workers, target_manifest=manifest,
+                                      candidate_limit=candidate_limit, same_character=same_character)
             completed_characters = result.get("completed_preview", "")
         if source_score or diversity_score:
             from .generation_scores import evaluate
