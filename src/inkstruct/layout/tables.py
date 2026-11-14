@@ -188,6 +188,7 @@ def measure_table(
     footnote_style=None,
     latin_spacing="capture",
     punctuation_spacing="capture",
+    han_spacing="full",
     han_variation=None,
     available_widths=(),
 ):
@@ -212,6 +213,7 @@ def measure_table(
             footnote_style=footnote_style,
             latin_spacing=latin_spacing,
             punctuation_spacing=punctuation_spacing,
+            han_spacing=han_spacing,
             han_variation=han_variation,
             character_em={
                 c: style.digit_height_mm / style.numeric_height_em for c in "0123456789."

@@ -58,6 +58,32 @@ if scenario=='no_op':
     assert before==(w.style,w.page,w.flow,w.source_session.atom_ids,w.resolver.selection_records())
     assert not w.dirty
     d.reject()
+elif scenario=='han_spacing':
+    from inkstruct.global_defaults import GlobalDefaultsStore
+    from inkstruct.document.han_variation import HanVariation
+    from inkstruct.settings_dialog import BodyPage
+    w.flow=replace(w.flow, han_variation=HanVariation(enabled=True, spacing_strength=.6))
+    original=w.flow
+    store=GlobalDefaultsStore()
+    defaults,_=store.load()
+    store.save(replace(defaults,flow=replace(defaults.flow,han_variation=original.han_variation)))
+    d=SettingsDialog(w,category='body');p=d.pages['body']
+    assert isinstance(p,BodyPage) and p.han_spacing.currentData()=='full'
+    d.filter_categories('汉字间距')
+    assert p.han_spacing.property('settingsSearchHit')
+    p.han_spacing.setCurrentIndex(p.han_spacing.findData('handwriting'))
+    assert d.apply(),d.error.text()
+    assert w.flow==original and GlobalDefaultsStore().load()[0].flow.han_spacing=='handwriting'
+    assert d.apply(to_document=True),d.error.text();d.reject();ready()
+    assert w.flow.han_spacing=='handwriting' and w.flow.han_variation==original.han_variation
+    path=root/'spacing.inkdoc'
+    save_package(path,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
+    w.load_project_path(path);ready()
+    d=SettingsDialog(w,category='body');p=d.pages['body']
+    assert p.han_spacing.currentData()=='handwriting'
+    p.han_spacing.setCurrentIndex(p.han_spacing.findData('full'))
+    assert d.apply(to_document=True),d.error.text();d.reject();ready()
+    assert w.flow.han_spacing=='full' and w.flow.han_variation==original.han_variation
 elif scenario=='scopes':
     from inkstruct.global_defaults import GlobalDefaultsStore
     d=SettingsDialog(w,category='table');p=d.pages['table']
@@ -199,7 +225,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
-@pytest.mark.parametrize("scenario", ["no_op", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
+@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
 def test_settings_transactions_and_navigation(tmp_path, dpi, scenario):
     result = subprocess.run(
         [sys.executable, "-c", PROGRAM, str(tmp_path), scenario],

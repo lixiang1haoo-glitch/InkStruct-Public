@@ -123,7 +123,7 @@ def prepare(
         SELECTION_VERSION,
         policy_key(),
         document.document_id,
-        digest({"page": asdict(page), "style": asdict(style), "flow": asdict(flow)}),
+        digest({"page": asdict(page), "style": asdict(style), "flow": flow.layout_record()}),
     )
     # Full measured inputs include exact source offsets, identities, current
     # selected glyph geometry/metrics/provenance, tables, images and code wraps.
