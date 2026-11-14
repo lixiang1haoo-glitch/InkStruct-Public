@@ -10,6 +10,7 @@ from ..settings_pages import section
 from ..symbol_catalog import SYMBOL_GROUPS, character_preview
 from ..theme import set_tone
 from ..ui_behavior import compact_field
+from ..writer_links import WriterLinkRequired, WriterLinks
 from .core import FontPackage, to_user
 from .library import entry, fingerprint, import_font, publish_font
 from .management_ui import DEFAULT_FONT_LABEL, DEFAULT_FONT_ROLE, FontList, FontManagement
@@ -179,6 +180,12 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.publication_progress.setWordWrap(True)
         self.publication_progress.setProperty("inkRole", "status")
         publication_layout.addWidget(self.publication_progress)
+        self.writer_links = WriterLinks(self.root.parent)
+        self.writer_link = None
+        self.confirm_writer_button = QtWidgets.QPushButton('核对并关联书写者…')
+        self.confirm_writer_button.clicked.connect(self.confirm_writer_link)
+        self.confirm_writer_button.hide()
+        publication_layout.addWidget(self.confirm_writer_button)
         footer = QtWidgets.QHBoxLayout()
         footer.addStretch()
         close = QtWidgets.QPushButton("返回字体库")
@@ -292,6 +299,8 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
 
     def invalidate_publication(self, *_):
         self.review_revision += 1
+        self.writer_link = None
+        self.confirm_writer_button.hide()
         self.review = self.review_stamp = self.review_result = self.review_groups = None
         with QtCore.QSignalBlocker(self.contents):
             self.contents.clear()
@@ -324,11 +333,11 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 if stamp is None:
                     stamp = publication_stamp(writer, run, symbols)
                 require_publication_stamp(writer, run, symbols, stamp)
-                result = review_selection(writer, run, symbols, name, groups, rules=rules)
+                result = review_selection(writer, run, symbols, name, groups, rules=rules, writer_links=self.writer_links)
                 require_publication_stamp(writer, run, symbols, stamp)
-                return revision, inputs, stamp, groups, result, "", False
+                return revision, inputs, stamp, groups, result, None
             except Exception as error:  # Carry the request identity with failures too.
-                return revision, inputs, stamp, groups, None, str(error), isinstance(error, PublicationInputsChanged)
+                return revision, inputs, stamp, groups, None, error
 
         job = self.review_job = Job(work)
         job.signals.completed.connect(self.publication_reviewed)
@@ -340,18 +349,21 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
 
     def publication_reviewed(self, response):
         self.review_job = None
-        revision, inputs, stamp, groups, result, error, changed = response
+        revision, inputs, stamp, groups, result, error = response
         if revision != self.review_revision or inputs != self.publication_inputs():
             self.update_actions()
             self.review_timer.start()
             return
-        if changed:
+        if isinstance(error, PublicationInputsChanged):
             self.invalidate_publication()
             return
         self.review_stamp = stamp
         if result is None:
-            self.coverage_summary.setText("清单核对失败：" + error)
+            self.coverage_summary.setText("清单核对失败：" + str(error))
             self.publication_progress.setText("制作前请处理清单中的核对错误。")
+            if isinstance(error, WriterLinkRequired):
+                self.writer_link = error.link
+                self.confirm_writer_button.show()
             set_tone(self.publication_progress, "danger")
             self.update_actions()
             return
@@ -377,6 +389,31 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             self.publication_progress.setText("已核对当前勾选。制包时验证汉字来源与包完整性。")
         set_tone(self.publication_progress, "")
         self.update_actions()
+
+    def confirm_writer_link(self):
+        link = self.writer_link
+        if link is None:
+            return
+        _, run, symbols, _ = self.publication_inputs()
+        source = link.symbols
+        box = QtWidgets.QMessageBox(self.publication)
+        box.setWindowTitle('确认两份来源为同一书写者')
+        box.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+        box.setText(f'汉字批次  {Path(run).name}\n书写者 ID  {link.target_writer}\n\n'
+                    f'扩展样本  {Path(symbols).name}\n原书写者 ID  {source.writer}\n'
+                    f'{source.count} 份样本，{len(source.characters)} 个字符\n\n'
+                    '请确认上述两份来源均由同一人书写。本机记录只适用于这个批次和这组样本。')
+        box.setDetailedText(f'{run}\n{symbols}\n\n字符范围\n{source.characters}\n\n样本 SHA-256\n{source.sha256}')
+        buttons = QtWidgets.QMessageBox.StandardButton
+        box.setStandardButtons(buttons.Yes | buttons.Cancel)
+        box.setDefaultButton(buttons.Cancel)
+        if box.exec() == buttons.Yes and link == self.writer_link:
+            try:
+                self.writer_links.confirm(link)
+            except (OSError, ValueError) as error:
+                self.failed(str(error))
+            else:
+                self.invalidate_publication()
 
     def create_publication_rows(self, result):
         available = {group for group, _, _ in result["coverage"]}
@@ -760,7 +797,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         def work(progress):
             result = publish_font(self.root, writer=writer, run=run, symbols=symbols, name=name,
                                   package_kind=kind, groups=groups, stamp=stamp, expected=expected,
-                                  progress=progress, rules=rules)
+                                  progress=progress, rules=rules, writer_links=self.writer_links)
             stats = result["verification"]
             actual, difference = display_coverage(result["coverage"]), result["difference"]
             lines = [f"字体已验证并入库 · {stats['characters']} 字，{stats['candidates']} 份候选"]

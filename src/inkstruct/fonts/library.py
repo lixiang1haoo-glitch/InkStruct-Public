@@ -89,11 +89,12 @@ def import_font(source, root, progress=lambda message: None, *, workers=None):
     }
 
 
-def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stamp, expected, progress, rules=None):
+def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stamp, expected, progress, rules=None,
+                 writer_links=None):
     """Build and fully verify on the library volume before creating its visible entry."""
     from ..generation_workflow import identity, write
     from .importer import build_font
-    from .publication import candidate_coverage, require_publication_stamp
+    from .publication import candidate_coverage, require_publication_stamp, writer_authorizer
     from .publication_rules import PublicationRules
 
     rules = rules or PublicationRules()
@@ -138,6 +139,7 @@ def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stam
             build_font(staged, writer=writer, name=name, run=run if "han" in groups else None,
                        symbols=selected_symbols, symbol_groups=groups if symbols else None,
                        package_kind=package_kind, phase=phase, diagnostics=diagnostics, rules=rules,
+                       authorize_symbols=writer_authorizer(writer, run, writer_links),
                        progress=lambda message: progress("准备字形 · " + message))
             phase("完整验证")
             font = FontPackage(staged, verify_all=False)
