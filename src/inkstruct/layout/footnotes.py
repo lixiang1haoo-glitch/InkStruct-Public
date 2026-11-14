@@ -391,6 +391,7 @@ def layout_footnotes(document, resolver, *, page, style, flow, cancelled=None, f
         template=None,
         template_bindings=(),
         first_line_indent_mm=0,
+        digits_follow_latin=False,
         list_indent_mm=settings.label_indent_mm,
         math=replace(flow.math, em_mm=flow.math.em_mm * ratio),
         code=replace(

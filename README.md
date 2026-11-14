@@ -4,9 +4,9 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 0.1.86 · Python / Qt
+Windows x64 · 0.1.87 · Python / Qt
 
-0.1.86 新增 Windows 样本库和 Markdown 段落对齐区块。样本可跨任务筛选、预览和离线交接，正文可按区块指定对齐方式。
+0.1.87 将正文数字纳入「字母与数字间距」，支持按实际笔迹宽度排列。旧项目打开时沿用原数字间距。
 
 0.1.82 修复排版页连续按 Ctrl+S 时界面长时间无响应的问题。Markdown 项目在后台保存，重复请求会合并。
 
@@ -66,15 +66,15 @@ $python = ".\.venv\Scripts\python.exe"
 $env:PYTHONPATH = "$PWD/src;$PWD/artifacts/external/data_collection"
 & $python -B packaging/prepare_public_resources.py
 & $python -B -m pytest -p no:cacheprovider
-& $python -B packaging/build_inkstruct_app.py --output build/0.1.86
-& $python -B packaging/verify_public_windows.py --bundle build/0.1.86/dist/InkStruct --output build/verification
+& $python -B packaging/build_inkstruct_app.py --output build/0.1.87
+& $python -B packaging/verify_public_windows.py --bundle build/0.1.87/dist/InkStruct --output build/verification
 ```
 
 从源码启动可运行 `python -m inkstruct.application --workspace workspace`。构建安装程序时，从 [NSIS 锁](packaging/nsis-win.lock.json) 下载编译器 ZIP，保持原样，并执行：
 
 ```powershell
 & $python -B packaging/build_windows_installer.py --verification build/verification/verification.json --nsis-zip nsis-3.13.zip --output build/installer
-& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.86-Windows-x64.zip --output build/installer-check
+& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.87-Windows-x64.zip --output build/installer-check
 ```
 
 ## 许可与贡献

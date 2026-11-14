@@ -31,7 +31,7 @@ CATEGORIES = (
         "body",
         "排版默认设置",
         "正文与段落",
-        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 汉字间距 英文 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
+        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 汉字间距 英文 字母与数字间距 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
     ),
     (
         "math",
@@ -74,9 +74,11 @@ class BodyPage(QtWidgets.QWidget):
         self.latin_spacing.addItem("按笔迹宽度（推荐）", "handwriting")
         self.latin_spacing.addItem("保留采集位置留白（旧版）", "capture")
         self.latin_spacing.setCurrentIndex(self.latin_spacing.findData(owner.flow.latin_spacing))
-        self.latin_spacing.setAccessibleName("英文字母间距")
-        self.latin_spacing.setToolTip("按笔迹宽度排列正文英文字母，保留字形大小和基线；公式与等宽代码使用原有规则。旧文档不自动切换。")
-        form.addRow("英文字母间距", self.latin_spacing)
+        self.latin_spacing.setAccessibleName("字母与数字间距")
+        self.latin_spacing.setToolTip("按笔迹宽度排列英文字母和正文数字，保留字形大小和基线。公式、表格数字和代码各自排版。")
+        self.digit_spacing_edited = False
+        self.latin_spacing.currentIndexChanged.connect(self.record_digit_spacing_edit)
+        form.addRow("字母与数字间距", self.latin_spacing)
         self.punctuation_spacing = QtWidgets.QComboBox()
         self.punctuation_spacing.addItem("按笔迹紧凑排列（推荐）", "handwriting")
         self.punctuation_spacing.addItem("保留采集位置留白（旧版）", "capture")
@@ -210,6 +212,9 @@ class BodyPage(QtWidgets.QWidget):
         self.upgrade_natural.setText("已选择新版算法")
         self.upgrade_natural.setEnabled(False)
 
+    def record_digit_spacing_edit(self, *_):
+        self.digit_spacing_edited = True
+
     def variation_configuration(self):
         original = self.original_variation
         values = {key:(getattr(original,key) if control.value()==self.initial_variation_values.get(key)
@@ -226,6 +231,7 @@ class BodyPage(QtWidgets.QWidget):
         self.dialect.setCurrentIndex(0)
         self.han_spacing.setCurrentIndex(0)
         self.latin_spacing.setCurrentIndex(0)
+        self.record_digit_spacing_edit()
         self.punctuation_spacing.setCurrentIndex(0)
         self.paragraph_align.setCurrentIndex(0)
         self.han_enabled.setChecked(False)
@@ -546,7 +552,9 @@ class SettingsDialog(QtWidgets.QDialog):
                 self.collector.ui_settings = capture
                 self.collector.apply_ui_settings(capture)
             if to_document:
-                apply_to_document(w, defaults)
+                body = self.pages.get("body")
+                apply_digits = self.current == "body" or (body is not None and body.digit_spacing_edited)
+                apply_to_document(w, defaults, apply_digit_spacing=apply_digits)
             self.flow, self.style, self.page, self.mode = flow, style, paper, mode
             if 'preview' in self.pages:
                 self.pages['preview'].save()
