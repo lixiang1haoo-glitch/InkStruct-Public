@@ -100,6 +100,7 @@ def measure_runs(
     latin_spacing="capture",
     punctuation_spacing="capture",
     han_spacing="full",
+    digits_follow_latin=False,
     han_variation=None,
 ):
     boxes, diagnostics = [], []
@@ -233,8 +234,8 @@ def measure_runs(
                 bounds, metrics = glyph.layout_bounds, glyph.layout_metrics
                 offset = radius + max(0, -bounds[0] * em)
                 advance = max(metrics.advance, bounds[2]) * em + offset + radius
-                compact_latin = (latin_spacing == "handwriting" and len(o.text) == 1
-                                 and o.text.isascii() and o.text.isalpha())
+                compact_latin = (latin_spacing == "handwriting" and len(o.text) == 1 and o.text.isascii()
+                                 and (o.text.isalpha() or (digits_follow_latin and o.text.isdigit())))
                 compact_han = han_spacing == "handwriting" and is_han(o.text)
                 if run.kind != "code_inline" and (compact_latin or compact_han):
                     # Retain size and baseline, placing the pen envelope with

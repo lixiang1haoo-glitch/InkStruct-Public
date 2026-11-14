@@ -84,6 +84,27 @@ elif scenario=='han_spacing':
     p.han_spacing.setCurrentIndex(p.han_spacing.findData('full'))
     assert d.apply(to_document=True),d.error.text();d.reject();ready()
     assert w.flow.han_spacing=='full' and w.flow.han_variation==original.han_variation
+elif scenario=='digit_spacing':
+    from inkstruct.global_defaults import GlobalDefaultsStore
+    assert w.flow.digits_follow_latin and w.flow.latin_spacing=='handwriting'
+    old = root/'old.inkdoc'
+    flow = replace(w.flow, digits_follow_latin=False, schema_version='inkstruct_flow_style_v5')
+    save_package(old,w.source_session,w.resolver,w.page,w.style,flow=flow)
+    w.load_project_path(old);ready()
+    assert w.flow.latin_spacing=='handwriting' and not w.flow.digits_follow_latin
+    d=SettingsDialog(w,category='table')
+    assert d.apply(to_document=True),d.error.text()
+    assert not w.flow.digits_follow_latin
+    d.select('body'); p=d.pages['body']
+    assert p.latin_spacing.accessibleName()=='字母与数字间距'
+    assert d.apply(),d.error.text()
+    assert not w.flow.digits_follow_latin and GlobalDefaultsStore().load()[0].flow.digits_follow_latin
+    assert d.apply(to_document=True),d.error.text(); d.reject(); ready()
+    assert w.flow.digits_follow_latin
+    new=root/'new.inkdoc'
+    save_package(new,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
+    w.load_project_path(new);ready()
+    assert w.flow.digits_follow_latin and w.flow.latin_spacing=='handwriting'
 elif scenario=='scopes':
     from inkstruct.global_defaults import GlobalDefaultsStore
     d=SettingsDialog(w,category='table');p=d.pages['table']
@@ -225,7 +246,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
-@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
+@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "digit_spacing", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
 def test_settings_transactions_and_navigation(tmp_path, dpi, scenario):
     result = subprocess.run(
         [sys.executable, "-c", PROGRAM, str(tmp_path), scenario],
