@@ -9,12 +9,21 @@ class PreviewSettingsPage(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         column = QtWidgets.QVBoxLayout(self)
+        self.saved_acceleration = GlobalDefaultsStore.preview_acceleration_enabled()
+        self.acceleration = QtWidgets.QCheckBox('渲染加速')
+        self.acceleration.setObjectName('preview_render_acceleration')
+        self.acceleration.setAccessibleDescription('通过简化路径点加速渲染')
+        self.acceleration.setChecked(self.saved_acceleration)
+        column.addWidget(self.acceleration)
+        column.addWidget(QtWidgets.QLabel('通过简化路径点加速渲染'))
+        column.addSpacing(12)
         self.backend = QtWidgets.QComboBox()
         self.backend.setObjectName('preview_backend')
         self.backend.addItem('CPU（默认，兼容性优先）', 'cpu')
         self.backend.addItem('GPU 栅格化（可选，失败自动回退 CPU）', 'gpu')
         current = GlobalDefaultsStore.make_settings().value('preview_backend_v1', 'cpu', str)
         self.backend.setCurrentIndex(max(0, self.backend.findData(current)))
+        self.saved_backend = self.backend.currentData()
         column.addWidget(QtWidgets.QLabel('页面预览绘制后端'))
         column.addWidget(compact_field(self.backend))
         text = QtWidgets.QLabel('保存后下次启动应用生效。仅影响屏幕栅格化，不改变排版、选字或 SVG 导出。'
@@ -23,12 +32,21 @@ class PreviewSettingsPage(QtWidgets.QWidget):
         column.addWidget(text)
         column.addStretch()
 
+    @property
+    def changed(self):
+        return (self.acceleration.isChecked() != self.saved_acceleration
+                or self.backend.currentData() != self.saved_backend)
+
     def save(self):
         settings = GlobalDefaultsStore.make_settings()
         settings.setValue('preview_backend_v1', self.backend.currentData())
+        settings.setValue(GlobalDefaultsStore.PREVIEW_ACCELERATION_KEY, self.acceleration.isChecked())
         settings.sync()
         if settings.status() != QtCore.QSettings.Status.NoError:
             raise OSError('预览设置保存失败')
+        self.saved_acceleration = self.acceleration.isChecked()
+        self.saved_backend = self.backend.currentData()
 
     def reset_defaults(self):
         self.backend.setCurrentIndex(0)
+        self.acceleration.setChecked(True)

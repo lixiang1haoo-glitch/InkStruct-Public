@@ -378,8 +378,9 @@ class SettingsDialog(QtWidgets.QDialog):
         self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
         self.heading.setText(f"{group} › {title}")
-        self.apply_document.setVisible(self.has_current_document and key != "appearance")
-        self.save_button.setText("保存" if key == "appearance" else "存为默认")
+        app_setting = key in {"appearance", "preview"}
+        self.apply_document.setVisible(self.has_current_document and not app_setting)
+        self.save_button.setText("保存" if app_setting else "存为默认")
         role = "primary" if self.apply_document.isHidden() else None
         if self.save_button.property("inkRole") != role:
             self.save_button.setProperty("inkRole", role)
@@ -390,7 +391,7 @@ class SettingsDialog(QtWidgets.QDialog):
             if key == "capture"
             else "生效范围：本机应用界面，保存后立即切换。"
             if key == "appearance"
-            else "生效范围：本机预览，下次启动应用生效；不修改文档。"
+            else "渲染加速切换后立即重绘，保存后保留选择。绘制后端在下次启动时生效。"
             if key == "preview"
             else "生效范围：全局默认，保存后新文档使用；已有文档保持原设置。"
         )
@@ -408,6 +409,7 @@ class SettingsDialog(QtWidgets.QDialog):
         elif key == "preview":
             from .editor.preview_settings import PreviewSettingsPage
             page = PreviewSettingsPage()
+            page.acceleration.toggled.connect(self.editor.canvas.set_render_acceleration)
         elif key == "capture":
             page = CapturePage(self.collector)
         elif key == "body":
@@ -469,7 +471,8 @@ class SettingsDialog(QtWidgets.QDialog):
                 group.setHidden(all(group.child(j).isHidden() for j in range(group.childCount())))
         if query and found:
             self.select(found[0])
-            self.scope_info.setText(f"搜索结果：{self.heading.text()}。修改仅在点击应用后生效。")
+            if found[0] != "preview":
+                self.scope_info.setText(f"搜索结果：{self.heading.text()}。修改仅在点击应用后生效。")
         elif query:
             self.scope_info.setText("没有匹配的设置，可尝试“行高”“图片”“公式”等关键词。")
         page = self.pages[self.current]
@@ -519,8 +522,11 @@ class SettingsDialog(QtWidgets.QDialog):
             defaults = LayoutDefaults(paper, style, flow, mode, self.run, self.symbols)
             appearance = self.pages.get("appearance")
             theme_changed = appearance is not None and appearance.changed
+            preview = self.pages.get("preview")
+            preview_changed = preview is not None and preview.changed
+            to_document = to_document and self.current != "preview"
             save_defaults = (
-                not theme_changed or to_document
+                not (theme_changed or preview_changed or self.current == "preview") or to_document
                 or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
             )
             inspector = getattr(w, "element_inspector", None)
@@ -556,13 +562,14 @@ class SettingsDialog(QtWidgets.QDialog):
                 apply_digits = self.current == "body" or (body is not None and body.digit_spacing_edited)
                 apply_to_document(w, defaults, apply_digit_spacing=apply_digits)
             self.flow, self.style, self.page, self.mode = flow, style, paper, mode
-            if 'preview' in self.pages:
-                self.pages['preview'].save()
+            if preview is not None:
+                preview.save()
             if theme_changed:
                 appearance.save()
             set_tone(self.error, "success")
             self.error.setText(
                 "已更新当前文档并存为默认。" if to_document
+                else "已保存预览绘制设置。" if self.current == "preview" and not save_defaults
                 else "已保存应用主题。" if theme_changed and not save_defaults
                 else "已保存为新文档默认。"
             )
@@ -593,6 +600,8 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def remember(self, result):
         self.preferences.setValue("size", self.size())
+        if preview := self.pages.get("preview"):
+            self.editor.canvas.set_render_acceleration(preview.saved_acceleration)
         for page in self.pages.values():
             timer = getattr(page, "timer", None)
             if timer:
