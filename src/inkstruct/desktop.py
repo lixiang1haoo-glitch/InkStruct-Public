@@ -64,6 +64,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
         generation_progress = QtCore.Signal(object)
         generation_preparation = QtCore.Signal(str, str)
         publish_requested = QtCore.Signal()
+        history_publish_requested = QtCore.Signal(object, str)
 
         def __init__(self):
             super().__init__()
@@ -75,6 +76,7 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.last_generated_run = None
             self.last_generated_writer = None
             self.last_generated_batch = None
+            self.history_dialog = None
             self.generation_active = False
             self.generation_error = ""
             self.generation_stage = ""
@@ -267,6 +269,10 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
             self.publish_batch_summary.hide()
             summary_layout.addWidget(self.publish_batch_summary)
             result_layout.addLayout(summary_layout, 1)
+            self.history_button = QtWidgets.QPushButton("历史生成结果…")
+            self.history_button.setObjectName("generation_history")
+            self.history_button.clicked.connect(self.open_generation_history)
+            result_layout.addWidget(self.history_button)
             self.publish_button = QtWidgets.QPushButton("制作字体…")
             self.publish_button.setObjectName("generation_to_font_library")
             self.publish_button.setProperty("inkRole", "primary")
@@ -415,6 +421,25 @@ def main(argv=None, *, create_only=False, workspace=None, database=None):
 
         def values(self):
             return self.writer.text().strip(), self.samples.text().strip(), self.method.currentData()
+
+        def open_generation_history(self):
+            from .generation_history_ui import GenerationHistoryDialog
+
+            dialog = self.history_dialog
+            if dialog is None:
+                capture = self.capture_root_provider() if self.capture_root_provider else root / "capture"
+                dialog = GenerationHistoryDialog(service.root, capture, self.writer.text().strip(),
+                                                   self.window(), can_publish=create_only)
+                dialog.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+                dialog.destroyed.connect(self.clear_history_dialog)
+                dialog.publish_requested.connect(self.history_publish_requested)
+                self.history_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+
+        def clear_history_dialog(self):
+            self.history_dialog = None
 
         def preferred_candidate_limit(self):
             try:

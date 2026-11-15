@@ -58,11 +58,13 @@ def trajectory_for(glyph):
             "coordinate_space": "em-y-down-baseline-0.88", "strokes": strokes}
 
 
-def grouped_records(root, writer):
+def grouped_records(root, writer, *, character=None):
     manifest = read(root / "v63-run.json")
     if manifest.get("schema_version") != RUN or manifest.get("writer") != writer:
         raise ValueError("连笔生成批次协议或作者不符")
-    for char, spec in manifest["files"].items():
+    files = manifest["files"]
+    entries = files.items() if character is None else ((character, files[character]),) if character in files else ()
+    for char, spec in entries:
         if len(char) != 1 or spec["name"] != f"U+{ord(char):04X}.json":
             raise ValueError("连笔生成批次文件名无效")
         path = (root / spec["name"]).resolve()
