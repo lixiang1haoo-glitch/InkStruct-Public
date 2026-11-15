@@ -8,7 +8,8 @@ from .schema import Diagnostic, SourceSpan
 
 START = r"\begin{paragraphalign}"
 END = r"\end{paragraphalign}"
-MODES = frozenset({"left", "center", "right", "justify"})
+MODES = frozenset({"left", "center", "right"})
+LEGACY_MODE = "justify"
 
 
 def block_paragraph_align(state, start, end, silent):
@@ -22,7 +23,7 @@ def block_paragraph_align(state, start, end, silent):
         match = re.fullmatch(r"\{([^{}]*)\}", parameter)
         if parameter and not match and not (parameter.startswith("{") and "}" not in parameter):
             return False
-        mode = match[1] if match and match[1] in MODES else ""
+        mode = match[1] if match and (match[1] in MODES or match[1] == LEGACY_MODE) else ""
         kind = "paragraph_align_start"
     elif raw == END:
         kind, mode = "paragraph_align_end", ""
@@ -54,7 +55,7 @@ def resolve_paragraph_alignment(nodes, diagnostics, cancelled=None):
         if node.kind == "paragraph_align_start":
             selected = dict(node.attributes)["mode"]
             if not selected:
-                report(node, "paragraph-align-option", "段落对齐参数应为 left、center、right 或 justify。")
+                report(node, "paragraph-align-option", "段落对齐参数应为 left、center 或 right。")
             if depth:
                 report(node, "paragraph-align-nested", "段落对齐区块不允许嵌套。")
                 mode = ""
@@ -66,7 +67,12 @@ def resolve_paragraph_alignment(nodes, diagnostics, cancelled=None):
                 report(node, "paragraph-align-unexpected-end", "段落对齐结束符没有对应的起始指令。")
                 continue
             depth -= 1
-            if not depth and mode:
+            if depth:
+                continue
+            if mode == LEGACY_MODE:
+                report(opening, "paragraph-align-legacy-justify",
+                       "justify 区块已停用。正文沿用文档的正文对齐和首行缩进，可删除此起始指令及对应的结束指令。")
+            elif mode:
                 for index in range(first, len(body)):
                     check_cancel(cancelled)
                     paragraph = body[index]

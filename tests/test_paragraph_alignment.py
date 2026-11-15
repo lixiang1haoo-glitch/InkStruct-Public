@@ -55,32 +55,63 @@ def test_invalid_range_keeps_default_and_reports_source_line(text, diagnostic, l
     assert all(block.paragraph_align == 'justify' for block in body_blocks(document, FlowStyle(paragraph_align='justify')))
 
 
-@pytest.mark.parametrize('mode', ['left', 'center', 'right', 'justify'])
+@pytest.mark.parametrize('mode', ['left', 'center', 'right'])
 def test_placement_indent_and_wrapping_across_pages(mode):
-    document = parse_markdown(scoped(mode, '甲' * 31) + '\n\n乙')
-    resolver = AssetResolver(generated=provider('甲乙'))
+    document = parse_markdown(scoped(mode, '甲' * 31 + '\n\n' + '丙' * 14) + '\n\n乙')
+    resolver = AssetResolver(generated=provider('甲乙丙'))
     page = PageProfile(50, 35, 5)
     style = StyleProfile(em_mm=6, line_height_mm=8)
-    flow = FlowStyle(first_line_indent_mm=10)
+    flow = FlowStyle(first_line_indent_mm=10, paragraph_align='justify')
+    assert [(block.paragraph_align, block.first_indent) for block in body_blocks(document, flow)] == [
+        (mode, 0), (mode, 0), ('justify', 10)
+    ]
     result = layout_markdown(document, resolver, page=page, style=style, flow=flow)
     by_page = lines(result)
     assert len(by_page) >= 2
-    visible = [line for group in by_page for line in group if line[0].text == '甲']
-    assert sum(len(line) for line in visible) == 31
-    assert len(visible) >= 5 and len(visible[0]) < 31
     assert next(f for f in result.fragments if f.text == '乙').x_mm == pytest.approx(15)
-    if mode in {'center', 'right'}:
+    for char, count in [('甲', 31), ('丙', 14)]:
+        visible = [line for group in by_page for line in group if line[0].text == char]
+        assert sum(len(line) for line in visible) == count
         assert len(visible[0]) == len(visible[1])
         for line in visible:
             left, right = line[0].logical_bounds[0], line[-1].logical_bounds[2]
-            assert (left + right) / 2 == pytest.approx(25) if mode == 'center' else right == pytest.approx(45)
-    else:
-        assert len(visible[0]) < len(visible[1])
-        assert visible[0][0].x_mm == pytest.approx(15)
-        assert all(line[0].x_mm == pytest.approx(5) for line in visible[1:])
-        if mode == 'justify':
-            assert visible[0][-1].logical_bounds[2] == pytest.approx(45)
-            assert visible[-1][-1].logical_bounds[2] < 45
+            if mode == 'left':
+                assert left == pytest.approx(5) and right < 45
+            elif mode == 'center':
+                assert (left + right) / 2 == pytest.approx(25)
+            else:
+                assert right == pytest.approx(45)
+
+
+@pytest.mark.parametrize('document_alignment', ['left', 'justify'])
+def test_legacy_justify_keeps_document_layout_and_hides_both_commands(document_alignment):
+    text = '甲' * 25 + '\n\n' + '丙' * 9
+    opening = r'\begin{paragraphalign}{justify}'
+    source = ('乙\n\n' + scoped('justify', text) + '\n\n乙').replace('\n', '\r\n')
+    document = parse_markdown(source)
+    reminder, = (d for d in document.diagnostics if d.code.startswith('paragraph-align-'))
+    assert reminder.code == 'paragraph-align-legacy-justify'
+    assert reminder.severity == 'warning'
+    assert source[reminder.span.start:reminder.span.end] == opening
+    assert '可删除' in reminder.message and '结束指令' in reminder.message
+    assert ''.join(item.text for item in document.occurrences) == '乙' + '甲' * 25 + '丙' * 9 + '乙'
+
+    flow = FlowStyle(paragraph_align=document_alignment, first_line_indent_mm=8)
+    assert [(block.paragraph_align, block.first_indent) for block in body_blocks(document, flow)] == [
+        (document_alignment, 8)
+    ] * 4
+    reference = parse_markdown('乙\n\n' + text + '\n\n乙')
+    resolver = AssetResolver(generated=provider('甲乙丙'))
+    settings = dict(page=PageProfile(50, 35, 5), style=StyleProfile(em_mm=6, line_height_mm=8), flow=flow)
+    result = layout_markdown(document, resolver, **settings)
+    plain = layout_markdown(reference, resolver, **settings)
+    assert result.exportable and plain.exportable
+    assert reminder in result.diagnostics
+
+    def geometry(layout):
+        return [(fragment.text, fragment.logical_bounds) for page in layout.pages for fragment in page.fragments]
+
+    assert geometry(result) == geometry(plain)
 
 
 def test_frame_width_and_saved_source_round_trip(tmp_path):

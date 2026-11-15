@@ -88,7 +88,7 @@ InkStruct 编辑器将 Markdown 源码、实际手写轨迹和毫米页面结合
 
 \paragraph{样本库（0.1.86）}在「采集」打开样本库，按书写者、字符、类别或任务筛选，预览原始笔迹并选择导出。接收端选择目标书写者，核对离线采集包中的新增、重复和冲突后导入。
 
-\paragraph{段落对齐区块（0.1.86）}分别在独立源码行使用 \verb|\begin{paragraphalign}{center}| 和 \verb|\end{paragraphalign}|。对齐方式可选 \texttt{left}、\texttt{center}、\texttt{right} 或 \texttt{justify}，作用于区块中的普通正文。区块可跨页或正文框，错误指令对应的正文沿用文档默认对齐。
+\paragraph{段落对齐区块}分别在独立源码行使用 \verb|\begin{paragraphalign}{left}| 和 \verb|\end{paragraphalign}|。区块方式可选 \texttt{left}、\texttt{center}、\texttt{right}，区块内每段正文的首行都取消额外缩进。称呼可以放在 \texttt{left} 区块里顶格排版。区块可跨页或正文框。普通正文仍沿用文档的对齐与首行缩进设置，正文设置里的两端对齐照常生效。旧 \texttt{justify} 区块沿用文档设置，预览和导出时隐藏两行指令，并在起始指令所在的源码行提示可删除这两行。
 
 \paragraph{字母与数字间距（0.1.87）}在「正文与段落」应用并保存，可让正文数字随字母按实际笔迹宽度排列。旧项目打开时延用原间距。
 
