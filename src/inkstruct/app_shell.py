@@ -10,6 +10,7 @@ _PATHS = {
     'generate': '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5zM20 2v4M18 4h4"/>',
     'layout': '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h3v6H8zM14 11h2M14 14h2M14 17h2"/>',
     'library': '<path d="M3 4h7v16H3zM10 4h6v16h-6zM17 5l3-1 3 15-3 1zM6 8h1M12 8h2M6 16h1M12 16h2"/>',
+    'samples': '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M7 8h10M8 16l3-4 2 2 3-4"/>',
     'templates': '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8v3H8zM8 13h3v5H8zM14 13h2m-2 4h2"/>',
     'settings': '<path d="m9 3-.5 3-2 1.2L4 6l-2 3 2.3 2v2L2 15l2 3 2.5-1.2 2 1.2.5 3h4l.5-3 2-1.2L18 18l2-3-2.3-2v-2L20 9l-2-3-2.5 1.2-2-1.2-.5-3z"/><circle cx="11" cy="12" r="3"/>',
     'import': '<path d="M4 8V4h16v16H4v-4M2 12h11m-4-4 4 4-4 4"/>',
@@ -95,10 +96,11 @@ def install_shell(window, about):
     window.navigation_buttons = {}
     for index, title, key, shortcut in (
         (0, '采集', 'capture', 'Alt+1'), (1, '生成', 'generate', 'Alt+2'),
-        (3, '排版', 'layout', 'Alt+3'), (2, '字体库', 'library', 'Alt+4'),
+        (3, '排版', 'layout', 'Alt+3'), (5, '样本库', 'samples', 'Alt+6'),
+        (2, '字体库', 'library', 'Alt+4'),
         (4, '模板库', 'templates', 'Alt+5'),
     ):
-        if index == 2:
+        if key == 'samples':
             navigation.addStretch(1)
             line = QtWidgets.QFrame()
             line.setFrameShape(QtWidgets.QFrame.Shape.HLine)

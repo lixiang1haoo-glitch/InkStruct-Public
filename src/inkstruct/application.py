@@ -98,6 +98,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
         from .desktop import main as generator
         from .editor.mixed import MixedWindow
         from .fonts.ui import FontLibrary
+        from .sample_library_ui import SampleLibraryPage
 
         self.workspace = Path(workspace) if workspace else workspace_path()
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -128,17 +129,21 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.editor.settings_host = self
         from .editor.template_library import TemplateLibrary
         self.template_library = TemplateLibrary(self.editor)
+        self.sample_library = SampleLibraryPage(self.collector.single_widget._capture_catalog)
+        self.sample_library_writer = None
+        self.collector.open_sample_library = self.open_sample_library
         for title, widget in [
             ("采集", self.collector),
             ("生成", self.generator),
             ("字体库", self.library),
             ("排版", self.editor),
             ("模板库", self.template_library),
+            ("样本库", self.sample_library),
         ]:
             if isinstance(widget, QtWidgets.QMainWindow):
                 widget.setWindowFlags(QtCore.Qt.WindowType.Widget)
                 widget.menuBar().setNativeMenuBar(False)
-            if widget in (self.editor, self.template_library):
+            if widget in (self.editor, self.template_library, self.sample_library):
                 self.tabs.addTab(widget, title)
             else:
                 # Large native control/font hints must not enlarge every tab or the window.
@@ -155,6 +160,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
                 # the QWidget and its children remain owned by the module page.
                 widget.destroy()
         self.tabs.setCurrentIndex(3)
+        self.tabs.currentChanged.connect(self.sample_library_activated)
         from .settings_dialog import gear_button
         self.settings_button = gear_button(self, self.open_settings)
         # The integrated application owns the only settings entry point.
@@ -197,6 +203,18 @@ class InkStructWindow(QtWidgets.QMainWindow):
             category = 'capture'
         return open_settings(self.editor, self.collector, self, category=category)
 
+    def sample_library_activated(self, index):
+        if self.tabs.widget(index) is self.sample_library:
+            writer, self.sample_library_writer = self.sample_library_writer, None
+            self.sample_library.open_catalog(self.collector.single_widget._capture_catalog, writer)
+
+    def open_sample_library(self, writer):
+        self.sample_library_writer = writer
+        if self.tabs.currentWidget() is self.sample_library:
+            self.sample_library_activated(self.tabs.currentIndex())
+        else:
+            self.tabs.setCurrentWidget(self.sample_library)
+
     def use_font(self, path):
         try:
             self.editor.use_font(path)
@@ -225,6 +243,10 @@ class InkStructWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         workflow = self.generator.centralWidget()
+        if self.sample_library.job:
+            QtWidgets.QMessageBox.information(self, "样本库操作进行中", "请等待样本库操作完成后再退出。")
+            event.ignore()
+            return
         if self.library.job or self.library.review_job or getattr(workflow, "busy", False):
             QtWidgets.QMessageBox.information(
                 self, "操作进行中", "请等待字体操作完成，或在生成页取消任务后再退出。"
