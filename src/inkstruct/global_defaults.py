@@ -48,6 +48,7 @@ class GlobalDefaultsStore:
     MATH_DEFAULT_KEY = "compact_math_default_v1"
     JUSTIFY_DEFAULT_KEY = "justify_wrapped_default_v1"
     DIGIT_DEFAULT_KEY = "body_digit_spacing_default_v1"
+    PREVIEW_ACCELERATION_KEY = "preview_render_acceleration_v1"
 
     @staticmethod
     def make_settings():
@@ -59,6 +60,10 @@ class GlobalDefaultsStore:
             "InkStruct",
             "UnifiedSettings",
         )
+
+    @classmethod
+    def preview_acceleration_enabled(cls):
+        return cls.make_settings().value(cls.PREVIEW_ACCELERATION_KEY, True, bool)
 
     def __init__(self):
         self.settings = self.make_settings()

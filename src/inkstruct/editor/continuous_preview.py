@@ -12,7 +12,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..cache import BoundedCache
 from ..document.limits import validate_snapshot
-from ..renderers.pages import page_svg
+from ..global_defaults import GlobalDefaultsStore
+from ..renderers.pages import screen_page_svg
 from .preview_process import PreviewProcess
 
 FULL = (-1, -1)
@@ -48,23 +49,29 @@ class RasterSignals(QtCore.QObject):
 
 
 class RasterWorker(QtCore.QRunnable):
-    def __init__(self, snapshot, generation, index, spec, tiles, token, path):
+    def __init__(self, snapshot, generation, index, render_key, tiles, token, path):
         super().__init__()
         self.snapshot, self.generation, self.index = snapshot, generation, index
-        self.spec, self.tiles = spec, tuple(tiles)
+        self.render_key = render_key
+        self.spec, _, self.accelerate = render_key
+        self.tiles = tuple(tiles)
         self.token, self.path = token, path
         self.cancelled = threading.Event()
         self.signals = RasterSignals()
 
     def run(self):
         result = {'generation': self.generation, 'index': self.index, 'spec': self.spec,
+                  'render_key': self.render_key,
                   'images': [], 'svg_seconds': 0.0, 'raster_seconds': 0.0,
                   'token': self.token, 'tiles': self.tiles, 'cancel_event': self.cancelled}
         try:
             if self.cancelled.is_set():
                 return
             start = time.perf_counter()
-            raw = page_svg(self.snapshot, self.index, debug=not self.snapshot.exportable).encode()
+            raw = screen_page_svg(self.snapshot, self.index, self.spec, accelerate=self.accelerate,
+                                  cancelled=self.cancelled).encode()
+            if self.cancelled.is_set():
+                return
             self.path.write_bytes(raw)
             result['svg_seconds'] = time.perf_counter() - start
         except Exception as error:  # noqa: BLE001 - transport render failures to GUI
@@ -93,6 +100,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self.snapshot = None
         self.page_index = 0
         self.scale = 3.0
+        self.render_acceleration = GlobalDefaultsStore.preview_acceleration_enabled()
         self.reviews, self.selected_id, self.show_marks = {}, None, True
         self._label_placement = None
         self._label_highlight = None
@@ -260,6 +268,26 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
     def _spec(self):
         return (*self.page_size(), self.devicePixelRatioF())
 
+    def _render_key(self):
+        return (self._spec(), self.scale, self.render_acceleration)
+
+    def set_render_acceleration(self, enabled):
+        if enabled != self.render_acceleration:
+            self.render_acceleration = enabled
+            self._raster_settings_changed()
+
+    def _raster_settings_changed(self):
+        if self._job:
+            self._job.cancelled.set()
+        self._errors.clear()
+        self.update()
+        self._queue()
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.Type.DevicePixelRatioChange and hasattr(self, '_timer'):
+            self._raster_settings_changed()
+        return super().event(event)
+
     def _tiles(self, index, rect):
         width, height, dpr = self._spec()
         page = self.page_rect(index)
@@ -277,7 +305,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         return tuple((col, row) for row in range(top, bottom + 1) for col in range(left, right + 1))
 
     def _key(self, index, tile):
-        return (self._page_tokens[index], self._spec(), tile)
+        return (self._page_tokens[index], self._render_key(), tile)
 
     def _tile_bytes(self, tile):
         width, height, dpr = self._spec()
@@ -314,6 +342,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
     def _launch(self):
         if self._closed or self._job or not self.snapshot or not self.isVisible():
             return
+        render_key = self._render_key()
         visible = self.viewport_rect()
         indices = sorted(self.pages_in_rect(visible), key=lambda i: abs(i - self.page_at(visible.center().y())))
         requests = [(i, visible) for i in indices]
@@ -336,7 +365,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         for index, rect in requests:
             if index == 0 and self._startup_background is not None:
                 continue
-            if (index, self._spec()) in self._errors:
+            if (index, render_key) in self._errors:
                 continue
             tiles = tuple(t for t in self._tiles(index, rect)
                           if self.preview_cache.get(self._key(index, t)) is None)
@@ -344,7 +373,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 continue
             tiles = tiles[:32]
             token, path = self._process.prepare_path()
-            self._job = RasterWorker(self.snapshot, self._generation, index, self._spec(), tiles, token, path)
+            self._job = RasterWorker(self.snapshot, self._generation, index, render_key, tiles, token, path)
             self._job.signals.finished.connect(self._prepared)
             self.render_jobs += 1
             QtCore.QThreadPool.globalInstance().start(self._job)
@@ -352,8 +381,9 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
 
     @QtCore.Slot(object)
     def _prepared(self, result):
-        if (self._closed or result['cancelled'] or 'error' in result
-                or result['generation'] != self._generation or result['spec'] != self._spec()):
+        if (self._closed or result['cancel_event'].is_set() or 'error' in result
+                or self._job is None or result['token'] != self._job.token
+                or result['generation'] != self._generation or result['render_key'] != self._render_key()):
             (self._process.directory / f"{result['token']}.svg").unlink(missing_ok=True)
             self._completed(result)
             return
@@ -361,17 +391,20 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
 
     @QtCore.Slot(object)
     def _completed(self, result):
+        if self._job is None or result['token'] != self._job.token:
+            return
         result['cancelled'] = result['cancel_event'].is_set()
         self._job = None
         if self._closed:
             return
         if result['cancelled']:
             self.cancelled_jobs += 1
-        if result['generation'] == self._generation and result['spec'] == self._spec():
+        if (not result['cancelled'] and result['generation'] == self._generation
+                and result['render_key'] == self._render_key()):
             index = result['index']
             if 'error' in result:
-                self._errors[index, result['spec']] = result['error']
-            elif not result['cancelled']:
+                self._errors[index, result['render_key']] = result['error']
+            else:
                 for tile, image in result['images']:
                     self.preview_cache.put((self._key(index, tile),), image, image.sizeInBytes() + 128)
             self.svg_seconds += result['svg_seconds']
@@ -414,7 +447,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                         painted = True
             if not painted:
                 painter.setPen(QtGui.QColor('#64748b'))
-                message = self._errors.get((index, self._spec()), f'正在绘制第 {index + 1} 页…')
+                message = self._errors.get((index, self._render_key()), f'正在绘制第 {index + 1} 页…')
                 painter.drawText(page, QtCore.Qt.AlignmentFlag.AlignCenter, message)
             elif index == 0 and self._first_painted_generation != self._generation:
                 first_painted = not page.intersected(dirty).intersected(self.viewport_rect()).isEmpty()
