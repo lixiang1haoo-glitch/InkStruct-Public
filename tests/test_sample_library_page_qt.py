@@ -12,6 +12,7 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         import sys
         from pathlib import Path
         from time import monotonic, sleep
+        from unittest.mock import patch
 
         sys.path.insert(0, 'tests')
 
@@ -50,13 +51,27 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
                 sleep(.01)
                 assert monotonic() < deadline, page.status.text()
 
+        def assert_loading():
+            assert page.job is not None
+            assert page.preview_message.isVisible()
+            assert page.preview_message.alignment() == QtCore.Qt.AlignCenter
+            assert page.preview_message.text() == '正在读取样本库…'
+            assert not page.detail_panel.isVisible() and not page.status.text()
+
         button = window.findChild(QtWidgets.QToolButton, 'navigate_samples')
         button.click()
         assert window.tabs.currentWidget() is page and button.isChecked()
+        assert page.preview_message.text() == '选择书写者以查看样本'
         window.navigation_buttons[0].click()
         capture.writer_picker.reload('a')
         capture.findChild(QtWidgets.QPushButton, 'capture_sample_library').click()
+        assert_loading()
+        page.category.setCurrentIndex(page.category.findData('punctuation'))
+        assert_loading()
         wait(lambda: page.job is None)
+        assert page.preview_message.text() == '没有符合筛选条件的样本'
+        page.category.setCurrentIndex(0)
+        assert page.detail_panel.isVisible() and not page.preview_message.isVisible()
         assert window.tabs.currentWidget() is page and page.writer.text() == 'a'
         assert page.table.topLevelItemCount() == 2
         first, second = (page.table.topLevelItem(i) for i in range(2))
@@ -66,6 +81,11 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         assert page.variants.count() == 2 and page.preview.value['sample_id'] == 'one'
         page.variants.setCurrentRow(1)
         assert page.preview.value['sample_id'] == 'two'
+        page.refresh_button.click()
+        assert_loading()
+        wait(lambda: page.job is None)
+        assert page.detail_panel.isVisible() and page.preview.value['sample_id'] == 'two'
+        first, second = (page.table.topLevelItem(i) for i in range(2))
         assert page.source_fields['task'].text() == 'later'
         assert '2026-01-01' in page.source_fields['time'].text() or '2025-12-31' in page.source_fields['time'].text()
         assert not page.technical_panel.isVisible()
@@ -133,7 +153,15 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         assert len(open_bundle(all_output).samples) == 2
 
         page.writer.setText('b')
+        assert_loading()
         wait(lambda: page.job is None)
+        assert page.preview_message.text() == '此书写者的样本库为空'
+        with patch('inkstruct.sample_library_ui.inventory', side_effect=OSError('测试读取失败')):
+            page.refresh_button.click()
+            assert_loading()
+            wait(lambda: page.job is None)
+            assert page.preview_message.text() == '无法读取样本库'
+            assert '测试读取失败' in page.status.text()
         assert not page.selected_samples() and not page.export_button.isEnabled()
         page.writer.setText('a')
         wait(lambda: page.job is None)

@@ -26,11 +26,14 @@ class _SpeedGraph(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.speed_label = QtWidgets.QLabel(self)
         self.speed_label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.speed_label.setForegroundRole(QtGui.QPalette.ColorRole.Text)
+        self.speed_label.setContentsMargins(5, 1, 5, 1)
         self.setAccessibleName("生成进度与速度图")
-        description = "浅绿色表示已处理比例，深绿色表示各处理阶段的速度，横线表示当前近期速度。"
+        description = "绿色底纹表示已处理比例，绿色曲面表示各处理阶段的速度，横线表示近期速度。"
         self.setToolTip(description)
         self.setAccessibleDescription(description)
         self.reset()
+        self.speed_label.installEventFilter(self)
 
     def reset(self):
         self.history = []
@@ -53,10 +56,7 @@ class _SpeedGraph(QtWidgets.QWidget):
             self.speed_label.setText("测速中" if measuring else "速度：—")
         else:
             self.speed_label.setText(f"速度：{speed:.1f} 字/秒")
-        self.speed_label.setEnabled(speed is not None)
-        self.speed_label.adjustSize()
         self._place_label()
-        self.update()
 
     def _area(self):
         return QtCore.QRectF(self.rect()).adjusted(1, 1, -1, -1)
@@ -70,9 +70,17 @@ class _SpeedGraph(QtWidgets.QWidget):
     def _place_label(self):
         area = self._area()
         label = self.speed_label
+        label.adjustSize()
         y = (area.center().y() - label.height() / 2 if self.speed is None
              else self._speed_y(self.speed) - label.height() - self.label_gap)
         label.move(max(1, int(area.right() - label.width() - 5)), round(y))
+        self.update()
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QtCore.QEvent.Type.FontChange, QtCore.QEvent.Type.StyleChange):
+            # Qt updates the label's inherited font and style after the filter runs.
+            QtCore.QTimer.singleShot(0, self, self._place_label)
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -85,11 +93,18 @@ class _SpeedGraph(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         area = self._area()
-        painter.fillRect(area, QtGui.QColor("#f6faf6"))
+        palette = self.palette()
+        background = palette.base().color()
+        dark = background.lightness() < 128
+        grid_color = QtGui.QColor("#35433c" if dark else "#d5e3d5")
+        progress_color = QtGui.QColor("#254436" if dark else "#d7ebd0")
+        history_color = QtGui.QColor("#4a9c6c" if dark else "#248b40")
+        recent_color = QtGui.QColor("#a4bdb0" if dark else "#526557")
+        painter.fillRect(area, background)
         fill = QtCore.QRectF(area)
         fill.setWidth(area.width() * self.fraction)
-        painter.fillRect(fill, QtGui.QColor("#d7ebd0"))
-        painter.setPen(QtGui.QColor("#d5e3d5"))
+        painter.fillRect(fill, progress_color)
+        painter.setPen(grid_color)
         for step in range(1, 12):
             x = area.left() + area.width() * step / 12
             painter.drawLine(QtCore.QLineF(x, area.top(), x, area.bottom()))
@@ -106,13 +121,14 @@ class _SpeedGraph(QtWidgets.QWidget):
             speed_area.lineTo(fill.right(), self._speed_y(self.history[-1][1]))
             speed_area.lineTo(fill.right(), area.bottom())
             speed_area.closeSubpath()
-            painter.fillPath(speed_area, QtGui.QColor("#248b40"))
+            painter.fillPath(speed_area, history_color)
         if self.speed is not None:
-            painter.setPen(QtGui.QColor("#526557"))
+            painter.setPen(recent_color)
             y = self._speed_y(self.speed)
             painter.drawLine(QtCore.QLineF(area.left(), y, area.right(), y))
-        painter.setPen(QtGui.QColor("#9fb69f"))
+        painter.setPen(palette.mid().color())
         painter.drawRect(area)
+        painter.fillRect(self.speed_label.geometry(), background)
 
 
 class GenerationProgress(QtWidgets.QWidget):
