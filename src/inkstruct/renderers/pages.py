@@ -10,8 +10,10 @@ from dataclasses import asdict, dataclass, field
 from html import escape
 from pathlib import Path
 
+from ..document.cancellation import check_cancel
 from ..document.limits import validate_snapshot
 from ..scene.schema import LayoutSnapshot
+from .preview_paths import simplify_stroke, tolerance_squared
 
 PREVIEW_VERSION = "page-svg-preview-v1"
 
@@ -37,14 +39,24 @@ def preview_key(snapshot, page_index, *, debug=False):
     )
 
 
-def _export_gate(snapshot: LayoutSnapshot, debug: bool) -> None:
-    validate_snapshot(snapshot)
+def _export_gate(snapshot: LayoutSnapshot, debug: bool, *, cancelled=None) -> None:
+    validate_snapshot(snapshot, cancelled=cancelled)
     if not snapshot.exportable and not debug:
         raise ValueError("Unresolved document errors block finished export")
 
 
 def page_svg(snapshot: LayoutSnapshot, page_index: int, *, debug: bool = False) -> str:
-    _export_gate(snapshot, debug)
+    return _page_svg(snapshot, page_index, debug=debug)
+
+
+def screen_page_svg(snapshot, page_index, spec, *, accelerate, cancelled=None):
+    tolerance_sq = tolerance_squared(snapshot.page_profile, spec) if accelerate else None
+    return _page_svg(snapshot, page_index, debug=not snapshot.exportable,
+                     tolerance_sq=tolerance_sq, cancelled=cancelled)
+
+
+def _page_svg(snapshot, page_index, *, debug, tolerance_sq=None, cancelled=None):
+    _export_gate(snapshot, debug, cancelled=cancelled)
     p = snapshot.page_profile
     page = snapshot.pages[page_index]
     lines = [
@@ -61,6 +73,7 @@ def page_svg(snapshot: LayoutSnapshot, page_index: int, *, debug: bool = False) 
             f'xlink:href="data:image/png;base64,{page.background.png_base64}"/>'
         )
     for reference in page.images:
+        check_cancel(cancelled)
         x, y, right, bottom = reference.bounds
         width, height = right - x, bottom - y
         if reference.png_base64:
@@ -78,19 +91,22 @@ def page_svg(snapshot: LayoutSnapshot, page_index: int, *, debug: bool = False) 
             '<text x="2" y="4" font-size="2.3" fill="#9a3412">RASTER REFERENCE PAGE - NOT PLOTTER READY</text>'
         )
     for op in (*page.preview_ops, *page.paint_ops):
+        check_cancel(cancelled)
+        stroke = (op.points if tolerance_sq is None
+                  else simplify_stroke(op.points, tolerance_sq, cancelled=cancelled))
         attrs = (
             f'fill="none" stroke="{escape(op.color, quote=True)}" '
             f'stroke-width="{op.width_mm:.6f}" stroke-linecap="round" '
             f'stroke-linejoin="round" data-occurrence="{escape(op.occurrence_id, quote=True)}"'
         )
-        if len(op.points) == 1:
-            x, y = op.points[0]
+        if len(stroke) == 1:
+            x, y = stroke[0]
             lines.append(
                 f'<circle cx="{x:.6f}" cy="{y:.6f}" r="{op.width_mm / 2:.6f}" '
                 f'fill="{op.color}" data-occurrence="{escape(op.occurrence_id, quote=True)}"/>'
             )
         else:
-            points = " ".join(map("%.6f,%.6f".__mod__, op.points))
+            points = " ".join(map("%.6f,%.6f".__mod__, stroke))
             lines.append(f'<polyline points="{points}" {attrs}/>')
     if debug:
         lines.append(
