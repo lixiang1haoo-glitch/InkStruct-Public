@@ -50,7 +50,7 @@ features:
 
 在「采集 › 样本库」跨任务浏览汉字、标点与扩展，选取样本并导出为离线采集包。接收端先核对目标书写者及新增、重复、冲突，再确认导入。
 
-Markdown 支持用 `\begin{paragraphalign}{center}` 和 `\end{paragraphalign}` 包围正文段落，区块可跨页和正文框。也可选左对齐、右对齐或两端对齐。
+Markdown 支持用 `\begin{paragraphalign}{center}` 和 `\end{paragraphalign}` 包围正文段落，区块可跨页和正文框。左对齐、居中、右对齐的区块都取消首行额外缩进。文档级正文设置仍可选两端对齐，旧 `justify` 区块沿用该文档的正文设置。
 
 ## 0.1.85 汉字间距
 
