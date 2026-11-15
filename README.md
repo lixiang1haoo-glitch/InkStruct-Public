@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.88**。左侧导航新增独立样本库，按字符分组查看和选取样本。
+当前源码版本为 **0.1.89**。样本库支持按字符浏览、同尺度对照原始笔迹及独立勾选导出。在同一书写者下切换筛选时，底栏会统计仍勾选的样本。
 
 0.1.78 起，汉字采集的四个常用按钮加大为两行，与画布纵向居中。按 Shift+Enter 可暂时跳过当前字。
 
