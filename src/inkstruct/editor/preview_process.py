@@ -3,9 +3,16 @@ import json
 import math
 import sys
 import tempfile
+import time
+from collections import OrderedDict
 from pathlib import Path
 
 from PySide6 import QtCore, QtGui
+
+from .preview_wire import VERSION
+
+PAGE_FILES = 8
+PAGE_BYTES = 96 * 1024**2
 
 
 def worker_command(directory):
@@ -27,6 +34,8 @@ class PreviewProcess(QtCore.QObject):
         self.directory = Path(self.temporary.name)
         self.token = 0
         self.pending = None
+        self.pages = OrderedDict()
+        self.page_bytes = 0
         self.buffer = bytearray()
         self.closed = False
         from ..global_defaults import GlobalDefaultsStore
@@ -57,9 +66,27 @@ class PreviewProcess(QtCore.QObject):
             except (ValueError, OSError) as error:
                 self.fail(str(error))
 
-    def prepare_path(self):
+    def prepare_path(self, page_id):
         self.token += 1
-        return self.token, self.directory / f'{self.token}.svg'
+        size = self.pages.get(page_id, 0)
+        if size:
+            self.pages.move_to_end(page_id)
+        return self.token, self.directory / f'page-{page_id}.bin', size
+
+    def remember_page(self, page_id, size):
+        self.page_bytes += size
+        self.pages[page_id] = size
+        while self.page_bytes > PAGE_BYTES or len(self.pages) > PAGE_FILES:
+            evicted, old_size = self.pages.popitem(last=False)
+            self.page_bytes -= old_size
+            (self.directory / f'page-{evicted}.bin').unlink(missing_ok=True)
+
+    def cancel(self, token):
+        if self.pending is not None and self.pending['token'] == token:
+            try:
+                (self.directory / f'{token}.cancel').touch(exist_ok=True)
+            except OSError:
+                pass  # The receiving canvas still rejects the cancelled result.
 
     def render(self, result, tiles):
         self.pending = result
@@ -67,8 +94,11 @@ class PreviewProcess(QtCore.QObject):
         try:
             if self.process.state() == QtCore.QProcess.ProcessState.NotRunning:
                 self.prewarm()
-            self.process.write(json.dumps({'token': result['token'], 'spec': result['spec'],
-                                           'tiles': tiles}).encode() + b'\n')
+            result['sent_at'] = time.perf_counter()
+            request = {'version': VERSION, 'token': result['token'], 'page': result['page_id'],
+                       'spec': result['spec'], 'accelerate': result['render_key'][2], 'tiles': tiles}
+            if self.process.write(json.dumps(request).encode() + b'\n') < 0:
+                raise OSError('无法发送页面预览请求')
         except (ValueError, OSError) as error:
             self.fail(str(error))
 
@@ -81,6 +111,7 @@ class PreviewProcess(QtCore.QObject):
             return
         if b'\n' not in self.buffer or not self.pending:
             return
+        received = time.perf_counter()
         raw, _, rest = self.buffer.partition(b'\n')
         self.buffer = bytearray(rest)
         result = self.pending
@@ -88,6 +119,11 @@ class PreviewProcess(QtCore.QObject):
             response = json.loads(raw)
             if type(response['token']) is not int or response['token'] != result['token']:
                 raise ValueError('页面预览进程返回过期标识')
+            if result['cancel_event'].is_set():
+                self._finish(result)
+                return
+            if response.get('cancelled'):
+                raise ValueError('页面预览进程意外取消')
             if 'error' in response:
                 raise ValueError(response['error'])
             images = response['images']
@@ -111,9 +147,6 @@ class PreviewProcess(QtCore.QObject):
                 if stride != w * 4 or stride * h != item['bytes'] or item['bytes'] > 40 * 1024**2:
                     raise ValueError('页面预览图像字节数无效')
                 path = self.directory / f"{result['token']}-{col}-{row}.argb"
-                if result['cancel_event'].is_set():
-                    path.unlink(missing_ok=True)
-                    continue
                 if path.stat().st_size != item['bytes']:
                     raise ValueError('页面预览图像不完整')
                 pixels = path.read_bytes()
@@ -122,7 +155,15 @@ class PreviewProcess(QtCore.QObject):
                 image.setDevicePixelRatio(result['spec'][2])
                 result['images'].append(((col, row), image))
                 path.unlink()
-            result['raster_seconds'] = response['raster_seconds']
+            for key in ('decode_seconds', 'svg_seconds', 'raster_seconds'):
+                elapsed = response[key]
+                if type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0:
+                    raise ValueError('页面预览进程返回无效计时')
+                result[key] = elapsed
+            result['page_reused'] = response['page_reused'] is True
+            result['receive_seconds'] = time.perf_counter() - received
+            result['ipc_seconds'] = max(0.0, time.perf_counter() - result['sent_at']
+                                        - sum(result[key] for key in ('decode_seconds', 'svg_seconds', 'raster_seconds')))
             self.backend = response.get('backend', 'cpu')
             self.fallback_reason = response.get('gpu_fallback') or self.fallback_reason
         except (ValueError, OSError, KeyError, TypeError) as error:
@@ -132,7 +173,10 @@ class PreviewProcess(QtCore.QObject):
     def _finish(self, result):
         self.timer.stop()
         self.pending = None
-        (self.directory / f"{result['token']}.svg").unlink(missing_ok=True)
+        token = result['token']
+        (self.directory / f'{token}.cancel').unlink(missing_ok=True)
+        for col, row in result['tiles']:
+            (self.directory / f'{token}-{col}-{row}.argb').unlink(missing_ok=True)
         self.completed.emit(result)
 
     def fail(self, message):
@@ -146,6 +190,7 @@ class PreviewProcess(QtCore.QObject):
             self.process.kill()
             self.process.waitForFinished(1000)
             self.process.blockSignals(False)
+        self.buffer.clear()
         if self.backend == 'gpu' and not self.retried:
             self.retried = True
             self.backend, self.fallback_reason = 'cpu', message
@@ -153,11 +198,12 @@ class PreviewProcess(QtCore.QObject):
             env.insert('QT_QPA_PLATFORM', 'offscreen')
             env.insert('INKSTRUCT_PREVIEW_BACKEND', 'cpu')
             self.process.setProcessEnvironment(env)
-            self.buffer.clear()
-            if result:
+            if result and not result['cancel_event'].is_set():
                 result['images'].clear()
                 self.render(result, result['tiles'])
             else:
+                if result is not None:
+                    self._finish(result)
                 self.prewarm()
             return
         if result:
@@ -174,4 +220,4 @@ class PreviewProcess(QtCore.QObject):
         try:
             self.temporary.cleanup()
         except OSError:
-            pass  # A cancelled SVG preparer will release its file shortly.
+            pass  # A cancelled page preparer will release its file shortly.

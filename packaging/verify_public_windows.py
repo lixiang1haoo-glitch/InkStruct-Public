@@ -13,9 +13,12 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
+from inkstruct.document.schema import PageProfile
+from inkstruct.editor.preview_wire import VERSION, write_page
 from inkstruct.fonts import APP_VERSION
 from inkstruct.fonts.core import FontPackage
 from inkstruct.fonts.importer import build_font
+from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
 from windows_bundle import excluded_binary
 
 
@@ -109,13 +112,14 @@ def verify_cpu_preview(executable, output):
     directory.mkdir()
     # The full page fits the CPU budget but exceeds the GPU buffer budget.
     width, height = 6144, 1024
-    (directory / "1.svg").write_text(
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
-        f'<rect width="{width}" height="{height}" fill="red"/></svg>', encoding="ascii",
-    )
+    page = Page(0, (), (PaintOp("fixture", ((0.0, 0.0),), 4.0, "red"),))
+    snapshot = LayoutSnapshot("fixture", "fixture", "fixture", 0, PageProfile(width, height, 0),
+                              (page,), (), "fixture", "markdown-fixture")
+    write_page(directory / "page-1.bin", snapshot, 0, None)
     env = system_environment()
     env["INKSTRUCT_PREVIEW_BACKEND"] = "gpu"
-    request = {"token": 1, "spec": [width, height, 1], "tiles": [[-1, -1]]}
+    request = {"version": VERSION, "token": 1, "page": 1, "accelerate": True,
+               "spec": [width, height, 1], "tiles": [[-1, -1]]}
     completed = subprocess.run(
         [str(executable), "--inkstruct-preview-worker", str(directory)],
         input=json.dumps(request).encode("ascii") + b"\n",
