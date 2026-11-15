@@ -1109,7 +1109,7 @@ def verify_windows_style(window, app, out, font_path=None):
         window.close()
 
 
-def verify_v631(window, out):
+def verify_v631(window, out, wait):
     from inkstruct.application import database_path
     from inkstruct.assets.resolver import AssetResolver
     from inkstruct.document.editing import SourceSession
@@ -1155,7 +1155,7 @@ def verify_v631(window, out):
                   'sample_id': sample_id, 'character': character, 'writer_id': writer,
                   'capture': {'canvas_width': 100, 'canvas_height': 100}, 'strokes': strokes})
 
-    service = GenerationWorkflow(out / 'old-workspace', database)
+    service = GenerationWorkflow(window.workspace, database)
     legacy = service.generate(writer, source, 'v63', characters, workers=1, candidate_limit=4,
                               preparation=lambda *_: None)
     assert read(Path(legacy['output']) / 'protocol.json')['method'] == 'v6.3 exp'
@@ -1213,11 +1213,36 @@ def verify_v631(window, out):
     saved = load_package(path)
     assert layout_markdown(parse_markdown(saved.session), saved.resolver) == layout
     assert saved.resolver.selection_records() == resolver.selection_records()
+    window.tabs.setCurrentWidget(window.generator)
+    widget.writer.setText(writer)
+    assert widget.last_generated_run is None and widget.history_button.isEnabled()
+    widget.history_button.click()
+    history = widget.history_dialog
+    try:
+        assert history.isVisible() and not history.isModal()
+        wait(lambda: len(history.visible) == 3 and bool(history.strokes))
+        assert history.writers.currentData() == writer
+        history.search.setText('明')
+        wait(lambda: bool(history.strokes))
+        assert history.character.currentText() == '明' and history.candidate.count() > 1
+        joined = next(i for i, item in enumerate(history.candidates) if any(len(s.slots) > 1 for s in item[1]))
+        history.candidate.setCurrentIndex(joined)
+        wait(lambda: any(len(stroke.slots) > 1 for stroke in history.strokes))
+        row, stroke = next((i, s) for i, s in enumerate(history.strokes) if len(s.slots) > 1)
+        history.stroke_table.setCurrentCell(row, 0)
+        assert history.original.selected == stroke.raw_order - 1
+        assert history.recordings[stroke.key].status == '原录制'
+        history.copy.click()
+        assert ' + '.join(stroke.slots) in QtWidgets.QApplication.clipboard().text()
+    finally:
+        history.close()
     return {'app_version': APP_VERSION, 'frozen': bool(getattr(sys, 'frozen', False)),
             'method': 'v6.3.1', 'engine': ENGINE_VERSION, 'characters': len(characters),
             'candidates': len(assets), 'implementation_hashes': code, 'workers': [1, 2],
             'fallback': None, 'matching_character_files': len(files), 'old_archive_reused': True,
-            'fresh_archive_verified': True, 'frozen_document_reopened': True}
+            'fresh_archive_verified': True, 'frozen_document_reopened': True,
+            'generation_history': {'batches': 3, 'nonmodal': True, 'candidate_switch': True,
+                                   'connected_recording_highlight': True, 'copy_review': True}}
 
 
 def main():
@@ -1300,19 +1325,6 @@ def main():
     QtWidgets.QMessageBox.critical = lambda *a: notices.append(str(a[2]))
     w = InkStructWindow(workspace=out / "workspace")
     w.show()
-    if args.v631_check:
-        try:
-            result = verify_v631(w, out)
-            (out / 'verification.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
-        finally:
-            w.close()
-        return
-    if args.windows_style_check:
-        verify_windows_style(w, app, out, args.font)
-        return
-    assert app.styleHints().colorScheme() != QtCore.Qt.ColorScheme.Dark
-    assert app.palette().color(QtGui.QPalette.Window).lightness() > 230
-    assert app.palette().color(QtGui.QPalette.Base).lightness() > 230
 
     def wait(condition, timeout=90):
         end = time.monotonic() + timeout
@@ -1323,6 +1335,20 @@ def main():
             # Release the GIL for Python-heavy import/profile worker steps.
             time.sleep(0.01)
         raise AssertionError((notices, w.editor.status.text()))
+
+    if args.v631_check:
+        try:
+            result = verify_v631(w, out, wait)
+            (out / 'verification.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
+        finally:
+            w.close()
+        return
+    if args.windows_style_check:
+        verify_windows_style(w, app, out, args.font)
+        return
+    assert app.styleHints().colorScheme() != QtCore.Qt.ColorScheme.Dark
+    assert app.palette().color(QtGui.QPalette.Window).lightness() > 230
+    assert app.palette().color(QtGui.QPalette.Base).lightness() > 230
 
     if args.math_settings_check:
         from inkstruct.editor.math_settings import GROUPS, MathSettingsDialog

@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.92**。屏幕预览默认以 0.1 物理像素为阈值简化路径，可在「应用设置 › 预览绘制」切换。
+当前源码版本为 **0.1.93**。生成页可打开「历史生成结果…」，浏览批次及候选字形来源，也可用所选历史批次制作字体。
 
 0.1.78 起，汉字采集的四个常用按钮加大为两行，与画布纵向居中。按 Shift+Enter 可暂时跳过当前字。
 

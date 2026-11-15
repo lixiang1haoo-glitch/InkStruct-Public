@@ -71,14 +71,16 @@ def public_development(value):
     return value
 
 
-def generated_records(run, writer):
+def generated_records(run, writer, *, character=None):
     root = Path(run)
     if (root / "v63-run.json").is_file():
         from ..v63_package import grouped_records
-        yield from grouped_records(root, writer)
+        yield from grouped_records(root, writer, character=character)
         return
     if (root / "trajectories").is_dir():
-        for path in sorted((root / "trajectories").glob("U+*.json")):
+        folder = root / "trajectories"
+        paths = sorted(folder.glob("U+*.json")) if character is None else (folder / f"U+{ord(character):04X}.json",)
+        for path in paths:
             glyph = _read(path)
             if glyph.get("writer_id") != writer:
                 raise ValueError("生成结果书写者不一致")
@@ -97,7 +99,8 @@ def generated_records(run, writer):
                 or type(policy.get("limit")) is not int or not 2 <= policy["limit"] <= MAX_CANDIDATES):
             raise ValueError("不支持的生成候选池协议")
         limit = policy["limit"]
-    for char in protocol["characters"]:
+    characters = protocol["characters"]
+    for char in characters if character is None else (character,) if character in characters else ():
         stem = root / writer / f"{ord(char):04X}"
         row = _read(stem.with_suffix(".json"))
         if row.get("writer") != writer or row.get("character") != char:
@@ -129,7 +132,10 @@ def generated_records(run, writer):
             groups = verify_connected_candidates(payload, row, writer, char,
                                                  connected.get("limit"), connected.get("same_character", False))
             for group in groups:
-                yield group, None, {"grouped": True, "legacy_source_hash": sha(encoded(group))}, protocol
+                evidence = {"grouped": True, "legacy_source_hash": sha(encoded(group))}
+                if character is not None:
+                    evidence["base_stroke_sources"] = payload.get("stroke_sources", [])
+                yield group, None, evidence, protocol
             if replay_only or (groups and limit == 1):
                 continue
         primary = {k: v for k, v in payload.items() if k != "candidate_pool"} if limit > 1 else payload
