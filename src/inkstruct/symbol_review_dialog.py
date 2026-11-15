@@ -6,14 +6,18 @@ from .symbol_tasks import item_letter_style
 
 
 class InkPreview(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, *, themed=False):
         super().__init__()
         self.value = None
+        self.themed = themed
         self.setMinimumSize(240, 180)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
-        painter.fillRect(self.rect(), QtGui.QColor('white'))
+        palette = self.palette()
+        background = palette.base().color() if self.themed else QtGui.QColor('white')
+        ink = palette.text().color() if self.themed else QtGui.QColor('#18212f')
+        painter.fillRect(self.rect(), background)
         if not self.value:
             return
         strokes = [s['points'] for s in self.value['strokes']]
@@ -26,7 +30,7 @@ class InkPreview(QtWidgets.QWidget):
         scale = min((self.width()-30)/max(width, 1), (self.height()-30)/max(height, 1))
         dx, dy = (self.width()-width*scale)/2, (self.height()-height*scale)/2
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        painter.setPen(QtGui.QPen(QtGui.QColor('#18212f'), 2.2, QtCore.Qt.SolidLine,
+        painter.setPen(QtGui.QPen(ink, 2.2, QtCore.Qt.SolidLine,
                                  QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
         for stroke in strokes:
             path = QtGui.QPainterPath()
