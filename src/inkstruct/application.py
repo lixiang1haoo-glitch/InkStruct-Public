@@ -172,6 +172,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
                 self.collector.menuBar().removeAction(action)
         self.library.use_requested.connect(self.choose_font_for_document)
         self.generator.centralWidget().publish_requested.connect(self.use_generated)
+        self.generator.centralWidget().history_publish_requested.connect(self.publish_generated_batch)
         self.statusBar().showMessage(
             f"InkStruct {APP_VERSION} · 采集、生成、字体与排版 · 工作区：" + str(self.workspace)
         )
@@ -231,15 +232,18 @@ class InkStructWindow(QtWidgets.QMainWindow):
         workflow = self.generator.centralWidget()
         path = getattr(workflow, "last_generated_run", None)
         if path:
-            if self.library.job:
-                QtWidgets.QMessageBox.information(self, "字体操作进行中", "请等待当前字体操作完成。")
-                return
-            self.tabs.setCurrentIndex(2)
-            self.library.prepare_publication(path, workflow.last_generated_writer or workflow.writer.text())
+            self.publish_generated_batch(path, workflow.last_generated_writer or workflow.writer.text())
         else:
             QtWidgets.QMessageBox.information(
                 self, "生成结果", "请先生成，或在字体库中选择已有 v6.1/旧生成结果目录。"
             )
+
+    def publish_generated_batch(self, path, writer):
+        if self.library.job or self.library.review_job:
+            QtWidgets.QMessageBox.information(self, "字体操作进行中", "请等待当前字体操作完成。")
+            return
+        self.tabs.setCurrentIndex(2)
+        self.library.prepare_publication(path, writer)
 
     def closeEvent(self, event):
         workflow = self.generator.centralWidget()
