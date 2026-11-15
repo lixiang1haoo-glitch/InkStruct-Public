@@ -164,7 +164,8 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
             attrs = dict(node.attributes)
             level = int(attrs.get("tag", "h1")[1:]) if node.kind == "heading" else 1
             scale = flow.heading_scales[level - 1]
-            alignment = attrs.get("paragraph_align", flow.paragraph_align) if node.kind == "paragraph" else ""
+            scoped_alignment = attrs.get("paragraph_align")
+            alignment = (scoped_alignment or flow.paragraph_align) if node.kind == "paragraph" else ""
             append_text(
                 BodyBlock(
                     node,
@@ -177,7 +178,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
                     task=task,
                     first_indent=(
                         flow.first_line_indent_mm
-                        if alignment in {"left", "justify"} and indent == 0 and not marker
+                        if alignment and scoped_alignment is None and indent == 0 and not marker
                         else 0
                     ),
                     paragraph_align=alignment,

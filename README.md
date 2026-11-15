@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.90**。生成速度图随深浅主题配色，样本库读取状态显示在预览区中央。
+当前源码版本为 **0.1.91**。段落对齐区块取消首行额外缩进，旧 `justify` 区块沿用文档的正文对齐和首行缩进设置。
 
 0.1.78 起，汉字采集的四个常用按钮加大为两行，与画布纵向居中。按 Shift+Enter 可暂时跳过当前字。
 
