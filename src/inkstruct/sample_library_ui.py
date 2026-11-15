@@ -188,6 +188,8 @@ class SampleLibraryPage(QtWidgets.QWidget):
         self.library = SampleLibrary(catalog)
         self.all_rows, self.tasks = (), {}
         self.scan_errors = ()
+        self.scan_in_progress = False
+        self.scan_failed = False
         self.rows_scope = None
         self.checked_by_scope = {}
         self.visible_rows = ()
@@ -281,10 +283,10 @@ class SampleLibraryPage(QtWidgets.QWidget):
         panel = QtWidgets.QVBoxLayout(inspector_panel)
         panel.setContentsMargins(10, 0, 4, 0)
         self.inspector_margins = panel.contentsMargins()
-        self.empty = plain_label()
-        self.empty.setAlignment(Qt.AlignCenter)
-        self.empty.setWordWrap(True)
-        panel.addWidget(self.empty, 1)
+        self.preview_message = plain_label()
+        self.preview_message.setAlignment(Qt.AlignCenter)
+        self.preview_message.setWordWrap(True)
+        panel.addWidget(self.preview_message, 1)
         self.detail_panel = QtWidgets.QWidget()
         panel.addWidget(self.detail_panel)
         panel.addStretch()
@@ -571,6 +573,10 @@ class SampleLibraryPage(QtWidgets.QWidget):
     @QtCore.Slot(str)
     def failed(self, error):
         self.job = None
+        if self.scan_in_progress:
+            self.scan_in_progress = False
+            self.scan_failed = True
+            self.update_preview_message()
         self.update_actions()
         self.status.setText(error)
         self.open_pending()
@@ -599,6 +605,8 @@ class SampleLibraryPage(QtWidgets.QWidget):
             return
         catalog, writer = self.library.catalog, self.writer.text()
         scope = self.scope()
+        self.scan_in_progress = bool(writer)
+        self.scan_failed = False
         self.read_preview.cache_clear()
         if self.rows_scope != scope:
             self.rows_scope = None
@@ -617,6 +625,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
             return rows, errors, tasks
 
         def display(result):
+            self.scan_in_progress = False
             self.rows_scope = scope
             self.all_rows, self.scan_errors, self.tasks = result
             self.selected_keys().intersection_update(map(sample_key, self.all_rows))
@@ -628,7 +637,8 @@ class SampleLibraryPage(QtWidgets.QWidget):
             self.task_model.setStringList(sorted(set(self.tasks.values())))
             self.filter()
 
-        self.submit(load, display, '正在读取样本库…')
+        self.update_preview_message()
+        self.submit(load, display, '')
 
     def filter(self, *_):
         query = self.character.text().strip().casefold()
@@ -665,7 +675,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         message = f'库中共 {len(self.all_rows)} 份'
         if self.scan_errors:
             message += f' · {len(self.scan_errors)} 份无法读取 · {self.scan_errors[0]}'
-        if self.job is None:
+        if self.job is None and not self.scan_in_progress:
             self.status.setText(message)
 
     def show_group(self, current, *_):
@@ -690,16 +700,26 @@ class SampleLibraryPage(QtWidgets.QWidget):
         if not has_variants:
             with QtCore.QSignalBlocker(self.compare_button):
                 self.compare_button.setChecked(False)
-        self.detail_panel.setVisible(bool(group))
-        self.empty.setVisible(not group)
-        if not group:
-            if not self.writer.text():
-                self.empty.setText('选择书写者以查看样本')
-            elif self.all_rows:
-                self.empty.setText('没有符合筛选条件的样本')
-            else:
-                self.empty.setText('此书写者的样本库为空')
         self.show_sample()
+        self.update_preview_message()
+
+    def update_preview_message(self):
+        show_preview = self.active_row is not None and not self.scan_in_progress
+        self.detail_panel.setVisible(show_preview)
+        self.preview_message.setVisible(not show_preview)
+        if show_preview:
+            return
+        if self.scan_in_progress:
+            message = '正在读取样本库…'
+        elif self.scan_failed or (self.scan_errors and not self.all_rows):
+            message = '无法读取样本库'
+        elif not self.writer.text():
+            message = '选择书写者以查看样本'
+        elif self.all_rows:
+            message = '没有符合筛选条件的样本'
+        else:
+            message = '此书写者的样本库为空'
+        self.preview_message.setText(message)
 
     def variant_name(self, row):
         return f'样本 {self.numbers[sample_key(row)]}'
