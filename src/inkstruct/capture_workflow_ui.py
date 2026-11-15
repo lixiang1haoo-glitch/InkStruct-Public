@@ -702,6 +702,10 @@ def install_capture_management(window, root):
 
 
 def open_sample_library(widget):
+    navigate = getattr(widget._capture_window, 'open_sample_library', None)
+    if navigate is not None:
+        navigate(widget.writer_picker.text())
+        return
     from .sample_library_ui import SampleLibraryDialog
 
     dialog = SampleLibraryDialog(widget._capture_catalog, widget.writer_picker.text(), widget)
