@@ -62,18 +62,22 @@ def test_rdp_preserves_reversals_and_handles_cancellation():
 
 def test_raster_workers_use_same_full_page_transform_for_tiles(tmp_path):
     from inkstruct.editor.continuous_preview import FULL, RasterWorker
+    from inkstruct.editor.preview_wire import read_page
+    from inkstruct.renderers.pages import draw_screen_svg
 
     snapshot = sample_snapshot(.0015)
     render_key = ((2520, 3564, 1.5), 12, True)
     outputs = []
     for token, tiles in enumerate(((FULL,), ((0, 0), (1, 1))), 1):
-        path = tmp_path / f'{token}.svg'
-        job = RasterWorker(snapshot, 1, 0, render_key, tiles, token, path)
+        path = tmp_path / f'page-{token}.bin'
+        job = RasterWorker(snapshot, 1, 0, 1, render_key, tiles, token, path, 0)
         results = []
         job.signals.finished.connect(results.append)
         job.run()
         assert 'error' not in results[0]
-        outputs.append(path.read_bytes())
+        page, _ = read_page(path)
+        assert results[0]['packed_bytes'] == path.stat().st_size
+        outputs.append(draw_screen_svg(page, render_key[0], accelerate=True).encode())
     assert outputs[0] == outputs[1]
     assert outputs[0] == screen_page_svg(snapshot, 0, render_key[0], accelerate=True).encode()
     assert b'1.500000,1.001500' in outputs[1]
@@ -141,6 +145,7 @@ def test_acceleration_settings_redraw_live_and_preserve_export(tmp_path):
         assert not canvas.render_acceleration and not config.contains(key)
         assert on_key != canvas._key(0, FULL)
         wait(lambda: canvas.preview_cache.get(canvas._key(0, FULL)) is not None)
+        assert canvas.reused_pages >= 1 and len(canvas._process.pages) == 1
         assert w.snapshot is canvas.snapshot is snapshot and w.revision == revision
         after = export_plan(plan_from_snapshot(w.snapshot), root / 'original')
         assert [(p.name, p.read_bytes()) for p in sorted(before.glob('*.svg'))] == [
@@ -188,6 +193,22 @@ def test_acceleration_settings_redraw_live_and_preserve_export(tmp_path):
         w.zoom.setCurrentIndex((w.zoom.currentIndex() + 1) % w.zoom.count())
         assert canvas._key(0, FULL) != zoom_key
         assert w.snapshot is canvas.snapshot is snapshot and w.revision == revision
+        wait(lambda: canvas._job is None and canvas.viewport_ready())
+        before_edit = canvas._page_tokens[0]
+        canvas.preview_cache.clear()
+        canvas.viewport_changed()
+        deferred = []
+        canvas._process.render = lambda result, tiles: deferred.append(result)
+        wait(lambda: bool(deferred))
+        old = deferred[0]
+        w.editor.insertPlainText('5')
+        wait(lambda: w.snapshot is not snapshot and canvas._page_tokens[0] != before_edit)
+        assert old['cancel_event'].is_set()
+        old['images'] = [(FULL, stale)]
+        canvas._process.render = render
+        canvas._process._finish(old)
+        assert canvas.preview_cache.get(canvas._key(0, FULL)) is None
+        wait(lambda: canvas.viewport_ready())
         w.dirty = False
         assert w.close()
     ''', tmp_path)

@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from dataclasses import asdict, dataclass, field
 from html import escape
+from itertools import chain
 from pathlib import Path
 
 from ..document.cancellation import check_cancel
@@ -50,37 +51,64 @@ def page_svg(snapshot: LayoutSnapshot, page_index: int, *, debug: bool = False) 
 
 
 def screen_page_svg(snapshot, page_index, spec, *, accelerate, cancelled=None):
-    tolerance_sq = tolerance_squared(snapshot.page_profile, spec) if accelerate else None
-    return _page_svg(snapshot, page_index, debug=not snapshot.exportable,
-                     tolerance_sq=tolerance_sq, cancelled=cancelled)
-
-
-def _page_svg(snapshot, page_index, *, debug, tolerance_sq=None, cancelled=None):
+    debug = not snapshot.exportable
     _export_gate(snapshot, debug, cancelled=cancelled)
-    p = snapshot.page_profile
+    return draw_screen_svg(page_draw(snapshot, page_index, debug), spec,
+                           accelerate=accelerate, cancelled=cancelled)
+
+
+@dataclass(frozen=True)
+class PageDraw:
+    width_mm: float
+    height_mm: float
+    debug: bool
+    background: str | None
+    images: tuple
+    strokes: tuple
+
+
+def page_draw(snapshot, page_index, debug):
+    profile = snapshot.page_profile
     page = snapshot.pages[page_index]
+    return PageDraw(profile.width_mm, profile.height_mm, debug,
+                    page.background.png_base64 if page.background else None,
+                    tuple((ref.bounds, ref.png_base64) for ref in page.images),
+                    tuple(chain(page.preview_ops, page.paint_ops)))
+
+
+def draw_screen_svg(page, spec, *, accelerate, cancelled=None):
+    tolerance_sq = tolerance_squared(page, spec) if accelerate else None
+    return _draw_svg(page, tolerance_sq=tolerance_sq, cancelled=cancelled)
+
+
+def _page_svg(snapshot, page_index, *, debug):
+    _export_gate(snapshot, debug)
+    return _draw_svg(page_draw(snapshot, page_index, debug))
+
+
+def _draw_svg(page, *, tolerance_sq=None, cancelled=None):
     lines = [
         (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{p.width_mm}mm" '
-            f'height="{p.height_mm}mm" viewBox="0 0 {p.width_mm} {p.height_mm}">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{page.width_mm}mm" '
+            f'height="{page.height_mm}mm" viewBox="0 0 {page.width_mm} {page.height_mm}">'
         ),
-        f'<rect width="{p.width_mm}" height="{p.height_mm}" fill="white"/>',
+        f'<rect width="{page.width_mm}" height="{page.height_mm}" fill="white"/>',
     ]
     if page.background:
         lines.append(
-            f'<image x="0" y="0" width="{p.width_mm}" height="{p.height_mm}" '
+            f'<image x="0" y="0" width="{page.width_mm}" height="{page.height_mm}" '
             f'preserveAspectRatio="none" xmlns:xlink="http://www.w3.org/1999/xlink" '
-            f'xlink:href="data:image/png;base64,{page.background.png_base64}"/>'
+            f'xlink:href="data:image/png;base64,{page.background}"/>'
         )
-    for reference in page.images:
+    for bounds, png_base64 in page.images:
         check_cancel(cancelled)
-        x, y, right, bottom = reference.bounds
+        x, y, right, bottom = bounds
         width, height = right - x, bottom - y
-        if reference.png_base64:
+        if png_base64:
             lines.append(
                 f'<image x="{x:.6f}" y="{y:.6f}" width="{width:.6f}" height="{height:.6f}" '
                 f'preserveAspectRatio="none" xmlns:xlink="http://www.w3.org/1999/xlink" '
-                f'data-plotter-ready="false" xlink:href="data:image/png;base64,{reference.png_base64}"/>'
+                f'data-plotter-ready="false" xlink:href="data:image/png;base64,{png_base64}"/>'
             )
         else:
             lines.append(
@@ -90,7 +118,7 @@ def _page_svg(snapshot, page_index, *, debug, tolerance_sq=None, cancelled=None)
         lines.append(
             '<text x="2" y="4" font-size="2.3" fill="#9a3412">RASTER REFERENCE PAGE - NOT PLOTTER READY</text>'
         )
-    for op in (*page.preview_ops, *page.paint_ops):
+    for op in page.strokes:
         check_cancel(cancelled)
         stroke = (op.points if tolerance_sq is None
                   else simplify_stroke(op.points, tolerance_sq, cancelled=cancelled))
@@ -103,12 +131,12 @@ def _page_svg(snapshot, page_index, *, debug, tolerance_sq=None, cancelled=None)
             x, y = stroke[0]
             lines.append(
                 f'<circle cx="{x:.6f}" cy="{y:.6f}" r="{op.width_mm / 2:.6f}" '
-                f'fill="{op.color}" data-occurrence="{escape(op.occurrence_id, quote=True)}"/>'
+                f'fill="{escape(op.color, quote=True)}" data-occurrence="{escape(op.occurrence_id, quote=True)}"/>'
             )
         else:
             points = " ".join(map("%.6f,%.6f".__mod__, stroke))
             lines.append(f'<polyline points="{points}" {attrs}/>')
-    if debug:
+    if page.debug:
         lines.append(
             '<text x="2" y="4" font-size="3" fill="#dc2626">'
             "DEBUG PREVIEW - NOT A FINISHED EXPORT</text>"
