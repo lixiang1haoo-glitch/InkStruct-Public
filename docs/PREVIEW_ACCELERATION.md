@@ -20,7 +20,7 @@ Windows 上使用 Qt 6.9.2 和 CPU 离屏绘制。正文、表格、分式和参
 
 ```powershell
 $workspace = (Get-Location).Path
-$checkout = "$workspace/artifacts/preview-path-acceleration/s"
+$checkout = "$workspace/artifacts/release-0.1.92/s"
 $fixture = Join-Path (Split-Path -Parent $workspace) 'InkStruct-Layout-Dev/artifacts/a4-4k-sampling-20261115/input'
 $python = "$workspace/.venv/Scripts/python.exe"
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -31,11 +31,11 @@ $env:PYTHONUTF8 = '1'
 $env:OPENBLAS_NUM_THREADS = '1'
 
 & $python -B packaging/prepare_public_resources.py
-& $python -B -m pytest -o addopts= -q -p no:cacheprovider tests/test_preview_acceleration.py tests/test_preview_process.py
+& $python -B -m pytest -o addopts= -q -p no:cacheprovider tests/test_preview_path_simplification.py tests/test_preview_process.py
 & $python -B -m pytest -o addopts= -q -p no:cacheprovider
 
 $env:QT_SCALE_FACTOR = '1.5'
-& $python -B tests/benchmark_preview_acceleration.py "$workspace/artifacts/preview-path-acceleration/first-frame-$stamp.json" "$fixture/body.inkfont" "$fixture/source.md" --repeats 5
+& $python -B tests/benchmark_preview_acceleration.py "$workspace/artifacts/release-0.1.92/first-frame-$stamp.json" "$fixture/body.inkfont" "$fixture/source.md" --repeats 5
 ```
 
 基准脚本把该次运行两态的 SVG 哈希与每轮首帧时间写入 JSON。回归也直接比较两态 SVG 文件的字节序列。

@@ -952,6 +952,32 @@ def verify_large_fonts(window, out, wait, paths):
         'mode': 'offscreen frozen/source check; native focus, responsiveness and tablet not certified'}
 
 
+def verify_preview_path_setting(dialog, canvas):
+    from inkstruct.document.schema import PageProfile
+    from inkstruct.renderers.pages import page_svg, screen_page_svg
+    from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
+
+    dialog.select("preview")
+    toggle = dialog.pages["preview"].acceleration
+    assert toggle.isChecked() and canvas.render_acceleration
+    snapshot = LayoutSnapshot(
+        "probe", "job", "doc", 1, PageProfile(20, 30, 1),
+        (Page(0, (), (PaintOp("ink", ((1, 1), (1.5, 1.015), (2, 1)), .3),)),),
+        (), "resources", "markdown-smoke",
+    )
+    original = page_svg(snapshot, 0)
+    assert "1.500000,1.015000" in original
+    assert "1.500000,1.015000" not in screen_page_svg(snapshot, 0, (60, 90, 1), accelerate=True)
+    assert screen_page_svg(snapshot, 0, (60, 90, 3), accelerate=True) == original
+    current = canvas.snapshot
+    toggle.click()
+    assert not canvas.render_acceleration and canvas.snapshot is current
+    assert screen_page_svg(snapshot, 0, (60, 90, 1), accelerate=canvas.render_acceleration) == original
+    toggle.click()
+    assert canvas.render_acceleration and canvas.snapshot is current
+    assert page_svg(snapshot, 0) == original
+
+
 def verify_windows_style(window, app, out, font_path=None):
     from PIL import Image
     from inkstruct.document.images import RasterResource
@@ -1051,6 +1077,7 @@ def verify_windows_style(window, app, out, font_path=None):
     system_scheme = app.styleHints().colorScheme()
     speed_graph = window.generator.centralWidget().progress_panel.graph
     speed_graph.set_progress(.6, 60.1)
+    verify_preview_path_setting(dialog, editor.canvas)
     dialog.select("appearance")
     theme = dialog.pages["appearance"].theme
     assert theme.currentData() == "system"
@@ -1119,6 +1146,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
             "jpeg_reference_imported": True, "sample_library_handoff": True,
+            "preview_path_acceleration": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
