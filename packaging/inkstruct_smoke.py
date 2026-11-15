@@ -987,12 +987,14 @@ def verify_windows_style(window, app, out, font_path=None):
     window.navigation_buttons[0].click()
     click.click()
     assert window.tabs.currentWidget() is library and library.writer.text() == writer
+    assert library.preview_message.isVisible() and library.preview_message.text() == '正在读取样本库…'
     for _ in range(500):
         app.processEvents()
         if library.job is None:
             break
         QtTest.QTest.qWait(10)
     assert library.table.topLevelItemCount() == 1, library.status.text()
+    assert not library.preview_message.isVisible()
     library.table.setCurrentItem(library.table.topLevelItem(0))
     assert library.preview.value['sample_id'] == 'synthetic-1'
     assert library.variants.count() == 2 and not library.selected_samples()
@@ -1047,6 +1049,8 @@ def verify_windows_style(window, app, out, font_path=None):
     settings = GlobalDefaultsStore.make_settings()
     defaults_before = settings.value(GlobalDefaultsStore.KEY)
     system_scheme = app.styleHints().colorScheme()
+    speed_graph = window.generator.centralWidget().progress_panel.graph
+    speed_graph.set_progress(.6, 60.1)
     dialog.select("appearance")
     theme = dialog.pages["appearance"].theme
     assert theme.currentData() == "system"
@@ -1061,6 +1065,12 @@ def verify_windows_style(window, app, out, font_path=None):
             dark = scheme == QtCore.Qt.ColorScheme.Dark
             assert app.styleHints().colorScheme() == scheme
             assert (surface.lightness() < 128) == dark
+            speed_base = speed_graph.palette().base().color()
+            speed_label = speed_graph.speed_label
+            speed_ink = speed_label.palette().color(speed_label.foregroundRole())
+            assert speed_label.text() == "速度：60.1 字/秒"
+            assert (speed_base.lightness() < 128) == dark
+            assert (speed_ink.lightness() > 128) == dark
             assert dialog.grab().save(str(out / f"theme-{scheme.name.lower()}.png"))
             dialog.select("math")
             app.processEvents()
@@ -1090,7 +1100,8 @@ def verify_windows_style(window, app, out, font_path=None):
             assert not step.isEmpty() and spin.value() == before + spin.singleStep()
             spin.setValue(before)
             reports[scheme.name] = {"surface": surface.name(), "stepper": [step.width(), step.height()],
-                                    "formula": canvas_colors}
+                                    "formula": canvas_colors,
+                                    "generation_speed": {"background": speed_base.name(), "ink": speed_ink.name()}}
             dialog.select("appearance")
         dialog.reset_current()
         assert theme.currentData() == "system"
@@ -1111,6 +1122,7 @@ def verify_windows_style(window, app, out, font_path=None):
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
+        speed_graph.reset()
         dialog.reject()
         window.editor.timer.stop()
         if window.editor.cancelled:
