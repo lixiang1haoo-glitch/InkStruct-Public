@@ -972,13 +972,15 @@ def verify_windows_style(window, app, out, font_path=None):
     target = CaptureCatalog(out / 'sample-target')
     writer = source.create_writer('Synthetic sample writer')
     reader = target.create_writer('Synthetic receiving writer')
-    path = source.task_root('symbol') / 'samples' / writer / 'U+0031' / 'source.json'
-    path.parent.mkdir(parents=True)
-    path.write_text(json.dumps({'schema_version': 'inkstruct_symbol_sample_v1', 'character': '1',
-                               'sample_id': 'synthetic-1', 'writer_id': writer,
-                               'capture': {'coordinate_space': 'logical_px'},
-                               'guides': {'em_px': 100, 'origin_x_px': 10, 'baseline_y_px': 80},
-                               'strokes': [{'points': [{'x': 20, 'y': 20}, {'x': 40, 'y': 60}]}]}), encoding='utf-8')
+    folder = source.task_root('symbol') / 'samples' / writer / 'U+0031'
+    folder.mkdir(parents=True)
+    for number in (1, 2):
+        (folder / f'source-{number}.json').write_text(
+            json.dumps({'schema_version': 'inkstruct_symbol_sample_v1', 'character': '1',
+                        'sample_id': f'synthetic-{number}', 'writer_id': writer,
+                        'capture': {'coordinate_space': 'logical_px'},
+                        'guides': {'em_px': 100, 'origin_x_px': 10, 'baseline_y_px': 80},
+                        'strokes': [{'points': [{'x': 20, 'y': 20}, {'x': 40, 'y': 60 + number}]}]}), encoding='utf-8')
     library = window.sample_library
     click = window.collector.symbol_widget.findChild(QtWidgets.QPushButton, 'capture_sample_library')
     window.collector.symbol_widget.writer_picker.reload(writer)
@@ -992,7 +994,17 @@ def verify_windows_style(window, app, out, font_path=None):
         QtTest.QTest.qWait(10)
     assert library.table.topLevelItemCount() == 1, library.status.text()
     library.table.setCurrentItem(library.table.topLevelItem(0))
-    assert library.preview.value['character'] == '1'
+    assert library.preview.value['sample_id'] == 'synthetic-1'
+    assert library.variants.count() == 2 and not library.selected_samples()
+    library.compare_button.click()
+    assert library.compare_preview.value['sample_id'] == 'synthetic-2'
+    assert library.preview.fit_span == library.compare_preview.fit_span == (20, 42)
+    library.select_button.click()
+    assert len(library.selected_samples()) == 2
+    library.character.setText('U+0032')
+    assert library.selection_summary() == (2, 2)
+    library.character.clear()
+    library.clear_button.click()
     window.navigation_buttons[3].click()
     window.navigation_buttons[window.tabs.indexOf(library)].click()
     assert window.tabs.currentWidget() is library and library.writer.text() == writer
@@ -1005,11 +1017,11 @@ def verify_windows_style(window, app, out, font_path=None):
     rows, errors = inventory(source, writer)
     assert not errors
     bundle_path = out / 'synthetic.inkcapture'
-    assert export_bundle(bundle_path, writer, 'Synthetic sample writer', rows) == 1
+    assert export_bundle(bundle_path, writer, 'Synthetic sample writer', rows) == 2
     bundle = open_bundle(bundle_path)
     destination = SampleLibrary(target)
-    assert destination.import_confirmed(bundle, reader, destination.review(bundle, reader)) == 1
-    assert len(destination.review(bundle, reader).duplicates) == 1
+    assert destination.import_confirmed(bundle, reader, destination.review(bundle, reader)) == 2
+    assert len(destination.review(bundle, reader).duplicates) == 2
     jpeg = out / "synthetic-reference.jpg"
     Image.new("RGB", (120, 60), (90, 20, 150)).save(jpeg)
     raster = RasterResource.from_file(jpeg, jpeg.name)
