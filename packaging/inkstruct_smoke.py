@@ -961,7 +961,6 @@ def verify_windows_style(window, app, out, font_path=None):
 
     from inkstruct.capture_management import CaptureCatalog
     from inkstruct.sample_library import SampleLibrary, export_bundle, inventory, open_bundle
-    from inkstruct.sample_library_ui import SampleLibraryDialog
 
     assert app.platformName() == "windows"
     assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
@@ -969,7 +968,7 @@ def verify_windows_style(window, app, out, font_path=None):
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
     assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
                for tab in (window.collector.single_widget, window.collector.symbol_widget))
-    source = CaptureCatalog(out / 'sample-source')
+    source = window.collector.single_widget._capture_catalog
     target = CaptureCatalog(out / 'sample-target')
     writer = source.create_writer('Synthetic sample writer')
     reader = target.create_writer('Synthetic receiving writer')
@@ -980,17 +979,29 @@ def verify_windows_style(window, app, out, font_path=None):
                                'capture': {'coordinate_space': 'logical_px'},
                                'guides': {'em_px': 100, 'origin_x_px': 10, 'baseline_y_px': 80},
                                'strokes': [{'points': [{'x': 20, 'y': 20}, {'x': 40, 'y': 60}]}]}), encoding='utf-8')
-    library = SampleLibraryDialog(source, writer, window)
-    library.show()
+    library = window.sample_library
+    click = window.collector.symbol_widget.findChild(QtWidgets.QPushButton, 'capture_sample_library')
+    window.collector.symbol_widget.writer_picker.reload(writer)
+    window.navigation_buttons[0].click()
+    click.click()
+    assert window.tabs.currentWidget() is library and library.writer.text() == writer
     for _ in range(500):
         app.processEvents()
         if library.job is None:
             break
         QtTest.QTest.qWait(10)
-    assert library.model.rowCount() == 1, library.status.text()
-    library.table.setCurrentIndex(library.model.index(0, 0))
+    assert library.table.topLevelItemCount() == 1, library.status.text()
+    library.table.setCurrentItem(library.table.topLevelItem(0))
     assert library.preview.value['character'] == '1'
-    library.reject()
+    window.navigation_buttons[3].click()
+    window.navigation_buttons[window.tabs.indexOf(library)].click()
+    assert window.tabs.currentWidget() is library and library.writer.text() == writer
+    for _ in range(500):
+        if library.job is None:
+            break
+        QtTest.QTest.qWait(10)
+    assert library.job is None
+    window.navigation_buttons[3].click()
     rows, errors = inventory(source, writer)
     assert not errors
     bundle_path = out / 'synthetic.inkcapture'

@@ -29,7 +29,7 @@ snapshot=w.editor.snapshot;choices=w.editor.resolver.selection_records()
 identity=w.editor.source_session.identity_record();flow=w.editor.flow
 assert choices
 assert not w.tabs.tabBar().isVisible() and not w.menuBar().isVisible()
-assert list(w.navigation_buttons)==[0,1,3,2,4]
+assert list(w.navigation_buttons)==[0,1,3,5,2,4]
 for button in w.navigation_buttons.values():assert not button.icon().isNull() and button.accessibleName()
 assert w.settings_button.text()=='设置' and not w.settings_button.icon().isNull()
 from inkstruct.fonts import APP_VERSION
@@ -65,7 +65,7 @@ for width,height in ((1360,900),(1000,720)):
   assert w.rect().contains(w.settings_button.mapTo(w,w.settings_button.rect().center()))
  # Programmatic transitions and keyboard navigation must use the same selected state.
  w.tabs.setCurrentIndex(3);w.editor.editor.setFocus();app.processEvents()
- for key,index in ((QtCore.Qt.Key_1,0),(QtCore.Qt.Key_2,1),(QtCore.Qt.Key_3,3),(QtCore.Qt.Key_4,2),(QtCore.Qt.Key_5,4)):
+ for key,index in ((QtCore.Qt.Key_1,0),(QtCore.Qt.Key_2,1),(QtCore.Qt.Key_3,3),(QtCore.Qt.Key_4,2),(QtCore.Qt.Key_5,4),(QtCore.Qt.Key_6,5)):
   QtTest.QTest.keyClick(w, key, QtCore.Qt.AltModifier);app.processEvents()
   assert w.tabs.currentIndex()==index and w.navigation_buttons[index].isChecked()
 def close_about():
