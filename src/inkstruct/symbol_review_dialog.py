@@ -5,11 +5,51 @@ from .symbol_revisions import read_sample
 from .symbol_tasks import item_letter_style
 
 
+def ink_span(value):
+    points = [point for stroke in value['strokes'] for point in stroke['points']]
+    if not points:
+        return 0, 0
+    return (max(p['x'] for p in points) - min(p['x'] for p in points),
+            max(p['y'] for p in points) - min(p['y'] for p in points))
+
+
+def paint_ink(painter, rect, value, ink, *, fit_span=None, margin=15):
+    strokes = [s['points'] for s in value['strokes']]
+    points = [p for s in strokes for p in s]
+    if not points:
+        return
+    left, top = min(p['x'] for p in points), min(p['y'] for p in points)
+    width = max(p['x'] for p in points) - left
+    height = max(p['y'] for p in points) - top
+    fit_width, fit_height = fit_span or (width, height)
+    scale = min((rect.width() - 2 * margin) / max(fit_width, 1),
+                (rect.height() - 2 * margin) / max(fit_height, 1))
+    dx, dy = rect.center().x() - width * scale / 2, rect.center().y() - height * scale / 2
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    painter.setPen(QtGui.QPen(ink, 2.2, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+    for stroke in strokes:
+        if not stroke:
+            continue
+        path = QtGui.QPainterPath()
+        for i, point in enumerate(stroke):
+            position = QtCore.QPointF(dx + (point['x'] - left) * scale, dy + (point['y'] - top) * scale)
+            if i == 0:
+                path.moveTo(position)
+            else:
+                path.lineTo(position)
+        if len(stroke) == 1:
+            painter.drawPoint(path.currentPosition())
+        else:
+            painter.drawPath(path)
+
+
 class InkPreview(QtWidgets.QWidget):
     def __init__(self, *, themed=False):
         super().__init__()
         self.value = None
         self.themed = themed
+        self.guides = False
+        self.fit_span = None
         self.setMinimumSize(240, 180)
 
     def paintEvent(self, event):
@@ -18,32 +58,18 @@ class InkPreview(QtWidgets.QWidget):
         background = palette.base().color() if self.themed else QtGui.QColor('white')
         ink = palette.text().color() if self.themed else QtGui.QColor('#18212f')
         painter.fillRect(self.rect(), background)
-        if not self.value:
-            return
-        strokes = [s['points'] for s in self.value['strokes']]
-        points = [p for s in strokes for p in s]
-        if not points:
-            return
-        left, top = min(p['x'] for p in points), min(p['y'] for p in points)
-        width = max(p['x'] for p in points)-left
-        height = max(p['y'] for p in points)-top
-        scale = min((self.width()-30)/max(width, 1), (self.height()-30)/max(height, 1))
-        dx, dy = (self.width()-width*scale)/2, (self.height()-height*scale)/2
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        painter.setPen(QtGui.QPen(ink, 2.2, QtCore.Qt.SolidLine,
-                                 QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-        for stroke in strokes:
-            path = QtGui.QPainterPath()
-            for i, point in enumerate(stroke):
-                position = QtCore.QPointF(dx+(point['x']-left)*scale,dy+(point['y']-top)*scale)
-                if i == 0:
-                    path.moveTo(position)
-                else:
-                    path.lineTo(position)
-            if len(stroke) == 1:
-                painter.drawPoint(path.currentPosition())
-            else:
-                painter.drawPath(path)
+        rect = QtCore.QRectF(0, 0, self.width(), self.height())
+        if self.guides:
+            guide = QtGui.QColor(ink)
+            guide.setAlpha(50)
+            painter.setPen(guide)
+            frame = rect.adjusted(12, 12, -12, -12)
+            painter.drawRect(frame)
+            x, y = frame.center().x(), frame.center().y()
+            painter.drawLine(QtCore.QLineF(x, frame.top(), x, frame.bottom()))
+            painter.drawLine(QtCore.QLineF(frame.left(), y, frame.right(), y))
+        if self.value:
+            paint_ink(painter, rect, self.value, ink, fit_span=self.fit_span)
 
 
 class SymbolReviewDialog(QtWidgets.QDialog):
