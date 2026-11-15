@@ -7,7 +7,7 @@ import io
 import json
 import math
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from hashlib import sha256
 from pathlib import Path
 
@@ -48,6 +48,7 @@ MAX_MEMBER_BYTES = 16_000_000
 # Catalogs aggregate many individually bounded glyphs, including font provenance.
 # The writer can legitimately exceed the per-glyph/member size in this one index.
 MAX_RESOURCE_CATALOG_BYTES = 128_000_000
+GLYPH_RECORD_FIELDS = tuple(field.name for field in fields(ResolvedGlyph) if field.name != "original_json")
 
 
 @dataclass
@@ -129,14 +130,19 @@ def package_bytes(
     resources = []
     for char in sorted(resolver.pools):
         for glyph in resolver.pools[char]:
-            record = asdict(glyph)
-            raw = record.pop("original_json")
+            # Geometry is immutable and the encoder accepts its tuples directly.
+            # Encode each record separately so building the index doesn't hold
+            # the interpreter lock for an entire large font catalog at once.
+            record = {name: getattr(glyph, name) for name in GLYPH_RECORD_FIELDS}
+            record["metrics"] = asdict(glyph.metrics)
+            raw = glyph.original_json
             raw_hash = sha256(raw).hexdigest()
             filename = f"assets/{raw_hash}.json"
             record["source_file"] = filename
-            resources.append(record)
+            resources.append(_json(record))
             members[filename] = raw
-    members["resources.json"] = _json(resources)
+    # Match the existing JSON array separators and byte representation.
+    members["resources.json"] = b"[" + b", ".join(resources) + b"]"
     if resolver.font_identity:
         members['font-source.json'] = _json({
             'schema_version': 'inkstruct_font_source_v1',
