@@ -16,7 +16,7 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
 
         sys.path.insert(0, 'tests')
 
-        from PySide6 import QtCore, QtTest, QtWidgets
+        from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 
         from inkstruct.application import InkStructWindow
         from inkstruct.sample_library import open_bundle
@@ -96,9 +96,41 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         page.compare_button.click()
         assert page.compare_preview.value['sample_id'] == 'one'
         assert page.preview.size() == page.compare_preview.size()
-        assert page.preview.fit_span == page.compare_preview.fit_span == (20, 70)
+        primary, other = page.preview, page.compare_preview
+        initial = primary.drawing_transform()
+        assert initial == other.drawing_transform()
+        assert page.zoom_button.text() == '100%'
+        cursor = QtCore.QPointF(72, 55)
+        global_cursor = QtCore.QPointF(primary.mapToGlobal(cursor.toPoint()))
+        anchor = initial.inverted()[0].map(cursor)
+
+        def wheel(modifiers, delta):
+            event = QtGui.QWheelEvent(cursor, global_cursor, QtCore.QPoint(), QtCore.QPoint(0, delta),
+                                      QtCore.Qt.NoButton, modifiers, QtCore.Qt.ScrollPhase.NoScrollPhase, False)
+            app.sendEvent(primary, event)
+
+        wheel(QtCore.Qt.NoModifier, 120)
+        assert primary.drawing_transform() == initial
+        wheel(QtCore.Qt.ControlModifier, 120)
+        assert page.zoom_button.text() == '120%'
+        zoomed = primary.drawing_transform()
+        assert zoomed == other.drawing_transform()
+        assert QtCore.QLineF(zoomed.map(anchor), cursor).length() < 1e-7
+        start, end = QtCore.QPoint(60, 60), QtCore.QPoint(87, 83)
+        QtTest.QTest.mousePress(other, QtCore.Qt.LeftButton, pos=start)
+        move = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseMove, QtCore.QPointF(end),
+                                 QtCore.QPointF(other.mapToGlobal(end)), QtCore.Qt.NoButton,
+                                 QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+        app.sendEvent(other, move)
+        QtTest.QTest.mouseRelease(other, QtCore.Qt.LeftButton, pos=end)
+        panned = primary.drawing_transform()
+        assert panned == other.drawing_transform()
+        assert QtCore.QLineF(panned.map(anchor) - zoomed.map(anchor), QtCore.QPointF(end - start)).length() < 1e-7
         page.guides.click()
         assert not page.preview.guides and not page.compare_preview.guides
+        assert primary.drawing_transform() == panned
+        page.zoom_button.click()
+        assert page.zoom_button.text() == '100%' and primary.drawing_transform() == other.drawing_transform() == initial
         page.compare_button.click()
 
         QtTest.QTest.mouseClick(page.table.viewport(), QtCore.Qt.LeftButton, pos=page.table.visualRect(page.table.indexFromItem(second, 0)).center())
@@ -193,3 +225,55 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
                           env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
                           capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=45)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_capture_proportion_preserves_small_marks_and_recorded_positions():
+    pytest.importorskip('PySide6')
+    from PySide6.QtCore import QRectF
+
+    from inkstruct.sample_preview import SampleDrawing, SampleView
+    from inkstruct.symbol_capture import scaled_frame
+
+    def ink(scale, points):
+        guides = scaled_frame(scale)
+        return SampleDrawing({
+            'guides': guides,
+            'strokes': [{'points': [
+                {'x': guides['origin_x_px'] + x * guides['em_px'],
+                 'y': guides['baseline_y_px'] + y * guides['em_px']}
+                for x, y in points
+            ]}],
+        })
+
+    mark = ((.06, -.12), (.12, -.02))
+    punctuation = ink(50, mark)
+    doubled = ink(100, mark)
+    quote = ink(100, ((.08, -.65), (.11, -.52)))
+    tall = ink(150, ((.05, -.7), (.15, 0)))
+    view = SampleView()
+    view.frame([punctuation, doubled, quote, tall], reset=True)
+    transform = view.transform(QRectF(0, 0, 224, 224), 14)
+    mark_bbox, doubles, high, digit = [
+        transform.map(d.ink).boundingRect() for d in (punctuation, doubled, quote, tall)]
+    assert (mark_bbox.x(), mark_bbox.y(), mark_bbox.width(), mark_bbox.height()) == pytest.approx(
+        (doubles.x(), doubles.y(), doubles.width(), doubles.height()))
+    assert mark_bbox.height() == pytest.approx(digit.height() / 7)
+    assert high.bottom() < digit.center().y() < mark_bbox.top()
+    assert 0 < mark_bbox.height() < 12
+
+
+def test_uncalibrated_preview_uses_saved_canvas_or_limited_fit():
+    pytest.importorskip('PySide6')
+    from PySide6.QtCore import QRectF
+
+    from inkstruct.sample_preview import SampleDrawing, SampleView
+
+    strokes = [{'points': [{'x': 40, 'y': 90}, {'x': 43, 'y': 96}]}]
+    recorded = SampleDrawing({'capture': {'canvas_width': 100, 'canvas_height': 200}, 'strokes': strokes})
+    missing = SampleDrawing({'strokes': strokes})
+    view = SampleView()
+    view.frame([missing], reset=True)
+    assert recorded.canvas_only and not recorded.missing_scale
+    assert recorded.bounds.width() == 1 and recorded.bounds.height() == 2
+    assert missing.missing_scale
+    assert view.transform(QRectF(0, 0, 224, 224), 14).map(missing.ink).boundingRect().height() < 12

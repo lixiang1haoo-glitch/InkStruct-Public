@@ -11,7 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .capture_workflow_ui import WriterPicker
 from .fonts.ui import Job
 from .sample_library import CATEGORIES, SampleLibrary, export_bundle, inventory, open_source, read_row
-from .symbol_review_dialog import InkPreview, ink_span, paint_ink
+from .sample_preview import SampleDrawing, SamplePreview, SampleView
 
 
 Qt = QtCore.Qt
@@ -297,12 +297,21 @@ class SampleLibraryPage(QtWidgets.QWidget):
         self.variant_count = plain_label(role='hint')
         self.guides = QtWidgets.QCheckBox('参考线')
         self.guides.setChecked(True)
-        self.guides.setToolTip('显示预览画布的中心和边界参考线')
+        self.guides.setToolTip('显示采集画布边界和书写参考线')
+        self.preview_view = SampleView(self)
+        self.zoom_button = QtWidgets.QToolButton()
+        self.zoom_button.setText('100%')
+        self.zoom_button.setMinimumWidth(53)
+        self.zoom_button.setToolTip('Ctrl + 滚轮缩放 · 点击恢复采集比例')
+        self.zoom_button.setAccessibleDescription('点击恢复采集比例和位置')
+        self.zoom_button.clicked.connect(self.preview_view.reset)
+        self.preview_view.changed.connect(self.update_zoom_label)
         self.compare_button = QtWidgets.QPushButton('并排比较')
         self.compare_button.setCheckable(True)
         preview_heading.addWidget(self.active_character)
         preview_heading.addWidget(self.variant_count)
         preview_heading.addStretch()
+        preview_heading.addWidget(self.zoom_button)
         preview_heading.addWidget(self.guides)
         preview_heading.addWidget(self.compare_button)
         column.addLayout(preview_heading)
@@ -319,7 +328,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         primary_row.addWidget(self.primary_label)
         primary_row.addStretch()
         primary.addLayout(primary_row)
-        self.preview = InkPreview(themed=True)
+        self.preview = SamplePreview(self.preview_view)
         self.preview.setAccessibleName('原始笔迹预览')
         self.preview.setFixedSize(PREVIEW_SIZE, PREVIEW_SIZE)
         primary.addWidget(self.preview)
@@ -335,7 +344,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         counterpart_row.addWidget(plain_label('对照样本'))
         counterpart_row.addWidget(self.counterpart, 1)
         comparison.addLayout(counterpart_row)
-        self.compare_preview = InkPreview(themed=True)
+        self.compare_preview = SamplePreview(self.preview_view)
         self.compare_preview.setAccessibleName('对照笔迹预览')
         self.compare_preview.setFixedSize(PREVIEW_SIZE, PREVIEW_SIZE)
         comparison.addWidget(self.compare_preview)
@@ -734,8 +743,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         pixmap.fill(Qt.transparent)
         painter = QtGui.QPainter(pixmap)
         try:
-            paint_ink(painter, QtCore.QRectF(0, 0, size, size), value,
-                      self.palette().text().color(), margin=5)
+            SampleDrawing(value).paint_thumbnail(painter, QtCore.QRectF(0, 0, size, size), self.palette())
         finally:
             painter.end()
         return QtGui.QIcon(pixmap)
@@ -750,6 +758,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
     def show_sample(self, *_):
         item = self.variants.currentItem()
         row = item.data(Qt.UserRole) if item is not None else None
+        previous = self.active_row
         old_counterpart = self.counterpart.currentData()
         if old_counterpart == row:
             old_counterpart = self.active_row
@@ -766,7 +775,9 @@ class SampleLibraryPage(QtWidgets.QWidget):
             self.active_character.setText(row.character)
             self.variant_count.setText(f'{len(self.groups[row.character])} 份 · {CATEGORIES[row.category]}')
             self.show_source(row)
-        self.paint_comparison()
+        reset_view = (previous is None or row is None
+                      or (previous.writer, previous.character) != (row.writer, row.character))
+        self.paint_comparison(reset_view=reset_view)
         self.sync_checks()
 
     def show_source(self, row):
@@ -789,21 +800,26 @@ class SampleLibraryPage(QtWidgets.QWidget):
         self.technical_panel.setVisible(expanded)
         self.technical_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
 
-    def paint_comparison(self, *_):
+    def update_zoom_label(self):
+        self.zoom_button.setText(f'{self.preview_view.zoom:.0%}')
+
+    def paint_comparison(self, *_, reset_view=False):
         row, other = self.active_row, self.counterpart.currentData()
-        errors = []
+        notices = []
         for preview, sample in ((self.preview, row), (self.compare_preview, other)):
             preview.guides = self.guides.isChecked()
-            preview.fit_span = None
-            preview.value = None
+            value = None
             if sample is not None:
                 try:
-                    preview.value = self.read_preview(sample)
+                    value = self.read_preview(sample)
                 except READ_ERRORS as error:
-                    errors.append(f'{self.variant_name(sample)}无法读取 · {error}')
-        if self.preview.value and self.compare_preview.value:
-            spans = ink_span(self.preview.value), ink_span(self.compare_preview.value)
-            self.preview.fit_span = self.compare_preview.fit_span = tuple(map(max, zip(*spans)))
+                    notices.append(f'{self.variant_name(sample)}无法读取 · {error}')
+            preview.set_sample(value)
+            if preview.drawing is not None and preview.drawing.missing_scale:
+                notices.append(f'{self.variant_name(sample)}缺少采集比例 · 按约略尺寸显示')
+        drawings = [p.drawing for p in (self.preview, self.compare_preview) if p.drawing is not None]
+        self.preview_view.frame(drawings, reset=reset_view)
+        self.zoom_button.setEnabled(bool(drawings))
         self.preview.update()
         self.compare_preview.update()
         self.compare_button.setText('退出比较' if other is not None else '并排比较')
@@ -811,8 +827,8 @@ class SampleLibraryPage(QtWidgets.QWidget):
         if row is not None:
             self.primary_label.setText(f'{self.variant_name(row)} · {"当前预览" if other else "原始笔迹"}')
         self.layout_preview()
-        self.preview_warning.setText('\n'.join(errors))
-        self.preview_warning.setVisible(bool(errors))
+        self.preview_warning.setText('\n'.join(notices))
+        self.preview_warning.setVisible(bool(notices))
 
     def pick_export(self):
         rows = self.selected_samples()
