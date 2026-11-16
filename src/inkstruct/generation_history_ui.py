@@ -13,6 +13,7 @@ from .generation_history import (
     character_query,
     inspect_candidates,
 )
+from .sample_preview import InkViewport, SampleView
 
 
 class HistorySignals(QtCore.QObject):
@@ -34,81 +35,135 @@ class HistoryRead(QtCore.QRunnable):
             self.signals.finished.emit(self.key, self.revision, value, "")
 
 
-class StrokePreview(QtWidgets.QWidget):
+class StrokePreview(InkViewport):
     stroke_selected = QtCore.Signal(int)
 
-    def __init__(self, description, *, interactive=False):
-        super().__init__()
+    def __init__(self, view, description, *, interactive=False):
+        super().__init__(view)
         self.setAccessibleName(description)
-        self.setMinimumSize(180, 174)
+        self.setMinimumSize(105, 98)
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
         self.interactive = interactive
         self.selected = -1
-        self.strokes, self.colors, self.paths = (), (), []
+        self.paths, self.colors = [], ()
 
-    def set_ink(self, strokes=(), colors=(), selected=-1):
-        self.strokes, self.colors, self.selected = strokes, colors, selected
+    def set_ink(self, strokes=(), colors=()):
+        self.colors, self.selected = colors, -1
         self.paths = []
+        for stroke in strokes:
+            if not stroke:
+                self.paths.append(None)
+                continue
+            path = QtGui.QPainterPath(QtCore.QPointF(*stroke[0]))
+            for x, y in stroke[1:]:
+                path.lineTo(x, y)
+            self.paths.append(path)
+        self.press_position = self.drag_position = None
+        self.view_changed()
+
+    def has_ink(self):
+        return any(path is not None for path in self.paths)
+
+    def select(self, stroke):
+        self.selected = stroke
         self.update()
+
+    def display_path(self, index):
+        path = self.paths[index]
+        return self.drawing_transform().map(path) if path is not None else None
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         palette = self.palette()
         painter.fillRect(self.rect(), palette.base())
-        if not self.strokes:
-            return
-        points = [point for stroke in self.strokes for point in stroke]
-        if not points:
-            return
-        box = self.rect().adjusted(18, 18, -18, -18)
-        left, right = min(x for x, _ in points), max(x for x, _ in points)
-        top, bottom = min(y for _, y in points), max(y for _, y in points)
-        scale = min(box.width() / max(right - left, 1e-9), box.height() / max(bottom - top, 1e-9))
-        center = QtCore.QPointF(box.center())
-        self.paths = []
-        for stroke in self.strokes:
-            path = QtGui.QPainterPath()
-            for i, (x, y) in enumerate(stroke):
-                point = center + QtCore.QPointF((x - (left + right) / 2) * scale,
-                                                  (y - (top + bottom) / 2) * scale)
-                if i == 0:
-                    path.moveTo(point)
-                else:
-                    path.lineTo(point)
-            self.paths.append(path)
+        transform = self.drawing_transform()
+        box = transform.mapRect(self.view.bounds)
+        guide = palette.text().color()
+        guide.setAlpha(54)
+        painter.setPen(QtGui.QPen(guide, 1))
+        painter.drawRect(box)
+        guide.setAlpha(30)
+        painter.setPen(QtGui.QPen(guide, 1))
+        x, y = box.center().x(), box.center().y()
+        painter.drawLine(QtCore.QLineF(box.left(), y, box.right(), y))
+        painter.drawLine(QtCore.QLineF(x, box.top(), x, box.bottom()))
         order = sorted(range(len(self.paths)), key=lambda i: i == self.selected)
         for i in order:
-            if not self.strokes[i]:
+            path = self.paths[i]
+            if path is None:
                 continue
-            color = QtGui.QColor(self.colors[i] if self.colors else palette.text().color())
-            if not self.interactive and i != self.selected:
-                color.setAlpha(88)
-            width = 4 if i == self.selected else 2.2
+            accent = self.colors[i]
+            color = QtGui.QColor(accent or palette.text().color())
+            if accent is None:
+                color.setAlpha(130)
+            width = 4 if i == self.selected else 2 if accent else 1.4
             painter.setPen(QtGui.QPen(color, width, QtCore.Qt.PenStyle.SolidLine,
                                       QtCore.Qt.PenCapStyle.RoundCap, QtCore.Qt.PenJoinStyle.RoundJoin))
-            if self.paths[i].isEmpty():
-                painter.drawPoint(self.paths[i].currentPosition())
+            if path.isEmpty():
+                painter.drawPoint(transform.map(path.currentPosition()))
             else:
-                painter.drawPath(self.paths[i])
+                painter.drawPath(transform.map(path))
 
-    def mousePressEvent(self, event):
-        if not self.interactive or event.button() != QtCore.Qt.MouseButton.LeftButton:
-            return super().mousePressEvent(event)
-        for width in (5, 12, 20):
+    def ink_clicked(self, position):
+        if not self.interactive:
+            return
+        paths = [self.display_path(i) for i in range(len(self.paths))]
+        for width in (5, 11, 19):
             stroker = QtGui.QPainterPathStroker()
             stroker.setWidth(width)
-            for i, path in enumerate(self.paths):
-                if not self.strokes[i]:
+            for i, path in enumerate(paths):
+                if path is None:
                     continue
                 if path.isEmpty():
-                    delta = event.position() - path.currentPosition()
+                    delta = position - path.currentPosition()
                     hit = delta.x() ** 2 + delta.y() ** 2 <= (width / 2) ** 2
                 else:
-                    hit = stroker.createStroke(path).contains(event.position())
+                    hit = stroker.createStroke(path).contains(position)
                 if hit:
                     self.stroke_selected.emit(i)
                     return
+
+
+class SourceCard(QtWidgets.QFrame):
+    def __init__(self, view, index, source, recording, raw_orders, color):
+        super().__init__()
+        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(5, 4, 5, 4)
+        layout.setSpacing(3)
+        identity = source.sample or source.digest or "样本编号未记录"
+        character = source.character or "源字未记录"
+        self.button = QtWidgets.QToolButton()
+        self.button.setText(f"{character} · 样本 {index}")
+        self.button.setCheckable(True)
+        self.button.setToolTip(f"{character} · {identity}\n{recording.status}")
+        self.button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.button)
+        self.preview = StrokePreview(view, f"{character}的源录制笔迹")
+        strokes = recording.framed_strokes()
+        if strokes:
+            self.preview.setFixedHeight(108)
+            self.preview.set_ink(strokes, [color if i in raw_orders else None for i in range(1, len(strokes) + 1)])
+            layout.addWidget(self.preview)
+            text = "原笔序 " + "、".join(map(str, sorted(raw_orders))) if raw_orders else "原笔序未记录"
+            if recording.status != "原录制":
+                text = "索引笔迹 · " + text
+        else:
+            empty = QtWidgets.QLabel("原录制不可用")
+            empty.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            empty.setMinimumHeight(108)
+            layout.addWidget(empty)
+            text = "批次来源记录"
+        note = QtWidgets.QLabel(text)
+        note.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+        note.setWordWrap(True)
+        note.setToolTip(recording.status)
+        layout.addWidget(note)
+
+    def select(self, active, raw_order=None):
+        self.button.setChecked(active)
+        self.preview.select(raw_order - 1 if raw_order else -1)
 
 
 def table(columns):
@@ -149,9 +204,12 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         self.readers = {}
         self.batches = self.visible = self.characters = self.candidates = []
         self.batch = self.archive = None
-        self.strokes, self.recordings, self.source_keys = (), {}, []
+        self.strokes, self.recordings, self.source_cards = (), {}, {}
         self.version = ""
         self.default_writer = writer
+        self.view = SampleView(self)
+        self.view.bounds = QtCore.QRectF(0, 0, 1, 1)
+        self.view.reset()
 
         layout = QtWidgets.QVBoxLayout(self)
         splitter = QtWidgets.QSplitter()
@@ -159,22 +217,26 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         layout.addWidget(splitter, 1)
         left = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(left)
-        filters = QtWidgets.QHBoxLayout()
+        batch_title = QtWidgets.QHBoxLayout()
+        batch_title.addWidget(QtWidgets.QLabel("历史批次"), 1)
         self.writers = QtWidgets.QComboBox()
         self.writers.setAccessibleName("按书写者筛选批次")
-        filters.addWidget(QtWidgets.QLabel("书写者"))
-        filters.addWidget(self.writers, 1)
+        self.writers.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.writers.setMinimumContentsLength(10)
         refresh = QtWidgets.QPushButton("刷新")
         refresh.clicked.connect(lambda: self.reload(self.writers.currentData() or ""))
-        filters.addWidget(refresh)
-        left_layout.addLayout(filters)
-        self.batches_table = table(("生成时间", "书写者", "算法", "完成 / 目标", "状态"))
-        self.batches_table.setAccessibleName("生成批次")
-        left_layout.addWidget(self.batches_table)
+        batch_title.addWidget(refresh)
+        left_layout.addLayout(batch_title)
+        left_layout.addWidget(self.writers)
+        self.batch_list = QtWidgets.QListWidget()
+        self.batch_list.setAccessibleName("生成批次")
+        self.batch_list.setUniformItemSizes(True)
+        self.batch_list.setSpacing(2)
+        left_layout.addWidget(self.batch_list)
         actions = QtWidgets.QHBoxLayout()
-        self.folder_button = QtWidgets.QPushButton("打开结果目录")
+        self.folder_button = QtWidgets.QPushButton("打开目录")
         self.folder_button.clicked.connect(self.open_folder)
-        self.font_button = QtWidgets.QPushButton("用所选批次制作字体…")
+        self.font_button = QtWidgets.QPushButton("制作字体…")
         self.font_button.setVisible(can_publish)
         self.font_button.clicked.connect(self.publish_batch)
         actions.addWidget(self.folder_button)
@@ -182,46 +244,65 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         left_layout.addLayout(actions)
         splitter.addWidget(left)
 
-        right = QtWidgets.QWidget()
-        right_layout = QtWidgets.QVBoxLayout(right)
-        self.heading = QtWidgets.QLabel("字形来源")
-        self.heading.setProperty("inkRole", "title")
-        right_layout.addWidget(self.heading)
-        selector = QtWidgets.QHBoxLayout()
+        middle = QtWidgets.QWidget()
+        middle_layout = QtWidgets.QVBoxLayout(middle)
+        character_title = QtWidgets.QHBoxLayout()
+        character_title.addWidget(QtWidgets.QLabel("字符列表"), 1)
+        self.character_count = QtWidgets.QLabel()
+        character_title.addWidget(self.character_count)
+        middle_layout.addLayout(character_title)
         self.search = QtWidgets.QLineEdit()
         self.search.setAccessibleName("搜索目标字")
-        self.search.setPlaceholderText("输入目标字或 U+ 编码")
-        self.character = QtWidgets.QComboBox()
+        self.search.setPlaceholderText("字符或 U+ 编码")
+        self.search.setClearButtonEnabled(True)
+        middle_layout.addWidget(self.search)
+        self.character = QtWidgets.QListView()
         self.character.setAccessibleName("目标字")
-        self.character.setMinimumContentsLength(8)
+        self.character.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.character.setUniformItemSizes(True)
+        self.character_model = QtCore.QStringListModel(self.character)
+        self.character.setModel(self.character_model)
+        middle_layout.addWidget(self.character)
+        splitter.addWidget(middle)
+
+        right = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout(right)
+        selector = QtWidgets.QHBoxLayout()
+        self.heading = QtWidgets.QLabel("结果预览")
+        self.heading.setProperty("inkRole", "title")
+        selector.addWidget(self.heading, 1)
         self.candidate = QtWidgets.QComboBox()
         self.candidate.setAccessibleName("生成候选")
-        selector.addWidget(self.search, 1)
-        selector.addWidget(self.character)
         selector.addWidget(self.candidate)
+        self.zoom_button = QtWidgets.QToolButton()
+        self.zoom_button.setAccessibleName("重置预览倍率")
+        self.zoom_button.setToolTip("点击恢复默认视野")
+        self.zoom_button.setText("100%")
+        self.zoom_button.clicked.connect(self.view.reset)
+        self.view.changed.connect(lambda: self.zoom_button.setText(f"{self.view.zoom:.0%}"))
+        selector.addWidget(self.zoom_button)
         right_layout.addLayout(selector)
         previews = QtWidgets.QHBoxLayout()
         generated = QtWidgets.QGroupBox("生成字形")
         generated_layout = QtWidgets.QVBoxLayout(generated)
-        self.generated = StrokePreview("按来源样本着色的生成笔画", interactive=True)
+        self.generated = StrokePreview(self.view, "按来源样本着色的生成笔画", interactive=True)
         generated_layout.addWidget(self.generated, 1)
         self.target_note = QtWidgets.QLabel("选择批次后查看字形")
         self.target_note.setWordWrap(True)
         generated_layout.addWidget(self.target_note)
         previews.addWidget(generated, 1)
-        original = QtWidgets.QGroupBox("源录制")
+        original = QtWidgets.QGroupBox("来源字")
         original_layout = QtWidgets.QVBoxLayout(original)
-        self.original = StrokePreview("源录制笔迹")
-        self.sources = QtWidgets.QComboBox()
-        self.sources.setAccessibleName("来源样本")
-        self.sources.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.sources.setMinimumContentsLength(12)
-        original_layout.addWidget(self.sources)
-        original_layout.addWidget(self.original, 1)
+        self.source_scroll = QtWidgets.QScrollArea()
+        self.source_scroll.setAccessibleName("来源样本网格")
+        self.source_scroll.setWidgetResizable(True)
+        self.source_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.source_scroll.setMinimumWidth(247)
+        original_layout.addWidget(self.source_scroll, 1)
         self.source_note = QtWidgets.QLabel()
         self.source_note.setWordWrap(True)
         original_layout.addWidget(self.source_note)
-        previews.addWidget(original, 1)
+        previews.addWidget(original, 2)
         right_layout.addLayout(previews, 1)
         self.stroke_table = table(("实体笔段", "目标笔位", "来源方式", "源字", "原笔序"))
         self.stroke_table.setAccessibleName("生成字形的笔段和来源")
@@ -231,20 +312,19 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         self.copy.clicked.connect(self.copy_info)
         right_layout.addWidget(self.copy, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
         splitter.addWidget(right)
-        splitter.setSizes([510, 810])
-        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([245, 160, 875])
+        splitter.setStretchFactor(2, 1)
 
         self.message = QtWidgets.QLabel()
         self.message.setWordWrap(True)
         layout.addWidget(self.message)
         self.writers.currentIndexChanged.connect(self.filter_batches)
-        self.batches_table.currentCellChanged.connect(self.batch_changed)
+        self.batch_list.currentRowChanged.connect(self.batch_changed)
         self.search.textChanged.connect(self.filter_characters)
-        self.character.currentIndexChanged.connect(self.character_changed)
+        self.character.selectionModel().currentChanged.connect(self.character_changed)
         self.candidate.currentIndexChanged.connect(self.candidate_changed)
-        self.generated.stroke_selected.connect(self.stroke_table.selectRow)
+        self.generated.stroke_selected.connect(self.select_segment)
         self.stroke_table.currentCellChanged.connect(self.stroke_changed)
-        self.sources.currentIndexChanged.connect(self.source_changed)
         self.batch_changed(-1)
         self.reload(writer)
 
@@ -297,16 +377,23 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
 
     def filter_batches(self, *_):
         writer = self.writers.currentData()
+        selected = self.batch["path"] if self.batch else None
         self.visible = [item for item in self.batches if not writer or item["writer"] == writer]
-        fill_table(self.batches_table, [
-            (item["date"].strftime("%Y-%m-%d %H:%M"), item["writer"], item["method"],
-             f"{len(item['characters'])} / {item['target']}", STATUS.get(item["status"], item["status"]))
-            for item in self.visible
-        ])
-        if self.visible:
-            with QtCore.QSignalBlocker(self.batches_table):
-                self.batches_table.setCurrentCell(0, 0)
-        self.batch_changed(0 if self.visible else -1)
+        row = next((i for i, batch in enumerate(self.visible) if batch["path"] == selected),
+                   0 if self.visible else -1)
+        with QtCore.QSignalBlocker(self.batch_list):
+            self.batch_list.clear()
+            for batch in self.visible:
+                date = batch["date"].strftime("%Y-%m-%d %H:%M")
+                count = f"{len(batch['characters'])} / {batch['target']}"
+                status = STATUS.get(batch["status"], batch["status"])
+                item = QtWidgets.QListWidgetItem(
+                    f"{date} · {batch['writer']}\n{batch['method']} · {count} · {status}")
+                item.setToolTip(f"{item.text()}\n{batch['path'].name}")
+                item.setSizeHint(QtCore.QSize(0, self.batch_list.fontMetrics().lineSpacing() * 2 + 9))
+                self.batch_list.addItem(item)
+            self.batch_list.setCurrentRow(row)
+        self.batch_changed(row)
         if not self.visible:
             self.message.setText("此书写者暂无生成记录" if writer else "暂无历史生成记录")
 
@@ -323,25 +410,35 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         self.filter_characters()
 
     def filter_characters(self, *_):
+        previous = self.current_character()
         query = character_query(self.search.text())
         self.characters = [c for c in self.batch["characters"] if not query or c == query] if self.batch else []
-        with QtCore.QSignalBlocker(self.character):
-            self.character.clear()
-            self.character.addItems(self.characters)
+        row = self.characters.index(previous) if previous in self.characters else 0
+        with QtCore.QSignalBlocker(self.character.selectionModel()):
+            self.character_model.setStringList([f"{c}    U+{ord(c):04X}" for c in self.characters])
+            self.character.setCurrentIndex(self.character_model.index(row))
+        self.character_count.setText(f"{len(self.characters)} 字")
         self.character.setEnabled(bool(self.characters))
         self.character_changed(self.character.currentIndex())
 
-    def character_changed(self, i):
+    def current_character(self):
+        row = self.character.currentIndex().row()
+        return self.characters[row] if 0 <= row < len(self.characters) else ""
+
+    def character_changed(self, *_):
         self.revisions["glyph"] = self.revisions.get("glyph", 0) + 1
+        character = self.current_character()
+        self.heading.setText(f"结果预览 · {character}" if character else "结果预览")
+        self.view.reset()
         self.candidates = []
         with QtCore.QSignalBlocker(self.candidate):
             self.candidate.clear()
         self.candidate_changed(-1)
-        if i < 0 or not self.batch:
+        if not character or not self.batch:
             self.message.setText("没有匹配的已完成字形" if self.batch else "")
             return
         self.message.setText("正在读取字形和候选…")
-        batch, character = self.batch, self.characters[i]
+        batch = self.batch
         self.call("glyph", lambda: list(inspect_candidates(batch, character)))
 
     def candidate_changed(self, i):
@@ -356,73 +453,84 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         self.message.setText("正在查找源录制…")
         self.call("source", lambda: archive.resolve(strokes))
 
-    def colors(self):
+    def colors(self, keys):
         dark = self.palette().base().color().lightness() < 128
         lightness = 178 if dark else 86
-        lookup = {key: QtGui.QColor.fromHsl((203 + 137 * i) % 360, 175, lightness)
-                  for i, key in enumerate(self.source_keys)}
-        neutral = self.palette().mid().color()
-        return [lookup.get(s.key, neutral) for s in self.strokes]
+        return {key: QtGui.QColor.fromHsl((203 + 137 * i) % 360, 175, lightness)
+                for i, key in enumerate(keys)}
 
     def show_strokes(self, strokes, recordings):
         self.strokes, self.recordings = strokes, recordings
-        self.source_keys = list(dict.fromkeys(s.key for s in strokes if any(s.key)))
-        with QtCore.QSignalBlocker(self.sources):
-            self.sources.clear()
-            for i, key in enumerate(self.source_keys, 1):
-                source = next(s for s in strokes if s.key == key)
-                identity = source.sample or source.digest or "样本编号未记录"
-                self.sources.addItem(f"样本 {i} · {source.character} · {identity}", key)
-                self.sources.setItemData(i - 1, identity, QtCore.Qt.ItemDataRole.ToolTipRole)
+        groups = {}
+        for row, stroke in enumerate(strokes):
+            if any(stroke.key):
+                groups.setdefault(stroke.key, []).append(row)
+        colors = self.colors(groups)
+        self.generated.set_ink([s.points for s in strokes], [colors.get(s.key) for s in strokes])
+        self.source_cards = {}
+        content = QtWidgets.QWidget()
+        grid = QtWidgets.QGridLayout(content)
+        grid.setContentsMargins(4, 4, 4, 4)
+        grid.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        for index, (key, rows) in enumerate(groups.items()):
+            first = rows[0]
+            orders = {strokes[row].raw_order for row in rows if strokes[row].raw_order is not None}
+            card = SourceCard(self.view, index + 1, strokes[first], recordings.get(key, Recording()),
+                              orders, colors[key])
+            card.button.clicked.connect(lambda _, row=first: self.select_segment(row))
+            grid.addWidget(card, index // 2, index % 2)
+            self.source_cards[key] = card
+        if not self.source_cards:
+            empty = QtWidgets.QLabel("此候选未记录来源字" if strokes else "选择字符后查看来源字")
+            empty.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            grid.addWidget(empty, 0, 0, 1, 2)
+        self.source_scroll.setWidget(content)
         fill_table(self.stroke_table, [
             (i, " + ".join(s.slots), s.kind, s.character or "—", s.raw_order or "—")
             for i, s in enumerate(strokes, 1)
         ])
         self.copy.setEnabled(bool(strokes))
-        self.target_note.setText("点击生成笔迹或下方笔段查看原录制" if strokes else "暂无可查看的字形")
+        self.zoom_button.setEnabled(self.generated.has_ink())
+        self.target_note.setText("点击笔迹查看来源 · Ctrl + 滚轮缩放" if strokes else "暂无可查看的字形")
         if strokes:
             self.message.setText(f"批次 {self.batch['path'].name} · 算法版本 {self.version}")
             with QtCore.QSignalBlocker(self.stroke_table):
                 self.stroke_table.setCurrentCell(0, 0)
         self.stroke_changed(0 if strokes else -1)
 
-    def stroke_changed(self, row, *_):
-        color = self.colors()
-        self.generated.set_ink([s.points for s in self.strokes], color, row)
-        if 0 <= row < len(self.strokes):
-            source = self.strokes[row]
-            i = self.source_keys.index(source.key) if source.key in self.source_keys else -1
-        else:
-            i = -1
-        with QtCore.QSignalBlocker(self.sources):
-            self.sources.setCurrentIndex(i)
-        self.source_changed(i)
+    def select_segment(self, row):
+        previous = self.stroke_table.currentRow()
+        self.stroke_table.setCurrentCell(row, 0)
+        self.stroke_table.scrollToItem(self.stroke_table.item(row, 0))
+        if previous == row:
+            self.stroke_changed(row)
 
-    def source_changed(self, i):
-        if not 0 <= i < len(self.source_keys):
-            self.original.set_ink()
+    def stroke_changed(self, row, *_):
+        self.generated.select(row)
+        stroke = self.strokes[row] if 0 <= row < len(self.strokes) else None
+        key = stroke.key if stroke else None
+        for source_key, card in self.source_cards.items():
+            active = source_key == key
+            order = stroke.raw_order if active else None
+            card.select(active, order if order and 1 <= order <= len(card.preview.paths) else None)
+        card = self.source_cards.get(key)
+        if card is None:
             self.source_note.setText("此笔段没有可定位的源录制" if self.strokes else "")
             return
-        key = self.source_keys[i]
+        self.source_scroll.ensureWidgetVisible(card, 0, 6)
         recording = self.recordings.get(key, Recording())
-        row = self.stroke_table.currentRow()
-        stroke = self.strokes[row] if 0 <= row < len(self.strokes) and self.strokes[row].key == key else None
-        raw_order = stroke.raw_order if stroke else None
-        selected = raw_order - 1 if raw_order and 1 <= raw_order <= len(recording.strokes) else -1
-        color = next(c for s, c in zip(self.strokes, self.colors()) if s.key == key)
-        self.original.set_ink(recording.strokes, [color] * len(recording.strokes), selected)
-        detail = f" · 原笔序 {raw_order}" if raw_order else " · 原笔序未记录" if stroke else ""
-        if stroke and stroke.standard_id:
+        detail = f" · 原笔序 {stroke.raw_order}" if stroke.raw_order else " · 原笔序未记录"
+        if stroke.standard_id:
             detail += f" · 源标准笔位 {stroke.standard_id}"
-        sample = next(s for s in self.strokes if s.key == key)
-        identity = sample.sample or sample.digest or "样本编号未记录"
-        self.source_note.setText(f"{sample.character} · {identity}\n{recording.status}{detail}")
+        self.source_note.setText(f"{recording.status}{detail}")
 
     def copy_info(self):
         rows = [
             f"批次 {self.batch['path'].name} · 书写者 {self.batch['writer']}",
             f"算法 {self.batch['method']} · 版本 {self.version}",
-            f"目标字 {self.character.currentText()} · {self.candidate.currentText()}",
+            f"目标字 {self.current_character()} · {self.candidate.currentText()}",
         ]
         for i, s in enumerate(self.strokes, 1):
             rows.append(f"笔段 {i} · {' + '.join(s.slots)} · {s.kind} · 源字 {s.character or '未记录'}"

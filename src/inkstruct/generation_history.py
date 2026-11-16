@@ -112,6 +112,16 @@ def inspect_candidates(batch, character):
 class Recording:
     strokes: tuple = ()
     status: str = "未找到原录制，显示批次保存的来源"
+    canvas_size: tuple[float, float] | None = None
+
+    def framed_strokes(self):
+        if not self.canvas_size:
+            return ()
+        width, height = self.canvas_size
+        side = max(width, height)
+        left = (side - width) / 2
+        top = (side - height) / 2
+        return tuple(tuple(((x + left) / side, (y + top) / side) for x, y in stroke) for stroke in self.strokes)
 
 
 class SourceArchive:
@@ -188,7 +198,8 @@ class SourceArchive:
             resolved.append(replace(stroke, sample=sample_id, raw_order=order))
         return resolved, {
             key: Recording(tuple(tuple((p.x, p.y) for p in stroke.points) for stroke in sample.strokes),
-                           "原录制" if original else "原文件缺失，显示导入索引保留的笔迹")
+                           "原录制" if original else "原文件缺失，显示导入索引保留的笔迹",
+                           (sample.canvas_width, sample.canvas_height))
             if sample else Recording()
             for key, (sample, original) in recordings.items()
         }

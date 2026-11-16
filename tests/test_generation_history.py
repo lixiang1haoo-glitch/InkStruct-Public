@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from inkstruct import generation_workflow as workflow
-from inkstruct.generation_history import SourceArchive, batch_history, inspect_candidates
+from inkstruct.generation_history import Recording, SourceArchive, StrokeSource, batch_history, inspect_candidates
 from inkstruct.samples import sha256_file
 
 from test_v63_connected import record, setup
@@ -26,10 +26,14 @@ def batches(setup, tmp_path, monkeypatch):
     path = Path(result["output"])
     assert result["completed_count"] == 1
     legacy = service.root / "outputs" / "bob" / "older-run"
-    workflow.write(legacy / "manifest.json", {"writer_id": "bob", "completed_characters": "明"})
+    workflow.write(legacy / "manifest.json", {"writer_id": "bob", "completed_characters": "明丶"})
     workflow.write(legacy / "trajectories" / "U+660E.json", {
         "writer_id": "bob", "character": "明", "generator": "v4",
         "strokes": [{"points": [{"x": 0.3, "y": 0.4}, {"x": 0.6, "y": 0.7}]}],
+    })
+    workflow.write(legacy / "trajectories" / "U+4E36.json", {
+        "writer_id": "bob", "character": "丶", "generator": "v4",
+        "strokes": [{"points": [{"x": 0.5, "y": 0.3}, {"x": 0.53, "y": 0.36}]}],
     })
     return service, path, legacy, connected
 
@@ -90,7 +94,7 @@ def test_nonmodal_history_from_generation_panel(batches, monkeypatch):
         assert dialog.isVisible() and not dialog.isModal()
         wait_for(lambda: bool(dialog.strokes))
         assert dialog.writers.currentData() == "alice"
-        assert dialog.batches_table.rowCount() == 1
+        assert dialog.batch_list.count() == 1
         dialog.search.setText("U+660E")
         wait_for(lambda: bool(dialog.strokes))
         assert dialog.candidate.count() >= 2
@@ -99,19 +103,91 @@ def test_nonmodal_history_from_generation_panel(batches, monkeypatch):
         wait_for(lambda: bool(dialog.strokes))
         assert dialog.stroke_table.item(0, 1).text() == "s1 + s2"
         dialog.stroke_table.setCurrentCell(1, 0)
-        assert dialog.original.selected == dialog.strokes[1].raw_order - 1
+        assert dialog.source_cards[dialog.strokes[1].key].preview.selected == dialog.strokes[1].raw_order - 1
         wait_for(lambda: bool(dialog.generated.paths))
-        position = dialog.generated.paths[0].pointAtPercent(.15).toPoint()
+        position = dialog.generated.display_path(0).pointAtPercent(.15).toPoint()
         QtTest.QTest.mouseClick(dialog.generated, QtCore.Qt.MouseButton.LeftButton, pos=position)
-        assert dialog.stroke_table.currentRow() == 0 and dialog.original.selected == 0
+        assert dialog.stroke_table.currentRow() == 0 and dialog.source_cards[dialog.strokes[0].key].preview.selected == 0
         dialog.copy.click()
         copied = app.clipboard().text()
         assert all(s in copied for s in (path.name, "明", "候选", "s1 + s2", "connected", "原笔序 1"))
         dialog.font_button.click()
         assert received == [(path, "alice")] and widget.last_generated_run is None
         dialog.writers.setCurrentIndex(0)
-        assert dialog.batches_table.rowCount() == 2
+        assert dialog.batch_list.count() == 2
+        dialog.batch_list.setCurrentRow(next(i for i, batch in enumerate(dialog.visible) if batch["writer"] == "bob"))
+        assert dialog.character_model.rowCount() == 2
+        dot = dialog.character_model.index(dialog.characters.index("丶"))
+        QtTest.QTest.mouseClick(dialog.character.viewport(), QtCore.Qt.MouseButton.LeftButton,
+                                pos=dialog.character.visualRect(dot).center())
+        wait_for(lambda: dialog.current_character() == "丶" and bool(dialog.strokes))
+        assert not dialog.source_cards
+        assert dialog.generated.display_path(0).boundingRect().height() < dialog.generated.height() / 10
     finally:
         dialog.close()
         QtCore.QThreadPool.globalInstance().waitForDone()
         window.close()
+
+
+def test_source_grid_links_exact_recordings_and_shares_view(tmp_path):
+    pytest.importorskip("PySide6")
+    from PySide6 import QtCore, QtGui, QtTest, QtWidgets
+
+    from inkstruct.generation_history_ui import GenerationHistoryDialog
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    dialog = GenerationHistoryDialog(tmp_path, tmp_path, "")
+    dialog.resize(1180, 680)
+    dialog.show()
+    QtCore.QThreadPool.globalInstance().waitForDone()
+    app.processEvents()
+    dialog.batch = {"path": tmp_path}
+    first = StrokeSource(("s1",), ((.29, .25), (.32, .30)), "单笔拼接", "永", "a", "digest-a", raw_order=2)
+    second = StrokeSource(("s2", "s3"), ((.5, .6), (.68, .67)), "部件复用", "林", "b", "digest-b", raw_order=1)
+    missing = StrokeSource(("s4",), ((.48, .38), (.68, .39)), "单笔拼接", "林", "c", "digest-c", raw_order=3)
+    a = Recording((((20, 100), (85, 90)), ((8, 30), (14, 40))), "原录制", (100, 200))
+    b = Recording((((5, 5),),), "原录制", (200, 100))
+    try:
+        dialog.show_strokes([first, second, missing], {first.key: a, second.key: b})
+        app.processEvents()
+        one, two, unavailable = (dialog.source_cards[stroke.key] for stroke in (first, second, missing))
+        assert one.isVisible() and two.isVisible() and unavailable.isVisible()
+        assert a.framed_strokes()[1] == ((.29, .15), (.32, .2))
+        assert b.framed_strokes() == (((.025, .275),),)
+        assert one.preview.selected == 1 and two.preview.selected == -1
+        assert two.preview.has_ink() and not unavailable.preview.has_ink()
+        target = dialog.generated
+        position = target.display_path(1).pointAtPercent(.5)
+        QtTest.QTest.mouseClick(target, QtCore.Qt.MouseButton.LeftButton, pos=position.toPoint())
+        assert dialog.stroke_table.currentRow() == 1 and two.preview.selected == 0
+        assert two.button.isChecked() and not one.button.isChecked() and one.preview.selected == -1
+        unavailable.button.click()
+        assert unavailable.button.isChecked() and not two.button.isChecked()
+        assert "未找到原录制" in dialog.source_note.text() and unavailable.preview.selected == -1
+        viewport = one.preview
+        anchor = QtCore.QPointF(viewport.width() * .47, viewport.height() * .35)
+        before = viewport.drawing_transform().inverted()[0].map(anchor)
+        event = QtGui.QWheelEvent(anchor, viewport.mapToGlobal(anchor), QtCore.QPoint(), QtCore.QPoint(0, 120),
+                                  QtCore.Qt.MouseButton.NoButton, QtCore.Qt.KeyboardModifier.ControlModifier,
+                                  QtCore.Qt.ScrollPhase.NoScrollPhase, False)
+        app.sendEvent(viewport, event)
+        after = viewport.drawing_transform().inverted()[0].map(anchor)
+        assert QtCore.QLineF(before, after).length() < 1e-9
+        assert dialog.zoom_button.text() == "120%" and target.view is viewport.view is two.preview.view
+        center = QtCore.QPointF(dialog.view.center)
+        start = target.rect().center()
+        end = start + QtCore.QPoint(29, 18)
+        QtTest.QTest.mousePress(target, QtCore.Qt.MouseButton.LeftButton, pos=start)
+        move = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseMove, QtCore.QPointF(end),
+                                 QtCore.QPointF(target.mapToGlobal(end)), QtCore.Qt.MouseButton.NoButton,
+                                 QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier)
+        app.sendEvent(target, move)
+        QtTest.QTest.mouseRelease(target, QtCore.Qt.MouseButton.LeftButton, pos=end)
+        assert dialog.view.center != center and dialog.stroke_table.currentRow() == 2
+        QtTest.QTest.mouseClick(target, QtCore.Qt.MouseButton.LeftButton,
+                                pos=target.display_path(1).pointAtPercent(.5).toPoint())
+        assert dialog.stroke_table.currentRow() == 1 and two.preview.selected == 0
+        dialog.zoom_button.click()
+        assert dialog.zoom_button.text() == "100%" and dialog.view.center == QtCore.QPointF(.5, .5)
+    finally:
+        dialog.close()
