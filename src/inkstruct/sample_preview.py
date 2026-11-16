@@ -153,27 +153,19 @@ class SampleView(QtCore.QObject):
         self.changed.emit()
 
 
-class SamplePreview(QtWidgets.QWidget):
+class InkViewport(QtWidgets.QWidget):
     margin = 14
 
     def __init__(self, view):
         super().__init__()
         self.view = view
-        self.value = self.drawing = self.drag_position = None
-        self.guides = False
+        self.press_position = self.drag_position = None
         self.setToolTip('Ctrl + 滚轮缩放 · 放大后拖动')
         self.view.changed.connect(self.view_changed)
 
-    def set_sample(self, value):
-        if self.value is not value:
-            self.value = value
-            self.drawing = SampleDrawing(value) if value is not None else None
-        self.drag_position = None
-        self.view_changed()
-
     def view_changed(self):
-        if self.drawing is None or self.view.zoom <= 1:
-            self.drag_position = None
+        if not self.has_ink() or self.view.zoom <= 1:
+            self.drag_position = self.press_position = None
             self.unsetCursor()
         else:
             self.setCursor(Qt.ClosedHandCursor if self.drag_position is not None else Qt.OpenHandCursor)
@@ -182,15 +174,14 @@ class SamplePreview(QtWidgets.QWidget):
     def drawing_transform(self):
         return self.view.transform(QtCore.QRectF(self.rect()), self.margin)
 
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        palette = self.palette()
-        painter.fillRect(self.rect(), palette.base())
-        if self.drawing is not None:
-            self.drawing.paint(painter, self.drawing_transform(), palette, guides=self.guides)
+    def has_ink(self):
+        return False
+
+    def ink_clicked(self, position):
+        pass
 
     def wheelEvent(self, event):
-        if not self.drawing or not (event.modifiers() & Qt.ControlModifier):
+        if not self.has_ink() or not (event.modifiers() & Qt.ControlModifier):
             event.ignore()
             return
         steps = event.pixelDelta().y() / 80 or event.angleDelta().y() / 120
@@ -199,16 +190,18 @@ class SamplePreview(QtWidgets.QWidget):
         event.accept()
 
     def mousePressEvent(self, event):
-        if self.drawing is not None and self.view.zoom > 1 and event.button() == Qt.LeftButton:
-            self.drag_position = event.position()
-            self.setCursor(Qt.ClosedHandCursor)
+        if self.has_ink() and event.button() == Qt.LeftButton:
+            self.press_position = event.position()
             event.accept()
         else:
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self.drag_position is not None and event.buttons() & Qt.LeftButton:
-            delta = event.position() - self.drag_position
+        if self.press_position is not None and self.view.zoom > 1 and event.buttons() & Qt.LeftButton:
+            origin = self.drag_position if self.drag_position is not None else self.press_position
+            delta = event.position() - origin
+            if self.drag_position is None and delta.manhattanLength() < QtWidgets.QApplication.startDragDistance():
+                return
             self.drag_position = event.position()
             self.view.pan(delta, QtCore.QRectF(self.rect()), self.margin)
             event.accept()
@@ -216,9 +209,37 @@ class SamplePreview(QtWidgets.QWidget):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self.drag_position is not None and event.button() == Qt.LeftButton:
-            self.drag_position = None
+        if self.press_position is not None and event.button() == Qt.LeftButton:
+            click = (self.drag_position is None and (event.position() - self.press_position).manhattanLength()
+                     < QtWidgets.QApplication.startDragDistance())
+            self.drag_position = self.press_position = None
             self.view_changed()
             event.accept()
+            if click:
+                self.ink_clicked(event.position())
         else:
             super().mouseReleaseEvent(event)
+
+
+class SamplePreview(InkViewport):
+    def __init__(self, view):
+        super().__init__(view)
+        self.value = self.drawing = None
+        self.guides = False
+
+    def set_sample(self, value):
+        if self.value is not value:
+            self.value = value
+            self.drawing = SampleDrawing(value) if value is not None else None
+        self.drag_position = self.press_position = None
+        self.view_changed()
+
+    def has_ink(self):
+        return self.drawing is not None
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        palette = self.palette()
+        painter.fillRect(self.rect(), palette.base())
+        if self.drawing is not None:
+            self.drawing.paint(painter, self.drawing_transform(), palette, guides=self.guides)
