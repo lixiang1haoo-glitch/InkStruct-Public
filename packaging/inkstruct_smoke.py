@@ -1152,6 +1152,7 @@ def verify_v631(window, out, wait):
     from inkstruct.document.editing import SourceSession
     from inkstruct.document.schema import PageProfile, StyleProfile
     from inkstruct.fonts.importer import build_font, generated_records
+    from inkstruct.generation_history import Recording, StrokeSource
     from inkstruct.generation_workflow import GenerationWorkflow, read, write
     from inkstruct.samples import sha256_file
     from inkstruct.structures import StructureRepository
@@ -1261,16 +1262,36 @@ def verify_v631(window, out, wait):
         assert history.writers.currentData() == writer
         history.search.setText('明')
         wait(lambda: bool(history.strokes))
-        assert history.character.currentText() == '明' and history.candidate.count() > 1
+        assert history.current_character() == '明' and history.candidate.count() > 1
+        history.search.clear()
+        history.character.setCurrentIndex(history.character_model.index(history.characters.index('林')))
+        wait(lambda: history.current_character() == '林' and bool(history.strokes))
+        history.character.setCurrentIndex(history.character_model.index(history.characters.index('明')))
+        wait(lambda: history.current_character() == '明' and bool(history.strokes))
         joined = next(i for i, item in enumerate(history.candidates) if any(len(s.slots) > 1 for s in item[1]))
         history.candidate.setCurrentIndex(joined)
         wait(lambda: any(len(stroke.slots) > 1 for stroke in history.strokes))
         row, stroke = next((i, s) for i, s in enumerate(history.strokes) if len(s.slots) > 1)
         history.stroke_table.setCurrentCell(row, 0)
-        assert history.original.selected == stroke.raw_order - 1
+        assert history.source_cards[stroke.key].preview.selected == stroke.raw_order - 1
         assert history.recordings[stroke.key].status == '原录制'
         history.copy.click()
         assert ' + '.join(stroke.slots) in QtWidgets.QApplication.clipboard().text()
+        small = StrokeSource(('dot',), ((.2, .2), (.24, .24)), '单笔拼接',
+                             '林', 'synthetic-dot', 'synthetic-dot', raw_order=1)
+        recording = Recording((((20, 20), (24, 24)),), '原录制', (100, 100))
+        history.show_strokes([stroke, small], {stroke.key: history.recordings[stroke.key], small.key: recording})
+        QtWidgets.QApplication.processEvents()
+        first, other = (history.source_cards[s.key] for s in (stroke, small))
+        assert first.isVisible() and other.isVisible()
+        assert other.preview.display_path(0).boundingRect().height() < other.preview.height() / 10
+        history.stroke_table.setCurrentCell(1, 0)
+        assert other.button.isChecked() and other.preview.selected == 0 and not first.button.isChecked()
+        rect = QtCore.QRectF(history.generated.rect())
+        history.view.zoom_at(rect, history.generated.margin, rect.center(), 1)
+        assert history.zoom_button.text() == '120%' and other.preview.view.zoom == history.generated.view.zoom
+        history.zoom_button.click()
+        assert history.view.zoom == 1 and history.zoom_button.text() == '100%'
     finally:
         history.close()
     return {'app_version': APP_VERSION, 'frozen': bool(getattr(sys, 'frozen', False)),
@@ -1279,7 +1300,8 @@ def verify_v631(window, out, wait):
             'fallback': None, 'matching_character_files': len(files), 'old_archive_reused': True,
             'fresh_archive_verified': True, 'frozen_document_reopened': True,
             'generation_history': {'batches': 3, 'nonmodal': True, 'candidate_switch': True,
-                                   'connected_recording_highlight': True, 'copy_review': True}}
+                                   'connected_recording_highlight': True, 'copy_review': True,
+                                   'character_list': True, 'source_grid': True, 'shared_frame_zoom': True}}
 
 
 def main():
