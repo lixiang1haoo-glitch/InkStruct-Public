@@ -1277,14 +1277,19 @@ def verify_v631(window, out, wait):
         assert history.recordings[stroke.key].status == '原录制'
         history.copy.click()
         assert ' + '.join(stroke.slots) in QtWidgets.QApplication.clipboard().text()
-        small = StrokeSource(('dot',), ((.2, .2), (.24, .24)), '单笔拼接',
+        small = StrokeSource(('dot',), ((.2, .2), (.23, .23), (.24, .2)), '单笔拼接',
                              '林', 'synthetic-dot', 'synthetic-dot', raw_order=1)
-        recording = Recording((((20, 20), (24, 24)),), '原录制', (100, 100))
+        recording = Recording((((740, 110), (750, 122), (760, 110)), ((734, 80), (850, 165))),
+                              '原录制', (1600, 260))
         history.show_strokes([stroke, small], {stroke.key: history.recordings[stroke.key], small.key: recording})
         QtWidgets.QApplication.processEvents()
         first, other = (history.source_cards[s.key] for s in (stroke, small))
         assert first.isVisible() and other.isVisible()
         assert other.preview.display_path(0).boundingRect().height() < other.preview.height() / 10
+        box_side = min(other.preview.width(), other.preview.height())
+        assert other.preview.display_path(1).boundingRect().width() > box_side / 2
+        assert other.preview.paths[0].elementAt(2).isCurveTo()
+        assert history.generated.paths[1].elementAt(2).isCurveTo()
         history.stroke_table.setCurrentCell(1, 0)
         assert other.button.isChecked() and other.preview.selected == 0 and not first.button.isChecked()
         rect = QtCore.QRectF(history.generated.rect())
@@ -1301,7 +1306,8 @@ def verify_v631(window, out, wait):
             'fresh_archive_verified': True, 'frozen_document_reopened': True,
             'generation_history': {'batches': 3, 'nonmodal': True, 'candidate_switch': True,
                                    'connected_recording_highlight': True, 'copy_review': True,
-                                   'character_list': True, 'source_grid': True, 'shared_frame_zoom': True}}
+                                   'character_list': True, 'source_grid': True, 'shared_frame_zoom': True,
+                                   'wide_recording_framing': True, 'rounded_preview_paths': True}}
 
 
 def main():
