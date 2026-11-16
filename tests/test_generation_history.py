@@ -145,15 +145,18 @@ def test_source_grid_links_exact_recordings_and_shares_view(tmp_path):
     first = StrokeSource(("s1",), ((.29, .25), (.32, .30)), "单笔拼接", "永", "a", "digest-a", raw_order=2)
     second = StrokeSource(("s2", "s3"), ((.5, .6), (.68, .67)), "部件复用", "林", "b", "digest-b", raw_order=1)
     missing = StrokeSource(("s4",), ((.48, .38), (.68, .39)), "单笔拼接", "林", "c", "digest-c", raw_order=3)
-    a = Recording((((20, 100), (85, 90)), ((8, 30), (14, 40))), "原录制", (100, 200))
+    a = Recording((((744, 86), (812, 90), (846, 103)), ((775, 120), (796, 137))), "原录制", (1600, 260))
     b = Recording((((5, 5),),), "原录制", (200, 100))
     try:
         dialog.show_strokes([first, second, missing], {first.key: a, second.key: b})
         app.processEvents()
         one, two, unavailable = (dialog.source_cards[stroke.key] for stroke in (first, second, missing))
         assert one.isVisible() and two.isVisible() and unavailable.isVisible()
-        assert a.framed_strokes()[1] == ((.29, .15), (.32, .2))
-        assert b.framed_strokes() == (((.025, .275),),)
+        assert one.preview.paths[0].boundingRect().width() == pytest.approx(102 / 156)
+        assert one.preview.paths[0].elementAt(2).isCurveTo()
+        assert b.framed_strokes("林") == (((.5, .5),),)
+        punctuation = b.framed_strokes("、")[0][0]
+        assert punctuation == pytest.approx((.025, .275))
         assert one.preview.selected == 1 and two.preview.selected == -1
         assert two.preview.has_ink() and not unavailable.preview.has_ink()
         target = dialog.generated
@@ -189,5 +192,27 @@ def test_source_grid_links_exact_recordings_and_shares_view(tmp_path):
         assert dialog.stroke_table.currentRow() == 1 and two.preview.selected == 0
         dialog.zoom_button.click()
         assert dialog.zoom_button.text() == "100%" and dialog.view.center == QtCore.QPointF(.5, .5)
+        initial_height = one.preview.height()
+        dialog.resize(dialog.width(), dialog.height() + 180)
+        app.processEvents()
+        assert one.preview.height() > initial_height
     finally:
         dialog.close()
+
+
+def test_preview_curve_preserves_endpoints_dots_and_local_corners():
+    pytest.importorskip("PySide6")
+    from PySide6.QtCore import QPointF
+
+    from inkstruct.generation_history_ui import preview_path
+
+    start, end = (.2, .2), (.5, .7)
+    path = preview_path((start, start, (.5, .2), end))
+    assert path.pointAtPercent(0) == QPointF(*start)
+    assert path.pointAtPercent(1) == QPointF(*end)
+    assert path.elementAt(1).x == pytest.approx(.475)
+    assert path.elementAt(2).isCurveTo()
+    assert path.elementAt(4).y == pytest.approx(.225)
+    dot = preview_path((start, start))
+    assert dot.isEmpty() and dot.currentPosition() == QPointF(*start)
+    assert preview_path((start, end)).elementCount() == 2
