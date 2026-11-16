@@ -4,9 +4,11 @@ from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
 
+from .assets.glyph_provider import is_han
 from .fonts.importer import _read, generated_records
 from .fonts.publication import batch_info
 from .generation_workflow import GenerationWorkflow
+from .geometry import bbox
 from .samples import iter_index, load_raw_sample, sha256_file
 
 
@@ -114,14 +116,20 @@ class Recording:
     status: str = "未找到原录制，显示批次保存的来源"
     canvas_size: tuple[float, float] | None = None
 
-    def framed_strokes(self):
+    def framed_strokes(self, character):
         if not self.canvas_size:
             return ()
         width, height = self.canvas_size
         side = max(width, height)
-        left = (side - width) / 2
-        top = (side - height) / 2
-        return tuple(tuple(((x + left) / side, (y + top) / side) for x, y in stroke) for stroke in self.strokes)
+        center_x, center_y = width / 2, height / 2
+        if is_han(character) and any(self.strokes):
+            left, top, right, bottom = bbox([point for stroke in self.strokes for point in stroke])
+            # Fit the whole recording with padding. Keep a minimum frame tied to
+            # the capture height/short side so even a small Han mark stays small.
+            side = max(0.6 * min(width, height), 1.25 * max(right - left, bottom - top))
+            center_x, center_y = (left + right) / 2, (top + bottom) / 2
+        return tuple(tuple((0.5 + (x - center_x) / side, 0.5 + (y - center_y) / side)
+                           for x, y in stroke) for stroke in self.strokes)
 
 
 class SourceArchive:

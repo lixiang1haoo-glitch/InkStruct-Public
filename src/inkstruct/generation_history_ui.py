@@ -1,5 +1,6 @@
 """Non-modal batch history and read-only inspection of candidate ink."""
 
+from math import hypot
 from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -35,6 +36,29 @@ class HistoryRead(QtCore.QRunnable):
             self.signals.finished.emit(self.key, self.revision, value, "")
 
 
+def preview_path(stroke):
+    points = []
+    for x, y in stroke:
+        point = QtCore.QPointF(x, y)
+        if not points or point != points[-1]:
+            points.append(point)
+    path = QtGui.QPainterPath(points[0])
+    for previous, corner, following in zip(points, points[1:], points[2:]):
+        incoming = corner - previous
+        outgoing = following - corner
+        if incoming.x() * outgoing.y() == incoming.y() * outgoing.x():
+            path.lineTo(corner)
+            continue
+        before, after = hypot(incoming.x(), incoming.y()), hypot(outgoing.x(), outgoing.y())
+        # Trim only the local join, at most 2.5% of the shared glyph frame.
+        radius = min(.025, before / 2, after / 2)
+        path.lineTo(corner - incoming * (radius / before))
+        path.quadTo(corner, corner + outgoing * (radius / after))
+    if len(points) > 1:
+        path.lineTo(points[-1])
+    return path
+
+
 class StrokePreview(InkViewport):
     stroke_selected = QtCore.Signal(int)
 
@@ -49,15 +73,7 @@ class StrokePreview(InkViewport):
 
     def set_ink(self, strokes=(), colors=()):
         self.colors, self.selected = colors, -1
-        self.paths = []
-        for stroke in strokes:
-            if not stroke:
-                self.paths.append(None)
-                continue
-            path = QtGui.QPainterPath(QtCore.QPointF(*stroke[0]))
-            for x, y in stroke[1:]:
-                path.lineTo(x, y)
-            self.paths.append(path)
+        self.paths = [preview_path(stroke) if stroke else None for stroke in strokes]
         self.press_position = self.drag_position = None
         self.view_changed()
 
@@ -141,20 +157,21 @@ class SourceCard(QtWidgets.QFrame):
         self.button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         layout.addWidget(self.button)
         self.preview = StrokePreview(view, f"{character}的源录制笔迹")
-        strokes = recording.framed_strokes()
+        self.preview.margin = 8
+        strokes = recording.framed_strokes(source.character)
         if strokes:
-            self.preview.setFixedHeight(108)
             self.preview.set_ink(strokes, [color if i in raw_orders else None for i in range(1, len(strokes) + 1)])
-            layout.addWidget(self.preview)
+            self.surface = self.preview
             text = "原笔序 " + "、".join(map(str, sorted(raw_orders))) if raw_orders else "原笔序未记录"
             if recording.status != "原录制":
                 text = "索引笔迹 · " + text
         else:
             empty = QtWidgets.QLabel("原录制不可用")
             empty.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            empty.setMinimumHeight(108)
-            layout.addWidget(empty)
+            self.surface = empty
             text = "批次来源记录"
+        self.surface.setFixedHeight(108)
+        layout.addWidget(self.surface)
         note = QtWidgets.QLabel(text)
         note.setTextFormat(QtCore.Qt.TextFormat.PlainText)
         note.setWordWrap(True)
@@ -298,6 +315,7 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
         self.source_scroll.setWidgetResizable(True)
         self.source_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.source_scroll.setMinimumWidth(247)
+        self.source_scroll.viewport().installEventFilter(self)
         original_layout.addWidget(self.source_scroll, 1)
         self.source_note = QtWidgets.QLabel()
         self.source_note.setWordWrap(True)
@@ -487,6 +505,7 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
             empty.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             grid.addWidget(empty, 0, 0, 1, 2)
         self.source_scroll.setWidget(content)
+        self.resize_source_previews()
         fill_table(self.stroke_table, [
             (i, " + ".join(s.slots), s.kind, s.character or "—", s.raw_order or "—")
             for i, s in enumerate(strokes, 1)
@@ -499,6 +518,24 @@ class GenerationHistoryDialog(QtWidgets.QDialog):
             with QtCore.QSignalBlocker(self.stroke_table):
                 self.stroke_table.setCurrentCell(0, 0)
         self.stroke_changed(0 if strokes else -1)
+
+    def eventFilter(self, watched, event):
+        if watched is self.source_scroll.viewport() and event.type() == QtCore.QEvent.Type.Resize:
+            self.resize_source_previews()
+        return super().eventFilter(watched, event)
+
+    def resize_source_previews(self):
+        cards = self.source_cards.values()
+        if not cards:
+            return
+        layout = self.source_scroll.widget().layout()
+        margins = layout.contentsMargins()
+        overhead = max(card.sizeHint().height() - card.surface.height() for card in cards)
+        rows = min(2, (len(cards) + 1) // 2)
+        available = self.source_scroll.viewport().height() - margins.top() - margins.bottom()
+        height = (available - (rows - 1) * layout.verticalSpacing()) // rows - overhead
+        for card in cards:
+            card.surface.setFixedHeight(max(108, min(220, height)))
 
     def select_segment(self, row):
         previous = self.stroke_table.currentRow()
