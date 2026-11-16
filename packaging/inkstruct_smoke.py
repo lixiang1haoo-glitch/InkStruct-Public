@@ -1029,6 +1029,8 @@ def verify_windows_style(window, app, out, font_path=None):
     library.compare_button.click()
     assert library.compare_preview.value['sample_id'] == 'synthetic-2'
     first, second = library.preview, library.compare_preview
+    QtTest.QTest.qWait(30)
+    assert first.mapTo(library, QtCore.QPoint()).y() == second.mapTo(library, QtCore.QPoint()).y()
     original_view = first.drawing_transform()
     assert original_view == second.drawing_transform()
     ink = original_view.map(first.drawing.ink).boundingRect()
