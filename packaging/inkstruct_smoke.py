@@ -998,15 +998,17 @@ def verify_windows_style(window, app, out, font_path=None):
     target = CaptureCatalog(out / 'sample-target')
     writer = source.create_writer('Synthetic sample writer')
     reader = target.create_writer('Synthetic receiving writer')
-    folder = source.task_root('symbol') / 'samples' / writer / 'U+0031'
+    folder = source.task_root('symbol') / 'samples' / writer / 'U+3002'
     folder.mkdir(parents=True)
     for number in (1, 2):
         (folder / f'source-{number}.json').write_text(
-            json.dumps({'schema_version': 'inkstruct_symbol_sample_v1', 'character': '1',
+            json.dumps({'schema_version': 'inkstruct_symbol_sample_v1', 'character': '。',
                         'sample_id': f'synthetic-{number}', 'writer_id': writer,
                         'capture': {'coordinate_space': 'logical_px'},
-                        'guides': {'em_px': 100, 'origin_x_px': 10, 'baseline_y_px': 80},
-                        'strokes': [{'points': [{'x': 20, 'y': 20}, {'x': 40, 'y': 60 + number}]}]}), encoding='utf-8')
+                        'guides': {'em_px': 100 * number, 'origin_x_px': 10 * number,
+                                   'baseline_y_px': 80 * number},
+                        'strokes': [{'points': [{'x': 16 * number, 'y': 70 * number},
+                                                {'x': 22 * number, 'y': 78 * number}]}]}), encoding='utf-8')
     library = window.sample_library
     click = window.collector.symbol_widget.findChild(QtWidgets.QPushButton, 'capture_sample_library')
     window.collector.symbol_widget.writer_picker.reload(writer)
@@ -1026,7 +1028,33 @@ def verify_windows_style(window, app, out, font_path=None):
     assert library.variants.count() == 2 and not library.selected_samples()
     library.compare_button.click()
     assert library.compare_preview.value['sample_id'] == 'synthetic-2'
-    assert library.preview.fit_span == library.compare_preview.fit_span == (20, 42)
+    first, second = library.preview, library.compare_preview
+    QtTest.QTest.qWait(30)
+    assert first.mapTo(library, QtCore.QPoint()).y() == second.mapTo(library, QtCore.QPoint()).y()
+    original_view = first.drawing_transform()
+    assert original_view == second.drawing_transform()
+    ink = original_view.map(first.drawing.ink).boundingRect()
+    assert ink == original_view.map(second.drawing.ink).boundingRect()
+    assert 0 < ink.height() < 10 and ink.top() > first.height() / 2
+    position = QtCore.QPointF(first.width() / 3, first.height() / 3)
+    anchor = original_view.inverted()[0].map(position)
+    wheel = QtGui.QWheelEvent(position, QtCore.QPointF(first.mapToGlobal(position.toPoint())),
+                              QtCore.QPoint(), QtCore.QPoint(0, 120), QtCore.Qt.NoButton,
+                              QtCore.Qt.ControlModifier, QtCore.Qt.ScrollPhase.NoScrollPhase, False)
+    app.sendEvent(first, wheel)
+    assert library.zoom_button.text() == '120%' and first.drawing_transform() == second.drawing_transform()
+    assert QtCore.QLineF(first.drawing_transform().map(anchor), position).length() < 1e-7
+    start, stop = QtCore.QPoint(38, 40), QtCore.QPoint(56, 45)
+    QtTest.QTest.mousePress(second, QtCore.Qt.LeftButton, pos=start)
+    move = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseMove, QtCore.QPointF(stop),
+                             QtCore.QPointF(second.mapToGlobal(stop)), QtCore.Qt.NoButton,
+                             QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+    app.sendEvent(second, move)
+    QtTest.QTest.mouseRelease(second, QtCore.Qt.LeftButton, pos=stop)
+    assert first.drawing_transform() == second.drawing_transform()
+    assert QtCore.QLineF(first.drawing_transform().map(anchor) - position, QtCore.QPointF(stop - start)).length() < 1e-7
+    library.zoom_button.click()
+    assert library.zoom_button.text() == '100%' and first.drawing_transform() == second.drawing_transform() == original_view
     library.select_button.click()
     assert len(library.selected_samples()) == 2
     library.character.setText('U+0032')
@@ -1146,6 +1174,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "system_scheme_restored": system_scheme.name, "formula_geometry_unchanged": True,
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
             "jpeg_reference_imported": True, "sample_library_handoff": True,
+            "sample_library_capture_viewport": True,
             "preview_path_acceleration": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
