@@ -97,6 +97,8 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         assert page.compare_preview.value['sample_id'] == 'one'
         assert page.preview.size() == page.compare_preview.size()
         primary, other = page.preview, page.compare_preview
+        QtTest.QTest.qWait(30)
+        assert primary.mapTo(page, QtCore.QPoint()).y() == other.mapTo(page, QtCore.QPoint()).y()
         initial = primary.drawing_transform()
         assert initial == other.drawing_transform()
         assert page.zoom_button.text() == '100%'
