@@ -174,6 +174,8 @@ def main():
             raise ValueError(f"Native smoke did not cover both themed previews: {app}")
         if not native["sample_library_handoff"]:
             raise ValueError(f"Native smoke did not verify sample library handoff: {app}")
+        if not native["sample_library_capture_viewport"]:
+            raise ValueError(f"Native smoke did not verify sample library capture proportion and zoom: {app}")
         reports[app] = {"math": math, "native": native}
     tool = extracted / "InkStruct/InkStructTool.exe"
     generation = verify(tool, "v631-generation", "--v631-check", None, output)

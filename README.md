@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.94**。长篇 Markdown 的屏幕预览在后台进程组装 SVG，缩放和分块复用页面数据，减少输入期间的停顿。
+当前源码版本为 **0.1.95**。样本库预览按采集比例显示笔迹。Ctrl + 滚轮缩放，放大后可拖动。并排比较同步视野，点击倍率恢复默认视野。
 
 0.1.78 起，汉字采集的四个常用按钮加大为两行，与画布纵向居中。按 Shift+Enter 可暂时跳过当前字。
 
