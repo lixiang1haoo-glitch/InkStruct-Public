@@ -22,8 +22,7 @@ from inkstruct.document.styles import FlowStyle
 from inkstruct.document.package import save_package,load_package
 from inkstruct.global_defaults import GlobalDefaultsStore,LayoutDefaults
 from inkstruct.editor.mixed import MixedWindow
-from inkstruct.editor.svg_export_dialog import SvgExportDialog
-from inkstruct.plotter.options import ExportOptions
+from inkstruct.editor.document_export_dialog import DocumentExportDialog
 from inkstruct.settings_dialog import SettingsDialog
 app=QtWidgets.QApplication([])
 root=Path(sys.argv[1])
@@ -68,14 +67,18 @@ w.dirty=False;w.close()
 w=MixedWindow(source='1汉2');w.resolver=AssetResolver(builtin_numbers=True)
 w.flow=FlowStyle();w.show();w.schedule_layout();ready(w,True)
 QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.Type.DeferredDelete)
-assert w.force_machine_export.parent() is w.settings_storage
-w.force_svg_action.parent().aboutToShow.emit();assert w.force_svg_action.isEnabled()
-assert not w.snapshot.exportable and not w.machine_export.isEnabled() and w.force_machine_export.isEnabled()
+assert not w.snapshot.exportable and w.export_button.isEnabled()
 source=w.source_session.source;atoms=w.source_session.atom_ids;choices=w.resolver.selection_records()
 output=root/'forced-svg'
-w.configure_svg_export=lambda snapshot,force=False:(ExportOptions(tuple(range(len(snapshot.pages))),force=force),False)
-with patch.object(QtWidgets.QFileDialog,'getSaveFileName',return_value=(str(output),'')):
-    w.force_svg_action.trigger()
+def choose_partial(dialog):
+    dialog.run_check()
+    assert not dialog.save.isEnabled() and not dialog.partial.isHidden()
+    dialog.accept_partial()
+    return dialog.result()
+with (patch.object(QtWidgets.QFileDialog,'getSaveFileName',return_value=(str(output),'')),
+      patch.object(QtWidgets.QMessageBox,'question',return_value=QtWidgets.QMessageBox.StandardButton.Yes),
+      patch.object(DocumentExportDialog,'exec',choose_partial)):
+    w.export_button.click()
 end=time.monotonic()+35
 while w.export_job is not None and time.monotonic()<end:
     app.processEvents();time.sleep(.01)
@@ -85,13 +88,12 @@ assert (output/'issues.txt').is_file()
 assert json.loads((output/'issues.json').read_text(encoding='utf-8'))['forced']
 assert w.source_session.source==source and w.source_session.atom_ids==atoms
 assert w.resolver.selection_records()==choices and not w.snapshot.exportable
-assert not w.machine_export.isEnabled() and w.force_machine_export.isEnabled()
+assert w.export_button.isEnabled()
 assert 'issues.txt' in w.status.text()
-old=w.last_export_result;w.export_machine();assert w.last_export_result is old
-for forced in (False,True):
-    dialog=SvgExportDialog(2,parent=w,force=forced);dialog.accept()
-    assert dialog.options.force is forced
-    dialog.deleteLater()
+dialog=DocumentExportDialog(w.snapshot,w.markdown_document,w.flow,0,False,w)
+dialog.run_check();dialog.accept()
+assert dialog.selection is None and dialog.checked.partial is not None
+dialog.deleteLater()
 w.dirty=False;w.close();app.processEvents()
 """
 

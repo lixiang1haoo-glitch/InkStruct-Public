@@ -26,7 +26,7 @@ def ready():
  while time.monotonic()<end:
   app.processEvents()
   if w.snapshot and w.canvas.isEnabled() and not w.timer.isActive() and not w.worker:return
-  QtTest.QTest.qWait(10)
+  time.sleep(.01)
  raise AssertionError(w.status.text())
 ready();assert not w.snapshot.exportable
 before=w.flow
@@ -46,7 +46,7 @@ def accept(dialog):
  return QtWidgets.QDialog.Accepted
 ImageSettingsDialog.exec=accept
 w.image_settings();ready()
-assert w.snapshot.plotter_exportable and w.machine_export.isEnabled()
+assert w.snapshot.plotter_exportable and w.export_button.isEnabled()
 f=next(f for f in w.snapshot.fragments if f.status=='image-vector')
 w.select_fragment(f)
 assert w.editor.textCursor().selectedText()=='![12](plot.svg)'

@@ -95,7 +95,13 @@ from pathlib import Path
 from PySide6 import QtWidgets,QtTest
 from inkstruct.editor.mixed import MixedWindow
 from inkstruct.plotter.options import ExportOptions
-MixedWindow.configure_svg_export=lambda self,snapshot:(ExportOptions(tuple(range(len(snapshot.pages)))),self.optimize.isChecked())
+from inkstruct.editor.export_check import check_export
+def selected(window,snapshot,options=None,optimize=True):
+ opts=options or ExportOptions(tuple(range(len(snapshot.pages))))
+ check=check_export(snapshot,window.markdown_document,window.flow,opts,machine=True)
+ assert not check.errors
+ return 'machine',check,check.machine,optimize
+MixedWindow.configure_document_export=lambda self,snapshot:selected(self,snapshot,optimize=self.optimize.isChecked())
 from inkstruct.plotter import export
 app=QtWidgets.QApplication([])
 root=Path(sys.argv[1])
@@ -107,7 +113,7 @@ def ready():
   app.processEvents()
   if w.snapshot and w.canvas.isEnabled() and not w.timer.isActive() and not w.worker:
    w.recovery_timer.stop();return
-  QtTest.QTest.qWait(10)
+  time.sleep(.01)
  raise AssertionError(w.status.text())
 ready();w.optimize.setChecked(True)
 assert w.build_cache.routes.statistics()['entries']==0
@@ -115,14 +121,18 @@ def save(name,callback):
  target=root/name
  QtWidgets.QFileDialog.getSaveFileName=staticmethod(lambda *a,**k:(str(target),''))
  callback()
- assert not errors,errors
+ end=time.monotonic()+10
+ while w.export_job is not None and time.monotonic()<end:
+  app.processEvents()
+  time.sleep(.01)
+ assert w.export_job is None and not errors,errors
  return {p.name:p.read_bytes() for p in target.iterdir()}
-a=save('whole-a',w.export_machine)
+a=save('whole-a',w.export_document)
 assert w.build_cache.routes.statistics()['entries']>0
 real=export.optimize_paths
 def forbidden(*a,**kw):raise AssertionError('unexpected route search')
 export.optimize_paths=forbidden
-assert save('whole-b',w.export_machine)==a
+assert save('whole-b',w.export_document)==a
 export.optimize_paths=real
 before=w.build_cache.routes.statistics().copy()
 w.editor.insertPlainText('9');ready()

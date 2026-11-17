@@ -50,8 +50,11 @@ def accept(dialog):
 ImageSettingsDialog.exec=accept
 w.image_settings();ready()
 assert w.snapshot.exportable and not w.snapshot.plotter_exportable
-assert w.page_export.isEnabled() and w.machine_export.isEnabled()
-assert '非 SVG 参考图片' in w.status.text()
+assert w.export_button.isEnabled()
+from inkstruct.editor.export_check import check_export
+from inkstruct.plotter.options import ExportOptions
+checked=check_export(w.snapshot,w.markdown_document,w.flow,ExportOptions((0,)),machine=True)
+assert not checked.errors and checked.images
 fragment=next(f for f in w.snapshot.fragments if f.status=='image-reference')
 w.select_fragment(fragment)
 assert w.editor.textCursor().selectedText()=='![12](plot.png)'

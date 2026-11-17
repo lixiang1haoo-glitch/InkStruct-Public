@@ -37,7 +37,7 @@ original=limits.DEFAULT_LIMITS
 limits.DEFAULT_LIMITS=replace(original,points=1)
 w.editor.insertPlainText('1');settled(False)
 assert '超限' in w.status.text()
-assert not w.machine_export.isEnabled() and not w.page_export.isEnabled()
+assert not w.export_button.isEnabled()
 source=w.source_session.source
 identity=w.source_session.identity_record()
 path=root/'over-limit.inkdoc'
@@ -49,7 +49,7 @@ assert saved.session.source==source and saved.session.identity_record()==identit
 w.recovery_path=root/'recovery.inkdoc';w.recovery_hash=None;w.mark_dirty()
 w.write_recovery()
 assert load_package(w.recovery_path).session.source==source
-assert not w.machine_export.isEnabled()
+assert not w.export_button.isEnabled()
 # Settings that need a new AST report limits instead of raising inside a Qt slot.
 limits.DEFAULT_LIMITS=replace(original,nodes=1)
 w.template_settings();w.image_settings()
@@ -57,7 +57,7 @@ assert len(errors)==2 and all('超限' in e for e in errors)
 limits.DEFAULT_LIMITS=original
 w.load_project_path(path);settled(True)
 assert w.snapshot.exportable and w.source_session.source==source
-assert w.machine_export.isEnabled()
+assert w.export_button.isEnabled()
 w.dirty=False;w.close()
 print('Qt limits preserve draft/source/recovery and reject stale exports')
 """

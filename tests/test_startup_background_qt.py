@@ -72,7 +72,7 @@ first = w.canvas.snapshot.pages[0]
 w.schedule_layout()
 assert w.canvas.snapshot.pages[0] is first
 assert w.partial_revision == w.canvas.snapshot.revision == w.revision
-assert not w.machine_export.isEnabled()
+assert not w.export_button.isEnabled()
 w.editor.insertPlainText("12")
 assert w.partial_revision is None and w.canvas._startup_background is None
 w.timer.stop()

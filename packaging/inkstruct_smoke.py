@@ -30,7 +30,10 @@ def verify_background_export(editor, out, wait):
     from dataclasses import replace
 
     from inkstruct.editor.export_job import ExportJob
-    from inkstruct.plotter.options import ExportOptions, prepare_export
+    from inkstruct.editor.export_check import check_export
+    from inkstruct.plotter.options import ExportOptions
+    from inkstruct.plotter.parallel import ExportControl
+    from inkstruct.renderers.visual_export import export_visual
 
     editor.flow = replace(editor.flow, template=None, template_bindings=(), glyph_corrections=(),
                           images=(), image_overrides=())
@@ -41,22 +44,32 @@ def verify_background_export(editor, out, wait):
     snapshot = editor.snapshot
     assert can_export_with_image_omission(snapshot)
     assert len(snapshot.pages) > 1
+    # Exercise the frozen PDF backend and visual exporters inside the actual bundle.
+    visual = replace(snapshot, pages=tuple(replace(p, images=()) for p in snapshot.pages[:2]),
+                     diagnostics=())
+    for name, pages, format in (('page.png', (0,), 'png'), ('page.svg', (1,), 'svg'),
+                                ('whole-document.pdf', (0, 1), 'pdf')):
+        export_visual(visual, out / name, pages, format, control=ExportControl(), progress=lambda *_: None)
+    assert (out/'page.png').read_bytes().startswith(b'\x89PNG')
+    assert ET.parse(out/'page.svg').getroot().tag.endswith('}svg')
+    assert (out/'whole-document.pdf').read_bytes().count(b'/MediaBox') == 2
     choices = editor.resolver.selection_records()
     options = ExportOptions(tuple(range(len(snapshot.pages))), table_contents=False,
                             scale_x=1.32293, scale_y=1.32293, registration=True)
-    plan, scope = prepare_export(snapshot, editor.markdown_document, editor.flow, options)
+    check = check_export(snapshot, editor.markdown_document, editor.flow, options, machine=True)
+    assert not check.errors and check.images and check.machine is not None
+    plan, scope = check.machine.plan, check.machine.scope
     assert sum(len(p.strokes) for p in plan.pages) >= 512
-    export_plan(plan, out/'background-serial', optimize=True, export_scope=scope, page_indices=options.pages)
-    old_configure, old_choose = editor.configure_svg_export, QtWidgets.QFileDialog.getSaveFileName
-    old_confirm, old_warnings = editor.confirm_image_omissions, editor.show_font_warnings
+    export_plan(plan, out/'background-serial', optimize=True, export_scope=scope, page_indices=check.machine.pages)
+    old_configure, old_choose = editor.configure_document_export, QtWidgets.QFileDialog.getSaveFileName
+    old_warnings = editor.show_font_warnings
     original_init = ExportJob.__init__
     class Unavailable:
         def Pipe(self):
             raise OSError('packaged fallback acceptance')
     reports = []
     try:
-        editor.configure_svg_export = lambda s: (options, True)
-        editor.confirm_image_omissions = lambda s: True
+        editor.configure_document_export = lambda s: ('machine', check, check.machine, True)
         editor.show_font_warnings = lambda: True
         editor.build_cache.routes.clear()
         for name in ('parallel', 'cached', 'cancelled', 'fallback'):
@@ -68,7 +81,7 @@ def verify_background_export(editor, out, wait):
                     original_init(self, *a, **kw)
                     self.router.context = Unavailable()
                 ExportJob.__init__ = fail_spawn
-            editor.export_machine()
+            editor.export_document()
             ExportJob.__init__ = original_init
             job = editor.export_job
             assert job is not None
@@ -92,10 +105,11 @@ def verify_background_export(editor, out, wait):
         assert choices == editor.resolver.selection_records() and editor.snapshot is snapshot
     finally:
         ExportJob.__init__ = original_init
-        editor.configure_svg_export, QtWidgets.QFileDialog.getSaveFileName = old_configure, old_choose
-        editor.confirm_image_omissions, editor.show_font_warnings = old_confirm, old_warnings
+        editor.configure_document_export, QtWidgets.QFileDialog.getSaveFileName = old_configure, old_choose
+        editor.show_font_warnings = old_warnings
     (out/'background-export-results.json').write_text(json.dumps(reports, ensure_ascii=False, indent=2), 'utf-8')
     return {'real_font': True, 'same_frozen_snapshot': True, 'all_export_settings_exact': True,
+            'visual_exports': ['png', 'svg', 'pdf'],
             'parallel_cache_cancel_verified': True, 'results': reports}
 
 
@@ -337,7 +351,7 @@ def verify_template_partial_preview(editor, out, wait):
     wait(lambda: editor.canvas.isEnabled() and not editor.timer.isActive() and not editor.worker)
     stopped = editor.snapshot
     assert ''.join(f.text for f in stopped.fragments) == '123'
-    assert not stopped.exportable and not editor.machine_export.isEnabled()
+    assert not stopped.exportable and editor.export_button.isEnabled()
     assert '后续正文尚未排版' in editor.status.text()
     error = next(d for d in stopped.diagnostics if d.code == 'template-body-no-progress')
     assert source[error.span.start:error.span.end].startswith('```')
@@ -441,7 +455,7 @@ def verify_image_height_and_han(editor, out, wait):
     editor.editor.setPlainText(source+'\n\n![](height-reference.png)')
     wait(lambda: editor.canvas.isEnabled() and not editor.timer.isActive() and not editor.worker)
     assert editor.snapshot.exportable and not editor.snapshot.plotter_exportable
-    assert editor.machine_export.isEnabled()
+    assert editor.export_button.isEnabled()
     scope = reference_image_export_scope(editor.snapshot)
     assert len(scope['omitted_images']) == 1
     plan = plan_from_snapshot(editor.snapshot, omit_reference_images=True)
@@ -486,7 +500,7 @@ def verify_missing_raster_export(editor, out, wait):
     wait(lambda: editor.canvas.isEnabled() and not editor.timer.isActive() and not editor.worker)
     snapshot = editor.snapshot
     assert not snapshot.exportable and not snapshot.plotter_exportable
-    assert can_export_with_image_omission(snapshot) and editor.machine_export.isEnabled()
+    assert can_export_with_image_omission(snapshot) and editor.export_button.isEnabled()
     errors = [d for d in snapshot.diagnostics if d.severity == 'error']
     assert len(errors) == 4 and all(d.code == 'image-resource-missing' for d in errors)
     scope = reference_image_export_scope(snapshot)

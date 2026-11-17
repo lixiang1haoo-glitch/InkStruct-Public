@@ -51,7 +51,7 @@ w.schedule_layout();assert not p.locate.isEnabled() and not p.next.isEnabled()
 ready();assert source==w.source_session.identity_record()
 w.editor.setPlainText('123');w.schedule_layout();ready()
 assert not p.groups and not p.copy.isEnabled() and not p.locate.isEnabled()
-assert '检查通过' in p.summary.text() and '可正常导出' in p.export_state.text()
+assert '检查通过' in p.summary.text() and '按用途和页码检查' in p.export_state.text()
 p.set_failure('fixture rendering failure',w.buffer.raw)
 assert p.current_group().key[1]=='preview-failed'
 assert 'fixture rendering failure' in p.technical.toPlainText()

@@ -144,11 +144,11 @@ class ProblemsPanel(QtWidgets.QWidget):
         self.base_summary = self.summary.text()
         snapshot = self.snapshot
         if snapshot and snapshot.plotter_exportable:
-            text = "可正常导出 SVG。提醒不阻止导出。" if warnings else "可正常导出 SVG。"
+            text = "可在导出窗口按用途和页码检查。"
         elif snapshot and can_export_with_image_omission(snapshot):
-            text = "常规 SVG 导出可在确认后跳过参考图片。"
+            text = "写字机 SVG 可在确认后跳过参考图片。"
         else:
-            text = "常规 SVG 暂不可用。可修正后重排，或通过导出菜单强制导出已有笔迹；缺失留空并附问题清单。"
+            text = "有问题的页面会阻止正常导出。导出窗口可检查选定范围，并列出可用操作。"
         self.export_state.setText(text)
         if hasattr(self.owner,"problems_button"):
             self.owner.problems_button.setText(f"查看问题（{len(self.groups)}）" if self.groups else "查看问题")
