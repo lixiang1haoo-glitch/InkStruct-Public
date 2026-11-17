@@ -285,7 +285,7 @@ def inspect():
     d=app.activeModalWidget();assert isinstance(d,SettingsDialog)
     navigation_checks.append((
         ('capture' in d.pages)==(w.tabs.currentIndex()==0),
-        set(d.items)=={'appearance','preview','capture','body','math','table','image','code','footnote'},
+        set(d.items)=={'appearance','preview','about','capture','body','math','table','image','code','footnote'},
     ))
     d.reject()
 for i in range(w.tabs.count()):
@@ -297,6 +297,12 @@ for i in range(w.tabs.count()):
     else:QtTest.QTest.mouseClick(w.settings_button,QtCore.Qt.LeftButton)
 assert all(p==positions[0] for p in positions)
 assert navigation_checks==[(True,True)]*w.tabs.count()
+def inspect_about():
+    d=app.activeModalWidget()
+    assert isinstance(d,SettingsDialog) and d.current=='about'
+    d.reject()
+QtCore.QTimer.singleShot(10,inspect_about)
+next(a for a in w.actions() if a.text()=='关于 InkStruct').trigger()
 canvas=collector.symbol_widget.canvas
 from handwriting_collector.models import TrajectoryPoint
 canvas.trajectory.start_stroke(TrajectoryPoint(100,100,.4,0))
