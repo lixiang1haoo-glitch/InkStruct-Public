@@ -18,6 +18,14 @@ TRAJECTORY_SCHEMA = "source_trajectory_v1"
 MIN_MAPPING_CONFIDENCE = 0.30
 
 
+def with_source_pressure(provenance, samples):
+    return {
+        index: origin if samples[origin["sample_id"]].pressure_available else
+        {**origin, "pressure_available": False}
+        for index, origin in provenance.items()
+    }
+
+
 def arc_parameters(points: list[tuple[float, float]]) -> list[float]:
     distances = [0.0]
     for start, end in pairwise(points):
@@ -67,4 +75,5 @@ def source_trajectory(
         source_sha256=sample.source_sha256,
         stroke_order_status=aligned.stroke_order_status,
         strokes=strokes,
+        pressure_available=sample.pressure_available,
     ), None

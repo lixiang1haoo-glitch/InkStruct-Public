@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QElapsedTimer, QEvent, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QTabletEvent
-from PySide6.QtWidgets import QSizePolicy, QWidget
+from PySide6.QtGui import QColor, QEventPoint, QPainter, QPen, QPixmap, QTabletEvent
+from PySide6.QtWidgets import QApplication, QSizePolicy, QWidget
 
-from .models import Trajectory, TrajectoryPoint
+from .models import INPUT_MODES, UNMEASURED_PRESSURE, Trajectory, TrajectoryPoint
 
 
 class TrajectoryCanvas(QWidget):
-    """Tablet-only trajectory canvas with incremental, pressure-sensitive ink."""
+    """Record one selected input source with incremental ink."""
 
     # UI state changes at pen-down/up, undo and clear. Motion only affects the ink.
     trajectory_changed = Signal()
@@ -32,15 +32,35 @@ class TrajectoryCanvas(QWidget):
         self.pen_threshold = 0.01
         self.release_distance_threshold = 0.5
         self._pen_down = False
+        self._input_mode = "tablet"
+        self._touch_id = None
+        self.allow_pointer_dot = False
         self._timer = QElapsedTimer()
         self._clock_started = False
         self._render_cache = None
         self._render_key = None
         self._drawn_strokes = []
         self.setAttribute(Qt.WidgetAttribute.WA_TabletTracking)
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.setMinimumSize(360, 260)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        QApplication.instance().applicationStateChanged.connect(self._application_state_changed)
+
+    def set_input_mode(self, mode: str) -> None:
+        if mode not in INPUT_MODES:
+            raise ValueError("不支持的录制输入")
+        if mode != self._input_mode:
+            if self.trajectory.strokes:
+                raise ValueError("请先保存或放弃当前笔迹")
+            self._input_mode = mode
+            self._touch_id = None
+            self.setMouseTracking(mode == "mouse")
+
+    def _application_state_changed(self, state) -> None:
+        if state != Qt.ApplicationState.ApplicationActive:
+            self.cancel_active_stroke()
 
     def set_render_settings(self, stroke_width_scale: float, grid_scale: float) -> None:
         self.stroke_width_scale = float(stroke_width_scale)
@@ -48,18 +68,14 @@ class TrajectoryCanvas(QWidget):
         self.update()
 
     def tabletEvent(self, event: QTabletEvent) -> None:
+        event.accept()
+        if self._input_mode != "tablet":
+            return
         event_type = event.type()
         pressure = float(event.pressure())
         position = event.position()
         if event_type == QEvent.Type.TabletPress and pressure > self.pen_threshold:
-            if not self._clock_started:
-                self._timer.start()
-                self._clock_started = True
-            self._pen_down = True
-            point = self._point(position, pressure)
-            self.trajectory.start_stroke(point)
-            self.trajectory_changed.emit()
-            self._update_ink(point, point)
+            self._start_stroke(position, pressure)
         elif (
             event_type == QEvent.Type.TabletMove
             and self._pen_down
@@ -68,7 +84,106 @@ class TrajectoryCanvas(QWidget):
             self._append_ink(self._point(position, pressure))
         elif event_type == QEvent.Type.TabletRelease:
             self.finish_stroke(position, pressure)
+
+    def event(self, event: QEvent) -> bool:
+        kind = event.type()
+        if kind in (QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate,
+                    QEvent.Type.TouchEnd, QEvent.Type.TouchCancel):
+            # Accept all touch input on the canvas so Qt won't synthesize a
+            # mouse stroke in a different input mode.
+            event.accept()
+            if self._input_mode == "finger":
+                self._touch_event(event)
+            return True
+        if kind in (QEvent.Type.FocusOut, QEvent.Type.WindowDeactivate,
+                    QEvent.Type.Hide, QEvent.Type.UngrabMouse) or (
+                    kind == QEvent.Type.EnabledChange and not self.isEnabled()):
+            self.cancel_active_stroke()
+        return super().event(event)
+
+    def _touch_event(self, event) -> None:
+        kind = event.type()
+        if kind == QEvent.Type.TouchCancel:
+            self.cancel_active_stroke()
+            return
+        points = event.points()
+        if kind == QEvent.Type.TouchBegin:
+            primary = next((point for point in points
+                            if point.state() == QEventPoint.State.Pressed), None)
+            if primary is not None and self._start_stroke(primary.position(), UNMEASURED_PRESSURE):
+                self._touch_id = primary.id()
+            return
+        for point in points:
+            if point.id() != self._touch_id:
+                continue
+            if point.state() == QEventPoint.State.Released:
+                self.finish_stroke(point.position(), UNMEASURED_PRESSURE)
+                self._touch_id = None
+            elif point.state() == QEventPoint.State.Updated and self._pen_down:
+                self._append_pointer_ink(point.position())
+            break
+        if kind == QEvent.Type.TouchEnd:
+            self.cancel_active_stroke()
+
+    def mousePressEvent(self, event) -> None:
         event.accept()
+        if (self._input_mode == "mouse" and event.button() == Qt.MouseButton.LeftButton
+                and event.source() != Qt.MouseEventSource.MouseEventSynthesizedByQt):
+            self.cancel_active_stroke()
+            self._start_stroke(event.position(), UNMEASURED_PRESSURE)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        self.mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        event.accept()
+        if self._input_mode == "mouse" and self._pen_down:
+            if event.buttons() & Qt.MouseButton.LeftButton:
+                self._append_pointer_ink(event.position())
+            else:
+                self.cancel_active_stroke()
+
+    def mouseReleaseEvent(self, event) -> None:
+        event.accept()
+        if self._input_mode == "mouse" and event.button() == Qt.MouseButton.LeftButton:
+            self.finish_stroke(event.position(), UNMEASURED_PRESSURE)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape and self._pen_down:
+            self.cancel_active_stroke()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _start_stroke(self, position: QPointF, pressure: float) -> bool:
+        if self._pen_down or not QRectF(self.rect()).contains(position):
+            return False
+        if not self._clock_started:
+            self._timer.start()
+            self._clock_started = True
+        self._pen_down = True
+        self.trajectory.input_type = self._input_mode
+        point = self._point(position, pressure)
+        self.trajectory.start_stroke(point)
+        self._update_ink(point, point)
+        self.trajectory_changed.emit()
+        return True
+
+    def _append_pointer_ink(self, position: QPointF) -> None:
+        self._append_if_moved(self._point(position, UNMEASURED_PRESSURE))
+
+    def _append_if_moved(self, point: TrajectoryPoint) -> bool:
+        previous = self.trajectory.strokes[-1].points[-1]
+        if math.hypot(point.x - previous.x, point.y - previous.y) < self.release_distance_threshold:
+            return False
+        self._append_ink(point)
+        return True
+
+    def cancel_active_stroke(self) -> None:
+        self._touch_id = None
+        if self._pen_down:
+            self._pen_down = False
+            self.undo_last_stroke()
 
     def _point(self, position: QPointF, pressure: float) -> TrajectoryPoint:
         return TrajectoryPoint(
@@ -98,20 +213,20 @@ class TrajectoryCanvas(QWidget):
         was_active = self._pen_down
         appended = False
         if self._pen_down and self.trajectory.strokes:
-            release_point = self._point(position, pressure)
-            previous = self.trajectory.strokes[-1].points[-1]
-            distance = math.hypot(
-                release_point.x - previous.x, release_point.y - previous.y
-            )
-            if distance >= self.release_distance_threshold:
-                self._append_ink(release_point)
-                appended = True
+            appended = self._append_if_moved(self._point(position, pressure))
+            if (self._input_mode != "tablet" and not self.allow_pointer_dot
+                    and len(self.trajectory.strokes[-1].points) == 1):
+                self.cancel_active_stroke()
+                return False
         self._pen_down = False
         if was_active:
             self.trajectory_changed.emit()
         return appended
 
     def undo_last_stroke(self) -> None:
+        if self._pen_down:
+            self.cancel_active_stroke()
+            return
         old_count = self.trajectory.point_count
         if self.trajectory.undo_last_stroke():
             self.char_ends = [end for end in self.char_ends if end <= self.trajectory.point_count]
@@ -123,6 +238,7 @@ class TrajectoryCanvas(QWidget):
         self.trajectory.clear()
         self.char_ends.clear()
         self._pen_down = False
+        self._touch_id = None
         self._clock_started = False
         self.trajectory_changed.emit()
         self.update()

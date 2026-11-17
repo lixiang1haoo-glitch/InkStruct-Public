@@ -362,6 +362,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
                 not self.canvas.pen_down and not self.canvas.trajectory.point_count
             )
             item = self.task.current_item() if self.task else None
+            self.canvas.allow_pointer_dot = bool(item and item.character in ".．·⋅…:：;；!！?？ij")
             if self.task and self._task_root is not None:
                 self.task_name_label.setText(f"{self.task.name} · {self._task_root}")
             self.save_button.setEnabled(

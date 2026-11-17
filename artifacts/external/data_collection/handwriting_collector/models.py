@@ -6,6 +6,9 @@ from typing import Iterable
 
 import numpy as np
 
+INPUT_MODES = ("tablet", "finger", "mouse")
+UNMEASURED_PRESSURE = 0.5
+
 
 def is_cjk_character(value: str) -> bool:
     """Return whether value is one CJK unified ideograph."""
@@ -60,6 +63,11 @@ class Stroke:
 @dataclass
 class Trajectory:
     strokes: list[Stroke] = field(default_factory=list)
+    input_type: str = "tablet"
+
+    @property
+    def pressure_available(self) -> bool:
+        return self.input_type == "tablet"
 
     def start_stroke(self, point: TrajectoryPoint) -> None:
         self.strokes.append(Stroke([point]))
