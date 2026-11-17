@@ -16,6 +16,7 @@ from inkstruct.fonts.library import publish_font
 from inkstruct.fonts.publication import publication_stamp, review_selection
 from inkstruct.generation_workflow import GenerationWorkflow, read, write
 from inkstruct.layout.blocks import layout_markdown
+from inkstruct.recommended_capture import qualifies
 from inkstruct.samples import load_raw_sample, sha256_file
 from inkstruct.structure_corrections import POLICY
 from inkstruct.structures import StructureRepository, build_database
@@ -73,10 +74,12 @@ def test_only_locally_complete_contiguous_units_enter_archive(setup, tmp_path):
     joined = record(tmp_path / "joined.json", graph, join=0, omit=(2,))
     units = {path: points for path, _, points in sample_units(joined, graph)}
     assert set(units) == {"root.0"}
+    assert not qualifies(joined, graph)
     assert units["root.0"][0]["slots"] == ["s1", "s2"]
     assert [p["pressure"] for p in units["root.0"][0]["points"]] == [p.pressure for p in joined.strokes[0].points]
     crossing = record(tmp_path / "cross.json", graph, join=1)
     assert [path for path, _, _ in sample_units(crossing, graph)] == ["whole"]
+    assert qualifies(crossing, graph)
     missing = record(tmp_path / "missing.json", graph, join=0, omit=(0,))
     assert sample_units(missing, graph) == []
 

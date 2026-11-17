@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 
 from PySide6 import QtCore, QtWidgets
 
+from .recommended_capture import STAGES, recording_stages, remaining_entries, stage_key
 from .ui_behavior import compact_field
 from .capture_management import (
     CaptureCatalog,
@@ -161,6 +163,113 @@ class HanTaskDialog(QtWidgets.QDialog):
             super().accept()
 
 
+class RecommendedTaskDialog(QtWidgets.QDialog):
+    def __init__(self, catalog, writer, stage, structures, parent):
+        super().__init__(parent)
+        self.catalog, self.stage, self.structures = catalog, stage, structures
+        self.entries = ()
+        self.job = None
+        self.cancel_scan = Event()
+        self.disposing = False
+        self.setWindowTitle(stage.title)
+        self.setObjectName('recommended_capture_task')
+        self.resize(510, 440)
+        layout = QtWidgets.QVBoxLayout(self)
+        writer_row = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel('书写者')
+        self.writer = WriterPicker(catalog, writer)
+        label.setBuddy(self.writer)
+        writer_row.addWidget(label)
+        writer_row.addWidget(self.writer, 1)
+        add = QtWidgets.QPushButton('新建书写者…')
+        add.clicked.connect(self.add_writer)
+        writer_row.addWidget(add)
+        layout.addLayout(writer_row)
+        self.summary = QtWidgets.QLabel()
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+        self.preview = QtWidgets.QPlainTextEdit()
+        self.preview.setReadOnly(True)
+        self.preview.setAccessibleName('待录汉字')
+        layout.addWidget(self.preview, 1)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.start = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+        self.start.setText('开始采集')
+        self.start.setProperty('inkRole', 'primary')
+        buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText('关闭')
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.writer.textChanged.connect(self.scan)
+        self.scan()
+
+    def add_writer(self):
+        if new_writer(self.catalog, self.writer, self):
+            self.scan()
+
+    def scan(self):
+        from .fonts.ui import Job
+
+        self.cancel_scan.set()
+        self.entries = ()
+        self.start.setEnabled(False)
+        self.preview.clear()
+        writer = self.writer.text()
+        if not writer:
+            self.summary.setText('请选择或新建书写者。')
+            return
+        try:
+            check_capture_paths(self.catalog.root, writer)
+        except ValueError as error:
+            self.summary.setText(str(error))
+            return
+        self.summary.setText('正在检查此书写者的已有样本…')
+        if self.job is not None:
+            return
+        self.cancel_scan = Event()
+        catalog, stage, structures, cancelled = self.catalog, self.stage, self.structures, self.cancel_scan
+        self.job = Job(lambda _: remaining_entries(catalog, writer, stage, structures, cancelled.is_set))
+        self.job.signals.completed.connect(self.scanned, QtCore.Qt.ConnectionType.QueuedConnection)
+        self.job.signals.failed.connect(self.scan_failed, QtCore.Qt.ConnectionType.QueuedConnection)
+        QtCore.QThreadPool.globalInstance().start(self.job)
+
+    def dispose(self):
+        self.disposing = True
+        self.cancel_scan.set()
+        if self.job is None:
+            self.deleteLater()
+
+    def finish_scan(self):
+        self.job = None
+        if self.disposing:
+            self.deleteLater()
+        elif self.cancel_scan.is_set():
+            self.scan()
+        else:
+            return True
+        return False
+
+    @QtCore.Slot(object)
+    def scanned(self, entries):
+        if not self.finish_scan():
+            return
+        self.entries = entries
+        total = len(self.stage.entries)
+        self.summary.setText(f'本档已具备 {total - len(entries)} / {total} 字 · 剩余 {len(entries)} 字' if entries
+                             else f'本档 {total} 字均已有合格样本。')
+        self.preview.setPlainText('\n'.join(f'{char}　1 份' for char, _, _ in entries))
+        self.start.setEnabled(bool(entries))
+
+    @QtCore.Slot(str)
+    def scan_failed(self, error):
+        if self.finish_scan():
+            self.summary.setText(f'读取样本失败：{error}')
+
+    def accept(self):
+        if self.entries and self.start.isEnabled():
+            super().accept()
+
+
 class TaskListDialog(QtWidgets.QDialog):
     def __init__(self, catalog, parent=None):
         super().__init__(parent)
@@ -291,6 +400,14 @@ class CaptureLifecycleMixin:
             if self.task:
                 skipped = sum(i.status == 'skipped' for i in self.task.items)
                 self.progress_label.setText(f'已保存 {self.task.completed_count} / {len(self.task.items)} · 稍后录 {skipped}')
+                key = stage_key(self.task.source)
+                if key:
+                    total = STAGES[key][1]
+                    reused = total - len(self.task.items)
+                    done = reused + self.task.completed_count
+                    self.progress_bar.setRange(0, total)
+                    self.progress_bar.setValue(done)
+                    self.progress_label.setText(f'本档 {done} / {total} 字 · 已有 {reused} · 剩余 {total - done} · 稍后录 {skipped}')
 
     def _close_task(self):
         self.task = None
@@ -326,6 +443,21 @@ class CaptureLifecycleMixin:
             except (OSError, ValueError) as error:
                 self._capture_error(error)
 
+    def _can_reassign_task(self):
+        import json
+
+        from .symbol_tasks import source_configuration
+
+        task = self.task
+        if stage_key(task.source) or task.completed_count or source_configuration(task.source)['reuse']:
+            return False
+        return not (
+            any(json.loads(p.read_text('utf-8')).get('task_id') == task.task_id
+                for p in (self._managed_root / 'revisions').glob('*/revision.json'))
+            or any(json.loads(p.read_text('utf-8')).get('task', {}).get('task_id') == task.task_id
+                   for p in (self._managed_root / 'samples' / task.writer_id).glob('*/*.json'))
+        )
+
     def choose_writer(self, key):
         if not key:
             if self.task:
@@ -334,14 +466,7 @@ class CaptureLifecycleMixin:
         old = self.task.writer_id if self.task else self.writer_edit.text()
         try:
             if self.task and key != old:
-                from .symbol_tasks import source_configuration
-                reuse = source_configuration(self.task.source)['reuse']
-                import json
-                history = any(json.loads(p.read_text('utf-8')).get('task_id') == self.task.task_id
-                              for p in (self._managed_root / 'revisions').glob('*/revision.json'))
-                history = history or any(json.loads(p.read_text('utf-8')).get('task', {}).get('task_id') == self.task.task_id
-                    for p in (self._managed_root / 'samples' / old).glob('*/*.json'))
-                if self.task.completed_count == 0 and not history and not reuse:
+                if self._can_reassign_task():
                     if not self._can_switch():
                         self.writer_picker.reload(old)
                         return
@@ -362,8 +487,8 @@ class CaptureLifecycleMixin:
                     self.canvas.clear()
                     self.set_task(updated)
                 else:
-                    if QtWidgets.QMessageBox.question(self, '任务已有样本或复用配置',
-                        '已保存内容不能直接改变归属。暂停并关闭当前任务，为新任务选择该书写者？',
+                    if QtWidgets.QMessageBox.question(self, '切换书写者',
+                        '暂停当前任务并切换书写者？采集进度和样本仍归当前书写者。',
                         QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No) != QtWidgets.QMessageBox.Yes:
                         self.writer_picker.reload(old)
                         return
@@ -451,21 +576,60 @@ class CaptureLifecycleMixin:
         self.configure_han_task()
 
     def configure_han_task(self, path=None):
-        from handwriting_collector.tasks import CollectionTask, TaskRepository
         try:
             dialog = HanTaskDialog(self._capture_catalog, self.writer_edit.text(), path, self)
             if dialog.exec() != QtWidgets.QDialog.Accepted or not self._can_switch():
                 return
-            root = self._capture_catalog.root
-            task = CollectionTask.create(dialog.name.text().strip(), Path(path).name if path else 'builtin:cjk-demo',
-                                         dialog.writer.text(), dialog.entries)
-            TaskRepository(root).save(task)
-            if self.task:
-                self._capture_catalog.set_state(self._capture_kind, self.task.task_id, 'paused')
-            self._managed_root = None
-            self.set_task(task)
-            self._capture_window.capture_selected_writer = task.writer_id
-            self._capture_window.writer_selected.emit(task.writer_id)
+            self._start_han_task(dialog.name.text().strip(), Path(path).name if path else 'builtin:cjk-demo',
+                                 dialog.writer.text(), dialog.entries)
+        except (OSError, ValueError) as error:
+            self._capture_error(error)
+
+    def _start_han_task(self, name, source, writer, entries):
+        from handwriting_collector.tasks import CollectionTask, TaskRepository
+
+        task = CollectionTask.create(name, source, writer, entries)
+        TaskRepository(self._capture_catalog.root).save(task)
+        if self.task:
+            self._capture_catalog.set_state(self._capture_kind, self.task.task_id, 'paused')
+        self._managed_root = None
+        self.set_task(task)
+
+    def configure_recommended_task(self, key):
+        if not self._can_switch():
+            return
+        try:
+            stage = recording_stages()[key]
+            catalog = self._capture_catalog
+            dialog = RecommendedTaskDialog(catalog, self.writer_edit.text(), stage, self.structures, self)
+            try:
+                if dialog.exec() != QtWidgets.QDialog.Accepted:
+                    return
+                selected, entries = dialog.writer.text(), dialog.entries
+            finally:
+                dialog.dispose()
+            lock = QtCore.QLockFile(str(catalog.root / '.recommended-capture.lock'))
+            if not lock.tryLock(0):
+                raise ValueError('另一窗口正在打开推荐录制任务，请稍后重试')
+            try:
+                matches = []
+                for candidate in catalog.tasks():
+                    task = candidate['task']
+                    if not task or candidate['kind'] != 'han' or candidate['state'] not in ('active', 'paused'):
+                        continue
+                    if task.source != stage.source or task.writer_id != selected:
+                        continue
+                    pending = tuple((item.character, item.repeat_total, item.source_index)
+                                    for item in task.items if item.status != 'completed')
+                    if pending == entries:
+                        matches.append(candidate)
+                if matches:
+                    entry = max(matches, key=lambda item: item['task'].created_at)
+                    self.open_managed_task(entry, check_switch=False)
+                else:
+                    self._start_han_task(stage.title, stage.source, selected, entries)
+            finally:
+                lock.unlock()
         except (OSError, ValueError) as error:
             self._capture_error(error)
 
@@ -476,9 +640,9 @@ class CaptureLifecycleMixin:
         else:
             return super().resume_task(quiet=quiet)
 
-    def open_managed_task(self, entry):
+    def open_managed_task(self, entry, *, check_switch=True):
         from handwriting_collector.tasks import TaskRepository
-        if not self._can_switch():
+        if check_switch and not self._can_switch():
             return
         root = entry['root']
         from handwriting_collector.storage import SampleStorage
@@ -588,6 +752,8 @@ class CaptureLifecycleMixin:
             key = item.character, item.source_index
             counts[key] = counts.get(key, 0) + 1
         source = entry['task'].source
+        if stage_key(source):
+            source = 'copy:' + entry['task'].task_id
         if source.startswith(CUSTOM_PREFIXES):
             config = source_configuration(source)
             config['reuse'] = []
@@ -675,6 +841,21 @@ def install_capture_management(window, root):
         for button in (task_list, widget.pause_button, widget.cancel_task_button):
             actions.addWidget(button)
         column.addLayout(actions)
+        if kind == 'han':
+            recommendations = QtWidgets.QGroupBox('推荐录制任务')
+            stages = QtWidgets.QGridLayout(recommendations)
+            for index, (key, (title, count)) in enumerate(STAGES.items()):
+                button = QtWidgets.QPushButton(title)
+                button.setObjectName('capture_recommended_' + key)
+                if key == 'add68':
+                    button.setProperty('inkRole', 'primary')
+                button.clicked.connect(lambda _checked=False, w=widget, k=key: w.configure_recommended_task(k))
+                subtitle = QtWidgets.QLabel(f'新增 {count} 字 · 每字 1 份')
+                subtitle.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+                stages.addWidget(button, 0, index)
+                stages.addWidget(subtitle, 1, index)
+                stages.setColumnStretch(index, 1)
+            column.addWidget(recommendations)
         widget.layout().insertWidget(0, panel)
         widget.writer_picker.textChanged.connect(widget.choose_writer)
         def create(_checked=False, w=widget):
