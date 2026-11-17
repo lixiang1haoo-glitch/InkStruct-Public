@@ -46,7 +46,7 @@ else:
  cursor.setPosition(body_end)
  cursor.movePosition(QtGui.QTextCursor.PreviousCharacter, QtGui.QTextCursor.KeepAnchor)
 cursor.insertText('9');w.editor.setTextCursor(cursor)
-assert not w.canvas.isEnabled() and not w.machine_export.isEnabled()
+assert not w.canvas.isEnabled() and not w.export_button.isEnabled()
 ready()
 assert w.snapshot.revision == w.revision
 stats=w.build_cache.continuation.statistics()

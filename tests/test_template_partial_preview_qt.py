@@ -34,13 +34,13 @@ source='123\n\n```\n'+'2'*100+'\n```\n\n456'
 w.editor.setPlainText(source);ready()
 assert ''.join(f.text for f in w.snapshot.fragments)=='123'
 assert '后续正文尚未排版' in w.status.text()
-assert not w.machine_export.isEnabled()
+assert not w.snapshot.exportable and w.export_button.isEnabled()
 error=next(d for d in w.snapshot.diagnostics if d.code=='template-body-no-progress')
 index=next(i for i in range(w.diagnostic_picker.count()) if getattr(w.diagnostic_picker.itemData(i),'code',None)==error.code)
 w.diagnostic_picker.setCurrentIndex(index);w.navigate_diagnostic()
 assert w.editor.textCursor().selectedText().replace('\u2029','\n')==source[error.span.start:error.span.end]
 cursor=w.editor.textCursor();cursor.insertText('2\n\n');ready()
-assert w.snapshot.exportable and w.machine_export.isEnabled()
+assert w.snapshot.exportable and w.export_button.isEnabled()
 assert ''.join(f.text for f in w.snapshot.fragments)=='1232456'
 w.editor.undo();ready()
 assert ''.join(f.text for f in w.snapshot.fragments)=='123'

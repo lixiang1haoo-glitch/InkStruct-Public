@@ -5,6 +5,7 @@ import time
 
 from PySide6 import QtCore, QtWidgets
 
+from ..document.cancellation import LayoutCancelled
 from ..plotter.export import export_plan
 from ..plotter.parallel import ExportCancelled, ExportControl, PageRouter
 
@@ -40,7 +41,7 @@ class ExportProgress(QtWidgets.QDialog):
     def __init__(self, job, parent=None):
         super().__init__(parent)
         self.job = job
-        self.setWindowTitle('正在导出 SVG')
+        self.setWindowTitle('正在导出')
         self.setMinimumWidth(440)
         self.setModal(False)
         layout = QtWidgets.QVBoxLayout(self)
@@ -60,8 +61,9 @@ class ExportProgress(QtWidgets.QDialog):
             return
         names = {'route': '优化路径', 'write': '写出页面', 'fallback': '并行不可用，串行重算未完成页'}
         self.label.setText(f'{names[stage]}：{done}/{total} 页。使用已冻结排版，可继续编辑。')
-        self.bar.setRange(0, max(1, total * 2))
-        self.bar.setValue(done + (total if stage == 'write' else 0))
+        routing = isinstance(self.job, ExportJob)
+        self.bar.setRange(0, max(1, total * (2 if routing else 1)))
+        self.bar.setValue(done + (total if routing and stage == 'write' else 0))
 
     def cancel(self):
         if self.job.control.cancel():
@@ -77,3 +79,28 @@ class ExportProgress(QtWidgets.QDialog):
             event.ignore()
         else:
             event.accept()
+
+
+class VisualExportJob(QtCore.QThread):
+    progress = QtCore.Signal(str, int, int)
+
+    def __init__(self, snapshot, output, pages, format, *, replace_file=False, parent=None):
+        super().__init__(parent)
+        self.snapshot, self.output, self.pages, self.format = snapshot, output, pages, format
+        self.replace_file = replace_file
+        self.control = ExportControl()
+
+    def run(self):
+        from ..renderers.visual_export import export_visual
+
+        result = {'output': str(self.output), 'snapshot_id': self.snapshot.snapshot_id,
+                  'cancelled': False, 'error': None}
+        try:
+            export_visual(self.snapshot, self.output, self.pages, self.format, control=self.control,
+                          progress=lambda done, total: self.progress.emit('write', done, total),
+                          replace_file=self.replace_file)
+        except (ExportCancelled, LayoutCancelled):
+            result['cancelled'] = True
+        except Exception as error:  # Keep output failures contained in the GUI worker.
+            result['error'] = f'{type(error).__name__}: {error}'
+        self.result = result

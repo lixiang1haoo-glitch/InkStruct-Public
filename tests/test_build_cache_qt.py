@@ -24,7 +24,7 @@ def ready():
   app.processEvents()
   if w.snapshot and w.canvas.isEnabled() and not w.timer.isActive() and not w.worker:
    w.recovery_timer.stop();return
-  QtTest.QTest.qWait(10)
+  time.sleep(.01)
  raise AssertionError(w.status.text())
 ready();original=w.snapshot
 w.refresh_assets();ready()
@@ -35,9 +35,9 @@ assert w.snapshot.job_key==original.job_key
 old_key,old_revision=w.current_key,w.revision
 old_snapshot=w.snapshot
 w.editor.insertPlainText('2 ')
-assert not w.canvas.isEnabled() and not w.machine_export.isEnabled()
+assert not w.canvas.isEnabled() and not w.export_button.isEnabled()
 w.publish({'key':old_key,'revision':old_revision,'snapshot':old_snapshot})
-assert not w.canvas.isEnabled() and not w.machine_export.isEnabled()
+assert not w.canvas.isEnabled() and not w.export_button.isEnabled()
 ready()
 assert w.snapshot.revision==w.revision and w.snapshot.pages!=original.pages
 w.editor.undo();ready()

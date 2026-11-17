@@ -31,10 +31,7 @@ from ..layout.blocks import layout_markdown
 from ..layout.continuation import continuation_scope
 from ..layout.inline import LayoutCancelled, check_cancel
 from ..layout.measurement_cache import measurement_scope
-from ..plotter.adapters import (
-    can_export_with_image_omission,
-    reference_image_export_scope,
-)
+from ..plotter.adapters import can_export_with_image_omission
 from .app import ReviewWindow, WorkerSignals
 from .build_cache import (
     CachedLayout,
@@ -482,9 +479,6 @@ class MixedWindow(ReviewWindow):
         self.optimize.toggled.connect(self.mark_dirty)
         self.optimize.toggled.connect(self.export_preference_changed)
         self.optimize.hide()  # Saved document preference, edited by the export dialog.
-        self.machine_export = self.button("导出写字机 SVG…", self.export_machine, row)
-        self.force_machine_export = self.button("强制导出 SVG…", self.export_machine_forced, row)
-        self.force_machine_export.setToolTip("仅导出已有有效笔迹，缺失处留空，并附问题清单；不宣称为完整成品。")
         self.button("打开恢复副本…", self.open_recovery, row)
         self.centralWidget().layout().insertLayout(2, row)
         settings = WrappingLayout()
@@ -1029,13 +1023,9 @@ class MixedWindow(ReviewWindow):
             self.glyph_inspector.set_ready(ready)
         if hasattr(self, "element_inspector"):
             self.element_inspector.set_ready(ready)
-        if hasattr(self, "machine_export"):
-            self.machine_export.setEnabled(
-                bool(ready and self.snapshot and can_export_with_image_omission(self.snapshot)
-                     and self.export_job is None)
-            )
-        if hasattr(self, "force_machine_export"):
-            self.force_machine_export.setEnabled(bool(ready and self.snapshot and self.export_job is None))
+        if hasattr(self, "export_button"):
+            self.export_button.setEnabled(bool(ready and self.snapshot and self.snapshot.pages
+                                               and self.export_job is None))
         self.update_diagnostic_action()
 
     def current_table(self):
@@ -1126,11 +1116,6 @@ class MixedWindow(ReviewWindow):
             self.flow = replace(self.flow, table=style)
         self.mark_dirty()
         self.schedule_layout()
-
-    def export_document(self):
-        if self.current_font_warnings(pending_only=True) and not self.show_font_warnings():
-            return
-        return super().export_document()
 
     def load_all(self):
         if self.run_path and Path(self.run_path).suffix == '.inkfont':
@@ -1254,34 +1239,16 @@ class MixedWindow(ReviewWindow):
         finally:
             dialog.deleteLater()
 
-    def confirm_image_omissions(self, scope):
-        loaded = [i for i in scope['omitted_images'] if i['reason'] == 'loaded-raster']
-        missing = [i for i in scope['omitted_images'] if i['reason'] == 'resource-not-loaded']
-        dialog = QtWidgets.QMessageBox(self)
-        dialog.setWindowTitle("导出 SVG：跳过非 SVG 图片")
-        dialog.setIcon(QtWidgets.QMessageBox.Question)
-        dialog.setText("导出的 SVG 不包含非 SVG 图片，包括尚未载入的图片；"
-                       "保留当前预览中的图片占位与图题，导出其余可书写内容。")
-        dialog.setInformativeText(f"已载入位图：{len(loaded)} 处；尚未载入的位图引用：{len(missing)} 处。\n"
-                                  "可展开详情查看文件名。原文档、资源与缺失诊断保持不变。是否继续？")
-        dialog.setDetailedText('\n\n'.join(
-            title + '\n' + ('\n'.join(f"第 {i['page_number']} 页 · {i['display_name']}\n引用：{i['source']}" for i in items) or '无')
-            for title, items in (('已载入位图', loaded), ('尚未载入的位图引用', missing))))
-        dialog.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel)
-        dialog.button(QtWidgets.QMessageBox.Yes).setText("继续导出")
-        dialog.button(QtWidgets.QMessageBox.Cancel).setText("取消")
-        dialog.setDefaultButton(QtWidgets.QMessageBox.Cancel)
-        try:
-            return dialog.exec() == QtWidgets.QMessageBox.Yes
-        finally:
-            dialog.deleteLater()
+    def configure_document_export(self, snapshot):
+        from .document_export_dialog import DocumentExportDialog
 
-    def configure_svg_export(self, snapshot, *, force=False):
-        from .svg_export_dialog import SvgExportDialog
-        dialog = SvgExportDialog(len(snapshot.pages), self.optimize.isChecked(), self, force=force)
+        dialog = DocumentExportDialog(snapshot, self.markdown_document, self.flow,
+                                      self.page_picker.value() - 1, self.optimize.isChecked(), self)
         try:
             if dialog.exec() == QtWidgets.QDialog.Accepted:
-                return dialog.options, dialog.optimize.isChecked()
+                return dialog.selection
+            if dialog.view_problems:
+                self.problems_button.click()
             return None
         finally:
             dialog.deleteLater()
@@ -1289,71 +1256,63 @@ class MixedWindow(ReviewWindow):
     def export_preference_changed(self, _value):
         self.export_preference_epoch += 1
 
-    def export_machine_forced(self):
-        return self.export_machine(force=True)
-
-    def export_machine(self, *, force=False):
-        if self.export_preparing:
-            return
-        if self.export_job is not None:
-            if self.export_progress:
-                self.export_progress.show()
-                self.export_progress.raise_()
+    def export_document(self):
+        if (self.export_preparing or self.export_job is not None or not self.snapshot
+                or not self.snapshot.pages or not self.canvas.isEnabled() or self.editor.composing):
             return
         self.export_preparing = True
         try:
-            self._configure_and_start_machine_export(force=force)
+            self._configure_and_start_export()
         finally:
             self.export_preparing = False
 
-    def _configure_and_start_machine_export(self, *, force=False):
-        if not force and self.current_font_warnings(pending_only=True) and not self.show_font_warnings():
-            return
-        if not self.snapshot or not self.canvas.isEnabled() or (not force and not can_export_with_image_omission(self.snapshot)):
-            return
-        snapshot = self.snapshot
-        selected = self.configure_svg_export(snapshot, force=True) if force else self.configure_svg_export(snapshot)
-        if selected is None:
-            return
-        options, optimize = selected
-        if self.snapshot is not snapshot or not self.canvas.isEnabled():
-            return
-        from ..plotter.options import prepare_export
-        scope = None if options.force else reference_image_export_scope(snapshot)
-        if scope:
-            scope = {**scope, 'omitted_images': [i for i in scope['omitted_images'] if i['page_index'] in options.pages]}
-            if not scope['omitted_images']:
-                scope = None
-        if scope and not self.confirm_image_omissions(scope):
-            return
-        if self.snapshot is not snapshot or not self.canvas.isEnabled():
-            return
-        try:
-            # Freeze geometry, page selection, omissions and calibration before
-            # the destination picker can process arbitrary GUI events.
-            plan, export_scope = prepare_export(snapshot, self.markdown_document, self.flow, options)
-            if options.force:
-                export_scope["font_usage_warnings"] = self.current_font_warnings()
-        except ValueError as error:
-            self.message_error(error)
-            return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "指定新的强制 SVG 输出文件夹" if options.force else "指定新的写字机输出文件夹")
-        if path:
-            from .export_job import ExportJob, ExportProgress
-            job = ExportJob(plan, Path(path), optimize=optimize, route_cache=self.build_cache.routes,
-                            export_scope=export_scope, page_indices=options.pages, parent=self)
-            self.export_job = job
-            job.preference_epoch = self.export_preference_epoch
-            job.source_session = self.source_session
-            self.export_progress = ExportProgress(job, self)
-            self.machine_export.setEnabled(False)
-            self.force_machine_export.setEnabled(False)
-            job.forced = options.force
-            job.finished.connect(lambda: self.finish_machine_export(job, optimize, scope))
-            self.export_progress.show()
-            job.start()
+    def _configure_and_start_export(self):
+        from .export_job import ExportJob, ExportProgress, VisualExportJob
 
-    def finish_machine_export(self, job, optimize, scope):
+        snapshot = self.snapshot
+        selected = self.configure_document_export(snapshot)
+        if selected is None or self.snapshot is not snapshot or not self.canvas.isEnabled():
+            return
+        format, check, machine, optimize = selected
+        partial = bool(machine and machine.scope.get('forced'))
+        if not partial and self.current_font_warnings(pending_only=True) and not self.show_font_warnings():
+            return
+        if self.snapshot is not snapshot or not self.canvas.isEnabled():
+            return
+        preference_epoch, source_session = self.export_preference_epoch, self.source_session
+        single = format == 'pdf' or (format != 'machine' and len(check.pages) == 1)
+        filters = {'pdf': 'PDF (*.pdf)', 'png': 'PNG (*.png)', 'svg': '页面 SVG (*.svg)'}
+        if single:
+            name = '排版.pdf' if format == 'pdf' else f'page-{check.pages[0] + 1:03d}.{format}'
+            selected_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, '保存导出文件', name, filters[format])
+        else:
+            selected_path, _ = QtWidgets.QFileDialog.getSaveFileName(self, '指定新的导出文件夹')
+        if not selected_path:
+            return
+        output = Path(selected_path)
+        if single and not output.suffix:
+            output = output.with_suffix('.' + format)
+        if single and output.suffix.lower() != '.' + format:
+            self.message_error(f'请使用 .{format} 文件扩展名。')
+            return
+        if machine:
+            if partial:
+                machine.scope['font_usage_warnings'] = self.current_font_warnings()
+            job = ExportJob(machine.plan, output, optimize=optimize, route_cache=self.build_cache.routes,
+                            export_scope=machine.scope, page_indices=machine.pages, parent=self)
+        else:
+            job = VisualExportJob(check.snapshot, output, check.pages, format,
+                                  replace_file=single and output.is_file() and output == Path(selected_path),
+                                  parent=self)
+        self.export_job = job
+        self.export_progress = ExportProgress(job, self)
+        self.export_button.setEnabled(False)
+        job.finished.connect(lambda: self.finish_export(job, format, machine, optimize, preference_epoch,
+                                                        source_session))
+        self.export_progress.show()
+        job.start()
+
+    def finish_export(self, job, format, machine, optimize, preference_epoch, source_session):
         if self.export_job is not job:
             return
         result = self.last_export_result = job.result
@@ -1366,15 +1325,21 @@ class MixedWindow(ReviewWindow):
         if result['error']:
             self.message_error(result['error'])
         elif result['cancelled']:
-            self.status.setText('SVG 导出已取消；未发布输出目录，文档与选样不变。')
-        else:
-            if (self.source_session is job.source_session and self.source_session.document_id == job.plan.document_id
-                    and self.export_preference_epoch == job.preference_epoch):
+            self.status.setText('导出已取消。')
+        elif machine:
+            if (self.source_session is source_session and self.source_session.document_id == job.plan.document_id
+                    and self.export_preference_epoch == preference_epoch):
                 self.optimize.setChecked(optimize)
-            self.status.setText(('已强制导出可用笔迹 SVG；缺失处留空，问题见 issues.txt / issues.json' if getattr(job, 'forced', False)
-                                 else '已导出冻结排版的逐页写字机 SVG 和路径来源清单') +
-                                (f"；已跳过 {len(scope['omitted_images'])} 处非 SVG 图片，保留占位与图题" if scope else '') +
-                                ('；并行不可用，已串行重算未完成页' if result['routing']['fallback'] else ''))
+            scope = machine.scope
+            text = ('已导出可用笔迹，问题见 issues.txt 和 issues.json' if scope.get('forced')
+                    else '已导出逐页写字机 SVG 和路径来源清单')
+            if scope.get('omitted_images'):
+                text += f" · 已跳过 {len(scope['omitted_images'])} 处位图，保留留白和图题"
+            if result['routing']['fallback']:
+                text += ' · 并行不可用，已串行重算未完成页'
+            self.status.setText(text)
+        else:
+            self.status.setText('已导出整篇 PDF' if format == 'pdf' else '已导出整页排版图')
 
     def new_document(self):
         if self.editor.composing or not self.confirm_discard():
@@ -1785,7 +1750,7 @@ class MixedWindow(ReviewWindow):
         if self.export_job is not None:
             self.export_progress.cancel()
             self.export_progress.show()
-            self.status.setText('正在取消 SVG 导出，请等待临时文件和子进程清理完成后再关闭。')
+            self.status.setText('正在取消导出，请等待临时文件和子进程清理完成后再关闭。')
             event.ignore()
             return
         if getattr(getattr(self, "glyph_inspector", None), "job", None):

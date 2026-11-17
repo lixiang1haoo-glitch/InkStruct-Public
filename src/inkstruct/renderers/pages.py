@@ -86,7 +86,7 @@ def _page_svg(snapshot, page_index, *, debug):
     return _draw_svg(page_draw(snapshot, page_index, debug))
 
 
-def _draw_svg(page, *, tolerance_sq=None, cancelled=None):
+def _draw_svg(page, *, tolerance_sq=None, cancelled=None, reference_notice=True):
     lines = [
         (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{page.width_mm}mm" '
@@ -114,7 +114,7 @@ def _draw_svg(page, *, tolerance_sq=None, cancelled=None):
             lines.append(
                 f'<rect x="{x:.6f}" y="{y:.6f}" width="{width:.6f}" height="{height:.6f}" fill="#fff1f2" stroke="#dc2626" stroke-width="0.2"/>'
             )
-    if page.images:
+    if page.images and reference_notice:
         lines.append(
             '<text x="2" y="4" font-size="2.3" fill="#9a3412">RASTER REFERENCE PAGE - NOT PLOTTER READY</text>'
         )
@@ -145,19 +145,25 @@ def _draw_svg(page, *, tolerance_sq=None, cancelled=None):
     return "\n".join(lines) + "\n"
 
 
-def page_png(snapshot: LayoutSnapshot, page_index: int, *, dpi: float = 144, debug: bool = False):
-    from PIL import Image, ImageDraw
-
-    _export_gate(snapshot, debug)
+def png_dimensions(profile, dpi):
     if not math.isfinite(dpi) or dpi <= 0:
         raise ValueError("DPI must be finite and positive")
     scale = dpi / 25.4
-    profile = snapshot.page_profile
     if profile.width_mm * profile.height_mm * scale * scale > 40_000_000:
         raise ValueError("PNG exceeds the 40 million pixel page budget; lower DPI")
     width, height = math.ceil(profile.width_mm * scale), math.ceil(profile.height_mm * scale)
     if width * height > 40_000_000:
         raise ValueError("PNG exceeds the 40 million pixel page budget; lower DPI")
+    return width, height
+
+
+def page_png(snapshot: LayoutSnapshot, page_index: int, *, dpi: float = 144, debug: bool = False,
+             reference_notice: bool = True):
+    from PIL import Image, ImageDraw
+
+    _export_gate(snapshot, debug)
+    width, height = png_dimensions(snapshot.page_profile, dpi)
+    scale = dpi / 25.4
     image = Image.new("RGB", (width, height), "white")
     page = snapshot.pages[page_index]
     if page.background:
@@ -187,7 +193,7 @@ def page_png(snapshot: LayoutSnapshot, page_index: int, *, dpi: float = 144, deb
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=op.color)
     if debug:
         draw.text((8, 8), "DEBUG PREVIEW - NOT A FINISHED EXPORT", fill="#dc2626")
-    elif page.images:
+    elif page.images and reference_notice:
         draw.text((8, 8), "RASTER REFERENCE PAGE - NOT PLOTTER READY", fill="#9a3412")
     return image
 

@@ -36,7 +36,7 @@ def test_force_keeps_real_paths_leaves_missing_blank_and_writes_issue_files(tmp_
     export_plan(plan,tmp_path/'forced',export_scope=scope)
     report=json.loads((tmp_path/'forced/issues.json').read_text(encoding='utf-8'))
     assert any(d['code']=='asset-missing' for d in report['diagnostics'])
-    assert '强制 SVG' in (tmp_path/'forced/issues.txt').read_text(encoding='utf-8')
+    assert '仅导出可用笔迹' in (tmp_path/'forced/issues.txt').read_text(encoding='utf-8')
     assert json.loads((tmp_path/'forced/plotter.json').read_text(encoding='utf-8'))['export_scope']['forced']
     svg=(tmp_path/'forced/page-001.svg').read_text()
     assert '<path' in svg and '#dc2626' not in svg and '<text' not in svg

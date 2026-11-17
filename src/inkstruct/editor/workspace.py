@@ -1,9 +1,6 @@
-"""Writing-first workspace: document panes, optional properties and glyph review."""
+"""Writing-first workspace: document panes, export and optional properties."""
 
 from PySide6 import QtCore, QtGui, QtWidgets
-
-from .wrapping import WrappingLayout
-
 
 def organize_workspace(w):
     old = w.takeCentralWidget()
@@ -84,8 +81,12 @@ def organize_workspace(w):
                 w.math_settings_button, w.code_settings_button, w.table_settings_button,
                 w.image_settings_button, w.footnote_settings_button]
     controls.extend(buttons[title] for title in ('标题字号…', '选择字形目录…', '刷新字形', '载入全部字'))
+    controls.extend((w.optimize, w.page_export, w.filter, w.glyph_list, w.summary, w.inspector,
+                     w.selection_label, w.note, w.show_marks, w.next_button, *w.rating_buttons,
+                     buttons["撤销标记"], buttons["重做标记"]))
     for control in controls:
         control.setParent(storage)
+    w.show_marks.setChecked(False)
     storage.hide()
     w.settings_storage = storage
     dock = QtWidgets.QDockWidget("问题与定位", w)
@@ -129,25 +130,9 @@ def organize_workspace(w):
     w.settings_shortcut = w.settings_button.settings_shortcut
     w.menuBar().setCornerWidget(w.settings_button, QtCore.Qt.Corner.TopRightCorner)
     action(file_menu, '载入当前字库全部字', w.load_all)
-    review_button = tool("字形评价")
-    w.machine_export.setText("导出 SVG…")
-    w.machine_export.setMinimumHeight(32)
-    toolbar.addWidget(w.machine_export)
-    export_button = tool("▾")
-    export_button.setAccessibleName("更多导出选项")
-    export_menu = QtWidgets.QMenu(export_button)
-    # Keep the original page export button in the panel so its readiness guard
-    # remains authoritative; mirror it when opening the export menu.
-    w.force_svg_action = action(export_menu, "强制导出 SVG…", w.force_machine_export.click)
-    export_menu.aboutToShow.connect(lambda: w.force_svg_action.setEnabled(w.force_machine_export.isEnabled()))
-    page_action = action(export_menu, "导出参考页面…", w.page_export.click)
-    export_menu.aboutToShow.connect(lambda: page_action.setEnabled(w.page_export.isEnabled()))
-    action(export_menu, "导出评价 CSV…", w.export_csv)
-    export_button.setMenu(export_menu)
-    export_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-    w.optimize.setParent(storage)
-    w.page_export.setParent(storage)
-    w.force_machine_export.setParent(storage)
+    w.export_button = tool("导出…", w.export_document)
+    w.export_button.setObjectName("document_export")
+    w.export_button.setEnabled(False)
 
     split = QtWidgets.QSplitter()
     split.setObjectName("document_splitter")
@@ -200,34 +185,6 @@ def organize_workspace(w):
     w.workspace_views = WorkspaceViews(w, split, left, right)
     toolbar.insertWidget(0, w.workspace_views.widget)
 
-    review = QtWidgets.QDockWidget("字形评价", w)
-    review.setObjectName("glyph_review_dock")
-    review.setAllowedAreas(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea)
-    panel = QtWidgets.QWidget()
-    review_layout = QtWidgets.QHBoxLayout(panel)
-    listing = QtWidgets.QVBoxLayout()
-    listing.addWidget(w.filter)
-    listing.addWidget(w.glyph_list, 1)
-    listing.addWidget(w.summary)
-    review_layout.addLayout(listing, 1)
-    review_layout.addWidget(w.inspector)
-    details = QtWidgets.QVBoxLayout()
-    details.addWidget(w.selection_label)
-    ratings = WrappingLayout()
-    for button in (*w.rating_buttons, buttons["撤销标记"], buttons["重做标记"]):
-        ratings.addWidget(button)
-    details.addLayout(ratings)
-    details.addWidget(w.note)
-    details.addWidget(w.show_marks)
-    details.addWidget(w.next_button)
-    review_layout.addLayout(details, 2)
-    review.setWidget(panel)
-    w.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, review)
-    w.review_dock = review
-    review_button.setCheckable(True)
-    review_button.toggled.connect(review.setVisible)
-    review.visibilityChanged.connect(review_button.setChecked)
-
     footer = QtWidgets.QHBoxLayout()
     footer.addWidget(w.status, 1)
     problems = QtWidgets.QToolButton()
@@ -239,7 +196,6 @@ def organize_workspace(w):
     layout.addLayout(footer)
     view_menu = w.menuBar().addMenu("视图")
     view_menu.addAction(dock.toggleViewAction())
-    view_menu.addAction(review.toggleViewAction())
     from .element_inspector import ElementInspector
     from .glyph_inspector import GlyphInspector
     properties = QtWidgets.QDockWidget('元素属性', w)
@@ -275,7 +231,6 @@ def organize_workspace(w):
     view_menu.addAction(properties.toggleViewAction())
     w.setCentralWidget(root)
     dock.hide()
-    review.hide()
     old.deleteLater()
     # Schedule after initial show so keyboard input works immediately on launch.
     QtCore.QTimer.singleShot(0, w.workspace_views.focus_current)

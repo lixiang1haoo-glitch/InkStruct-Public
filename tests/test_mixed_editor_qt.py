@@ -29,7 +29,11 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 from inkstruct.editor.mixed import MixedWindow
 from inkstruct.plotter.options import ExportOptions
-MixedWindow.configure_svg_export=lambda self,snapshot:(ExportOptions(tuple(range(len(snapshot.pages)))),self.optimize.isChecked())
+from inkstruct.editor.export_check import check_export
+def configure(self,snapshot):
+ check=check_export(snapshot,self.markdown_document,self.flow,ExportOptions(tuple(range(len(snapshot.pages)))),machine=True)
+ return ('machine',check,check.machine,self.optimize.isChecked()) if not check.errors else None
+MixedWindow.configure_document_export=configure
 import inkstruct.editor.mixed as mixed
 from inkstruct.document.package import load_package
 from inkstruct.plotter.adapters import plan_from_snapshot
@@ -165,21 +169,20 @@ def choose_export(*a, **k):
     return str(target), ""
 QtWidgets.QFileDialog.getSaveFileName = staticmethod(choose_export)
 w.optimize.setChecked(False)
-w.export_machine()
+w.export_document()
 end_export=time.monotonic()+20
 while w.export_job is not None and time.monotonic()<end_export:
     app.processEvents();QtTest.QTest.qWait(10)
 assert w.export_job is None and not w.last_export_result['error'], getattr(w,'last_export_result',{})
 
 assert (target / "page-001.svg").read_text() == page_svg(plan_from_snapshot(frozen).pages[0])
-assert not w.machine_export.isEnabled()
 ready()
 assert not w.snapshot.exportable
 index = next(i for i in range(w.diagnostic_picker.count())
              if "asset-missing" in w.diagnostic_picker.itemText(i))
 w.diagnostic_picker.setCurrentIndex(index); w.navigate_diagnostic()
 assert w.editor.textCursor().selectedText() == "缺"
-assert not w.machine_export.isEnabled() and not w.page_export.isEnabled()
+assert w.export_button.isEnabled() and configure(w,w.snapshot) is None
 
 # Mode changes reject stale success and failure; source undo remains usable.
 old_key, old_revision, old_snapshot = w.current_key, w.revision, w.snapshot
