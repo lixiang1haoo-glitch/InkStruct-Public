@@ -2,7 +2,7 @@
 
 团队成员先阅读 [GitHub 协作与环境准备](docs/COLLABORATION.md)；两组任务书和公共接口在 [团队任务目录](docs/team_tasks_20261022/组长准备与协作清单.md)。Android 在独立私有仓库 [InkStruct-Android](https://github.com/lixiang1haoo-glitch/InkStruct-Android) 开发。
 
-当前源码版本为 **0.1.98**。排版页统一导出写字机 SVG、整页排版图与整篇 PDF，并在保存前检查选定页。
+当前源码版本为 **0.1.99**。排版工具栏显示「导出…」文字，写字机 SVG 直接显示高级设置。样本库中的同字样本按可用宽度自动换行。
 
 0.1.97 起，历史生成结果的汉字来源按整字笔迹取景，生成字形和来源笔迹在预览时平滑绘制。点击生成笔段可高亮对应原笔迹。
 

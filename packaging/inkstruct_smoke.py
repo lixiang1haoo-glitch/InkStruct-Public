@@ -967,8 +967,11 @@ def verify_large_fonts(window, out, wait, paths):
 
 
 def verify_windows_style(window, app, out, font_path=None):
+    from types import SimpleNamespace
+
     from PIL import Image
     from inkstruct.document.images import RasterResource
+    from inkstruct.editor.document_export_dialog import DocumentExportDialog
     from inkstruct.global_defaults import GlobalDefaultsStore
     from inkstruct.settings_dialog import SettingsDialog
     from inkstruct.theme import theme_preference
@@ -979,6 +982,16 @@ def verify_windows_style(window, app, out, font_path=None):
     assert app.platformName() == "windows"
     assert "windows11" in {name.lower() for name in QtWidgets.QStyleFactory.keys()}
     assert app.property("inkstructDesktopStyle") == "windows11"
+    export = window.editor.export_button
+    assert export.text() == '导出…' and not export.icon().isNull()
+    assert export.toolButtonStyle() == QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+    export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
+    assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
+    export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
+    assert export_options.advanced_panel.isHidden()
+    export_options.purpose.setCurrentIndex(export_options.purpose.findData('machine'))
+    assert not export_options.advanced_panel.isHidden()
+    export_options.deleteLater()
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
     assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
                for tab in (window.collector.single_widget, window.collector.symbol_widget))
@@ -1014,6 +1027,9 @@ def verify_windows_style(window, app, out, font_path=None):
     library.table.setCurrentItem(library.table.topLevelItem(0))
     assert library.preview.value['sample_id'] == 'synthetic-1'
     assert library.variants.count() == 2 and not library.selected_samples()
+    assert library.variants.isWrapping()
+    assert library.variants.resizeMode() == QtWidgets.QListView.Adjust
+    assert library.variants.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
     library.compare_button.click()
     assert library.compare_preview.value['sample_id'] == 'synthetic-2'
     first, second = library.preview, library.compare_preview
@@ -1147,6 +1163,8 @@ def verify_windows_style(window, app, out, font_path=None):
             "handwritten_glyphs": sum(bool(glyph.glyph) for glyph in boxes[1].glyphs),
             "jpeg_reference_imported": True, "sample_library_handoff": True,
             "sample_library_capture_viewport": True,
+            "sample_library_variant_wrap": True,
+            "layout_export_controls": True,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
