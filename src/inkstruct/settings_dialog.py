@@ -11,6 +11,7 @@ from .document.styles import FlowStyle
 from .global_defaults import GlobalDefaultsStore, LayoutDefaults, apply_to_document
 from .settings_elements import ElementPage
 from .settings_pages import (
+    AboutPage,
     AppearancePage,
     CapturePage,
     CompactSpinBox,
@@ -26,6 +27,7 @@ from .theme import set_tone
 CATEGORIES = (
     ("appearance", "应用设置", "主题", "外观 深色 浅色 跟随系统 明暗 颜色"),
     ("preview", "应用设置", "预览绘制", "CPU GPU 栅格化 缓存 显卡 加速"),
+    ("about", "应用设置", "关于", "InkStruct 墨构 应用版本 GitHub 文档站 官方 QQ 群 1035966437"),
     ("capture", "采集设置", "书写显示", "书写格 参考格 比例 田字格 配置"),
     (
         "body",
@@ -325,6 +327,8 @@ class SettingsDialog(QtWidgets.QDialog):
                 button.setProperty("inkRole", "primary")
             if text == "存为默认":
                 self.save_button = button
+            elif text == "取消":
+                self.close_button = button
             actions.addWidget(button)
             if text == "应用并保存":
                 self.apply_document = button
@@ -379,7 +383,12 @@ class SettingsDialog(QtWidgets.QDialog):
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
         self.heading.setText(f"{group} › {title}")
         app_setting = key in {"appearance", "preview"}
-        self.apply_document.setVisible(self.has_current_document and not app_setting)
+        about = key == "about"
+        self.reset.setVisible(not about)
+        self.scope_info.setVisible(not about)
+        self.save_button.setVisible(not about)
+        self.close_button.setText("关闭" if about else "取消")
+        self.apply_document.setVisible(self.has_current_document and not (app_setting or about))
         self.save_button.setText("保存" if app_setting else "存为默认")
         role = "primary" if self.apply_document.isHidden() else None
         if self.save_button.property("inkRole") != role:
@@ -400,12 +409,14 @@ class SettingsDialog(QtWidgets.QDialog):
             if key in {"table", "image"} and self.pages[key].current_key
             else "恢复本分类初始值"
         )
-        if key != "capture":
+        if key not in {"capture", "about"}:
             self.preferences.setValue("last_layout_category", key)
 
     def make_page(self, key):
         if key == "appearance":
             page = AppearancePage(self.preferences)
+        elif key == "about":
+            page = AboutPage()
         elif key == "preview":
             from .editor.preview_settings import PreviewSettingsPage
             page = PreviewSettingsPage()
@@ -471,10 +482,14 @@ class SettingsDialog(QtWidgets.QDialog):
                 group.setHidden(all(group.child(j).isHidden() for j in range(group.childCount())))
         if query and found:
             self.select(found[0])
-            if found[0] != "preview":
+            self.scope_info.setVisible(found[0] != "about")
+            if found[0] not in {"about", "preview"}:
                 self.scope_info.setText(f"搜索结果：{self.heading.text()}。修改仅在点击应用后生效。")
         elif query:
+            self.scope_info.show()
             self.scope_info.setText("没有匹配的设置，可尝试“行高”“图片”“公式”等关键词。")
+        elif self.current == "about":
+            self.scope_info.hide()
         page = self.pages[self.current]
         for widget in page.findChildren(QtWidgets.QWidget):
             text = (

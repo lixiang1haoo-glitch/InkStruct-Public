@@ -1044,6 +1044,76 @@ def verify_recommended_recording(window, app, out):
     return {'stage_counts': counts, 'legacy_remaining': existing, 'other_writer_remaining': fresh}
 
 
+def verify_about_page(dialog, app):
+    dialog.select("about")
+    app.processEvents()
+    page = dialog.pages["about"]
+    assert page.product.text() == "InkStruct 墨构" and page.version.text() == APP_VERSION
+    assert page.qq_number.isVisible() and page.qq_number.isReadOnly()
+    assert page.qq_number.text() == "1035966437"
+    assert dialog.reset.isHidden() and dialog.save_button.isHidden() and dialog.apply_document.isHidden()
+
+    opened = []
+    open_url = QtGui.QDesktopServices.openUrl
+    clipboard = app.clipboard()
+    previous = clipboard.text()
+    try:
+        QtGui.QDesktopServices.openUrl = lambda url: opened.append(url.toString()) or True
+        page.github.click()
+        page.docs.click()
+        assert opened == ["https://github.com/lixiang1haoo-glitch/InkStruct-Public",
+                          "https://lixiang1haoo-glitch.github.io/InkStruct-Public/"]
+        page.qq_number.setFocus()
+        page.qq_number.selectAll()
+        QtTest.QTest.keyClick(page.qq_number, QtCore.Qt.Key.Key_C, QtCore.Qt.KeyboardModifier.ControlModifier)
+        assert page.qq_number.selectedText() == page.qq_number.text() == clipboard.text()
+        page.copy_qq.click()
+        assert clipboard.text() == page.qq_number.text()
+    finally:
+        QtGui.QDesktopServices.openUrl = open_url
+        clipboard.setText(previous)
+    palette = page.qq_number.palette()
+    return {"version": page.version.text(), "links": opened, "qq_group": page.qq_number.text(),
+            "background": palette.base().color().name(), "ink": palette.text().color().name()}
+
+
+def verify_experience_resources(window, directory, wait):
+    font = directory / "InkStruct 示例手写体.inkfont"
+    template = directory / "双页预印教案.json"
+    if not font.is_file() or not template.is_file():
+        raise ValueError("体验资源目录缺少示例字体或教案模板")
+    editor, library = window.editor, window.library
+    templates = window.template_library
+    assert not any(library.root.glob("*.inkfont")) and not templates.store.entries()
+    document_before = (editor.run_path, editor.flow.template)
+    original = QtWidgets.QFileDialog.getOpenFileName
+    try:
+        QtWidgets.QFileDialog.getOpenFileName = lambda *args: (str(font), "")
+        library.import_button.click()
+        assert library.job is not None
+        wait(lambda: library.job is None, timeout=600)
+        imported = library.last_result
+        assert imported and imported["verification"]["characters"] > 0
+        with Path(imported["path"]).open("rb") as stream:
+            font_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+        with font.open("rb") as stream:
+            assert font_hash == hashlib.file_digest(stream, "sha256").hexdigest()
+
+        QtWidgets.QFileDialog.getOpenFileName = lambda *args: (str(template), "")
+        button = next(b for b in templates.findChildren(QtWidgets.QPushButton) if b.text() == "导入模板…")
+        button.click()
+        wait(lambda: (templates.selected() or {}).get("managed") and templates.template is not None)
+        selected = templates.template
+        assert (selected.width_mm, selected.height_mm, selected.mode) == (183, 259, "preprinted")
+        assert len(selected.layouts) == 2 and len(selected.fields) == 13
+        assert (editor.run_path, editor.flow.template) == document_before
+    finally:
+        QtWidgets.QFileDialog.getOpenFileName = original
+    return {"font_sha256": font_hash, "font_characters": imported["verification"]["characters"],
+            "template_pages": len(selected.layouts), "template_fields": len(selected.fields),
+            "template_mm": [selected.width_mm, selected.height_mm]}
+
+
 def verify_windows_style(window, app, out, font_path=None):
     from types import SimpleNamespace
 
@@ -1237,7 +1307,11 @@ def verify_windows_style(window, app, out, font_path=None):
             QtTest.QTest.mouseClick(spin, QtCore.Qt.MouseButton.LeftButton, pos=step.center())
             assert not step.isEmpty() and spin.value() == before + spin.singleStep()
             spin.setValue(before)
+            about = verify_about_page(dialog, app)
+            assert (QtGui.QColor(about["background"]).lightness() < 128) == dark
+            assert (QtGui.QColor(about["ink"]).lightness() > 128) == dark
             reports[scheme.name] = {"surface": surface.name(), "stepper": [step.width(), step.height()],
+                                    "about": about,
                                     "formula": canvas_colors,
                                     "generation_speed": {"background": speed_base.name(), "ink": speed_ink.name()}}
             dialog.select("appearance")
@@ -1452,13 +1526,18 @@ def main():
     parser.add_argument('--v631-check', action='store_true')
     parser.add_argument('--large-font-check', action='store_true')
     parser.add_argument('--large-font', action='append', type=Path, default=[])
+    parser.add_argument('--experience-resources', type=Path)
     parser.add_argument("--writer", default="demo_writer")
     parser.add_argument("--export-only", action="store_true")
     args = parser.parse_args()
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
-    if args.v631_check:
+    if args.experience_resources is not None:
+        if any((args.font, args.samples, args.generation_profile, args.candidate_check, args.math_settings_check,
+                args.windows_style_check, args.v631_check, args.large_font_check, args.large_font, args.export_only)):
+            parser.error('--experience-resources is a separate manual import check')
+    elif args.v631_check:
         if any((args.font, args.samples, args.generation_profile, args.candidate_check, args.math_settings_check,
                 args.windows_style_check, args.large_font_check, args.large_font, args.export_only)):
             parser.error('--v631-check is a separate synthetic generation check')
@@ -1484,7 +1563,8 @@ def main():
         parser.error('--font and --samples are required unless --generation-profile is supplied')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    if args.large_font_check or args.math_settings_check or args.windows_style_check or args.v631_check:
+    if (args.large_font_check or args.math_settings_check or args.windows_style_check or args.v631_check
+            or args.experience_resources):
         # Recovery files must be private too, not only Qt preferences/workspace.
         os.environ['INKSTRUCT_LAYOUT_PREVIEW_HOME'] = str(out / 'private')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["InkStructCheck"])
@@ -1540,6 +1620,21 @@ def main():
         return
     if args.windows_style_check:
         verify_windows_style(w, app, out, args.font)
+        return
+    if args.experience_resources:
+        try:
+            result = verify_experience_resources(w, args.experience_resources.resolve(), wait)
+            assert not notices, notices
+            record = {"app_version": APP_VERSION, "frozen": bool(getattr(sys, "frozen", False)), **result}
+            (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+        finally:
+            w.editor.timer.stop()
+            if w.editor.cancelled:
+                w.editor.cancelled.set()
+            w.editor.pool.waitForDone()
+            QtCore.QThreadPool.globalInstance().waitForDone()
+            w.editor.dirty = False
+            w.close()
         return
     assert app.styleHints().colorScheme() != QtCore.Qt.ColorScheme.Dark
     assert app.palette().color(QtGui.QPalette.Window).lightness() > 230
