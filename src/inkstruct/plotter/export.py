@@ -169,7 +169,7 @@ def export_plan(
         if export_scope and export_scope.get("forced"):
             (staging / "issues.json").write_text(
                 json.dumps(export_scope, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-            lines = ["强制 SVG 导出问题清单", export_scope["notice"],
+            lines = ["仅导出可用笔迹 · 问题清单", export_scope["notice"],
                      "导出页码：" + ", ".join(map(str, export_scope.get("page_numbers", ())))]
             for d in export_scope.get("diagnostics", ()):
                 span = d.get("span", {})

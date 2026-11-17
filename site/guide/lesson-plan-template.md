@@ -159,7 +159,7 @@ import { withBase } from 'vitepress'
 | --- | --- |
 | [![首页成稿，课题和日期在固定栏位，椭圆线图和图题位于正文框底部](/screenshots/lesson-plan/lesson-page-1.png)](/screenshots/lesson-plan/lesson-page-1.png) | [![续页成稿，焦半径例题在正文区，作业和小结位于底部](/screenshots/lesson-plan/lesson-page-2.png)](/screenshots/lesson-plan/lesson-page-2.png) |
 
-预览合适后，点 **文件 › 保存项目**。用写字机时，在 **导出 SVG…** 中先只选第 **1** 页，在实物纸张上核对课题和正文的落点。若与印刷栏线有偏差，先复测纸宽、纸高及纸边到栏线的距离，再调整纸张参数、框位置或校准值。
+预览合适后，点 **文件 › 保存项目**。用写字机时，在 **导出… › 写字机 SVG** 中先只选第 **1** 页，在实物纸张上核对课题和正文的落点。若与印刷栏线有偏差，先复测纸宽、纸高及纸边到栏线的距离，再调整纸张参数、框位置或校准值。
 
 ## 6. 在椭圆图上加手写标注
 

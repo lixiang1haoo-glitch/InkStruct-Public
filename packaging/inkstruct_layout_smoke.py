@@ -139,20 +139,21 @@ def verify_new_features(editor, out, ready, template):
     editor.flow=FlowStyle();editor.page=PageProfile()
     editor.resolver=AssetResolver(builtin_numbers=True)
     editor.editor.setPlainText("1缺2");editor.schedule_layout();ready(allow_errors=True)
-    assert not editor.snapshot.exportable and not editor.machine_export.isEnabled()
-    assert editor.force_machine_export.isEnabled()
-    editor.force_svg_action.parent().aboutToShow.emit()
-    assert editor.force_svg_action.isEnabled()
+    assert not editor.snapshot.exportable and editor.export_button.isEnabled()
+    from inkstruct.editor.export_check import check_export
+    options = ExportOptions(tuple(range(len(editor.snapshot.pages))))
+    check = check_export(editor.snapshot, editor.markdown_document, editor.flow, options, machine=True)
+    assert check.errors and check.machine is None and check.partial is not None
     before=editor.source_session.identity_record();choices=editor.resolver.selection_records()
     picker=QtWidgets.QFileDialog.getSaveFileName
-    configure=editor.configure_svg_export
+    configure=editor.configure_document_export
     message=editor.message_error
     errors=[]
     QtWidgets.QFileDialog.getSaveFileName=lambda *a,**k:(str(out/"forced-svg"),"")
-    editor.configure_svg_export=lambda snapshot,force=False:(ExportOptions(tuple(range(len(snapshot.pages))),force=force),False)
+    editor.configure_document_export=lambda snapshot:('machine',check,check.partial,False)
     editor.message_error=lambda text:errors.append(str(text))
     try:
-        editor.force_svg_action.trigger()
+        editor.export_button.click()
         deadline=time.monotonic()+45
         while editor.export_job is not None and time.monotonic()<deadline:
             QtWidgets.QApplication.processEvents();QtTest.QTest.qWait(10)
@@ -160,13 +161,13 @@ def verify_new_features(editor, out, ready, template):
         assert editor.last_export_result["error"] is None,editor.last_export_result
     finally:
         QtWidgets.QFileDialog.getSaveFileName=picker
-        editor.configure_svg_export=configure
+        editor.configure_document_export=configure
         editor.message_error=message
     report=json.loads((out/"forced-svg/issues.json").read_text(encoding="utf-8"))
     assert report["forced"] and any(d["code"]=="asset-missing" for d in report["diagnostics"])
     assert (out/"forced-svg/issues.txt").is_file()
     assert before==editor.source_session.identity_record() and choices==editor.resolver.selection_records()
-    assert not editor.snapshot.exportable and not editor.machine_export.isEnabled()
+    assert not editor.snapshot.exportable and editor.export_button.isEnabled()
     return {"justification":True,"han_variation_seeded":True,"han_seed_changes_shape":True,
             "han_roundtrip_exact":True,"font_package_unchanged":True,"han_font_sha256":font_hash,
             "body_settings_preserve_template_and_page":True,"right_sidebar_preserves_template":True,

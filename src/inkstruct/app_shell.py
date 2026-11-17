@@ -212,8 +212,8 @@ def style_module_pages(window):
     workflow.log.setObjectName('generation_log')
     editor = window.editor
     editor.setObjectName('layout_workspace')
-    editor.machine_export.setProperty('inkRole', 'primary')
-    PaletteIcon(editor.machine_export, 'export')
+    editor.export_button.setProperty('inkRole', 'primary')
+    PaletteIcon(editor.export_button, 'export')
     paste = editor.findChild(QtWidgets.QToolButton, 'paste_source')
     PaletteIcon(paste, 'paste')
     paste.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)

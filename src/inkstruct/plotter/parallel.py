@@ -35,12 +35,15 @@ class ExportControl:
             self.cancelled.set()
             return True
 
-    def publish(self, staging, output):
+    def publish(self, staging, output, *, replace_file=False):
         with self.lock:
             self.check()
-            if output.exists():
+            if replace_file:
+                staging.replace(output)
+            elif output.exists():
                 raise FileExistsError(f"Output appeared during export: {output}")
-            staging.rename(output)
+            else:
+                staging.rename(output)
             self.published = True
 
 
