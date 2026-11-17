@@ -60,6 +60,7 @@ def source_snapshot():
         ROOT / "packaging/verify_windows_installer.py",
         *sorted((ROOT / "configs").rglob("*.json")),
         *sorted((ROOT / "configs/character_sets").glob("*.txt")),
+        *sorted((ROOT / "configs/collection/research_v1").rglob("*.csv")),
         ROOT / "packaging/inkstruct_app.spec",
         ROOT / "packaging/inkstruct_launcher.py",
         ROOT / "packaging/inkstruct_layout_launcher.py",
