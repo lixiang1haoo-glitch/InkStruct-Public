@@ -39,7 +39,7 @@ def describe(diagnostic, source):
         if marker in diagnostic.message:
             subject = diagnostic.message.split(marker,1)[1].strip("'\"")
         return (f"缺少字形「{subject}」" if subject else "缺少字形", "字体与字形",
-                "选择包含这些字符的字体，或补充符号样本后重新排版。缺字处仍可定位；强制导出会留空。", subject)
+                "选择包含这些字符的字体，或补充符号样本后重新排版。仅导出可用笔迹时，缺字处会留空。", subject)
     if code == "template-body-no-progress":
         return ("正文流在此停止", "模板与布局",
                 "此对象放不进正文框，后续内容尚未排版。请减小对象尺寸、增大正文框，或调整模板后重新排版。", "")
