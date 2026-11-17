@@ -137,7 +137,7 @@ class SampleCheckDelegate(QtWidgets.QStyledItemDelegate):
         painter.restore()
 
 
-class VariantStrip(IndependentChecks, QtWidgets.QListWidget):
+class VariantGrid(IndependentChecks, QtWidgets.QListWidget):
     def is_check_hit(self, index, pos):
         return index.isValid() and self.itemDelegate().check_rect(self, index).contains(pos)
 
@@ -374,18 +374,19 @@ class SampleLibraryPage(QtWidgets.QWidget):
 
         self.variants_label = plain_label('同字样本', role='sectionTitle')
         column.addWidget(self.variants_label)
-        self.variants = VariantStrip()
+        self.variants = VariantGrid()
         self.variants.setAccessibleName('同字样本。空格键勾选当前样本')
         self.variants.setFlow(QtWidgets.QListView.LeftToRight)
-        self.variants.setWrapping(False)
+        self.variants.setWrapping(True)
+        self.variants.setResizeMode(QtWidgets.QListView.Adjust)
         self.variants.setSpacing(4)
         self.variants.setUniformItemSizes(True)
         self.variants.setIconSize(QtCore.QSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE))
-        self.variants.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
-        self.variants.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.variants.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.variants.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.variants.setItemDelegate(SampleCheckDelegate(self.variants))
-        self.variants.setFixedHeight(THUMBNAIL_SIZE + 34)
-        column.addWidget(self.variants)
+        self.variants.setMinimumHeight(THUMBNAIL_SIZE + 16)
+        column.addWidget(self.variants, 1)
         self.single_check = QtWidgets.QCheckBox('勾选此样本')
         column.addWidget(self.single_check, 0, Qt.AlignLeft)
         content.addWidget(self.inspector)
@@ -699,6 +700,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         has_variants = len(group) > 1
         self.variants_label.setVisible(has_variants)
         self.variants.setVisible(has_variants)
+        self.inspector.widget().layout().setStretchFactor(self.detail_panel, int(has_variants))
         self.single_check.setVisible(len(group) == 1)
         self.compare_button.setVisible(has_variants)
         if not has_variants:

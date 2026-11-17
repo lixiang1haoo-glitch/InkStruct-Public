@@ -333,6 +333,9 @@ for group in (QtGui.QPalette.Active,QtGui.QPalette.Inactive,QtGui.QPalette.Disab
         palette.setColor(group,role,QtGui.QColor('#eeeeee'))
 app.setPalette(palette)
 w=InkStructWindow(workspace=Path(sys.argv[1])/'workspace');w.show();app.processEvents()
+export = w.editor.export_button
+assert export.text() == '导出…' and not export.icon().isNull()
+assert export.toolButtonStyle() == QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
 assert app.property('inkstructDesktopStyle') == 'fusion'
 assert app.styleHints().colorScheme()!=QtCore.Qt.ColorScheme.Dark
 for group in (QtGui.QPalette.Active,QtGui.QPalette.Inactive,QtGui.QPalette.Disabled):

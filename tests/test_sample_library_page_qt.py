@@ -220,6 +220,42 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
         page.pick_import(False)
         wait(lambda: page.job is None and len(confirmations) == 2)
         assert '新增 0 · 重复 1 · 冲突 0' in confirmations[1]
+
+        for number in range(36):
+            write(catalog, 'symbol', 'a', {**specimen('R', f'grid-{number:02d}'), 'writer_id': 'a'})
+        window.resize(1280, 750)
+        page.writer.setText('a')
+        wait(lambda: page.job is None)
+        page.character.setText('R')
+        variants = page.variants
+        assert variants.count() == 36
+
+        def columns():
+            app.processEvents()
+            first_y = variants.visualItemRect(variants.item(0)).y()
+            return sum(variants.visualItemRect(variants.item(i)).y() == first_y
+                       for i in range(variants.count()))
+
+        wide = columns()
+        assert 1 < wide < variants.count()
+        assert not variants.horizontalScrollBar().isVisible()
+        window.resize(850, 570)
+        wait(lambda: columns() < wide)
+        assert variants.verticalScrollBar().maximum() > 0
+        assert not variants.horizontalScrollBar().isVisible()
+
+        last = variants.item(variants.count() - 1)
+        variants.scrollToItem(last)
+        index = variants.indexFromItem(last)
+        check = variants.itemDelegate().check_rect(variants, index)
+        assert variants.viewport().rect().contains(check.center())
+        active = page.preview.value['sample_id']
+        QtTest.QTest.mouseClick(variants.viewport(), QtCore.Qt.LeftButton, pos=check.center())
+        assert last.checkState() == QtCore.Qt.Checked and page.preview.value['sample_id'] == active
+        rect = variants.visualItemRect(last)
+        QtTest.QTest.mouseClick(variants.viewport(), QtCore.Qt.LeftButton,
+                                pos=QtCore.QPoint(rect.right() - 8, rect.center().y()))
+        assert page.preview.value['sample_id'] == last.data(QtCore.Qt.UserRole).sample_id
         window.editor.dirty = False
         assert window.close()
     '''
