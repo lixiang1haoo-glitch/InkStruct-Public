@@ -24,6 +24,8 @@ assert dialog.items['about'].parent().text(0) == '应用设置'
 for theme in ('light', 'dark'):
     use_platform_theme(app, mode=theme)
     result = verify_about_page(dialog, app)
+    field = dialog.pages['about'].qq_number
+    assert field.fontMetrics().horizontalAdvance(field.text()) + 8 < field.contentsRect().width()
     for key, dark in (('background', theme == 'dark'), ('ink', theme != 'dark')):
         assert (QtGui.QColor(result[key]).lightness() < 128) == dark, result
     assert 'InkStruct墨构交流群' in [label.text() for label in dialog.pages['about'].findChildren(QtWidgets.QLabel)]
@@ -43,7 +45,7 @@ editor.close()
 '''
     result = subprocess.run(
         [sys.executable, "-B", "-X", "utf8", "-c", program, str(tmp_path)],
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_SCALE_FACTOR": "1.5"}, capture_output=True,
         text=True, encoding="utf-8", timeout=45, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
