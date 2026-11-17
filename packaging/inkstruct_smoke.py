@@ -966,6 +966,58 @@ def verify_large_fonts(window, out, wait, paths):
         'mode': 'offscreen frozen/source check; native focus, responsiveness and tablet not certified'}
 
 
+def verify_recommended_recording(window, app, out):
+    from inkstruct.capture_management import CaptureCatalog
+    from inkstruct.capture_workflow_ui import RecommendedTaskDialog
+    from inkstruct.recommended_capture import recording_stages
+
+    han = window.collector.single_widget
+    stages = recording_stages()
+    counts = [len(stage.entries) for stage in stages.values()]
+    assert counts == [32, 68, 300]
+    for key, stage in stages.items():
+        button = han.findChild(QtWidgets.QPushButton, 'capture_recommended_' + key)
+        assert button.text() == stage.title
+
+    catalog = CaptureCatalog(out / 'recommended')
+    stage = stages['starter32']
+    char = stage.entries[0][0]
+    folder = catalog.root / 'samples' / 'legacy' / f'U+{ord(char):04X}'
+    folder.mkdir(parents=True)
+    strokes, tick = [], 0
+    for stroke in han.structures.get(char).strokes:
+        points = [{'x': 30 + 150*x, 'y': 30 + 150*y, 't_ms': tick + i}
+                  for i, (x, y) in enumerate(stroke.median)]
+        strokes.append({'points': points})
+        tick += len(points)
+    (folder / 'specimen.json').write_text(
+        json.dumps({'schema_version': 'handwriting_single_v1', 'sample_id': 'synthetic',
+                    'writer_id': 'legacy', 'character': char, 'task': {'source': 'old-list.csv'},
+                    'capture': {'canvas_width': 220, 'canvas_height': 220}, 'strokes': strokes}),
+        encoding='utf-8',
+    )
+    other = catalog.create_writer('Synthetic new writer')
+    dialog = RecommendedTaskDialog(catalog, 'legacy', stage, han.structures, han)
+
+    def entry_count():
+        deadline = time.monotonic() + 10
+        while dialog.job is not None and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(.005)
+        assert dialog.job is None and dialog.start.isEnabled(), dialog.summary.text()
+        return len(dialog.entries)
+
+    try:
+        existing = entry_count()
+        assert existing == 31 and dialog.entries == stage.entries[1:]
+        dialog.writer.setText(other)
+        fresh = entry_count()
+        assert fresh == 32 and dialog.entries == stage.entries
+    finally:
+        dialog.dispose()
+    return {'stage_counts': counts, 'legacy_remaining': existing, 'other_writer_remaining': fresh}
+
+
 def verify_windows_style(window, app, out, font_path=None):
     from types import SimpleNamespace
 
@@ -995,6 +1047,7 @@ def verify_windows_style(window, app, out, font_path=None):
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
     assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
                for tab in (window.collector.single_widget, window.collector.symbol_widget))
+    recommended_recording = verify_recommended_recording(window, app, out)
     source = window.collector.single_widget._capture_catalog
     target = CaptureCatalog(out / 'sample-target')
     writer = source.create_writer('Synthetic sample writer')
@@ -1165,6 +1218,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_capture_viewport": True,
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
+            "recommended_recording": recommended_recording,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
