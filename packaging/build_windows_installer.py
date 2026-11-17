@@ -63,7 +63,7 @@ def main():
             subprocess.run([str(nsis / "makensis.exe"), "/V3", "/INPUTCHARSET", "UTF8",
                             *(f"/D{key}={value}" for key, value in defines.items()),
                             str(ROOT / "packaging/InkStruct.nsi")],
-                           cwd=nsis, stdout=log, stderr=subprocess.STDOUT, timeout=180, check=True)
+                           cwd=nsis, stdout=log, stderr=subprocess.STDOUT, timeout=600, check=True)
     report = {"file": installer.name, "sha256": digest(installer),
               "input_zip_sha256": record["archive_sha256"], "nsis": compiler}
     (output / "installer-build.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
