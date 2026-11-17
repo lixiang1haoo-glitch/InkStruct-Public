@@ -8,15 +8,18 @@ import tempfile
 
 from PySide6.QtCore import QStandardPaths
 
+from .models import INPUT_MODES
+
 
 @dataclass(frozen=True)
 class UiSettings:
-    """Persistent rendering preferences, independent from task data."""
+    """Persistent capture preferences, independent from task data."""
 
     stroke_width_scale: float = 2.0
     grid_scale: float = 0.72
     schema_version: str = "ui_settings_v1"
     symbol_stroke_width_scale: float | None = None
+    input_mode: str = "tablet"
 
     @property
     def symbol_stroke_scale(self) -> float:
@@ -31,6 +34,8 @@ class UiSettings:
             raise ValueError("符号笔迹粗细比例必须位于 0.75–4.0")
         if not 0.45 <= float(self.grid_scale) <= 0.95:
             raise ValueError("田字格尺寸比例必须位于 0.45–0.95")
+        if self.input_mode not in INPUT_MODES:
+            raise ValueError("不支持的录制输入")
         return self
 
 
@@ -53,6 +58,7 @@ class UiSettingsStore:
                 stroke_width_scale=float(payload["stroke_width_scale"]),
                 grid_scale=float(payload["grid_scale"]),
                 schema_version=str(payload["schema_version"]),
+                input_mode=payload.get("input_mode", "tablet"),
                 symbol_stroke_width_scale=(
                     float(payload["symbol_stroke_width_scale"])
                     if payload.get("symbol_stroke_width_scale") is not None else None

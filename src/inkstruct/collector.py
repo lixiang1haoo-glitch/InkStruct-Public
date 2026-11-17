@@ -278,6 +278,20 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 self.output_root.mkdir(parents=True, exist_ok=True)
             install_capture_management(self, self.output_root)
             for widget, title in ((self.single_widget, "汉字"), (self.symbol_widget, "标点与扩展")):
+                input_row = QtWidgets.QHBoxLayout()
+                input_mode = widget.input_mode_picker = QtWidgets.QComboBox()
+                input_mode.setObjectName("captureInputMode")
+                input_mode.setAccessibleName("录制输入")
+                input_mode.setToolTip("触屏和鼠标 / 串流录制笔迹与时间，不采集压感。")
+                for label, mode in (("数位笔", "tablet"), ("触屏", "finger"), ("鼠标 / 串流", "mouse")):
+                    input_mode.addItem(label, mode)
+                input_label = QtWidgets.QLabel("录制输入")
+                input_label.setBuddy(input_mode)
+                input_row.addWidget(input_label)
+                input_row.addWidget(input_mode)
+                input_row.addStretch()
+                widget.display_controls.insertLayout(0, input_row)
+                input_mode.activated.connect(lambda _index, tab=widget: self.change_input_mode(tab))
                 row, slider, widget.stroke_width_label = canvas_slider_row(
                     "笔迹粗细", f"{title}屏幕笔迹粗细", "仅调整屏幕显示，不改变已录笔迹"
                 )
@@ -332,10 +346,38 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 self.symbol_widget.canvas.set_render_settings(settings.symbol_stroke_scale, settings.grid_scale)
                 for tab, scale in ((self.single_widget, settings.stroke_width_scale),
                                    (self.symbol_widget, settings.symbol_stroke_scale)):
+                    if hasattr(tab, "input_mode_picker"):
+                        tab.canvas.set_input_mode(settings.input_mode)
+                        picker = tab.input_mode_picker
+                        with QtCore.QSignalBlocker(picker):
+                            picker.setCurrentIndex(picker.findData(settings.input_mode))
                     if hasattr(tab, "stroke_width_slider"):
                         with QtCore.QSignalBlocker(tab.stroke_width_slider):
                             tab.stroke_width_slider.setValue(round(scale * 100))
                         tab.stroke_width_label.setText(f"{round(scale * 100)}%")
+
+        def change_input_mode(self, widget):
+            mode = widget.input_mode_picker.currentData()
+            current = self.ui_settings
+            if mode == current.input_mode:
+                return
+            other = self.symbol_widget if widget is self.single_widget else self.single_widget
+            tabs = (widget, other)
+            if not all(tab._can_switch() for tab in tabs):
+                self.apply_ui_settings(current)
+                return
+            selected = replace(current, input_mode=mode)
+            try:
+                self.ui_settings_store.save(selected)
+            except (ValueError, OSError) as error:
+                self.apply_ui_settings(current)
+                QtWidgets.QMessageBox.warning(self, "无法保存录制输入", str(error))
+                return
+            for tab in tabs:
+                if tab.canvas.trajectory.point_count:
+                    tab.canvas.clear()
+            self.ui_settings = selected
+            self.apply_ui_settings(selected)
 
         def change_stroke_width(self, widget, value):
             current = self.ui_settings

@@ -1088,6 +1088,50 @@ def verify_experience_resources(window, directory, wait):
             "template_mm": [selected.width_mm, selected.height_mm]}
 
 
+def verify_capture_input(window, app):
+    collector = window.collector
+    han, symbol = collector.single_widget, collector.symbol_widget
+    tabs = (han, symbol)
+    previous_page = window.tabs.currentIndex()
+    window.tabs.setCurrentIndex(0)
+    collector.tabs.setCurrentWidget(han)
+    app.processEvents()
+    assert han.canvas.isVisible()
+    mouse, no_mod = QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier
+    start, stop = QtCore.QPoint(60, 60), QtCore.QPoint(120, 90)
+
+    def choose(tab, mode):
+        picker = tab.input_mode_picker
+        picker.setCurrentIndex(picker.findData(mode))
+        picker.activated.emit(picker.currentIndex())
+
+    assert all(tab.input_mode_picker.currentData() == "tablet" for tab in tabs)
+    choose(han, "mouse")
+    assert all(tab.input_mode_picker.currentData() == "mouse" for tab in tabs)
+    persisted, error = collector.ui_settings_store.load()
+    assert not error and persisted.input_mode == "mouse"
+    QtTest.QTest.mousePress(han.canvas, mouse, no_mod, start)
+    QtTest.QTest.mouseRelease(han.canvas, mouse, no_mod, stop)
+    assert han.canvas.trajectory.input_type == "mouse" and not han.canvas.trajectory.pressure_available
+    assert han.canvas.trajectory.point_count == 2
+    han.canvas.clear()
+
+    choose(symbol, "finger")
+    assert all(tab.input_mode_picker.currentData() == "finger" for tab in tabs)
+    touch = QtTest.QTest.createTouchDevice(QtGui.QInputDevice.DeviceType.TouchScreen)
+    press = QtTest.QTest.touchEvent(han.canvas, touch)
+    press.press(0, start, han.canvas).commit()
+    release = QtTest.QTest.touchEvent(han.canvas, touch)
+    release.release(0, stop, han.canvas).commit()
+    assert han.canvas.trajectory.input_type == "finger" and not han.canvas.trajectory.pressure_available
+    assert han.canvas.trajectory.point_count == 2
+    han.canvas.clear()
+    choose(han, "tablet")
+    window.tabs.setCurrentIndex(previous_page)
+    app.processEvents()
+    return {"mouse": "Qt event injection", "touch": "Qt event injection", "shared_mode_saved": True}
+
+
 def verify_windows_style(window, app, out, font_path=None):
     from types import SimpleNamespace
 
@@ -1117,6 +1161,7 @@ def verify_windows_style(window, app, out, font_path=None):
     assert window.collector.tabs.count() == 2 and not hasattr(window.collector, "line_widget")
     assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
                for tab in (window.collector.single_widget, window.collector.symbol_widget))
+    capture_input = verify_capture_input(window, app)
     recommended_recording = verify_recommended_recording(window, app, out)
     source = window.collector.single_widget._capture_catalog
     target = CaptureCatalog(out / 'sample-target')
@@ -1293,6 +1338,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
             "recommended_recording": recommended_recording,
+            "capture_input_modes": capture_input,
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
