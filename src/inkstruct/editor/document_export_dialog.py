@@ -1,5 +1,5 @@
 """Choose how to use the frozen document, then review the selected pages."""
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtWidgets
 
 from ..plotter.options import ExportOptions, parse_pages
 from ..ui_behavior import protect_parameter_wheels
@@ -41,11 +41,7 @@ class DocumentExportDialog(QtWidgets.QDialog):
         self.form = form
         column.addLayout(form)
 
-        self.advanced = QtWidgets.QToolButton()
-        self.advanced.setText('高级设置')
-        self.advanced.setCheckable(True)
-        column.addWidget(self.advanced, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
-        self.advanced_panel = QtWidgets.QGroupBox()
+        self.advanced_panel = QtWidgets.QGroupBox('高级设置')
         choices = QtWidgets.QFormLayout(self.advanced_panel)
         self.tables = QtWidgets.QCheckBox('导出表格内内容（取消后保留表格线和表格外内容）')
         self.tables.setChecked(True)
@@ -94,7 +90,6 @@ class DocumentExportDialog(QtWidgets.QDialog):
             control.toggled.connect(self.reset_check)
         for control in self.scales:
             control.valueChanged.connect(self.reset_check)
-        self.advanced.toggled.connect(self.advanced_panel.setVisible)
         self.confirm_images.toggled.connect(self.update_save)
         self.reset_check()
         self.check_button.setDefault(True)
@@ -109,8 +104,7 @@ class DocumentExportDialog(QtWidgets.QDialog):
         self.form.setRowVisible(self.format, kind == 'page')
         self.form.setRowVisible(self.range, kind != 'pdf')
         self.form.setRowVisible(self.pages, kind != 'pdf' and self.range.currentData() == 'selection')
-        self.advanced.setVisible(kind == 'machine')
-        self.advanced_panel.setVisible(kind == 'machine' and self.advanced.isChecked())
+        self.advanced_panel.setVisible(kind == 'machine')
         self.checked = None
         self.report.setPlainText('选择用途和范围后检查导出。')
         self.confirm_images.setChecked(False)
