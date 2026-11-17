@@ -109,6 +109,10 @@ def test_export_dialog_ranges_and_confirmations(snapshot, monkeypatch):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     dialog = DocumentExportDialog(snapshot, None, None, 1, True)
     dialog.show()
+    assert dialog.advanced_panel.isVisible() and dialog.advanced_panel.title() == '高级设置'
+    assert not dialog.advanced_panel.isCheckable()
+    assert all(control.isVisible() for control in (dialog.optimize, dialog.tables,
+                                                   dialog.registration, *dialog.scales))
     dialog.range.setCurrentIndex(dialog.range.findData('current'))
     dialog.run_check()
     assert dialog.checked.pages == (1,) and '第 2 页 · image.png' in dialog.report.toPlainText()
@@ -116,11 +120,13 @@ def test_export_dialog_ranges_and_confirmations(snapshot, monkeypatch):
     dialog.confirm_images.setChecked(True)
     assert dialog.save.isEnabled()
     dialog.purpose.setCurrentIndex(dialog.purpose.findData('page'))
+    assert dialog.advanced_panel.isHidden()
     dialog.range.setCurrentIndex(dialog.range.findData('selection'))
     dialog.pages.setText('1,3')
     dialog.run_check()
     assert dialog.checked.pages == (0, 2) and dialog.save.isEnabled() and dialog.format.currentData() == 'png'
     dialog.purpose.setCurrentIndex(dialog.purpose.findData('pdf'))
+    assert dialog.advanced_panel.isHidden()
     dialog.run_check()
     assert dialog.checked.pages == (0, 1, 2) and dialog.range.isHidden()
     dialog.accept()

@@ -131,6 +131,7 @@ def organize_workspace(w):
     w.menuBar().setCornerWidget(w.settings_button, QtCore.Qt.Corner.TopRightCorner)
     action(file_menu, '载入当前字库全部字', w.load_all)
     w.export_button = tool("导出…", w.export_document)
+    w.export_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     w.export_button.setObjectName("document_export")
     w.export_button.setEnabled(False)
 
