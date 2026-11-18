@@ -160,6 +160,8 @@ class CaptureWorkspace(QtCore.QObject):
         self.stack.setCurrentIndex(1 if widget.task else 0)
         has_item = bool(widget.task and widget.task.current_item())
         self.recording.setVisible(has_item)
+        self.complete.setText("复用配置已保存" if widget.task and widget._capture_kind == "symbol"
+                              and not widget.task.items else "本次任务已录制完成")
         self.complete.setVisible(bool(widget.task and not has_item))
         widget.task_help.setVisible(bool(widget.task_help.text()))
         widget.new_task_button.setEnabled(not widget.canvas.pen_down)
@@ -175,7 +177,8 @@ class CaptureWorkspace(QtCore.QObject):
             self.idle_hint.setText(f"为{name}创建任务，或继续已有任务。" if name else "请先选择或新建书写者。")
             tasks = [entry for entry in catalog.tasks() if entry["task"]
                      and entry["kind"] == widget._capture_kind and entry["task"].writer_id == key[0]
-                     and not entry["task"].is_complete and entry["state"] in ("active", "paused")]
+                     and entry["task"].items and not entry["task"].is_complete
+                     and entry["state"] in ("active", "paused")]
             for entry in sorted(tasks, key=lambda item: item["task"].created_at, reverse=True)[:5]:
                 task = entry["task"]
                 item = QtWidgets.QTreeWidgetItem([task.name, f"{task.completed_count} / {len(task.items)}", ""])

@@ -302,6 +302,11 @@ class CaptureTaskDialog(QtWidgets.QDialog):
                 groups = selector.selection_entries()[0]
                 existing = sum(len(selector.available.get((capture_character(char), TASK_GROUPS[groups[index]][2]), {}))
                                >= count for char, count, index in all_entries)
+        if self.kind == "symbol" and not problem:
+            selector = self.selection if self.sources.currentIndex() == 0 else self.import_selection
+            groups = selector.selection_entries()[0]
+            all_entries = (*all_entries, *((char, 0, groups.index(group)) for group, char in selector.reuse))
+            existing = len(all_entries) - len(self.entries)
         self.start.setEnabled(not problem)
         self.error.setText(problem)
         self.counts["target"].setText(f"{len(all_entries)} 字" if self.kind == "han" else f"{len(all_entries)} 字／写法")
@@ -322,7 +327,10 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         self.preview.clear()
         remaining = {(char, index) for char, _, index in self.entries}
         for char, count, index in all_entries if self.show_all else self.entries:
-            item = QtWidgets.QListWidgetItem(char if count == 1 else f"{char}\n{count} 份")
+            label = char if count == 1 else f"{char}\n{count} 份"
+            if count == 0:
+                label = f"{char}\n复用"
+            item = QtWidgets.QListWidgetItem(label)
             item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             font = item.font()
             font.setPointSize(15)
