@@ -181,6 +181,38 @@ assert complete.counts["existing"].text()=="100 字"
 complete.reject()
 complete.dispose()
 assert len(catalog.tasks())==3
+from handwriting_collector.models import TrajectoryPoint
+from inkstruct.symbol_tasks import task_plan
+
+source,entries=task_plan(["latin_upright"],1)
+symbol._start("复用供体",entries,source,writer_b)
+width,height=symbol.canvas.width(),symbol.canvas.height()
+symbol.canvas.trajectory.start_stroke(TrajectoryPoint(width*.3,height*.4,.5,0))
+symbol.canvas.trajectory.append_point(TrajectoryPoint(width*.45,height*.7,.5,50))
+symbol.save_current()
+assert symbol.task.completed_count==1
+sample_id=symbol.task.items[0].sample_id
+symbol.pause_task()
+reuse=CaptureTaskDialog(symbol)
+reuse.selection.reuse[("latin_italic","A")]={
+    "group":"latin_italic","target":"A","source":"A","source_style":"upright",
+    "sample_ids":[sample_id],"confirmed":True}
+reuse.selection.update_summary()
+assert reuse.start.isEnabled() and reuse.entries==[]
+assert reuse.counts["target"].text()=="1 字／写法" and reuse.counts["existing"].text()=="1 字"
+assert reuse.counts["copies"].text()=="0 份"
+reuse.select_preview(True)
+assert reuse.preview.count()==1 and "复用" in reuse.preview.item(0).text()
+reuse.accept()
+source,entries=reuse.source,reuse.entries
+reuse.dispose()
+symbol._start("供体复用",entries,source,writer_b)
+from inkstruct.symbol_tasks import source_configuration
+assert not symbol.task.items and source_configuration(symbol.task.source)["reuse"][0]["sample_ids"]==[sample_id]
+assert symbol.capture_workspace.complete.text()=="复用配置已保存"
+symbol.pause_task()
+assert all(symbol.capture_workspace.recent.topLevelItem(i).text(0)!="供体复用"
+           for i in range(symbol.capture_workspace.recent.topLevelItemCount()))
 window.close()
 app.processEvents()
 '''
