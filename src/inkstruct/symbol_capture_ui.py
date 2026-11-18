@@ -60,7 +60,10 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
     class SymbolWidget(CaptureLifecycleMixin, collector_ui.SingleCharacterWidget):
         def __init__(self, output_root_provider, parent=None, *, settings=None):
             self.canvas_settings = (
-                settings if settings is not None else QtCore.QSettings("InkStruct", "SymbolCollector")
+                settings if settings is not None else QtCore.QSettings(
+                    QtCore.QSettings.defaultFormat(), QtCore.QSettings.Scope.UserScope,
+                    "InkStruct", "SymbolCollector",
+                )
             )
             super().__init__(output_root_provider, parent)
 
@@ -131,7 +134,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             self.canvas_scroll = QtWidgets.QScrollArea()
             self.canvas_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
             self.canvas_scroll.setWidget(self.canvas)
-            self.canvas_scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.canvas_scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             self.undo_button = QtWidgets.QPushButton()
             self.clear_button = QtWidgets.QPushButton()
             self.skip_button = QtWidgets.QPushButton()
@@ -159,7 +162,8 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
 
         def _apply_canvas_size(self, percent):
             self.canvas.set_canvas_percent(percent)
-            self.canvas_scroll.setMaximumWidth(self.canvas.width())
+            scroll_bar_width = self.canvas_scroll.verticalScrollBar().sizeHint().width()
+            self.canvas_scroll.setMaximumWidth(self.canvas.width() + scroll_bar_width)
             self.canvas_scroll.setMinimumHeight(min(335, self.canvas.height() + 15))
             self.canvas_size_label.setText(
                 f"{percent}% · {self.canvas.width()} × {self.canvas.height()} px"
