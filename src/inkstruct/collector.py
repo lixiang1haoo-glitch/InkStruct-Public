@@ -101,6 +101,9 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.stroke_reference = None
             super().__init__(output_root_provider, parent)
             self.stroke_reference = StrokeReferenceWidget(reference_for, self)
+            self.stroke_reference.setMinimumWidth(180)
+            self.stroke_reference.setMaximumSize(220, 280)
+            self.target_label.setStyleSheet("font-size: 48px;")
             canvas_index = self.layout().indexOf(self.canvas)
             status_row = self.layout().itemAt(canvas_index - 1).layout()
             self.display_controls = capture_display_controls(status_row, self.progress_bar)
