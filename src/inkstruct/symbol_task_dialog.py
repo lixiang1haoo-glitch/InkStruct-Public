@@ -13,7 +13,10 @@ from .ui_behavior import compact_field
 
 
 class SymbolTaskDialog(QtWidgets.QDialog):
-    def __init__(self, writer, parent=None, *, imported=None, collection_root=None, catalog=None):
+    plan_changed = QtCore.Signal()
+
+    def __init__(self, writer, parent=None, *, imported=None, collection_root=None, catalog=None,
+                 embedded=False):
         super().__init__(parent)
         self.setWindowTitle('创建标点与扩展任务')
         self.setObjectName('symbol_task_dialog')
@@ -24,6 +27,8 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             }
         ''')
         self.resize(880, 760)
+        if embedded:
+            self.setWindowFlags(QtCore.Qt.WindowType.Widget)
         self.imported, self.collection_root = imported, collection_root
         self._inventory_writer = None
         self.available, self.reuse = {}, {}
@@ -41,10 +46,14 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         self.repeats.setValue(5)
         self.repeats.setSuffix(' 份')
         self.repeats.setObjectName('task_repeats')
-        form.addRow('任务名称', compact_field(self.name, maximum=340))
-        if catalog is None:
-            form.addRow('书写者 ID', compact_field(self.writer, maximum=340))
+        if embedded:
+            self.name.hide()
+            self.writer.hide()
         else:
+            form.addRow('任务名称', compact_field(self.name, maximum=340))
+        if catalog is None and not embedded:
+            form.addRow('书写者 ID', compact_field(self.writer, maximum=340))
+        elif not embedded:
             row = QtWidgets.QHBoxLayout()
             row.addWidget(self.writer, 1)
             create = QtWidgets.QPushButton('新建书写者…')
@@ -122,6 +131,10 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
+        if embedded:
+            self.buttons.hide()
+            self.summary.hide()
+            self.error.hide()
         self.repeats.valueChanged.connect(self.update_summary)
         self.writer.textChanged.connect(self.writer_changed)
         if imported is not None:
@@ -181,8 +194,7 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         return {g: [c for c, box in boxes.items() if box.isChecked()]
                 for g, boxes in self.characters.items()}
 
-    def plan(self):
-        self.load_inventory()
+    def selection_entries(self):
         selected = self.selected()
         groups = [g for g in TASK_GROUPS if selected[g] or any(k[0] == g for k in self.reuse)]
         if not groups:
@@ -192,6 +204,11 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         else:
             entries = [(c, n, i) for c, n, i in imported_entries(groups, self.imported)
                        if c in selected[groups[i]]]
+        return groups, entries
+
+    def plan(self):
+        self.load_inventory()
+        groups, entries = self.selection_entries()
         kept, self.existing_count = [], 0
         for char, count, index in entries:
             style = TASK_GROUPS[groups[index]][2]
@@ -223,6 +240,18 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             self.summary.setText(str(error))
             valid = False
         self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(valid)
+        self.plan_changed.emit()
+
+    def set_imported(self, imported):
+        self.imported = imported
+        wanted = {capture_character(char) for char, _, _ in imported}
+        self._changing = True
+        for boxes in self.characters.values():
+            for char, box in boxes.items():
+                box.setChecked(char in wanted)
+        self._changing = False
+        for group in self.groups:
+            self.character_changed(group)
 
     def configure_reuse(self):
         try:

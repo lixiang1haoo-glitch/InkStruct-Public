@@ -178,7 +178,22 @@ def style_module_pages(window):
     column.setSpacing(10)
     title = QtWidgets.QLabel('采集样本')
     title.setProperty('inkRole', 'title')
-    column.addWidget(title)
+    heading = QtWidgets.QHBoxLayout()
+    heading.addWidget(title, 1)
+    actions = QtWidgets.QStackedWidget()
+    for page in (collector.single_widget, collector.symbol_widget):
+        workspace = page.capture_workspace
+        page.layout().removeItem(workspace.heading)
+        workspace.heading.setParent(None)
+        workspace.heading_title.hide()
+        panel = QtWidgets.QWidget()
+        panel.setLayout(workspace.heading)
+        actions.addWidget(panel)
+    actions.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Fixed)
+    actions.setCurrentIndex(collector.tabs.currentIndex())
+    collector.tabs.currentChanged.connect(actions.setCurrentIndex)
+    heading.addWidget(actions)
+    column.addLayout(heading)
     column.addWidget(collector.takeCentralWidget(), 1)
     collector.setCentralWidget(root)
     def capture_page_size(index):

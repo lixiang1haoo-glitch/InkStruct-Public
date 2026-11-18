@@ -994,54 +994,64 @@ def verify_preview_path_setting(dialog, canvas):
 
 def verify_recommended_recording(window, app, out):
     from inkstruct.capture_management import CaptureCatalog
-    from inkstruct.capture_workflow_ui import RecommendedTaskDialog
+    from inkstruct.capture_task_dialog import CaptureTaskDialog
     from inkstruct.recommended_capture import recording_stages
 
     han = window.collector.single_widget
+    assert han.new_task_button.text() == "新建任务…"
+    assert han.capture_workspace.stack.currentIndex() == 0
+    assert not han.findChild(QtWidgets.QPushButton, "capture_recommended_starter32")
     stages = recording_stages()
     counts = [len(stage.entries) for stage in stages.values()]
-    assert counts == [32, 68, 300]
-    for key, stage in stages.items():
-        button = han.findChild(QtWidgets.QPushButton, 'capture_recommended_' + key)
-        assert button.text() == stage.title
-
-    catalog = CaptureCatalog(out / 'recommended')
-    stage = stages['starter32']
-    char = stage.entries[0][0]
-    folder = catalog.root / 'samples' / 'legacy' / f'U+{ord(char):04X}'
+    assert counts == [32, 100, 400]
+    catalog = CaptureCatalog(out / "recommended")
+    char = stages["starter32"].entries[0][0]
+    folder = catalog.root / "samples" / "legacy" / f"U+{ord(char):04X}"
     folder.mkdir(parents=True)
     strokes, tick = [], 0
     for stroke in han.structures.get(char).strokes:
-        points = [{'x': 30 + 150*x, 'y': 30 + 150*y, 't_ms': tick + i}
-                  for i, (x, y) in enumerate(stroke.median)]
-        strokes.append({'points': points})
+        points = [{"x":30+150*x, "y":30+150*y, "t_ms":tick+i}
+                  for i,(x,y) in enumerate(stroke.median)]
+        strokes.append({"points":points})
         tick += len(points)
-    (folder / 'specimen.json').write_text(
-        json.dumps({'schema_version': 'handwriting_single_v1', 'sample_id': 'synthetic',
-                    'writer_id': 'legacy', 'character': char, 'task': {'source': 'old-list.csv'},
-                    'capture': {'canvas_width': 220, 'canvas_height': 220}, 'strokes': strokes}),
-        encoding='utf-8',
-    )
-    other = catalog.create_writer('Synthetic new writer')
-    dialog = RecommendedTaskDialog(catalog, 'legacy', stage, han.structures, han)
-
-    def entry_count():
-        deadline = time.monotonic() + 10
-        while dialog.job is not None and time.monotonic() < deadline:
+    (folder / "specimen.json").write_text(json.dumps({
+        "schema_version":"handwriting_single_v1", "sample_id":"synthetic",
+        "writer_id":"legacy", "character":char, "task":{"source":"old-list.csv"},
+        "capture":{"canvas_width":220, "canvas_height":220}, "strokes":strokes,
+    }), encoding="utf-8")
+    owner = QtWidgets.QWidget(han)
+    owner._capture_catalog, owner._capture_kind, owner.structures = catalog, "han", han.structures
+    owner.writer_edit = QtWidgets.QLineEdit("legacy", owner)
+    dialogs = []
+    try:
+        dialog = CaptureTaskDialog(owner, stage_key="starter32")
+        dialogs.append(dialog)
+        deadline = time.monotonic()+10
+        while dialog.job is not None and time.monotonic()<deadline:
             app.processEvents()
             time.sleep(.005)
-        assert dialog.job is None and dialog.start.isEnabled(), dialog.summary.text()
-        return len(dialog.entries)
-
-    try:
-        existing = entry_count()
-        assert existing == 31 and dialog.entries == stage.entries[1:]
-        dialog.writer.setText(other)
-        fresh = entry_count()
-        assert fresh == 32 and dialog.entries == stage.entries
+        assert dialog.job is None and dialog.start.isEnabled(), dialog.error.text()
+        existing = len(dialog.entries)
+        assert existing == 31
+        remaining = []
+        for key, count in zip(stages, [31,99,399], strict=True):
+            dialog.select_stage(key)
+            assert len(dialog.entries) == count
+            remaining.append(count)
+        owner.writer_edit.setText(catalog.create_writer("Synthetic new writer"))
+        fresh_dialog = CaptureTaskDialog(owner, stage_key="starter32")
+        dialogs.append(fresh_dialog)
+        deadline = time.monotonic()+10
+        while fresh_dialog.job is not None and time.monotonic()<deadline:
+            app.processEvents()
+            time.sleep(.005)
+        fresh = len(fresh_dialog.entries)
+        assert fresh == 32
     finally:
-        dialog.dispose()
-    return {'stage_counts': counts, 'legacy_remaining': existing, 'other_writer_remaining': fresh}
+        for dialog in dialogs:
+            dialog.dispose()
+    return {"stage_counts":counts, "legacy_remaining":existing,
+            "other_writer_remaining":fresh, "cumulative_remaining":remaining}
 
 
 def verify_about_page(dialog, app):
@@ -1122,6 +1132,13 @@ def verify_capture_input(window, app):
     window.tabs.setCurrentIndex(0)
     collector.tabs.setCurrentWidget(han)
     app.processEvents()
+    from handwriting_collector.tasks import CollectionTask, TaskRepository
+
+    writer = han._capture_catalog.create_writer("Synthetic input check")
+    task = CollectionTask.create("Input check", "synthetic-check", writer, [("一",1,0)])
+    TaskRepository(han._capture_catalog.root).save(task)
+    han.set_task(task)
+    app.processEvents()
     assert han.canvas.isVisible()
     mouse, no_mod = QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier
     start, stop = QtCore.QPoint(60, 60), QtCore.QPoint(120, 90)
@@ -1153,6 +1170,7 @@ def verify_capture_input(window, app):
     assert han.canvas.trajectory.point_count == 2
     han.canvas.clear()
     choose(han, "tablet")
+    han.pause_task()
     window.tabs.setCurrentIndex(previous_page)
     app.processEvents()
     return {"mouse": "Qt event injection", "touch": "Qt event injection", "shared_mode_saved": True}
@@ -1780,18 +1798,18 @@ def main():
     capture_writer = sw._capture_catalog.create_writer('自检书写者')
     sw.writer_picker.reload(capture_writer)
     sw.choose_writer(capture_writer)
-    from inkstruct.symbol_task_dialog import SymbolTaskDialog
+    from inkstruct.capture_task_dialog import CaptureTaskDialog
     def configure_capture():
         dialog = app.activeModalWidget()
-        assert isinstance(dialog, SymbolTaskDialog)
-        dialog.select_all(False)
-        dialog.groups['latin_italic'].setChecked(True)
-        dialog.groups['digits'].setChecked(True)
-        dialog.groups['operators'].setChecked(True)
-        dialog.repeats.setValue(1)
+        assert isinstance(dialog, CaptureTaskDialog)
+        dialog.selection.select_all(False)
+        dialog.selection.groups['latin_italic'].setChecked(True)
+        dialog.selection.groups['digits'].setChecked(True)
+        dialog.selection.groups['operators'].setChecked(True)
+        dialog.selection.repeats.setValue(1)
         dialog.accept()
     QtCore.QTimer.singleShot(0, configure_capture)
-    sw.example_button.click()
+    sw.new_task_button.click()
     assert sw.task.current_item().character == "A"
     width, height = sw.canvas.width(), sw.canvas.height()
     sw.canvas.trajectory.start_stroke(TrajectoryPoint(width * .3, height * .4, 0.4, 0))
