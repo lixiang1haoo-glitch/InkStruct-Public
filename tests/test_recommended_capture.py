@@ -159,6 +159,8 @@ dialog=CaptureTaskDialog(symbol)
 assert dialog.sources.tabText(0)=="按类别选字" and not dialog.start.isEnabled()
 dialog.selection.groups["digits"].setChecked(True)
 dialog.selection.repeats.setValue(1)
+dialog.show()
+pump(lambda:dialog.symbol_inventory is not None)
 assert dialog.start.isEnabled() and len(dialog.entries)==10
 source,entries=dialog.source,dialog.entries
 dialog.accept()
@@ -200,6 +202,8 @@ reuse.selection.reuse[("latin_italic","A")]={
     "group":"latin_italic","target":"A","source":"A","source_style":"upright",
     "sample_ids":[sample_id],"confirmed":True}
 reuse.selection.update_summary()
+reuse.show()
+pump(lambda:reuse.symbol_inventory is not None)
 assert reuse.start.isEnabled() and reuse.entries==[]
 assert reuse.counts["target"].text()=="1 字／写法" and reuse.counts["existing"].text()=="1 字"
 assert reuse.counts["copies"].text()=="0 份"
@@ -242,7 +246,7 @@ QtWidgets.QFileDialog.getExistingDirectory=lambda *args,**kwargs:str(root/"new-c
 window.choose_output_root()
 QtWidgets.QFileDialog.getExistingDirectory=original_directory
 assert han.capture_workspace.recent.topLevelItemCount()==0
-assert not han.writer_edit.text() and not han.capture_workspace.begin.isEnabled()
+assert not han.writer_edit.text() and han.capture_workspace.begin.isEnabled()
 assert legacy_sample.read_bytes()==original_sample
 window.close()
 app.processEvents()

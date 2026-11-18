@@ -179,7 +179,7 @@ class CaptureWorkspace(QtCore.QObject):
         self.complete.setVisible(bool(widget.task and not has_item))
         widget.task_help.setVisible(bool(widget.task_help.text()))
         widget.new_task_button.setEnabled(not widget.canvas.pen_down)
-        self.begin.setEnabled(bool(widget.writer_edit.text()))
+        self.begin.setEnabled(widget.new_task_button.isEnabled())
         key = (widget.writer_edit.text(), widget.task.task_id if widget.task else None,
                str(widget._capture_catalog.root))
         if key == self.recent_key:
@@ -189,7 +189,7 @@ class CaptureWorkspace(QtCore.QObject):
         try:
             catalog = widget._capture_catalog
             name = catalog.writers().get(key[0], {}).get("name", key[0])
-            self.idle_hint.setText(f"为{name}创建任务，或继续已有任务。" if name else "请先选择或新建书写者。")
+            self.idle_hint.setText(f"为{name}创建任务，或继续已有任务。" if name else "新建任务时可选择或新建书写者。")
             tasks = [entry for entry in catalog.tasks() if entry["task"]
                      and entry["kind"] == widget._capture_kind and entry["task"].writer_id == key[0]
                      and entry["task"].items and not entry["task"].is_complete
