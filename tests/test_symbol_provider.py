@@ -33,6 +33,19 @@ def specimen(char="1", sid="s1", height=10):
 def asset(**kwargs):
     return adapt_symbol(json.dumps(specimen(**kwargs)).encode())
 
+def test_unmeasured_symbol_dot_keeps_its_position_and_time_without_pressure():
+    from inkstruct.fonts.importer import make_symbol
+
+    value = specimen(".")
+    value["capture"].update(input_type="mouse", pressure_available=False)
+    value["strokes"][0]["points"] = [{"x": 20, "y": 80, "t_ms": 0, "pressure": .5}]
+    trajectory, _, _ = make_symbol(json.dumps(value).encode(), value)
+    stroke, = trajectory["strokes"]
+    point, = stroke["points"]
+    assert point["t_ms"] == 0 and "pressure" not in point
+    assert stroke["dynamic_origin"]["pressure"] == "absent"
+    assert stroke["dynamic_origin"]["time"] == "measured"
+
 
 def test_symbol_profile_does_not_rescale_when_tall_symbols_are_added():
     digit = asset()

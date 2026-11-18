@@ -93,6 +93,10 @@ class RawSample:
     source_sha256: str
     capture: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def pressure_available(self) -> bool:
+        return self.capture.get("pressure_available") is not False
+
 
 @dataclass(slots=True)
 class StrokeMapping:
@@ -235,6 +239,7 @@ class SourceTrajectorySample:
     source_sha256: str
     stroke_order_status: str
     strokes: list[SourceTrajectoryStroke]
+    pressure_available: bool = True
 
 
 @dataclass(slots=True)

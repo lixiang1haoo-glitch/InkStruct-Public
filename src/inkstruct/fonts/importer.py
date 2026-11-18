@@ -159,6 +159,7 @@ def make_generated(glyph, row, payload, protocol):
     unknown = []
     missing = []
     kinds = {}
+    no_pressure = set()
     if row is None:
         unknown = list(range(1, n + 1))
     elif "stroke_sources" in payload:
@@ -180,6 +181,8 @@ def make_generated(glyph, row, payload, protocol):
                 "author_single_stroke",
             }:
                 author.append(i)
+                if s.get("pressure_available") is False:
+                    no_pressure.add(i)
             else:
                 unknown.append(i)
         if {r["order"] for r in missing} != set(reference):
@@ -265,12 +268,17 @@ def make_generated(glyph, row, payload, protocol):
                 for k in ("pressure", "time", "pen_state")
             }
         )
+        if i in no_pressure:
+            dynamic["pressure"] = "absent"
+        fields = ("x", "y", "t_ms", "pen_state") if i in no_pressure else (
+            "x", "y", "pressure", "t_ms", "pen_state"
+        )
         t["strokes"].append(
             {
                 "order": i,
                 "stroke_ref": f"stroke-{i}",
                 "points": [
-                    {k: p[k] for k in ("x", "y", "pressure", "t_ms", "pen_state")}
+                    {k: p[k] for k in fields}
                     for p in s["points"]
                 ],
                 "dynamic_origin": dynamic,
@@ -322,6 +330,9 @@ def symbol_records(path):
 
 def make_symbol(raw, value):
     asset = adapt_symbol(raw)
+    fields = ("t_ms", "pen_state") if value.get("capture", {}).get("pressure_available") is False else (
+        "pressure", "t_ms", "pen_state"
+    )
     t = {
         "schema_version": "inkfont_trajectory_v1",
         "character": asset.character,
@@ -332,7 +343,7 @@ def make_symbol(raw, value):
         pts = []
         for p, (x, y) in zip(source["points"], xy, strict=True):
             pts.append(
-                {"x": x, "y": y, **{k: p[k] for k in ("pressure", "t_ms", "pen_state") if k in p}}
+                {"x": x, "y": y, **{k: p[k] for k in fields if k in p}}
             )
         t["strokes"].append(
             {

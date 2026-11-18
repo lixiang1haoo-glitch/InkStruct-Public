@@ -50,8 +50,14 @@ def trajectory_for(glyph):
     strokes = []
     for i, segment in enumerate(glyph["segments"], 1):
         author = segment["kind"] != "reference"
-        strokes.append({"order": i, "stroke_ref": f"stroke-{i}", "points": segment["points"],
-                        "dynamic_origin": {"pressure": "inherited" if author else "synthesized",
+        has_pressure = segment.get("pressure_available") is not False
+        points = segment["points"] if has_pressure else [
+            {key: value for key, value in point.items() if key != "pressure"}
+            for point in segment["points"]
+        ]
+        pressure_origin = ("inherited" if author else "synthesized") if has_pressure else "absent"
+        strokes.append({"order": i, "stroke_ref": f"stroke-{i}", "points": points,
+                        "dynamic_origin": {"pressure": pressure_origin,
                                            "time": "inherited_retimed" if author else "synthesized",
                                            "pen_state": "synthesized"}})
     return {"schema_version": "inkfont_trajectory_v1", "character": glyph["character"],

@@ -184,7 +184,8 @@ def build_specimen(
         },
         "capture": {
             "created_at": datetime.now(UTC).isoformat(),
-            "input_type": "tablet",
+            "input_type": trajectory.input_type,
+            "pressure_available": trajectory.pressure_available,
             "canvas_width": canvas_width,
             "canvas_height": canvas_height,
             "device_pixel_ratio": device_pixel_ratio,

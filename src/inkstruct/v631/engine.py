@@ -175,6 +175,9 @@ def prepare_generation(writer, base, profile_record, *, reference_paths=None,
             checks = {"protocol": invariants(glyph, ctx.graph), "source_integrity": check_sources(profile, glyph, sources)}
             if any(checks.values()):
                 raise ValueError("生成协议或来源完整性校验失败，未发布此字。")
+            from ..source_trajectory import with_source_pressure
+
+            sources = with_source_pressure(sources, profile.source_trajectories)
             rows, donors, gaps = compact_sources(ctx.graph, sources, fill["trials"])
             if gaps:
                 row["warnings"].append(f"含 {len(gaps)} 笔参考替代；字体应用时将汇总提示。")

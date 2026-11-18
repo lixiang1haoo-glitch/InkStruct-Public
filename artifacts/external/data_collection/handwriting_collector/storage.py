@@ -73,7 +73,8 @@ class SampleStorage:
             },
             "capture": {
                 "created_at": created_at,
-                "input_type": "tablet",
+                "input_type": trajectory.input_type,
+                "pressure_available": trajectory.pressure_available,
                 "canvas_width": int(canvas_width),
                 "canvas_height": int(canvas_height),
                 "device_pixel_ratio": float(device_pixel_ratio),

@@ -1,9 +1,11 @@
 """Reusable settings pages; changes remain local until the owner commits them."""
 
 from dataclasses import fields, replace
+import sys
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .fonts import APP_VERSION
 from .theme import THEME_KEY, theme_preference, use_platform_theme
 from .ui_behavior import compact_field
 
@@ -40,6 +42,58 @@ def label(text):
     result.setWordWrap(True)
     result.setTextFormat(QtCore.Qt.TextFormat.PlainText)
     return result
+
+
+class AboutPage(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        column = QtWidgets.QVBoxLayout(self)
+        self.product = label("InkStruct 墨构")
+        self.product.setProperty("inkRole", "title")
+        column.addWidget(self.product)
+        form = QtWidgets.QFormLayout()
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.version = label(APP_VERSION)
+        form.addRow("应用版本", self.version)
+        links = QtWidgets.QHBoxLayout()
+        self.github = QtWidgets.QPushButton("GitHub")
+        self.docs = QtWidgets.QPushButton("文档站")
+        for button, address in (
+            (self.github, "https://github.com/lixiang1haoo-glitch/InkStruct-Public"),
+            (self.docs, "https://lixiang1haoo-glitch.github.io/InkStruct-Public/"),
+        ):
+            button.setToolTip(address)
+            button.setAutoDefault(False)
+            button.clicked.connect(lambda _checked=False, url=address: QtGui.QDesktopServices.openUrl(QtCore.QUrl(url)))
+            links.addWidget(button)
+        links.addStretch()
+        form.addRow("网站", links)
+
+        group = QtWidgets.QVBoxLayout()
+        group.addWidget(label("InkStruct墨构交流群"))
+        number_row = QtWidgets.QHBoxLayout()
+        group.addLayout(number_row)
+        self.qq_number = QtWidgets.QLineEdit("1035966437")
+        self.qq_number.setReadOnly(True)
+        self.qq_number.setAccessibleName("官方 QQ 群号")
+        self.qq_number.setMinimumWidth(self.qq_number.fontMetrics().horizontalAdvance(self.qq_number.text()) + 24)
+        number_row.addWidget(compact_field(self.qq_number))
+        self.copy_qq = QtWidgets.QPushButton("复制群号")
+        self.copy_qq.setAutoDefault(False)
+        self.copy_qq.clicked.connect(self.copy_group_number)
+        number_row.addWidget(self.copy_qq)
+        number_row.addStretch()
+        form.addRow("官方 QQ 群", group)
+        column.addLayout(form)
+        if sys.platform == "win32":
+            column.addWidget(label(
+                f"使用 Qt {QtCore.qVersion()}、PySide6 和 Shiboken（LGPLv3）。"
+                "对应源码及替换说明见安装目录 _internal/licenses/QT_SOURCES.md。"
+            ))
+        column.addStretch()
+
+    def copy_group_number(self):
+        QtWidgets.QApplication.clipboard().setText(self.qq_number.text())
 
 
 class AppearancePage(QtWidgets.QWidget):
