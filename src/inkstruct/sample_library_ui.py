@@ -258,6 +258,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         self.select_button = CheckScope('全选筛选结果')
         left.addWidget(self.select_button)
         self.table = CharacterDirectory()
+        self.table.setProperty("inkDataTable", True)
         self.table.setObjectName('sample_library_list')
         self.table.setAccessibleName('字符目录。空格键勾选当前字符的筛选结果')
         self.table.setHeaderLabels(['', '字符', '样本'])

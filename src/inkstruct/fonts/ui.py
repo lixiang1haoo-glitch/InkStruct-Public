@@ -152,6 +152,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         table_title.setProperty("inkRole", "sectionTitle")
         publication_layout.addWidget(table_title)
         self.contents = QtWidgets.QTreeWidget()
+        self.contents.setProperty("inkDataTable", True)
         self.contents.setAccessibleName("待制包清单")
         self.contents.setHeaderLabels(["加入 / 类别与字符", "独立录制", "同形共用", "规则合成", "未通过校验"])
         self.contents.setMinimumHeight(140)

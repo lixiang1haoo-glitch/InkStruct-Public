@@ -37,6 +37,7 @@ class ProblemsPanel(QtWidgets.QWidget):
         filters.addWidget(self.search,1)
         column.addLayout(filters)
         self.list = QtWidgets.QTreeWidget()
+        self.list.setProperty("inkDataTable", True)
         self.list.setObjectName("layout_problem_groups")
         self.list.setHeaderLabels(["问题","处数"])
         self.list.setRootIsDecorated(False)
