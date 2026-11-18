@@ -265,7 +265,7 @@ def use_platform_theme(application, *, windows11_accents=False, mode=None):
 
     if mode is not None:
         application.styleHints().setColorScheme(THEME_MODES[mode])
-    sheet = (_WINDOWS11_ACCENTS if windows11_accents else "") + WORKSPACE_CONTROL_STYLES
+    sheet = _WINDOWS11_ACCENTS + WORKSPACE_CONTROL_STYLES if windows11_accents else ""
     if application.styleSheet() != sheet:
         application.setStyleSheet(sheet)
     return key
@@ -296,7 +296,8 @@ def use_dark_fallback(application, *, accents):
     for color_role in (role.WindowText, role.Text, role.ButtonText):
         palette.setColor(QtGui.QPalette.ColorGroup.Disabled, color_role, QtGui.QColor("#8e98a8"))
     application.setPalette(palette)
-    application.setStyleSheet((_WINDOWS11_ACCENTS if accents else "") + WORKSPACE_CONTROL_STYLES)
+    if accents:
+        application.setStyleSheet(_WINDOWS11_ACCENTS + WORKSPACE_CONTROL_STYLES)
     application.setProperty("inkstructDesktopStyle", "fusion")
 
 
