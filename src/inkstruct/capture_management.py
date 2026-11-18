@@ -7,6 +7,7 @@ import json
 import os
 import re
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from .resource_catalog import atomic_json, catalog_write
@@ -180,6 +181,73 @@ def preview_han_file(path, default_repeats):
 
 def task_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+@contextmanager
+def managed_task_lock(path):
+    from PySide6.QtCore import QLockFile
+
+    lock = QLockFile(str(path.parent / '.capture.lock'))
+    if not lock.tryLock(0):
+        raise ValueError('另一窗口正在保存此任务，请稍后重试')
+    try:
+        yield
+    finally:
+        lock.unlock()
+
+
+def reconcile_pending_samples(root, task, kind):
+    """Recover a committed sample whose task item was not yet saved."""
+    from handwriting_collector.storage import sanitize_writer_id
+
+    pending = {item.item_id: item for item in task.items if item.status != 'completed'}
+    if not pending:
+        return 0
+    writer_id = task.writer_id if kind == 'symbol' else sanitize_writer_id(task.writer_id)
+    writer = root / 'samples' / writer_id
+    codes = {f'U+{ord(item.character):04X}' for item in pending.values()}
+    schema = 'inkstruct_symbol_sample_v1' if kind == 'symbol' else 'handwriting_single_v1'
+    folders = sorted(writer.glob('*'))
+    matching = [folder for folder in folders if folder.name.upper() in codes]
+    # Some older records use a nonstandard character folder inside the writer directory.
+    matching.extend(folder for folder in folders if not re.fullmatch(r'U\+[0-9A-F]{4,6}', folder.name, re.I))
+    recovered = 0
+    for folder in matching:
+        for path in sorted(folder.glob('*.json')):
+            try:
+                record = json.loads(path.read_text('utf-8'))
+                source = record['task']
+                item = pending.get(source['item_id'])
+                sample = record['sample_id']
+                if (item is not None and source['task_id'] == task.task_id
+                        and record['schema_version'] == schema and record['writer_id'] == task.writer_id
+                        and record['character'] == item.character and isinstance(sample, str) and sample):
+                    item.status, item.sample_id = 'completed', sample
+                    pending.pop(item.item_id)
+                    recovered += 1
+                    if not pending:
+                        return recovered
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    return recovered
+
+
+def prepare_managed_task(entry, catalog):
+    from handwriting_collector.tasks import TaskRepository
+
+    from .symbol_revisions import recover_revisions
+
+    root, path, kind = entry['root'], entry['path'], entry['kind']
+    with managed_task_lock(path):
+        task = TaskRepository(root).load(path)
+        state = catalog.read()['tasks'].get(f'{kind}:{task.task_id}', 'paused')
+        if (task.task_id != path.parent.name or task.writer_id != entry['task'].writer_id
+                or state not in ('active', 'paused')):
+            raise ValueError('任务状态或书写者已变化，请刷新任务列表后重试')
+        recover_revisions(root, task)
+        stamp = task_hash(path)
+        recovered = reconcile_pending_samples(root, task, kind)
+    return task, stamp, recovered
 
 
 class ManagedRepository:

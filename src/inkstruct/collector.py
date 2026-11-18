@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
-from .capture_controls import canvas_slider_row, capture_display_controls
+from .capture_controls import InputMismatchHint, canvas_slider_row, capture_display_controls
 from .capture_workflow_ui import CaptureLifecycleMixin, install_capture_management
 from .cli import PROJECT_ROOT
 from .stroke_reference import create_stroke_reference_widget_class
@@ -292,6 +292,9 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                 input_label.setBuddy(input_mode)
                 input_row.addWidget(input_label)
                 input_row.addWidget(input_mode)
+                input_hint = InputMismatchHint(input_mode)
+                input_row.addWidget(input_hint)
+                widget.canvas.input_mismatch.connect(input_hint.show_input)
                 input_row.addStretch()
                 widget.display_controls.insertLayout(0, input_row)
                 input_mode.activated.connect(lambda _index, tab=widget: self.change_input_mode(tab))
@@ -407,7 +410,8 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
     application.setApplicationName("InkStruct Collector V63" if connected_capture else "InkStruct Collector")
     application.setStyle("Fusion")
     application.setPalette(collector_ui.light_palette())
-    application.setStyleSheet(collector_ui.APP_STYLE)
+    from .theme import WORKSPACE_CONTROL_STYLES
+    application.setStyleSheet(collector_ui.APP_STYLE + WORKSPACE_CONTROL_STYLES)
     window = CollectorWindow()
     window.show()
     if smoke_test:

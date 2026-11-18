@@ -12,6 +12,8 @@ from .capture_management import (
     CaptureCatalog,
     ManagedRepository,
     check_capture_paths,
+    managed_task_lock,
+    prepare_managed_task,
     preview_han_file,
     task_hash,
 )
@@ -282,6 +284,7 @@ class TaskListDialog(QtWidgets.QDialog):
         self.search.setPlaceholderText('搜索任务名称、书写者或任务 ID；包含已完成、已取消及损坏任务')
         layout.addWidget(self.search)
         self.tree = QtWidgets.QTreeWidget()
+        self.tree.setProperty("inkDataTable", True)
         self.tree.setHeaderLabels(['任务', '类别', '书写者', '状态', '已保存 / 总份数'])
         layout.addWidget(self.tree, 1)
         self.info = QtWidgets.QLabel('关闭或取消任务均不删除已有样本。双击可打开；已取消任务需明确恢复。')
@@ -655,28 +658,26 @@ class CaptureLifecycleMixin:
             return super().resume_task(quiet=quiet)
 
     def open_managed_task(self, entry, *, check_switch=True):
-        from handwriting_collector.tasks import TaskRepository
         if check_switch and not self._can_switch():
             return
-        root = entry['root']
-        from handwriting_collector.storage import SampleStorage
+        self.finish_managed_task(entry, prepare_managed_task(entry, self._capture_catalog))
 
-        from .symbol_capture import SymbolStorage
-        from .symbol_revisions import recover_revisions
-        lock = QtCore.QLockFile(str(entry['path'].parent / '.capture.lock'))
-        if not lock.tryLock(0):
-            raise ValueError('另一窗口正在保存此任务，请稍后重试')
-        try:
-            task = TaskRepository(root).load(entry['path'])
-            recover_revisions(root, task)
-            storage = SymbolStorage(root) if self._capture_kind == 'symbol' else SampleStorage(root)
-            if storage.reconcile_task(task):
-                TaskRepository(root).save(task)
+    def finish_managed_task(self, entry, prepared):
+        from handwriting_collector.tasks import TaskRepository
+
+        task, stamp, recovered = prepared
+        path = entry['path']
+        with managed_task_lock(path):
+            catalog = self._capture_catalog
+            state = catalog.read()['tasks'].get(f'{self._capture_kind}:{task.task_id}', 'paused')
+            if (entry['root'] != catalog.task_root(self._capture_kind)
+                    or state not in ('active', 'paused') or stamp != task_hash(path)):
+                raise ValueError('任务已变化，请刷新任务列表后重试')
+            if recovered:
+                TaskRepository(entry['root']).save(task)
             if self.task and self.task.task_id != task.task_id:
-                self._capture_catalog.set_state(self._capture_kind, self.task.task_id, 'paused')
+                catalog.set_state(self._capture_kind, self.task.task_id, 'paused')
             self.set_task(task)
-        finally:
-            lock.unlock()
 
     def task_list(self):
         try:
@@ -686,14 +687,12 @@ class CaptureLifecycleMixin:
             entry, action = dialog.result_action
             target = self._capture_window.single_widget if entry['kind'] == 'han' else self._capture_window.symbol_widget
             if action == 'open':
-                target.open_managed_task(entry)
-                self._capture_window.tabs.setCurrentWidget(target)
+                target.capture_workspace.resume(entry)
             elif action in ('rename', 'copy'):
                 self.edit_task(entry, action, target)
             elif action == 'restore':
                 self._capture_catalog.set_state(entry['kind'], entry['task'].task_id, 'paused')
-                target.open_managed_task(entry)
-                self._capture_window.tabs.setCurrentWidget(target)
+                target.capture_workspace.resume(entry)
             else:
                 if target.task and target.task.task_id == entry['task'].task_id:
                     if action == 'cancel':

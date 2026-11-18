@@ -14,6 +14,7 @@ class TrajectoryCanvas(QWidget):
 
     # UI state changes at pen-down/up, undo and clear. Motion only affects the ink.
     trajectory_changed = Signal()
+    input_mismatch = Signal(str)
 
     def __init__(
         self,
@@ -33,6 +34,7 @@ class TrajectoryCanvas(QWidget):
         self.release_distance_threshold = 0.5
         self._pen_down = False
         self._input_mode = "tablet"
+        self._reported_input = ""
         self._touch_id = None
         self.allow_pointer_dot = False
         self._timer = QElapsedTimer()
@@ -57,6 +59,14 @@ class TrajectoryCanvas(QWidget):
             self._input_mode = mode
             self._touch_id = None
             self.setMouseTracking(mode == "mouse")
+            self._report_input("")
+
+    def _report_input(self, mode: str) -> None:
+        if mode and self._pen_down:
+            return
+        if mode != self._reported_input:
+            self._reported_input = mode
+            self.input_mismatch.emit(mode)
 
     def _application_state_changed(self, state) -> None:
         if state != Qt.ApplicationState.ApplicationActive:
@@ -70,6 +80,8 @@ class TrajectoryCanvas(QWidget):
     def tabletEvent(self, event: QTabletEvent) -> None:
         event.accept()
         if self._input_mode != "tablet":
+            if event.type() == QEvent.Type.TabletPress and event.pressure() > self.pen_threshold:
+                self._report_input("tablet")
             return
         event_type = event.type()
         pressure = float(event.pressure())
@@ -94,7 +106,13 @@ class TrajectoryCanvas(QWidget):
             event.accept()
             if self._input_mode == "finger":
                 self._touch_event(event)
+            elif kind == QEvent.Type.TouchBegin and any(
+                point.state() == QEventPoint.State.Pressed for point in event.points()
+            ):
+                self._report_input("finger")
             return True
+        if kind == QEvent.Type.Hide:
+            self._report_input("")
         if kind in (QEvent.Type.FocusOut, QEvent.Type.WindowDeactivate,
                     QEvent.Type.Hide, QEvent.Type.UngrabMouse) or (
                     kind == QEvent.Type.EnabledChange and not self.isEnabled()):
@@ -127,10 +145,14 @@ class TrajectoryCanvas(QWidget):
 
     def mousePressEvent(self, event) -> None:
         event.accept()
-        if (self._input_mode == "mouse" and event.button() == Qt.MouseButton.LeftButton
-                and event.source() != Qt.MouseEventSource.MouseEventSynthesizedByQt):
-            self.cancel_active_stroke()
-            self._start_stroke(event.position(), UNMEASURED_PRESSURE)
+        if (event.button() != Qt.MouseButton.LeftButton
+                or event.source() == Qt.MouseEventSource.MouseEventSynthesizedByQt):
+            return
+        if self._input_mode != "mouse":
+            self._report_input("mouse")
+            return
+        self.cancel_active_stroke()
+        self._start_stroke(event.position(), UNMEASURED_PRESSURE)
 
     def mouseDoubleClickEvent(self, event) -> None:
         self.mousePressEvent(event)
@@ -166,6 +188,7 @@ class TrajectoryCanvas(QWidget):
         point = self._point(position, pressure)
         self.trajectory.start_stroke(point)
         self._update_ink(point, point)
+        self._report_input("")
         self.trajectory_changed.emit()
         return True
 
