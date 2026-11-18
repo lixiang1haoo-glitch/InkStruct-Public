@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
-from .capture_controls import canvas_slider_row, capture_display_controls
+from .capture_controls import canvas_slider_row, capture_display_controls, capture_writing_row
 from .capture_workflow_ui import CaptureLifecycleMixin
 from .symbol_capture import (
     FRAME,
@@ -60,7 +60,10 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
     class SymbolWidget(CaptureLifecycleMixin, collector_ui.SingleCharacterWidget):
         def __init__(self, output_root_provider, parent=None, *, settings=None):
             self.canvas_settings = (
-                settings if settings is not None else QtCore.QSettings("InkStruct", "SymbolCollector")
+                settings if settings is not None else QtCore.QSettings(
+                    QtCore.QSettings.defaultFormat(), QtCore.QSettings.Scope.UserScope,
+                    "InkStruct", "SymbolCollector",
+                )
             )
             super().__init__(output_root_provider, parent)
 
@@ -129,9 +132,15 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             self.canvas_size_slider.setValue(percent // 5)
             self.display_controls.addLayout(size_row)
             self.canvas_scroll = QtWidgets.QScrollArea()
+            self.canvas_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
             self.canvas_scroll.setWidget(self.canvas)
-            self.canvas_scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            root.addWidget(self.canvas_scroll, 1)
+            self.canvas_scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            self.undo_button = QtWidgets.QPushButton()
+            self.clear_button = QtWidgets.QPushButton()
+            self.skip_button = QtWidgets.QPushButton()
+            self.save_button = QtWidgets.QPushButton()
+            self.save_button.setObjectName("primaryButton")
+            root.addLayout(capture_writing_row(self, self.canvas_scroll), 1)
             self._apply_canvas_size(percent)
             self.canvas_size_slider.valueChanged.connect(self._change_canvas_size)
             self.variant_note = QtWidgets.QLineEdit()
@@ -139,15 +148,6 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
                 "可选：写法备注，如斜体、直体、开口 4；不同 Unicode 字符请分别采集"
             )
             root.addWidget(self.variant_note)
-            buttons = QtWidgets.QHBoxLayout()
-            self.undo_button = QtWidgets.QPushButton("撤销上一笔")
-            self.clear_button = QtWidgets.QPushButton("清空当前笔迹")
-            self.skip_button = QtWidgets.QPushButton("跳过")
-            self.save_button = QtWidgets.QPushButton("保存并下一个 · Enter")
-            self.save_button.setObjectName("primaryButton")
-            for button in (self.undo_button, self.clear_button, self.skip_button, self.save_button):
-                buttons.addWidget(button)
-            root.addLayout(buttons)
             self.import_button.clicked.connect(self.import_task)
             self.example_button.clicked.connect(self.create_task)
             self.resume_button.clicked.connect(lambda: self.resume_task())
@@ -162,6 +162,8 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
 
         def _apply_canvas_size(self, percent):
             self.canvas.set_canvas_percent(percent)
+            scroll_bar_width = self.canvas_scroll.verticalScrollBar().sizeHint().width()
+            self.canvas_scroll.setMaximumWidth(self.canvas.width() + scroll_bar_width)
             self.canvas_scroll.setMinimumHeight(min(335, self.canvas.height() + 15))
             self.canvas_size_label.setText(
                 f"{percent}% · {self.canvas.width()} × {self.canvas.height()} px"
@@ -182,6 +184,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             for key, callback in [
                 ("Return", self.save_current),
                 ("Ctrl+Z", self.canvas.undo_last_stroke),
+                ("Delete", self.canvas.clear),
             ]:
                 action = QtGui.QAction(self)
                 action.setShortcut(QtGui.QKeySequence(key))
