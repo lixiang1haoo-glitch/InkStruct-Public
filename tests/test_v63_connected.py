@@ -48,7 +48,7 @@ def setup(tmp_path):
     return repo, graph, (graphics, dictionary, config)
 
 
-def record(path, graph, *, join=None, omit=()):
+def record(path, graph, *, join=None, omit=(), input_type=None):
     traces = [[(x*80+10, y*80+10) for x, y in s.median] for s in graph.strokes]
     if join is not None:
         traces[join:join+2] = [traces[join]+traces[join+1]]
@@ -59,13 +59,17 @@ def record(path, graph, *, join=None, omit=()):
             continue
         points = []
         for x, y in trace:
-            points.append({"x": x, "y": y, "pressure": .4+clock/2000, "t_ms": clock})
+            points.append({"x": x, "y": y, "pressure": .4+clock/2000 if input_type is None else .5,
+                           "t_ms": clock})
             clock += 20
         strokes.append({"points": points})
         clock += 60
+    capture = {"canvas_width": 100, "canvas_height": 100}
+    if input_type is not None:
+        capture.update(input_type=input_type, pressure_available=False)
     write(path, {"schema_version": "handwriting_single_v1", "sample_id": path.stem,
                  "character": graph.character, "writer_id": "alice",
-                 "capture": {"canvas_width": 100, "canvas_height": 100}, "strokes": strokes})
+                 "capture": capture, "strokes": strokes})
     return load_raw_sample(path)
 
 
@@ -257,6 +261,48 @@ def test_split_original_is_default_and_higher_priority_than_generated_backup(set
                            selections=[SelectedAsset(**r) for r in reopened.resolver.selection_records()])
     assert layout_markdown(parsed, frozen).pages == old_layout.pages
     assert frozen.selection_records() == reopened.resolver.selection_records()
+
+
+@pytest.mark.parametrize(("method", "input_type", "join"), [
+    ("v63", "mouse", None), ("v631", "finger", 0),
+])
+def test_unmeasured_pressure_survives_import_profile_replay_and_font(setup, tmp_path, monkeypatch,
+                                                               method, input_type, join):
+    from inkstruct import generation_workflow
+    from inkstruct.profile import build_profile
+    from inkstruct.samples import write_sample_index
+
+    repo, graph, refs = setup
+    monkeypatch.setattr(generation_workflow, "corrections", lambda: refs)
+    measured = record(tmp_path / "measured.json", graph)
+    source = tmp_path / "capture" / "pointer.json"
+    sample = record(source, graph, join=join, input_type=input_type)
+    assert sample.capture["input_type"] == input_type and not sample.pressure_available
+    # Both samples contribute geometry; the measured sample alone defines pressure.
+    split = record(tmp_path / "comparison.json", graph, input_type=input_type)
+    index = write_sample_index(tmp_path, "alice", tmp_path / "index", [measured, split], [])
+    profile, _ = build_profile("alice", Path(index["index"]), repo, tmp_path / "profiles",
+                               retain_source_trajectories=True)
+    assert profile.sample_count == 2
+    expected = np.mean([p.pressure for stroke in measured.strokes for p in stroke.points])
+    assert profile.global_style["pressure_mean"] == pytest.approx(expected)
+    assert not profile.source_trajectories[split.sample_id].pressure_available
+
+    service = GenerationWorkflow(tmp_path / "work", repo.path)
+    result = service.generate("alice", source.parent, method, "明", workers=1,
+                              preparation=lambda *_: None, candidate_limit=1)
+    run = Path(result["output"])
+    review = review_selection("alice", run, None, "pointer", {"han"})
+    report = publish_font(tmp_path / "library", writer="alice", run=run, symbols=None,
+                          name="pointer", package_kind="user", groups={"han"},
+                          stamp=publication_stamp("alice", run, None), expected=review["coverage"],
+                          progress=lambda _: None)
+    asset, = FontPackage(Path(report["path"])).glyphs()
+    strokes = decode(asset.original_json)["trajectory"]["strokes"]
+    assert len(strokes) == len(sample.strokes)
+    assert all(stroke["dynamic_origin"]["pressure"] == "absent" for stroke in strokes)
+    assert all("pressure" not in p for stroke in strokes for p in stroke["points"])
+    assert [len(stroke["points"]) for stroke in strokes] == [len(s.points) for s in sample.strokes]
 
 
 def test_scores_deduplicate_geometry_and_count_unfinished_targets(monkeypatch):

@@ -84,3 +84,95 @@ assert pixel(render(), 100, 55).lightness() < 60
         capture_output=True, text=True, encoding="utf-8", timeout=25, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_pointer_modes_own_only_their_active_stroke():
+    program = r"""
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtTest import QTest
+from handwriting_collector.canvas import TrajectoryCanvas
+
+app = QtWidgets.QApplication([])
+canvas = TrajectoryCanvas()
+canvas.resize(400, 300)
+canvas.show()
+app.processEvents()
+qt, event = QtCore.Qt, QtCore.QEvent.Type
+p = QtCore.QPoint
+left, right = qt.MouseButton.LeftButton, qt.MouseButton.RightButton
+none = qt.KeyboardModifier.NoModifier
+a, b, c = p(50, 50), p(90, 90), p(140, 100)
+
+def mouse_stroke():
+    QTest.mousePress(canvas, left, none, a)
+    QTest.mouseMove(canvas, b)
+    QTest.mouseRelease(canvas, left, none, c)
+
+mouse_stroke()
+assert not canvas.trajectory.strokes
+canvas.set_input_mode("mouse")
+QTest.mouseClick(canvas, left, none, a)
+QTest.mouseClick(canvas, right, none, a)
+assert not canvas.trajectory.strokes
+mouse_stroke()
+stroke, = canvas.trajectory.strokes
+assert canvas.trajectory.input_type == "mouse" and not canvas.trajectory.pressure_available
+assert [(point.x, point.y) for point in stroke.points] == [(50, 50), (90, 90), (140, 100)]
+assert all(point.pressure == 0.5 for point in stroke.points)
+QTest.mousePress(canvas, left, none, a)
+QTest.mouseRelease(canvas, left, none, p(460, 100))
+assert canvas.trajectory.strokes[-1].points[-1].x == 400
+canvas.undo_last_stroke()
+for cancel in (event.FocusOut, event.WindowDeactivate, event.UngrabMouse):
+    QTest.mousePress(canvas, left, none, a)
+    QTest.mouseMove(canvas, b)
+    interrupted = QtGui.QFocusEvent(cancel) if cancel == event.FocusOut else QtCore.QEvent(cancel)
+    app.sendEvent(canvas, interrupted)
+    assert canvas.trajectory.strokes == [stroke] and not canvas.pen_down
+    QTest.mouseRelease(canvas, left, none, c)
+    assert canvas.trajectory.strokes == [stroke]
+QTest.mousePress(canvas, left, none, a)
+lost_button = QtGui.QMouseEvent(event.MouseMove, b, b, qt.MouseButton.NoButton,
+                               qt.MouseButton.NoButton, none)
+app.sendEvent(canvas, lost_button)
+assert canvas.trajectory.strokes == [stroke] and not canvas.pen_down
+QTest.mouseRelease(canvas, left, none, c)
+
+canvas.clear()
+device = QTest.createTouchDevice(QtGui.QInputDevice.DeviceType.TouchScreen)
+def touches():
+    return QTest.touchEvent(canvas, device)
+
+touches().press(0, a, canvas).commit()
+touches().release(0, c, canvas).commit()
+assert not canvas.trajectory.strokes
+canvas.set_input_mode("finger")
+mouse_stroke()
+assert not canvas.trajectory.strokes
+touches().press(0, a, canvas).commit()
+assert canvas.pen_down
+touches().move(0, b, canvas).press(1, p(250, 90), canvas).commit()
+touches().release(0, c, canvas).move(1, p(260, 190), canvas).commit()
+assert not canvas.pen_down
+touches().move(1, p(260, 195), canvas).commit()
+touches().release(1, p(260, 210), canvas).commit()
+stroke, = canvas.trajectory.strokes
+assert [(point.x, point.y) for point in stroke.points] == [(50, 50), (90, 90), (140, 100)]
+assert canvas.trajectory.input_type == "finger" and not canvas.trajectory.pressure_available
+touches().press(0, a, canvas).commit()
+app.sendEvent(canvas, QtGui.QTouchEvent(event.TouchCancel, device, none, []))
+assert canvas.trajectory.strokes == [stroke] and not canvas.pen_down
+touches().release(0, a, canvas).commit()
+touches().press(0, a, canvas).commit()
+touches().release(0, a, canvas).commit()
+assert canvas.trajectory.strokes == [stroke]
+canvas.allow_pointer_dot = True
+touches().press(0, a, canvas).commit()
+touches().release(0, a, canvas).commit()
+assert len(canvas.trajectory.strokes[-1].points) == 1
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", program], env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        capture_output=True, text=True, encoding="utf-8", timeout=25, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

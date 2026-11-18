@@ -108,6 +108,9 @@ def alternative_candidates(engine, ctx, primary, plan, sources, *, limit, cancel
             return None
         seen.add(signature)
         evidence["accepted"] = True
+        from ..source_trajectory import with_source_pressure
+
+        provenance = with_source_pressure(provenance, engine.profile.source_trajectories)
         rows, _, gaps = compact_sources(ctx.graph, provenance, [])
         assert not gaps
         return {"glyph": value, "provenance": provenance, "stroke_sources": rows,

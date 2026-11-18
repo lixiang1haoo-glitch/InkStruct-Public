@@ -69,6 +69,7 @@ def extract_unit(sample, graph, path, confirmed, observed, wanted):
             "points": [{**asdict(p), "x": float(x), "y": float(y)}
                        for p, (x, y) in zip(raw, geometry, strict=True)],
             "coverage": list(edge.coverage), "margin": confirmed[edge],
+            **({"pressure_available": False} if not sample.pressure_available else {}),
         })
     return result
 
@@ -149,7 +150,8 @@ def mapped_segments(unit, mapping, placed=None):
                       for p, (x, y) in zip(points, placed[i], strict=True)]
         result.append({"standard_slots": [mapping[s] for s in stroke["slots"]], "points": points,
                        "kind": "author_group", "source_character": unit["character"],
-                       "source_sha256": unit["source_sha256"], "source_raw_order": stroke["raw_order"]})
+                       "source_sha256": unit["source_sha256"], "source_raw_order": stroke["raw_order"],
+                       **({"pressure_available": False} if stroke.get("pressure_available") is False else {})})
     return result
 
 
@@ -192,6 +194,7 @@ def same_character_candidates(writer, graph, split_samples, connected_units, *, 
             yield [{"standard_slots": [stroke.standard_stroke_id], "kind": "author_split",
                     "source_character": sample.character, "source_sha256": sample.source_sha256,
                     "source_raw_order": stroke.user_order,
+                    **({"pressure_available": False} if not sample.pressure_available else {}),
                     "points": [{"x": xy[0], "y": xy[1], "pressure": pressure, "t_ms": time}
                                for xy, pressure, time in zip(stroke.points, stroke.pressure, stroke.t_ms, strict=True)]}
                    for stroke in sample.strokes]
@@ -337,6 +340,8 @@ def connected_candidates(writer, graph, corrected, base_glyph, source_rows, unit
             segment["source_sha256"] = origin["source_sha256"]
             segment["source_character"] = origin["character"]
             segment["source_kind"] = origin["kind"]
+            if origin.get("pressure_available") is False:
+                segment["pressure_available"] = False
         base.append(segment)
     result, seen = [], set()
     for method, segments in candidates_for(graph, corrected, base, units, repo,

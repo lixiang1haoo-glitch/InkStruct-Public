@@ -109,6 +109,15 @@ def _point_relative(point: Point2D, parent: tuple[float, float, float, float]) -
     return np.asarray(((point[0] - parent[0]) / width, (point[1] - parent[1]) / height))
 
 
+def _pressure_average(curves, weights, shape):
+    measured = [(curve, weight) for curve, weight in zip(curves, weights, strict=True)
+                if curve is not None]
+    if not measured:
+        return np.full(shape, 0.5)
+    curves, weights = zip(*measured, strict=True)
+    return np.average(np.stack(curves), axis=0, weights=weights)
+
+
 def _build_component_trajectory_prototypes(
     values_by_key: dict[str, list[dict[str, object]]],
 ) -> dict[str, ComponentTrajectoryPrototype]:
@@ -125,10 +134,8 @@ def _build_component_trajectory_prototypes(
             weights=weights,
         )
         controls = np.clip(controls, -0.15, 1.15)
-        pressures = np.average(
-            np.stack([np.asarray(value["pressures"]) for value in compatible]),
-            axis=0,
-            weights=weights,
+        pressures = _pressure_average(
+            [value["pressures"] for value in compatible], weights, controls.shape[:-1]
         )
         durations = np.average(
             np.stack([np.asarray(value["durations"]) for value in compatible]),
@@ -169,8 +176,9 @@ def build_profile(
     y_offsets: list[float] = []
     slants: list[float] = []
     pressures: list[float] = []
+    measured_pressure_sample_count = 0
     milliseconds_per_unit: list[float] = []
-    prototype_values: dict[str, list[tuple[np.ndarray, np.ndarray, float, float]]] = {}
+    prototype_values: dict[str, list[tuple[np.ndarray, np.ndarray | None, float, float]]] = {}
     component_layout_values: dict[str, list[dict[str, object]]] = {}
     character_layout_values: dict[str, list[dict[str, object]]] = {}
     component_stroke_values: dict[str, list[dict[str, object]]] = {}
@@ -216,6 +224,7 @@ def build_profile(
             else:
                 source_exclusions.append({"sample_id": sample.sample_id, "reason": str(reason)})
         sample_count += 1
+        measured_pressure_sample_count += int(sample.pressure_available)
         characters.add(sample.character)
         user_glyph_bbox = _glyph_bbox(aligned.normalized_strokes)
         standard_glyph_bbox = _glyph_bbox([stroke.median for stroke in graph.strokes])
@@ -250,7 +259,8 @@ def build_profile(
             covariance = float(np.cov(all_user_points[:, 0], all_user_points[:, 1])[0, 1])
             slants.append(covariance / float(np.var(all_user_points[:, 1])))
         for stroke in sample.strokes:
-            pressures.extend(point.pressure for point in stroke.points)
+            if sample.pressure_available:
+                pressures.extend(point.pressure for point in stroke.points)
             duration = stroke.points[-1].t_ms - stroke.points[0].t_ms
             if duration > 0:
                 normalized = [
@@ -330,20 +340,19 @@ def build_profile(
                             ]
                         )
                     )
-                    raw_pressures = aligned.pressure_strokes[user_index]
-                    component_pressures.append(
-                        np.interp(
+                    if sample.pressure_available:
+                        raw_pressures = aligned.pressure_strokes[user_index]
+                        component_pressures.append(np.interp(
                             np.linspace(0, 1, 8),
                             np.linspace(0, 1, len(raw_pressures)),
                             raw_pressures,
-                        )
-                    )
+                        ))
                     times = aligned.time_strokes[user_index]
                     component_durations.append(float(max(1, times[-1] - times[0])))
                 trajectory_key = component_trajectory_key(graph, component)
                 trajectory_value = {
                     "controls": np.stack(controls),
-                    "pressures": np.stack(component_pressures),
+                    "pressures": np.stack(component_pressures) if component_pressures else None,
                     "durations": np.asarray(component_durations),
                     "confidence": layout_confidence,
                     "character": sample.character,
@@ -408,12 +417,14 @@ def build_profile(
             # Store only local shape deformation. Absolute position, glyph
             # scale and slant are modelled separately by global_style.
             residual = _local_stroke(user) - _local_stroke(standard)
-            raw_pressures = aligned.pressure_strokes[user_index]
-            pressure_curve = np.interp(
-                np.linspace(0, 1, 8),
-                np.linspace(0, 1, len(raw_pressures)),
-                raw_pressures,
-            )
+            pressure_curve = None
+            if sample.pressure_available:
+                raw_pressures = aligned.pressure_strokes[user_index]
+                pressure_curve = np.interp(
+                    np.linspace(0, 1, 8),
+                    np.linspace(0, 1, len(raw_pressures)),
+                    raw_pressures,
+                )
             times = aligned.time_strokes[user_index]
             duration = float(max(1, times[-1] - times[0]))
             standard_stroke = graph.strokes[standard_index]
@@ -498,7 +509,7 @@ def build_profile(
         weights = np.asarray([value[3] for value in values], dtype=np.float64)
         weights /= max(float(weights.sum()), 1e-9)
         residual = np.average(np.stack([value[0] for value in values]), axis=0, weights=weights)
-        pressure = np.average(np.stack([value[1] for value in values]), axis=0, weights=weights)
+        pressure = _pressure_average([value[1] for value in values], weights, residual.shape[:-1])
         duration = float(np.average([value[2] for value in values], weights=weights))
         signature, component_path = key.split("@", 1)
         prototypes[key] = StrokePrototype(
@@ -580,9 +591,7 @@ def build_profile(
             np.stack([np.asarray(value["residual"]) for value in values]), axis=0, weights=weights
         )
         residual = np.clip(residual, -0.20, 0.20)
-        pressure = np.average(
-            np.stack([np.asarray(value["pressure"]) for value in values]), axis=0, weights=weights
-        )
+        pressure = _pressure_average([value["pressure"] for value in values], weights, residual.shape[:-1])
         duration = float(
             np.average([float(value["duration"]) for value in values], weights=weights)
         )
@@ -675,6 +684,7 @@ def build_profile(
         component_trajectories=component_trajectories,
         character_component_trajectories=character_component_trajectories,
         coverage={
+            "measured_pressure_sample_count": measured_pressure_sample_count,
             "signature_hits": signature_hits,
             "prototype_count": len(prototypes),
             "aligned_character_count": len(characters),
