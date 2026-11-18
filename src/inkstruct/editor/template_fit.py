@@ -52,6 +52,7 @@ class TemplateFitDialog(QtWidgets.QDialog):
         self.fields.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.fields.setMaximumHeight(140)
         self.issues = QtWidgets.QTreeWidget()
+        self.issues.setProperty("inkDataTable", True)
         self.issues.setHeaderLabels(["级别", "位置", "问题"])
         labels = {field["region"]: field["label"] for field in report["fields"]}
         for i, diagnostic in enumerate(diagnostics):

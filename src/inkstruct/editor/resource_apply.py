@@ -205,6 +205,7 @@ class ResourceApplyDialog(QtWidgets.QDialog):
         self.summary.setWordWrap(True)
         col.addWidget(self.summary)
         self.issues = QtWidgets.QTreeWidget()
+        self.issues.setProperty("inkDataTable", True)
         self.issues.setHeaderLabels(['级别', '源码位置', '问题'])
         self.issues.setColumnWidth(0, 65)
         self.issues.setColumnWidth(1, 110)

@@ -189,6 +189,39 @@ QPushButton[inkRole="primary"]:enabled:focus {
 QPushButton[inkRole="primary"]:enabled:pressed { border-color: palette(shadow); }
 """
 
+WORKSPACE_CONTROL_STYLES = """
+QTableView, QTreeView[inkDataTable="true"] {
+    background-color: palette(base);
+    alternate-background-color: palette(alternate-base);
+    selection-background-color: palette(highlight);
+    selection-color: palette(highlighted-text);
+    gridline-color: palette(midlight);
+}
+QTableView QHeaderView::section, QTreeView[inkDataTable="true"] QHeaderView::section {
+    background: palette(button); color: palette(button-text);
+    font-weight: 600; padding: 5px 8px;
+    border: 0; border-bottom: 1px solid palette(mid);
+}
+QTableView::item, QTreeView[inkDataTable="true"]::item {
+    padding: 3px 8px; border-bottom: 1px solid palette(midlight);
+}
+QTableView::item:selected, QTreeView[inkDataTable="true"]::item:selected {
+    background: palette(highlight); color: palette(highlighted-text);
+}
+QFrame#captureInputHint {
+    background: palette(alternate-base); color: palette(text);
+    border: 1px solid palette(link); border-radius: 5px;
+}
+QFrame#captureInputHint QLabel { color: palette(text); }
+QPushButton#captureInputHintAction {
+    color: palette(link); font-weight: 600; padding: 2px 5px;
+    background: transparent; border: 1px solid transparent; border-radius: 3px;
+}
+QPushButton#captureInputHintAction:hover, QPushButton#captureInputHintAction:focus {
+    border-color: palette(link);
+}
+"""
+
 
 def native_style_key(platform, windows_build):
     """Choose the platform adapter independently of Qt plugin availability."""
@@ -232,7 +265,7 @@ def use_platform_theme(application, *, windows11_accents=False, mode=None):
 
     if mode is not None:
         application.styleHints().setColorScheme(THEME_MODES[mode])
-    sheet = _WINDOWS11_ACCENTS if windows11_accents else ""
+    sheet = (_WINDOWS11_ACCENTS if windows11_accents else "") + WORKSPACE_CONTROL_STYLES
     if application.styleSheet() != sheet:
         application.setStyleSheet(sheet)
     return key
@@ -263,8 +296,7 @@ def use_dark_fallback(application, *, accents):
     for color_role in (role.WindowText, role.Text, role.ButtonText):
         palette.setColor(QtGui.QPalette.ColorGroup.Disabled, color_role, QtGui.QColor("#8e98a8"))
     application.setPalette(palette)
-    if accents:
-        application.setStyleSheet(_WINDOWS11_ACCENTS)
+    application.setStyleSheet((_WINDOWS11_ACCENTS if accents else "") + WORKSPACE_CONTROL_STYLES)
     application.setProperty("inkstructDesktopStyle", "fusion")
 
 
@@ -317,7 +349,7 @@ def use_light_theme(application):
     palette.setColor(disabled, role.HighlightedText, QtGui.QColor(COLORS["text_muted"]))
     application.setPalette(palette)
     assets = (Path(__file__).parent / "editor/resources").as_posix()
-    application.setStyleSheet(_STYLE.substitute(COLORS, asset_dir=assets))
+    application.setStyleSheet(_STYLE.substitute(COLORS, asset_dir=assets) + WORKSPACE_CONTROL_STYLES)
     application.setProperty("inkstructDesktopStyle", "fusion")
 
 def set_tone(widget, tone):
