@@ -1054,6 +1054,53 @@ def verify_recommended_recording(window, app, out):
             "other_writer_remaining":fresh, "cumulative_remaining":remaining}
 
 
+def verify_new_task_writers(window, app, out):
+    from inkstruct.capture_management import CaptureCatalog
+    from inkstruct.capture_task_dialog import CaptureTaskDialog
+
+    owner = QtWidgets.QWidget(window)
+    catalog = owner._capture_catalog = CaptureCatalog(out / "task-writers")
+    owner._capture_kind = "symbol"
+    owner.writer_edit = QtWidgets.QLineEdit(owner)
+    existing = catalog.create_writer("Synthetic writer")
+    dialog = CaptureTaskDialog(owner)
+
+    def wait_until(condition):
+        deadline = time.monotonic() + 10
+        while not condition() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(.005)
+        assert condition(), dialog.error.text()
+
+    try:
+        dialog.show()
+        wait_until(lambda: dialog.writer_picker.findData(existing) > 0)
+        assert not dialog.writer and dialog.import_selection is None
+        assert not any(dialog.selection.characters.values())
+        dialog.selection.groups["digits"].setChecked(True)
+        dialog.selection.repeats.setValue(1)
+        assert dialog.counts["existing"].text() == "—" and not dialog.start.isEnabled()
+        dialog.writer_picker.setText(existing)
+        wait_until(dialog.start.isEnabled)
+        assert len(dialog.entries) == 10
+        input_dialog = QtWidgets.QInputDialog.getText
+        try:
+            QtWidgets.QInputDialog.getText = lambda *_: ("Created in the dialog", True)
+            dialog.add_writer_button.click()
+        finally:
+            QtWidgets.QInputDialog.getText = input_dialog
+        wait_until(dialog.start.isEnabled)
+        assert dialog.writer != existing and dialog.writer == dialog.writer_picker.currentData()
+        assert catalog.writers()[dialog.writer]["name"] == "Created in the dialog"
+        assert len(dialog.entries) == 10 and not owner.writer_edit.text()
+        dialog.sources.setCurrentIndex(1)
+        assert dialog.selection.available is dialog.import_selection.available
+    finally:
+        dialog.reject()
+        dialog.dispose()
+    return {"choose_existing": True, "create_new": True, "lazy_controls": True, "shared_inventory": True}
+
+
 def verify_about_page(dialog, app):
     dialog.select("about")
     app.processEvents()
@@ -1229,6 +1276,7 @@ def verify_windows_style(window, app, out, font_path=None):
     assert all(tab.findChild(QtWidgets.QPushButton, 'capture_sample_library')
                for tab in (window.collector.single_widget, window.collector.symbol_widget))
     capture_input = verify_capture_input(window, app)
+    new_task_writers = verify_new_task_writers(window, app, out)
     recommended_recording = verify_recommended_recording(window, app, out)
     source = window.collector.single_widget._capture_catalog
     target = CaptureCatalog(out / 'sample-target')
@@ -1421,6 +1469,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
             "recommended_recording": recommended_recording,
+            "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,
             "preview_path_acceleration": True,
         }
@@ -1819,20 +1868,28 @@ def main():
 
     sw = w.collector.symbol_widget
     capture_writer = sw._capture_catalog.create_writer('自检书写者')
-    sw.writer_picker.reload(capture_writer)
-    sw.choose_writer(capture_writer)
+    sw.writer_picker.reload()
     from inkstruct.capture_task_dialog import CaptureTaskDialog
     def configure_capture():
         dialog = app.activeModalWidget()
         assert isinstance(dialog, CaptureTaskDialog)
+        assert not dialog.writer and dialog.import_selection is None
+        assert not any(dialog.selection.characters.values())
+        dialog.writer_picker.setText(capture_writer)
         dialog.selection.select_all(False)
         dialog.selection.groups['latin_italic'].setChecked(True)
         dialog.selection.groups['digits'].setChecked(True)
         dialog.selection.groups['operators'].setChecked(True)
         dialog.selection.repeats.setValue(1)
+        deadline = time.monotonic() + 10
+        while dialog.symbol_inventory is None and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(.005)
+        assert dialog.start.isEnabled(), dialog.error.text()
         dialog.accept()
     QtCore.QTimer.singleShot(0, configure_capture)
     sw.new_task_button.click()
+    assert sw.task.writer_id == capture_writer and sw.writer_edit.text() == capture_writer
     assert sw.task.current_item().character == "A"
     width, height = sw.canvas.width(), sw.canvas.height()
     sw.canvas.trajectory.start_stroke(TrajectoryPoint(width * .3, height * .4, 0.4, 0))
