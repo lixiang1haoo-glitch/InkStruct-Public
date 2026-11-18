@@ -166,7 +166,8 @@ class CaptureWorkspace(QtCore.QObject):
         widget.task_help.setVisible(bool(widget.task_help.text()))
         widget.new_task_button.setEnabled(not widget.canvas.pen_down)
         self.begin.setEnabled(bool(widget.writer_edit.text()))
-        key = (widget.writer_edit.text(), widget.task.task_id if widget.task else None)
+        key = (widget.writer_edit.text(), widget.task.task_id if widget.task else None,
+               str(widget._capture_catalog.root))
         if key == self.recent_key:
             return
         self.recent_key = key

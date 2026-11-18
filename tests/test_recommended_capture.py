@@ -213,6 +213,35 @@ assert symbol.capture_workspace.complete.text()=="复用配置已保存"
 symbol.pause_task()
 assert all(symbol.capture_workspace.recent.topLevelItem(i).text(0)!="供体复用"
            for i in range(symbol.capture_workspace.recent.topLevelItemCount()))
+from inkstruct.capture_workflow_ui import TaskListDialog
+
+def rename_old():
+    modal=app.activeModalWidget()
+    assert isinstance(modal,TaskListDialog)
+    for index in range(modal.tree.topLevelItemCount()):
+        item=modal.tree.topLevelItem(index)
+        entry=item.data(0,QtCore.Qt.ItemDataRole.UserRole)
+        if entry["task"].task_id==old.task_id:
+            modal.tree.setCurrentItem(item)
+            modal.choose("rename")
+            return
+    raise AssertionError("Old task was absent from task management")
+
+original_input=QtWidgets.QInputDialog.getText
+han.choose_writer(writer_a)
+QtWidgets.QInputDialog.getText=lambda *args,**kwargs:("重命名的旧任务",True)
+QtCore.QTimer.singleShot(0,rename_old)
+han.task_list()
+QtWidgets.QInputDialog.getText=original_input
+assert any(han.capture_workspace.recent.topLevelItem(i).text(0)=="重命名的旧任务"
+           for i in range(han.capture_workspace.recent.topLevelItemCount()))
+original_directory=QtWidgets.QFileDialog.getExistingDirectory
+QtWidgets.QFileDialog.getExistingDirectory=lambda *args,**kwargs:str(root/"new-capture")
+window.choose_output_root()
+QtWidgets.QFileDialog.getExistingDirectory=original_directory
+assert han.capture_workspace.recent.topLevelItemCount()==0
+assert not han.writer_edit.text() and not han.capture_workspace.begin.isEnabled()
+assert legacy_sample.read_bytes()==original_sample
 window.close()
 app.processEvents()
 '''
