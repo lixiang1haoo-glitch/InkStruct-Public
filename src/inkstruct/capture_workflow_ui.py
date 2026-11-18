@@ -6,7 +6,7 @@ from threading import Event
 
 from PySide6 import QtCore, QtWidgets
 
-from .recommended_capture import STAGES, recording_stages, remaining_entries, stage_key
+from .recommended_capture import CUMULATIVE_PREFIX, recording_stages, remaining_entries, stage_key, stage_size
 from .ui_behavior import compact_field
 from .capture_management import (
     CaptureCatalog,
@@ -388,7 +388,7 @@ class CaptureLifecycleMixin:
         super().set_task(task)
         if getattr(self, '_capture_catalog', None):
             self.writer_picker.reload(task.writer_id)
-            self.task_help.setText('任务身份固定；显示名称可修改。关闭、取消均保留已保存样本。')
+            self.task_help.clear()
             self._sync_selected_writer(task.writer_id)
 
     def refresh(self):
@@ -401,13 +401,15 @@ class CaptureLifecycleMixin:
                 skipped = sum(i.status == 'skipped' for i in self.task.items)
                 self.progress_label.setText(f'已保存 {self.task.completed_count} / {len(self.task.items)} · 稍后录 {skipped}')
                 key = stage_key(self.task.source)
-                if key:
-                    total = STAGES[key][1]
+                if key and not self.task.source.startswith(CUMULATIVE_PREFIX):
+                    total = stage_size(self.task.source)
                     reused = total - len(self.task.items)
                     done = reused + self.task.completed_count
                     self.progress_bar.setRange(0, total)
                     self.progress_bar.setValue(done)
                     self.progress_label.setText(f'本档 {done} / {total} 字 · 已有 {reused} · 剩余 {total - done} · 稍后录 {skipped}')
+            if hasattr(self, "capture_workspace"):
+                self.capture_workspace.refresh()
 
     def _close_task(self):
         self.task = None
@@ -499,6 +501,7 @@ class CaptureLifecycleMixin:
             self.writer_edit.setText(key)
             self.writer_picker.reload(key)
             self._sync_selected_writer(key)
+            self.refresh()
         except (OSError, ValueError) as error:
             self.writer_picker.reload(old)
             self._capture_error(error)
@@ -512,6 +515,7 @@ class CaptureLifecycleMixin:
             if other is not self and not other.task and hasattr(other, 'writer_picker'):
                 other.writer_edit.setText(key)
                 other.writer_picker.reload(key)
+                other.refresh()
         self._capture_window.writer_selected.emit(key)
 
     def task_lock(self):
@@ -576,12 +580,26 @@ class CaptureLifecycleMixin:
         self.configure_han_task()
 
     def configure_han_task(self, path=None):
+        self.new_capture_task(path=path)
+
+    def new_capture_task(self, _checked=False, *, path=None, stage_key="add68"):
+        from .capture_task_dialog import CaptureTaskDialog
+
         try:
-            dialog = HanTaskDialog(self._capture_catalog, self.writer_edit.text(), path, self)
-            if dialog.exec() != QtWidgets.QDialog.Accepted or not self._can_switch():
-                return
-            self._start_han_task(dialog.name.text().strip(), Path(path).name if path else 'builtin:cjk-demo',
-                                 dialog.writer.text(), dialog.entries)
+            dialog = CaptureTaskDialog(self, path=path, stage_key=stage_key)
+            try:
+                if dialog.exec() != QtWidgets.QDialog.Accepted or not self._can_switch():
+                    return
+                if self._capture_kind == "symbol":
+                    self._start(dialog.name.text().strip(), dialog.entries, dialog.source, dialog.writer)
+                elif dialog.sources.currentIndex() == 0:
+                    self.start_recommended_task(dialog.stage, dialog.writer, dialog.entries,
+                                                dialog.name.text().strip())
+                else:
+                    self._start_han_task(dialog.name.text().strip(), dialog.source,
+                                         dialog.writer, dialog.entries)
+            finally:
+                dialog.dispose()
         except (OSError, ValueError) as error:
             self._capture_error(error)
 
@@ -596,28 +614,24 @@ class CaptureLifecycleMixin:
         self.set_task(task)
 
     def configure_recommended_task(self, key):
-        if not self._can_switch():
-            return
+        self.new_capture_task(stage_key=key)
+
+    def start_recommended_task(self, stage, selected, entries, name):
         try:
-            stage = recording_stages()[key]
             catalog = self._capture_catalog
-            dialog = RecommendedTaskDialog(catalog, self.writer_edit.text(), stage, self.structures, self)
-            try:
-                if dialog.exec() != QtWidgets.QDialog.Accepted:
-                    return
-                selected, entries = dialog.writer.text(), dialog.entries
-            finally:
-                dialog.dispose()
             lock = QtCore.QLockFile(str(catalog.root / '.recommended-capture.lock'))
             if not lock.tryLock(0):
                 raise ValueError('另一窗口正在打开推荐录制任务，请稍后重试')
             try:
+                entries = remaining_entries(catalog, selected, stage, self.structures)
+                if not entries:
+                    raise ValueError("此累计目标均已有合格样本，无需创建任务。")
                 matches = []
                 for candidate in catalog.tasks():
                     task = candidate['task']
                     if not task or candidate['kind'] != 'han' or candidate['state'] not in ('active', 'paused'):
                         continue
-                    if task.source != stage.source or task.writer_id != selected:
+                    if task.source != stage.source or task.writer_id != selected or task.name != name:
                         continue
                     pending = tuple((item.character, item.repeat_total, item.source_index)
                                     for item in task.items if item.status != 'completed')
@@ -627,7 +641,7 @@ class CaptureLifecycleMixin:
                     entry = max(matches, key=lambda item: item['task'].created_at)
                     self.open_managed_task(entry, check_switch=False)
                 else:
-                    self._start_han_task(stage.title, stage.source, selected, entries)
+                    self._start_han_task(name, stage.source, selected, entries)
             finally:
                 lock.unlock()
         except (OSError, ValueError) as error:
@@ -693,6 +707,11 @@ class CaptureLifecycleMixin:
                     self._capture_catalog.set_state(entry['kind'], entry['task'].task_id, 'cancelled' if action == 'cancel' else 'archived')
         except (OSError, ValueError) as error:
             self._capture_error(error)
+
+        finally:
+            for widget in (self._capture_window.single_widget, self._capture_window.symbol_widget):
+                widget.capture_workspace.recent_key = None
+                widget.refresh()
 
     def edit_task(self, entry, action, target):
         import json
@@ -806,8 +825,6 @@ def install_capture_management(window, root):
         row.addWidget(QtWidgets.QLabel('书写者'))
         widget.writer_picker = WriterPicker(catalog)
         row.addWidget(widget.writer_picker, 1)
-        new = QtWidgets.QPushButton('新建书写者…')
-        rename = QtWidgets.QPushButton('修改名称…')
         profiles = QtWidgets.QPushButton('书写者资料')
         profile_menu = QtWidgets.QMenu(profiles)
         profile_menu.addAction('导入书写者资料…', lambda _checked=False, w=widget: transfer_writer_profile(w, importing=True))
@@ -816,11 +833,9 @@ def install_capture_management(window, root):
         profile_menu.addAction('导入样本文件或 ZIP 到当前书写者…', lambda _checked=False, w=widget: import_writer_samples(w))
         profile_menu.addAction('导入样本目录到当前书写者…', lambda _checked=False, w=widget: import_writer_samples(w, directory=True))
         profiles.setMenu(profile_menu)
-        row.addWidget(new)
-        row.addWidget(rename)
         row.addWidget(profiles)
         column.addLayout(row)
-        widget.task_help = QtWidgets.QLabel('先选择或新建书写者，再创建任务。任务列表可恢复历史任务，关闭与取消不删除样本。')
+        widget.task_help = QtWidgets.QLabel()
         widget.task_help.setWordWrap(True)
         column.addWidget(widget.task_help)
         actions = QtWidgets.QHBoxLayout()
@@ -841,21 +856,6 @@ def install_capture_management(window, root):
         for button in (task_list, widget.pause_button, widget.cancel_task_button):
             actions.addWidget(button)
         column.addLayout(actions)
-        if kind == 'han':
-            recommendations = QtWidgets.QGroupBox('推荐录制任务')
-            stages = QtWidgets.QGridLayout(recommendations)
-            for index, (key, (title, count)) in enumerate(STAGES.items()):
-                button = QtWidgets.QPushButton(title)
-                button.setObjectName('capture_recommended_' + key)
-                if key == 'add68':
-                    button.setProperty('inkRole', 'primary')
-                button.clicked.connect(lambda _checked=False, w=widget, k=key: w.configure_recommended_task(k))
-                subtitle = QtWidgets.QLabel(f'新增 {count} 字 · 每字 1 份')
-                subtitle.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-                stages.addWidget(button, 0, index)
-                stages.addWidget(subtitle, 1, index)
-                stages.setColumnStretch(index, 1)
-            column.addWidget(recommendations)
         widget.layout().insertWidget(0, panel)
         widget.writer_picker.textChanged.connect(widget.choose_writer)
         def create(_checked=False, w=widget):
@@ -874,11 +874,13 @@ def install_capture_management(window, root):
                         other.writer_picker.reload(other.task.writer_id if other.task else other.writer_edit.text())
                 except (OSError, ValueError) as error:
                     w._capture_error(error)
-        new.clicked.connect(create)
-        rename.clicked.connect(rename_current)
         task_list.clicked.connect(widget.task_list)
         widget.pause_button.clicked.connect(widget.pause_task)
         widget.cancel_task_button.clicked.connect(widget.cancel_task)
+        from .capture_workspace import CaptureWorkspace
+
+        widget.capture_workspace = CaptureWorkspace(widget, panel, create, rename_current,
+                                                    profiles, task_list, samples)
         widget.refresh()
 
 

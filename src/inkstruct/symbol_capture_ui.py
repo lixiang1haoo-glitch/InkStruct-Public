@@ -249,6 +249,8 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             )
 
         def create_task(self):
+            if getattr(self, "_capture_catalog", None):
+                return self.new_capture_task()
             if not self._can_switch():
                 return
             self.configure_task()
@@ -271,6 +273,11 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
                 QtWidgets.QMessageBox.warning(self, "无法创建任务", str(error))
 
         def import_task(self):
+            if getattr(self, "_capture_catalog", None):
+                path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "选择符号字表", "", "字表 (*.txt *.csv)")
+                if path:
+                    self.new_capture_task(path=path)
+                return
             if not self._can_switch():
                 return
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -364,7 +371,7 @@ def create_symbol_widget_class(collector_ui, QtCore, QtGui, QtWidgets):
             item = self.task.current_item() if self.task else None
             self.canvas.allow_pointer_dot = bool(item and item.character in ".．·⋅…:：;；!！?？ij")
             if self.task and self._task_root is not None:
-                self.task_name_label.setText(f"{self.task.name} · {self._task_root}")
+                self.task_name_label.setText(self.task.name)
             self.save_button.setEnabled(
                 bool(item and self.canvas.trajectory.point_count and not self.canvas.pen_down)
             )

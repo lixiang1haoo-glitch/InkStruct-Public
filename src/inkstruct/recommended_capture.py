@@ -9,11 +9,13 @@ from hashlib import sha256
 from pathlib import Path
 
 SOURCE_PREFIX = 'builtin:research-v1:'
+CUMULATIVE_PREFIX = SOURCE_PREFIX + 'cumulative:'
 STAGES = {
     'starter32': ('起步 · 32 字', 32),
-    'add68': ('推荐 · 补至 100 字', 68),
-    'add300': ('进阶 · 补至 400 字', 300),
+    'add68': ('推荐 · 100 字', 100),
+    'add300': ('进阶 · 400 字', 400),
 }
+LEGACY_STAGE_SIZES = {'starter32': 32, 'add68': 68, 'add300': 300}
 ISSUED_LISTS = {
     'starter32/characters.csv': '7edac1a867d52e76a39215e32f711b1eca7ade0bec9f17af3f7bfc895542736f',
     'add68/characters.csv': '9495d09f96a3f045629f4ab20a85626316ba787e550a2a3ead000995d9aa5eaa',
@@ -32,12 +34,20 @@ class RecordingStage:
 
     @property
     def source(self):
-        return SOURCE_PREFIX + self.key
+        return CUMULATIVE_PREFIX + self.key
 
 
 def stage_key(source):
-    key = source.removeprefix(SOURCE_PREFIX)
-    return key if source.startswith(SOURCE_PREFIX) and key in STAGES else None
+    prefix = CUMULATIVE_PREFIX if source.startswith(CUMULATIVE_PREFIX) else SOURCE_PREFIX
+    key = source.removeprefix(prefix)
+    return key if source.startswith(prefix) and key in STAGES else None
+
+
+def stage_size(source):
+    key = stage_key(source)
+    if key is None:
+        return None
+    return STAGES[key][1] if source.startswith(CUMULATIVE_PREFIX) else LEGACY_STAGE_SIZES[key]
 
 
 @lru_cache(maxsize=1)
@@ -60,7 +70,7 @@ def recording_stages():
         raise ValueError('内置录制字表顺序或字数不一致')
     return {
         key: RecordingStage(key, tuple((char, 1, index) for index, char in enumerate(characters)))
-        for key, characters in zip(STAGES, (starter, addition, historical[100:]), strict=True)
+        for key, characters in zip(STAGES, (starter, historical[:100], historical), strict=True)
     }
 
 

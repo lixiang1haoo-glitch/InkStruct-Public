@@ -22,18 +22,23 @@ QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope,
 use_platform_theme(app, mode="light")
 window = main(["InkStruct"], create_only=True, workspace=Path(sys.argv[1]))
 from handwriting_collector.models import TrajectoryPoint
+from handwriting_collector.tasks import CollectionTask, TaskRepository
 
 window.show()
 for index, tab in enumerate((window.single_widget, window.symbol_widget)):
     window.tabs.setCurrentIndex(index)
     app.processEvents()
     position = lambda widget: widget.mapTo(tab, QtCore.QPoint())
-    progress_right = position(tab.progress_bar).x() + tab.progress_bar.width()
-    assert tab.progress_bar.width() <= 300
-    assert all(position(slider).x() > progress_right for slider in (tab.canvas_size_slider, tab.stroke_width_slider))
+    assert not tab.canvas.isVisible() and tab.capture_workspace.stack.currentIndex() == 0
+    writer = tab._capture_catalog.create_writer("Theme check")
+    task = CollectionTask.create("Theme check", "synthetic", writer, [("一" if index == 0 else ".",1,0)])
+    TaskRepository(tab._capture_catalog.task_root(tab._capture_kind)).save(task)
+    tab.set_task(task)
+    app.processEvents()
+    assert tab.progress_bar.isVisible() and tab.canvas.isVisible()
     assert position(tab.canvas_size_slider).y() < position(tab.stroke_width_slider).y()
+    assert position(tab.progress_bar).y() < position(tab.canvas_size_slider).y()
     if index == 0:
-        assert position(tab.connected_mode).x() < position(tab.progress_bar).x()
         assert position(tab.progress_bar).y() < position(tab.connected_mode).y() < position(tab.canvas).y()
 canvases = (window.single_widget.canvas, window.symbol_widget.canvas)
 saved = []
@@ -79,6 +84,7 @@ from pathlib import Path
 import sys
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtTest import QTest
+import time
 from handwriting_collector.models import TrajectoryPoint
 from handwriting_collector.tasks import CollectionTask, TaskRepository
 from inkstruct.collector import main
@@ -92,15 +98,29 @@ window.show()
 app.processEvents()
 tab = window.single_widget
 assert window.width() == 980
+assert not tab.canvas.isVisible()
+writer = tab._capture_catalog.create_writer("布局验收书写者")
+layout_task = CollectionTask.create("布局验收", "synthetic", writer, [("永",1,0)])
+TaskRepository(window.output_root).save(layout_task)
+tab.set_task(layout_task)
+app.processEvents()
 buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
 def position(button):
     return QtCore.QRect(button.mapTo(tab, QtCore.QPoint()), button.size())
 
 for step in (15, 20, 27, 30):
     tab.canvas_size_slider.setValue(step)
-    QTest.qWait(30)
-    reference = tab.stroke_reference.geometry()
-    canvas = tab.canvas.geometry()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        app.processEvents()
+        reference = position(tab.stroke_reference)
+        canvas = position(tab.canvas)
+        column = position(buttons[0]).united(position(buttons[-1]))
+        if abs(column.center().y() - canvas.center().y()) <= 1:
+            break
+        QTest.qWait(10)
+    reference = position(tab.stroke_reference)
+    canvas = position(tab.canvas)
     assert canvas.width() >= tab.canvas.minimumWidth()
     column = position(buttons[0]).united(position(buttons[-1]))
     assert abs(column.center().y() - canvas.center().y()) <= 1, (step, column, canvas)
@@ -111,7 +131,7 @@ for step in (15, 20, 27, 30):
         assert button.text().splitlines()[1] == ("Ctrl+Z", "Delete", "Shift+Enter", "Enter")[i]
         if i:
             assert position(buttons[i - 1]).bottom() < box.top()
-        assert not button.isEnabled()
+        assert button.isEnabled() == (button is tab.skip_button)
 
 tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 10))
 tab.canvas.trajectory_changed.emit()
@@ -122,7 +142,7 @@ tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 20))
 tab.canvas.trajectory_changed.emit()
 tab.clear_button.click()
 assert tab.canvas.trajectory.point_count == 0
-assert not tab.save_button.isEnabled() and not tab.skip_button.isEnabled()
+assert not tab.save_button.isEnabled() and tab.skip_button.isEnabled()
 writer = tab._capture_catalog.create_writer("演示书写者")
 tab.writer_picker.reload(writer)
 task = CollectionTask.create("快捷键验证", "synthetic", writer, [("永", 1, 0), ("中", 1, 1), ("人", 1, 2)])
