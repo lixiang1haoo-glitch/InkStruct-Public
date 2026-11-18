@@ -708,6 +708,11 @@ class CaptureLifecycleMixin:
         except (OSError, ValueError) as error:
             self._capture_error(error)
 
+        finally:
+            for widget in (self._capture_window.single_widget, self._capture_window.symbol_widget):
+                widget.capture_workspace.recent_key = None
+                widget.refresh()
+
     def edit_task(self, entry, action, target):
         import json
 

@@ -335,6 +335,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
                         widget.writer_picker.catalog = widget._capture_catalog
                         widget.writer_picker.reload()
                         widget.writer_edit.clear()
+                        widget.refresh()
                     self.capture_selected_writer = ''
                 self._update_status()
                 return self.output_root
