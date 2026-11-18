@@ -1155,6 +1155,19 @@ def verify_capture_input(window, app):
     app.processEvents()
     from handwriting_collector.tasks import CollectionTask, TaskRepository
 
+    def verify_writing_actions(tab):
+        def position(widget):
+            return QtCore.QRect(widget.mapTo(tab, QtCore.QPoint()), widget.size())
+
+        canvas = position(tab.canvas)
+        if tab is symbol:
+            canvas = canvas.intersected(position(symbol.canvas_scroll.viewport()))
+        column = position(tab.findChild(QtWidgets.QWidget, "captureWritingActions"))
+        assert not canvas.isEmpty() and canvas.left() - column.right() - 1 == 12, (canvas, column)
+        assert [button.accessibleDescription() for button in
+                (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)] == [
+                    "Ctrl+Z", "Delete", "Shift+Enter", "Enter"]
+
     writer = han._capture_catalog.create_writer("Synthetic input check")
     task = CollectionTask.create("Input check", "synthetic-check", writer, [("一",1,0)])
     TaskRepository(han._capture_catalog.root).save(task)
@@ -1172,6 +1185,7 @@ def verify_capture_input(window, app):
     assert han.task and han.task.task_id == task.task_id
     app.processEvents()
     assert han.canvas.isVisible()
+    verify_writing_actions(han)
     mouse, no_mod = QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.KeyboardModifier.NoModifier
     start, stop = QtCore.QPoint(60, 60), QtCore.QPoint(120, 90)
 
@@ -1214,10 +1228,18 @@ def verify_capture_input(window, app):
     han.canvas.clear()
     choose(han, "tablet")
     han.pause_task()
+    collector.tabs.setCurrentWidget(symbol)
+    view_task = CollectionTask.create("Canvas layout check", "synthetic-check", writer, [(".", 1, 0)])
+    TaskRepository(symbol._capture_catalog.task_root("symbol")).save(view_task)
+    symbol.set_task(view_task)
+    app.processEvents()
+    verify_writing_actions(symbol)
+    symbol.pause_task()
     window.tabs.setCurrentIndex(previous_page)
     app.processEvents()
     return {"mouse": "Qt event injection", "touch": "Qt event injection", "shared_mode_saved": True,
-            "mismatch_suggests_switch": True, "continue_task_background": True}
+            "mismatch_suggests_switch": True, "continue_task_background": True,
+            "actions_left_of_both_canvases": True}
 
 
 def verify_windows_style(window, app, out, font_path=None):

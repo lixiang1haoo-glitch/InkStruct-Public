@@ -1,6 +1,6 @@
 """Common canvas controls for both handwriting capture tabs."""
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from .ui_behavior import compact_field
 
@@ -51,6 +51,44 @@ def capture_display_controls(status, progress_bar):
     status.addLayout(controls)
     status.addStretch()
     return controls
+
+
+def capture_writing_row(owner, canvas_view, reference=None):
+    """Keep a single action column beside the drawing surface in both tabs."""
+    column = QtWidgets.QWidget()
+    column.setObjectName("captureWritingActions")
+    actions = QtWidgets.QVBoxLayout(column)
+    actions.setContentsMargins(0, 0, 0, 0)
+    actions.setSpacing(8)
+    for button, title, shortcut in (
+        (owner.undo_button, "撤销上一笔", "Ctrl+Z"),
+        (owner.clear_button, "重写当前字", "Delete"),
+        (owner.skip_button, "暂时跳过", "Shift+Enter"),
+        (owner.save_button, "保存并下一个", "Enter"),
+    ):
+        button.setText(f"{title}\n{shortcut}")
+        button.setAccessibleName(title)
+        button.setAccessibleDescription(shortcut)
+        button.setMinimumSize(112, 48)
+        actions.addWidget(button)
+    owner.save_button.setProperty("inkRole", "primary")
+    skip = QtGui.QShortcut(owner)
+    skip.setKeys([QtGui.QKeySequence("Shift+Return"), QtGui.QKeySequence("Shift+Enter")])
+    skip.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+    skip.setAutoRepeat(False)
+    skip.activated.connect(owner.skip_button.click)
+
+    row = QtWidgets.QHBoxLayout()
+    row.setSpacing(0)
+    if reference is not None:
+        row.addWidget(reference, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        row.addSpacing(24)
+    row.addStretch()
+    row.addWidget(column, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+    row.addSpacing(12)
+    row.addWidget(canvas_view, 1)
+    row.addStretch()
+    return row
 
 
 def canvas_slider_row(title, accessible_name, hint):
