@@ -30,9 +30,10 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         if embedded:
             self.setWindowFlags(QtCore.Qt.WindowType.Widget)
         self.imported, self.collection_root = imported, collection_root
+        self.embedded = embedded
         self._inventory_writer = None
         self.available, self.reuse = {}, {}
-        self._changing = False
+        self.checked = {key: set() for key in TASK_GROUPS}
         layout = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         self.name = QtWidgets.QLineEdit('标点与扩展采集')
@@ -77,7 +78,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             header = QtWidgets.QHBoxLayout()
             check = QtWidgets.QCheckBox(f'{label}（{len(characters)} 个采集项）')
             check.setObjectName('task_group_' + key)
-            check.toggled.connect(lambda checked, g=key: self.select_group(g, checked))
+            check.checkStateChanged.connect(
+                lambda state, g=key: self.select_group(g, state != QtCore.Qt.CheckState.Unchecked)
+            )
             self.groups[key] = check
             header.addWidget(check)
             members = SYMBOL_GROUPS[key][1]
@@ -86,23 +89,17 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             preview.setToolTip(" ".join(members) + "\n同形的全角和半角字符只录一项。")
             header.addWidget(preview, 1)
             button = QtWidgets.QPushButton('展开逐字选择')
+            button.setObjectName('task_expand_' + key)
             button.setMaximumWidth(150)
             header.addWidget(button)
             body_layout.addLayout(header)
             panel = QtWidgets.QWidget()
-            grid = QtWidgets.QGridLayout(panel)
             self.characters[key] = {}
-            for index, char in enumerate(characters):
-                box = QtWidgets.QCheckBox(char)
-                box.setObjectName(f'character_{key}_{ord(char):04X}')
-                box.setStyleSheet('font-size: 19px;' + ('font-style: italic;' if key == 'latin_italic' else ''))
-                box.setToolTip(capture_label(char))
-                box.toggled.connect(lambda _, g=key: self.character_changed(g))
-                self.characters[key][char] = box
-                grid.addWidget(box, index // 10, index % 10)
             panel.setVisible(False)
             self.panels[key] = panel
-            button.clicked.connect(lambda _, p=panel, b=button: self.toggle_panel(p, b))
+            if not embedded:
+                self.populate_characters(key)
+            button.clicked.connect(lambda _, g=key, b=button: self.toggle_panel(g, b))
             body_layout.addWidget(panel)
         body_layout.addStretch()
         scroll = QtWidgets.QScrollArea()
@@ -135,64 +132,93 @@ class SymbolTaskDialog(QtWidgets.QDialog):
             self.buttons.hide()
             self.summary.hide()
             self.error.hide()
+            self.reuse_button.setEnabled(False)
         self.repeats.valueChanged.connect(self.update_summary)
         self.writer.textChanged.connect(self.writer_changed)
         if imported is not None:
-            wanted = {capture_character(c) for c, _, _ in imported}
-            for boxes in self.characters.values():
-                for char, box in boxes.items():
-                    box.setChecked(char in wanted)
-        self.update_summary()
+            self.set_imported(imported)
+        else:
+            self.update_summary()
 
-    @staticmethod
-    def toggle_panel(panel, button):
+    def populate_characters(self, group):
+        grid = QtWidgets.QGridLayout(self.panels[group])
+        for index, char in enumerate(TASK_GROUPS[group][1]):
+            box = QtWidgets.QCheckBox(char)
+            box.setObjectName(f'character_{group}_{ord(char):04X}')
+            box.setStyleSheet('font-size: 19px;' + ('font-style: italic;' if group == 'latin_italic' else ''))
+            box.setToolTip(capture_label(char))
+            box.setChecked(char in self.checked[group])
+            box.toggled.connect(lambda checked, g=group, c=char: self.character_changed(g, c, checked))
+            self.characters[group][char] = box
+            grid.addWidget(box, index // 10, index % 10)
+
+    def toggle_panel(self, group, button):
+        panel = self.panels[group]
         visible = panel.isHidden()
+        if visible and panel.layout() is None:
+            self.populate_characters(group)
         panel.setVisible(visible)
         button.setText('收起' if visible else '展开逐字选择')
 
     def writer_changed(self):
         self.reuse.clear()
         self._inventory_writer = None
+        self.available = {}
+        if self.embedded:
+            self.reuse_button.setEnabled(False)
         self.update_summary()
 
+    def apply_inventory(self, available):
+        self.available = available
+        self._inventory_writer = self.writer.text().strip()
+        self.reuse_button.setEnabled(True)
+
     def load_inventory(self, *, force=False):
+        if self.embedded:
+            if self._inventory_writer is None:
+                raise ValueError('请先核对当前书写者的样本')
+            return
         writer = self.writer.text().strip()
         if force or writer != self._inventory_writer:
             self.available = inventory(self.collection_root, writer)
             self._inventory_writer = writer
 
     def select_group(self, group, checked):
-        if self._changing:
-            return
-        self._changing = True
-        for box in self.characters[group].values():
-            box.setChecked(checked)
-        self._changing = False
-        self.character_changed(group)
-
-    def character_changed(self, group):
-        if self._changing:
-            return
-        boxes = self.characters[group]
-        count = sum(box.isChecked() for box in boxes.values())
-        check = self.groups[group]
-        check.blockSignals(True)
-        check.setTristate(0 < count < len(boxes))
-        check.setCheckState(QtCore.Qt.Checked if count == len(boxes) else
-                            QtCore.Qt.PartiallyChecked if count else QtCore.Qt.Unchecked)
-        check.blockSignals(False)
-        for char, box in boxes.items():
-            if box.isChecked():
-                self.reuse.pop((group, char), None)
+        self.checked[group] = set(TASK_GROUPS[group][1]) if checked else set()
+        self.sync_group(group)
         self.update_summary()
 
+    def character_changed(self, group, char, checked):
+        if checked:
+            self.checked[group].add(char)
+        else:
+            self.checked[group].discard(char)
+        self.sync_group(group)
+        self.update_summary()
+
+    def sync_group(self, group):
+        selected = self.checked[group]
+        count, total = len(selected), len(TASK_GROUPS[group][1])
+        check = self.groups[group]
+        with QtCore.QSignalBlocker(check):
+            check.setTristate(0 < count < total)
+            check.setCheckState(QtCore.Qt.Checked if count == total else
+                                QtCore.Qt.PartiallyChecked if count else QtCore.Qt.Unchecked)
+        for char, box in self.characters[group].items():
+            with QtCore.QSignalBlocker(box):
+                box.setChecked(char in selected)
+        for char in selected:
+            self.reuse.pop((group, char), None)
+
     def select_all(self, checked):
-        for key in self.groups:
-            self.select_group(key, checked)
+        for key, (_, characters, _) in TASK_GROUPS.items():
+            self.checked[key] = set(characters) if checked else set()
+            self.sync_group(key)
+        self.update_summary()
 
     def selected(self):
-        return {g: [c for c, box in boxes.items() if box.isChecked()]
-                for g, boxes in self.characters.items()}
+        return {key: [char for char in chars if char in self.checked[key]]
+                for key, (_, chars, _) in TASK_GROUPS.items()}
 
     def selection_entries(self):
         selected = self.selected()
@@ -206,9 +232,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
                        if c in selected[groups[i]]]
         return groups, entries
 
-    def plan(self):
+    def plan(self, selection=None):
         self.load_inventory()
-        groups, entries = self.selection_entries()
+        groups, entries = self.selection_entries() if selection is None else selection
         kept, self.existing_count = [], 0
         for char, count, index in entries:
             style = TASK_GROUPS[groups[index]][2]
@@ -228,6 +254,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
         return CUSTOM_PREFIX + json.dumps({'groups': groups, 'reuse': reuse}, ensure_ascii=False, separators=(',', ':')), kept
 
     def update_summary(self):
+        if self.embedded:
+            self.plan_changed.emit()
+            return
         if not hasattr(self, 'summary'):
             return
         try:
@@ -245,13 +274,10 @@ class SymbolTaskDialog(QtWidgets.QDialog):
     def set_imported(self, imported):
         self.imported = imported
         wanted = {capture_character(char) for char, _, _ in imported}
-        self._changing = True
-        for boxes in self.characters.values():
-            for char, box in boxes.items():
-                box.setChecked(char in wanted)
-        self._changing = False
-        for group in self.groups:
-            self.character_changed(group)
+        for group, (_, characters, _) in TASK_GROUPS.items():
+            self.checked[group] = wanted.intersection(characters)
+            self.sync_group(group)
+        self.update_summary()
 
     def configure_reuse(self):
         try:
@@ -261,12 +287,9 @@ class SymbolTaskDialog(QtWidgets.QDialog):
                 return
             self.reuse = dialog.confirmed()
             for group, char in self.reuse:
-                box = self.characters[group][char]
-                box.blockSignals(True)
-                box.setChecked(False)
-                box.blockSignals(False)
+                self.checked[group].discard(char)
             for group in self.groups:
-                self.character_changed(group)
+                self.sync_group(group)
             self.update_summary()
         except (OSError, ValueError) as error:
             self.error.setText(str(error))

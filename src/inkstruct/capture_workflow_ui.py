@@ -22,10 +22,12 @@ from .capture_management import (
 class WriterPicker(QtWidgets.QComboBox):
     textChanged = QtCore.Signal(str)
 
-    def __init__(self, catalog, selected='', parent=None, *, allow_external=False):
+    def __init__(self, catalog, selected='', parent=None, *, allow_external=False, snapshot=None):
         super().__init__(parent)
         self.catalog = catalog
         self.allow_external = allow_external
+        self._snapshot = None if snapshot is None else dict(snapshot)
+        self.writers_snapshot = {}
         self.setObjectName('capture_writer_picker')
         self.setMinimumContentsLength(16)
         self.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -44,7 +46,8 @@ class WriterPicker(QtWidgets.QComboBox):
         return self.currentData() or ''
 
     def showPopup(self):
-        self.reload(self.text())
+        if self._snapshot is None:
+            self.reload(self.text())
         super().showPopup()
 
     def setText(self, value):
@@ -62,7 +65,8 @@ class WriterPicker(QtWidgets.QComboBox):
             self.clear()
             catalog = self.catalog() if callable(self.catalog) else self.catalog
             try:
-                writers = catalog.writers()
+                writers = catalog.writers() if self._snapshot is None else self._snapshot
+                self.writers_snapshot = dict(writers)
                 self.setToolTip('')
                 self.setEnabled(True)
             except (OSError, ValueError, ImportError) as error:
@@ -78,13 +82,23 @@ class WriterPicker(QtWidgets.QComboBox):
                 self.addItem(f"{item['name']} · {suffix}", key)
             self.setText(selected)
 
+    def writer_added(self, key, name):
+        if self._snapshot is not None:
+            self._snapshot[key] = {'name': name.strip()}
+        self.reload(key)
+
+    def set_snapshot(self, writers, selected):
+        if self._snapshot != writers:
+            self._snapshot = dict(writers)
+            self.reload(selected)
+
 
 def new_writer(catalog, picker, parent):
     name, ok = QtWidgets.QInputDialog.getText(parent, '新建书写者', '显示名称（可用中文，身份自动生成）：')
     if ok:
         try:
             key = catalog.create_writer(name)
-            picker.reload(key)
+            picker.writer_added(key, name)
             return key
         except (OSError, ValueError) as error:
             QtWidgets.QMessageBox.warning(parent, '未创建书写者', str(error))
