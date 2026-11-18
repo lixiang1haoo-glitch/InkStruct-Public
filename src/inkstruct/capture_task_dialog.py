@@ -7,9 +7,13 @@ from threading import Event
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .capture_management import check_capture_paths, preview_han_file
+from .capture_workflow_ui import WriterPicker, new_writer
+from .punctuation import capture_character
 from .recommended_capture import recording_stages, remaining_entries
 from .symbol_capture import parse_symbol_file
+from .symbol_reuse import capture_inventory
 from .symbol_task_dialog import SymbolTaskDialog
+from .symbol_tasks import TASK_GROUPS
 
 
 class CaptureTaskDialog(QtWidgets.QDialog):
@@ -19,28 +23,44 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         self.catalog = widget._capture_catalog
         self.kind = widget._capture_kind
         self.writer = widget.writer_edit.text().strip()
-        self.stages = recording_stages()
-        self.stage = self.stages[stage_key]
+        self.stages = recording_stages() if self.kind == "han" else {}
+        self.stage = self.stages[stage_key] if self.stages else None
         self.entries = ()
         self.source = ""
         self.file_path = Path(path) if path else None
         self.missing = None
+        self.symbol_inventory = None
+        self.import_selection = None
+        self.scan_error = ""
         self.job = None
+        self.writers_job = None
+        self.created_writers = {}
+        self.writers_error = ""
         self.cancel_scan = Event()
         self.disposing = False
         self.show_all = False
-        self._updating = False
+        self._painted = False
         self.setObjectName("capture_task_dialog")
         title = "汉字" if self.kind == "han" else "标点与扩展"
         self.setWindowTitle(f"新建{title}采集任务")
         self.resize(780, 720)
         self.setMinimumSize(480, 440)
         root = QtWidgets.QVBoxLayout(self)
-        name = self.catalog.writers().get(self.writer, {}).get("name", self.writer)
-        author = QtWidgets.QLabel(f"书写者　{name or '请先选择书写者'}")
-        author.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        author.setToolTip(self.writer)
-        root.addWidget(author)
+        picker = getattr(widget, "writer_picker", None)
+        snapshot = dict(picker.writers_snapshot) if picker is not None else {}
+        if self.writer:
+            snapshot.setdefault(self.writer, {"name": self.writer})
+        self.writer_picker = WriterPicker(self.catalog, self.writer, self, snapshot=snapshot)
+        self.writer_picker.setAccessibleName("书写者")
+        author = QtWidgets.QLabel("书写者")
+        author.setBuddy(self.writer_picker)
+        author_row = QtWidgets.QHBoxLayout()
+        author_row.addWidget(author)
+        author_row.addWidget(self.writer_picker, 1)
+        self.add_writer_button = QtWidgets.QPushButton("新建书写者…")
+        self.add_writer_button.clicked.connect(self.create_writer)
+        author_row.addWidget(self.add_writer_button)
+        root.addLayout(author_row)
 
         body = QtWidgets.QWidget()
         column = QtWidgets.QVBoxLayout(body)
@@ -62,9 +82,6 @@ class CaptureTaskDialog(QtWidgets.QDialog):
                 choices.addWidget(button, 1)
             first_layout.addLayout(choices)
             first_layout.addWidget(QtWidgets.QLabel("按累计目标补缺，每字 1 份。"))
-            self.scan_status = QtWidgets.QLabel("正在检查此书写者的已有样本…")
-            self.scan_status.setWordWrap(True)
-            first_layout.addWidget(self.scan_status)
             self.sources.addTab(first, "推荐字表")
         else:
             self.selection = SymbolTaskDialog(
@@ -76,7 +93,7 @@ class CaptureTaskDialog(QtWidgets.QDialog):
             self.selection.plan_changed.connect(self.update_plan)
 
         imported = QtWidgets.QWidget()
-        import_layout = QtWidgets.QVBoxLayout(imported)
+        import_layout = self.import_layout = QtWidgets.QVBoxLayout(imported)
         file_row = QtWidgets.QHBoxLayout()
         self.file_label = QtWidgets.QLineEdit()
         self.file_label.setReadOnly(True)
@@ -94,14 +111,6 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         self.repeats.setSuffix(" 份")
         form.addRow("TXT / CSV 空份数", self.repeats)
         import_layout.addLayout(form)
-        if self.kind == "symbol":
-            self.import_selection = SymbolTaskDialog(
-                self.writer, self, imported=[], collection_root=self.catalog.task_root("symbol"),
-                embedded=True,
-            )
-            self.import_selection.setMinimumHeight(220)
-            import_layout.addWidget(self.import_selection)
-            self.import_selection.plan_changed.connect(self.update_plan)
         self.sources.addTab(imported, "导入 TXT/CSV")
         column.addWidget(self.sources)
 
@@ -146,6 +155,9 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         scroll.setWidgetResizable(True)
         scroll.setWidget(body)
         root.addWidget(scroll, 1)
+        self.status = QtWidgets.QLabel()
+        self.status.setWordWrap(True)
+        root.addWidget(self.status)
         self.error = QtWidgets.QLabel()
         self.error.setWordWrap(True)
         self.error.setProperty("inkTone", "danger")
@@ -163,11 +175,11 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         self.sources.currentChanged.connect(self.source_changed)
         self.repeats.valueChanged.connect(self.read_file)
         self.name.textChanged.connect(self.update_plan)
+        self.writer_picker.textChanged.connect(self.writer_changed)
         if self.file_path:
             self.sources.setCurrentIndex(1)
             self.read_file()
-        if self.kind == "han":
-            self.scan()
+        self.scan()
         self.update_plan()
 
     def default_name(self):
@@ -176,8 +188,41 @@ class CaptureTaskDialog(QtWidgets.QDialog):
         return f"推荐汉字采集 · {len(self.stage.entries)} 字目标" if self.kind == "han" else "标点与扩展采集"
 
     def source_changed(self):
+        if self.kind == "symbol" and self.sources.currentIndex() == 1:
+            self.ensure_import_selection()
         if not self.name.isModified():
             self.name.setText(self.default_name())
+        self.update_plan()
+
+    def ensure_import_selection(self):
+        if self.import_selection is None:
+            self.import_selection = SymbolTaskDialog(
+                self.writer, self, imported=[], collection_root=self.catalog.task_root("symbol"), embedded=True
+            )
+            self.import_selection.setMinimumHeight(220)
+            self.import_layout.addWidget(self.import_selection)
+            if self.symbol_inventory is not None:
+                self.import_selection.apply_inventory(self.symbol_inventory)
+            self.import_selection.plan_changed.connect(self.update_plan)
+        return self.import_selection
+
+    def create_writer(self):
+        key = new_writer(self.catalog, self.writer_picker, self)
+        if key:
+            self.created_writers[key] = self.writer_picker.writers_snapshot[key]
+            self.writer_changed(key)
+
+    def writer_changed(self, writer):
+        self.writer = writer
+        self.cancel_scan.set()
+        self.missing = self.symbol_inventory = None
+        self.scan_error = ""
+        if self.kind == "symbol":
+            for selector in (self.selection, self.import_selection):
+                if selector is not None:
+                    with QtCore.QSignalBlocker(selector):
+                        selector.writer.setText(writer)
+        self.scan()
         self.update_plan()
 
     def select_stage(self, key):
@@ -213,43 +258,102 @@ class CaptureTaskDialog(QtWidgets.QDialog):
                 self.file_entries = parse_symbol_file(self.file_path, self.repeats.value())
                 if sum(count for _, count, _ in self.file_entries) > 50_000:
                     raise ValueError("任务超过 50,000 份，请拆分字表")
-                self.import_selection.set_imported(self.file_entries)
+                selector = self.ensure_import_selection()
+                with QtCore.QSignalBlocker(selector):
+                    selector.set_imported(self.file_entries)
         except (OSError, ValueError, TypeError) as error:
             self.file_error = str(error)
         self.update_plan()
 
     def scan(self):
+        if (not self.writer or self.job is not None or self.disposing or self.scan_error
+                or self.missing is not None or self.symbol_inventory is not None
+                or (self.kind == "symbol" and not self._painted)):
+            return
         from .fonts.ui import Job
 
-        if not self.writer:
-            self.scan_status.setText("请先在采集页选择或新建书写者。")
-            return
-        largest = self.stages["add300"]
-        self.job = Job(lambda _: remaining_entries(
-            self.catalog, self.writer, largest, self.owner.structures, self.cancel_scan.is_set
-        ))
+        self.cancel_scan = Event()
+        catalog, writer, kind = self.catalog, self.writer, self.kind
+        stage = self.stages.get("add300")
+        structures = self.owner.structures if kind == "han" else None
+        cancelled = self.cancel_scan.is_set
+
+        def check_samples(_):
+            root = catalog.task_root(kind)
+            check_capture_paths(root, writer)
+            if kind == "han":
+                return remaining_entries(catalog, writer, stage, structures, cancelled)
+            return capture_inventory(root, writer, cancelled)
+
+        self.job = Job(check_samples)
         self.job.signals.completed.connect(self.scanned, QtCore.Qt.ConnectionType.QueuedConnection)
         self.job.signals.failed.connect(self.scan_failed, QtCore.Qt.ConnectionType.QueuedConnection)
         QtCore.QThreadPool.globalInstance().start(self.job)
 
     @QtCore.Slot(object)
-    def scanned(self, entries):
-        self.job = None
-        if self.disposing:
-            self.deleteLater()
+    def scanned(self, result):
+        if not self.finish_scan():
             return
-        self.missing = {char for char, _, _ in entries}
-        self.scan_status.setText("已有合格样本的字符自动跳过。")
+        if self.kind == "han":
+            self.missing = {char for char, _, _ in result}
+        else:
+            self.symbol_inventory = result
+            for selector in (self.selection, self.import_selection):
+                if selector is not None:
+                    selector.apply_inventory(result)
         self.update_plan()
 
     @QtCore.Slot(str)
     def scan_failed(self, error):
+        if self.finish_scan():
+            self.scan_error = "读取样本失败，" + error
+            self.update_plan()
+
+    def finish_scan(self):
         self.job = None
         if self.disposing:
             self.deleteLater()
+        elif self.cancel_scan.is_set():
+            self.scan()
+        else:
+            return True
+        return False
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._painted:
+            self._painted = True
+            QtCore.QTimer.singleShot(0, self, self.after_first_paint)
+
+    def after_first_paint(self):
+        if self.disposing or not self.isVisible():
             return
-        self.scan_status.setText("读取样本失败，" + error)
-        self.update_plan()
+        from .fonts.ui import Job
+
+        catalog = self.catalog
+        self.writers_job = Job(lambda _: catalog.writers())
+        self.writers_job.signals.completed.connect(self.writers_loaded, QtCore.Qt.ConnectionType.QueuedConnection)
+        self.writers_job.signals.failed.connect(self.writers_failed, QtCore.Qt.ConnectionType.QueuedConnection)
+        QtCore.QThreadPool.globalInstance().start(self.writers_job)
+        self.scan()
+
+    @QtCore.Slot(object)
+    def writers_loaded(self, writers):
+        self.writers_job = None
+        if self.disposing:
+            return
+        writers.update(self.created_writers)
+        if self.writer:
+            known = self.writer_picker.writers_snapshot.get(self.writer, {"name": self.writer})
+            writers.setdefault(self.writer, known)
+        self.writer_picker.set_snapshot(writers, self.writer)
+
+    @QtCore.Slot(str)
+    def writers_failed(self, error):
+        self.writers_job = None
+        if not self.disposing:
+            self.writers_error = "读取书写者失败，" + error
+            self.update_plan()
 
     def dispose(self):
         self.disposing = True
@@ -258,65 +362,68 @@ class CaptureTaskDialog(QtWidgets.QDialog):
             self.deleteLater()
 
     def update_plan(self):
-        if self._updating or not hasattr(self, "start"):
-            return
-        self._updating = True
         self.entries = ()
-        all_entries, existing, problem = (), 0, ""
+        all_entries, existing, problem, status = (), 0, "", ""
+        imported = self.sources.currentIndex() == 1
+        ready = False
         try:
-            check_capture_paths(self.catalog.task_root(self.kind), self.writer)
+            if imported and not getattr(self, "file_entries", None):
+                raise ValueError(getattr(self, "file_error", "") or "请选择字表文件")
+            if self.kind == "symbol":
+                selector = self.import_selection if imported else self.selection
+                groups, selected = selector.selection_entries()
+                all_entries = (*selected, *((char, 0, groups.index(group)) for group, char in selector.reuse))
+                ready = self.symbol_inventory is not None
+            elif imported:
+                all_entries = tuple(self.file_entries)
+                ready = bool(self.writer)
+            else:
+                all_entries = self.stage.entries
+                ready = self.missing is not None
             if not self.writer:
                 raise ValueError("请先选择或新建书写者")
-            if self.sources.currentIndex() == 1:
-                if not getattr(self, "file_entries", None):
-                    raise ValueError(getattr(self, "file_error", "") or "请选择字表文件")
-                if self.kind == "han":
-                    all_entries = self.entries = tuple(self.file_entries)
-                    self.source = self.file_path.name
-                else:
-                    all_entries = self.import_selection.selection_entries()[1]
-                    self.source, self.entries = self.import_selection.plan()
-                    existing = len(all_entries) - len(self.entries)
-            elif self.kind == "han":
-                if self.missing is None:
-                    raise ValueError(self.scan_status.text())
-                all_entries = self.stage.entries
+            if not ready:
+                if self.scan_error:
+                    raise ValueError(self.scan_error)
+                status = "正在核对已有样本…"
+            elif self.kind == "symbol":
+                existing = sum(len(selector.available.get(
+                    (capture_character(char), TASK_GROUPS[groups[index]][2]), {}
+                )) >= count for char, count, index in all_entries)
+                self.source, self.entries = selector.plan((groups, selected))
+            elif imported:
+                check_capture_paths(self.catalog.task_root(self.kind), self.writer)
+                self.entries = all_entries
+                self.source = self.file_path.name
+            else:
                 self.entries = tuple(entry for entry in all_entries if entry[0] in self.missing)
                 self.source = self.stage.source
                 existing = len(all_entries) - len(self.entries)
-            else:
-                all_entries = self.selection.selection_entries()[1]
-                self.source, self.entries = self.selection.plan()
-                existing = len(all_entries) - len(self.entries)
             if not self.name.text().strip():
                 raise ValueError("请填写任务名称")
-            if not self.entries and self.kind == "han":
+            if ready and not self.entries and self.kind == "han":
                 raise ValueError("此目标均已有合格样本，无需新建任务。")
         except (OSError, ValueError) as error:
-            problem = str(error)
-            if self.kind == "symbol" and all_entries:
-                selector = self.selection if self.sources.currentIndex() == 0 else self.import_selection
-                from .punctuation import capture_character
-                from .symbol_tasks import TASK_GROUPS
-
-                groups = selector.selection_entries()[0]
-                existing = sum(len(selector.available.get((capture_character(char), TASK_GROUPS[groups[index]][2]), {}))
-                               >= count for char, count, index in all_entries)
-        if self.kind == "symbol" and not problem:
-            selector = self.selection if self.sources.currentIndex() == 0 else self.import_selection
-            groups = selector.selection_entries()[0]
-            all_entries = (*all_entries, *((char, 0, groups.index(group)) for group, char in selector.reuse))
-            existing = len(all_entries) - len(self.entries)
-        self.start.setEnabled(not problem)
+            problem = (self.writers_error or "请先选择或新建书写者") if not self.writer else str(error)
+        if self.writer and not self.scan_error and not (self.kind == "han" and imported):
+            waiting = self.missing is None if self.kind == "han" else self.symbol_inventory is None
+            if waiting:
+                status = "正在核对已有样本…"
+        self.start.setEnabled(ready and not problem)
+        self.status.setText(status)
+        self.status.setVisible(bool(status))
         self.error.setText(problem)
+        self.error.setVisible(bool(problem))
         self.counts["target"].setText(f"{len(all_entries)} 字" if self.kind == "han" else f"{len(all_entries)} 字／写法")
-        self.counts["existing"].setText(f"{existing} 字")
-        self.counts["remaining"].setText(f"{len(self.entries)} 字")
-        self.counts["copies"].setText(f"{sum(count for _, count, _ in self.entries)} 份")
-        self.missing_button.setText(f"待录 {len(self.entries)} 字")
+        self.counts["existing"].setText(f"{existing} 字" if ready else "—")
+        self.counts["remaining"].setText(f"{len(self.entries)} 字" if ready else "—")
+        self.counts["copies"].setText(f"{sum(count for _, count, _ in self.entries)} 份" if ready else "—")
+        self.missing_button.setText(f"待录 {len(self.entries)} 字" if ready else "待录")
         self.all_button.setText(f"全部 {len(all_entries)} 字")
-        self.missing_button.setChecked(not self.show_all)
-        self.all_button.setChecked(self.show_all)
+        show_all = self.show_all or not ready
+        self.missing_button.setEnabled(ready)
+        self.missing_button.setChecked(not show_all)
+        self.all_button.setChecked(show_all)
         for key, button in self.stage_buttons.items():
             stage = self.stages[key]
             text = stage.title
@@ -324,9 +431,16 @@ class CaptureTaskDialog(QtWidgets.QDialog):
                 text += f"\n待录 {sum(char in self.missing for char, _, _ in stage.entries)} 字"
             button.setText(text)
             button.setChecked(key == self.stage.key)
+        self.refresh_preview(all_entries if show_all else self.entries, ready)
+
+    def refresh_preview(self, displayed, ready):
+        remaining = frozenset((char, index) for char, _, index in self.entries)
+        key = tuple(displayed), ready, remaining
+        if key == getattr(self, "_preview_key", None):
+            return
+        self._preview_key = key
         self.preview.clear()
-        remaining = {(char, index) for char, _, index in self.entries}
-        for char, count, index in all_entries if self.show_all else self.entries:
+        for char, count, index in displayed:
             label = char if count == 1 else f"{char}\n{count} 份"
             if count == 0:
                 label = f"{char}\n复用"
@@ -335,11 +449,10 @@ class CaptureTaskDialog(QtWidgets.QDialog):
             font = item.font()
             font.setPointSize(15)
             item.setFont(font)
-            if (char, index) not in remaining:
+            if ready and (char, index) not in remaining:
                 item.setForeground(self.palette().brush(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.Text))
                 item.setToolTip("已有合格样本")
             self.preview.addItem(item)
-        self._updating = False
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

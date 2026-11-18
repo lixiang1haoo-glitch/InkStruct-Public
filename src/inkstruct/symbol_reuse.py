@@ -16,19 +16,31 @@ def reuse_options():
         ('greek', target, source) for target, source in GREEK_SIMILAR.items()]
 
 
-def inventory(root, writer):
-    if root is None or not Path(root).exists():
+def inventory(root, writer, *, cancelled=lambda: False):
+    if not writer or root is None or not Path(root).exists() or cancelled():
         return {}
     from .assets.symbol_provider import adapt_symbol
     from .fonts.importer import symbol_records
     result = {}
     for raw, value in symbol_records(root):
+        if cancelled():
+            break
         if value['writer_id'] != writer:
             continue
         adapt_symbol(raw)
         key = (capture_character(value['character']), value.get('variant', {}).get('letter_style', 'unspecified'))
         result.setdefault(key, {})[value['sample_id']] = value
     return result
+
+
+def capture_inventory(root, writer, cancelled):
+    """Read the managed writer directory, or search an older collection layout."""
+    from .capture_management import valid_writer
+
+    if not valid_writer(writer):
+        raise ValueError('请选择有效的书写者')
+    scoped = root / 'samples' / writer
+    return inventory(scoped if scoped.is_dir() else root, writer, cancelled=cancelled)
 
 
 def validate_reuse(record):
