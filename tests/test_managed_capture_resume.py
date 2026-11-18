@@ -40,15 +40,18 @@ def test_continue_button_drops_a_stale_result(tmp_path):
     program = r"""
 from pathlib import Path
 import sys
+from functools import partial
 from threading import Event
 from time import monotonic
 
-from PySide6 import QtCore, QtTest, QtWidgets
+from PySide6 import QtCore, QtGui, QtTest, QtWidgets
+from handwriting_collector import config
 from handwriting_collector.tasks import CollectionTask, TaskRepository
 from inkstruct import capture_workspace
 from inkstruct.application import InkStructWindow
 
 root = Path(sys.argv[1])
+config.UiSettingsStore = partial(config.UiSettingsStore, root / "collector-ui.json")
 QtCore.QSettings.setDefaultFormat(QtCore.QSettings.IniFormat)
 QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, str(root / "settings"))
 app = QtWidgets.QApplication([])
@@ -98,13 +101,19 @@ assert han.task.task_id == task.task_id and path.read_bytes() == original
 
 hint = han.findChild(QtWidgets.QFrame, "captureInputHint")
 assert not hint.isVisible()
-pos = QtCore.QPoint(60, 60)
-QtTest.QTest.mouseClick(han.canvas, QtCore.Qt.MouseButton.LeftButton, pos=pos)
+pump(han.canvas.isVisible)
+pos = QtCore.QPointF(60, 60)
+left = QtCore.Qt.MouseButton.LeftButton
+press = QtGui.QMouseEvent(QtCore.QEvent.Type.MouseButtonPress, pos, pos, left, left,
+                          QtCore.Qt.KeyboardModifier.NoModifier)
+app.sendEvent(han.canvas, press)
 assert hint.isVisible() and hint.message.text() == "收到鼠标输入"
 assert han.canvas.trajectory.point_count == 0
 hint.action.click()
 assert not hint.isVisible() and han.input_mode_picker.currentData() == "mouse"
 assert window.collector.symbol_widget.input_mode_picker.currentData() == "mouse"
+window.close()
+app.processEvents()
 """
     result = subprocess.run(
         [sys.executable, "-c", program, str(tmp_path)],
