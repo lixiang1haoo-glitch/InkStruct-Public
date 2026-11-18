@@ -122,7 +122,10 @@ def check_layout(tab, step):
     while time.monotonic() < deadline:
         app.processEvents()
         canvas, column, tolerance = geometry(tab)
-        if canvas.left() - column.right() - 1 == 12 and abs(column.center().y() - canvas.center().y()) <= tolerance:
+        needs_no_horizontal_scroll = tab is symbol and window.width() >= 1280
+        scrolls_horizontally = needs_no_horizontal_scroll and tab.canvas_scroll.horizontalScrollBar().isVisible()
+        if (canvas.left() - column.right() - 1 == 12
+                and abs(column.center().y() - canvas.center().y()) <= tolerance and not scrolls_horizontally):
             break
         QTest.qWait(10)
     assert canvas.left() - column.right() - 1 == 12 and not canvas.isEmpty(), (step, column, canvas)
@@ -131,6 +134,8 @@ def check_layout(tab, step):
         reference = position(tab, tab.stroke_reference)
         assert column.left() - reference.right() >= 24
         assert tab.canvas.width() >= tab.canvas.height() and tab.canvas.width() <= 390
+    else:
+        assert not scrolls_horizontally, (step, tab.canvas.size(), tab.canvas_scroll.size(), canvas)
     buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
     for i, button in enumerate(buttons):
         box = position(tab, button)
@@ -154,6 +159,8 @@ for tab, chars, steps in ((han, "一中人", (15, 20, 27, 30)), (symbol, ".+=", 
                                  [(char, 1, i) for i, char in enumerate(chars)])
     TaskRepository(tab._capture_catalog.task_root(tab._capture_kind)).save(task)
     tab.set_task(task)
+    if tab is symbol:
+        assert Path(tab.canvas_settings.fileName()).is_relative_to(Path(sys.argv[1]))
     for width in (980, 1280):
         window.resize(width, 710)
         app.processEvents()
