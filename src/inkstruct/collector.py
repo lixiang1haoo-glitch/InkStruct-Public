@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .capture_boundary import install_capture_boundary_guard
-from .capture_controls import InputMismatchHint, canvas_slider_row, capture_display_controls
+from .capture_controls import InputMismatchHint, canvas_slider_row, capture_display_controls, capture_writing_row
 from .capture_workflow_ui import CaptureLifecycleMixin, install_capture_management
 from .cli import PROJECT_ROOT
 from .stroke_reference import create_stroke_reference_widget_class
@@ -109,29 +109,10 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.display_controls = capture_display_controls(status_row, self.progress_bar)
             footer_actions = self.layout().itemAt(canvas_index + 1).layout()
             self.layout().removeWidget(self.canvas)
-            action_column = QtWidgets.QWidget()
-            actions = QtWidgets.QVBoxLayout(action_column)
-            actions.setContentsMargins(0, 0, 0, 0)
-            actions.setSpacing(8)
-            for button, title, shortcut in (
-                (self.undo_button, "撤销上一笔", "Ctrl+Z"),
-                (self.clear_button, "重写当前字", "Delete"),
-                (self.skip_button, "暂时跳过", "Shift+Enter"),
-                (self.save_button, "保存并下一个", "Enter"),
-            ):
+            for button in (self.undo_button, self.clear_button, self.skip_button, self.save_button):
                 footer_actions.removeWidget(button)
-                button.setText(f"{title}\n{shortcut}")
-                button.setAccessibleName(title)
-                button.setAccessibleDescription(shortcut)
-                button.setMinimumSize(112, 48)
-                actions.addWidget(button)
             self.layout().removeItem(footer_actions)
             footer_actions.deleteLater()
-            skip_shortcut = QtGui.QShortcut(self)
-            skip_shortcut.setKeys([QtGui.QKeySequence("Shift+Return"), QtGui.QKeySequence("Shift+Enter")])
-            skip_shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            skip_shortcut.setAutoRepeat(False)
-            skip_shortcut.activated.connect(self.skip_button.click)
             size_row, self.canvas_size_slider, self.canvas_size_label = canvas_slider_row(
                 "画布大小", "汉字画布大小", "先保存或重写当前笔迹，再调整画布大小"
             )
@@ -150,12 +131,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.canvas_size_slider.setValue(step if 15 <= step <= 30 else 20)
             self._apply_canvas_height(self.canvas_size_slider.value())
             self.canvas_size_slider.valueChanged.connect(self._change_canvas_height)
-            writing_row = QtWidgets.QHBoxLayout()
-            writing_row.setSpacing(16)
-            writing_row.addWidget(self.stroke_reference)
-            writing_row.addWidget(action_column, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
-            writing_row.addWidget(self.canvas, 1, QtCore.Qt.AlignmentFlag.AlignVCenter)
-            self.layout().insertLayout(canvas_index, writing_row, 1)
+            self.layout().insertLayout(canvas_index, capture_writing_row(self, self.canvas, self.stroke_reference), 1)
             self.stroke_count_label = QtWidgets.QLabel("笔画数量：等待书写")
             self.stroke_count_label.setObjectName("mutedLabel")
             self.connected_mode = QtWidgets.QCheckBox("允许汉字连笔（仅 v6.3 生成支持）")
@@ -172,6 +148,7 @@ def main(argv: list[str] | None = None, *, create_only=False, workspace=None, da
             self.canvas_height_step = step
             height = 13 * step  # Default 260 logical pixels.
             self.canvas.setFixedHeight(height)
+            self.canvas.setMaximumWidth(max(self.canvas.minimumWidth(), height))
             self.canvas_size_label.setText(f"{step * 5}% · {height} px")
 
         def _change_canvas_height(self, step):

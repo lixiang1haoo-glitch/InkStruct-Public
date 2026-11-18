@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -78,7 +79,7 @@ window.close()
 
 
 @pytest.mark.parametrize("scale", ["1", "1.5"])
-def test_han_actions_fit_between_reference_and_canvas(tmp_path, scale):
+def test_capture_actions_stay_at_the_left_edge_of_both_canvases(scale):
     program = r"""
 from pathlib import Path
 import sys
@@ -90,80 +91,122 @@ from handwriting_collector.tasks import CollectionTask, TaskRepository
 from inkstruct.collector import main
 
 app = QtWidgets.QApplication([])
+def warning(_owner, title, message):
+    raise AssertionError(f"{title}: {message}")
+QtWidgets.QMessageBox.warning = warning
 QtCore.QSettings.setDefaultFormat(QtCore.QSettings.IniFormat)
 QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, sys.argv[1])
 window = main(["InkStruct"], create_only=True, workspace=Path(sys.argv[1]))
-window.resize(980, 680)
+window.resize(980, 710)
 window.show()
 app.processEvents()
-tab = window.single_widget
-assert window.width() == 980
-assert not tab.canvas.isVisible()
-writer = tab._capture_catalog.create_writer("布局验收书写者")
-layout_task = CollectionTask.create("布局验收", "synthetic", writer, [("永",1,0)])
-TaskRepository(window.output_root).save(layout_task)
-tab.set_task(layout_task)
-app.processEvents()
-buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
-def position(button):
-    return QtCore.QRect(button.mapTo(tab, QtCore.QPoint()), button.size())
+han, symbol = window.single_widget, window.symbol_widget
+writer = han._capture_catalog.create_writer("布局验收书写者")
 
-for step in (15, 20, 27, 30):
+def position(tab, control):
+    return QtCore.QRect(control.mapTo(tab, QtCore.QPoint()), control.size())
+
+def geometry(tab):
+    canvas = position(tab, tab.canvas)
+    tolerance = 1
+    if tab is symbol:
+        viewport = position(tab, symbol.canvas_scroll.viewport())
+        tolerance += (symbol.canvas_scroll.height() - viewport.height() + 1) // 2
+        canvas = canvas.intersected(viewport)
+    column = position(tab, tab.undo_button).united(position(tab, tab.save_button))
+    return canvas, column, tolerance
+
+def check_layout(tab, step):
     tab.canvas_size_slider.setValue(step)
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         app.processEvents()
-        reference = position(tab.stroke_reference)
-        canvas = position(tab.canvas)
-        column = position(buttons[0]).united(position(buttons[-1]))
-        if abs(column.center().y() - canvas.center().y()) <= 1:
+        canvas, column, tolerance = geometry(tab)
+        needs_no_horizontal_scroll = tab is symbol and window.width() >= 1280
+        scrolls_horizontally = needs_no_horizontal_scroll and tab.canvas_scroll.horizontalScrollBar().isVisible()
+        if (canvas.left() - column.right() - 1 == 12
+                and abs(column.center().y() - canvas.center().y()) <= tolerance and not scrolls_horizontally):
             break
         QTest.qWait(10)
-    reference = position(tab.stroke_reference)
-    canvas = position(tab.canvas)
-    assert canvas.width() >= tab.canvas.minimumWidth()
-    column = position(buttons[0]).united(position(buttons[-1]))
-    assert abs(column.center().y() - canvas.center().y()) <= 1, (step, column, canvas)
+    assert canvas.left() - column.right() - 1 == 12 and not canvas.isEmpty(), (step, column, canvas)
+    assert abs(column.center().y() - canvas.center().y()) <= tolerance, (step, column, canvas)
+    if tab is han:
+        reference = position(tab, tab.stroke_reference)
+        assert column.left() - reference.right() >= 24
+        assert tab.canvas.width() >= tab.canvas.height() and tab.canvas.width() <= 390
+    else:
+        assert not scrolls_horizontally, (step, tab.canvas.size(), tab.canvas_scroll.size(), canvas)
+    buttons = (tab.undo_button, tab.clear_button, tab.skip_button, tab.save_button)
     for i, button in enumerate(buttons):
-        box = position(button)
+        box = position(tab, button)
         assert button.isVisible() and box.width() >= 112 and box.height() >= 48
-        assert reference.right() < box.left() < box.right() < canvas.left()
         assert button.text().splitlines()[1] == ("Ctrl+Z", "Delete", "Shift+Enter", "Enter")[i]
         if i:
-            assert position(buttons[i - 1]).bottom() < box.top()
+            assert position(tab, buttons[i - 1]).bottom() < box.top()
         assert button.isEnabled() == (button is tab.skip_button)
 
-tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 10))
-tab.canvas.trajectory_changed.emit()
-assert tab.undo_button.isEnabled() and tab.clear_button.isEnabled()
-tab.undo_button.click()
-assert tab.canvas.trajectory.point_count == 0
-tab.canvas.trajectory.start_stroke(TrajectoryPoint(40, 60, .5, 20))
-tab.canvas.trajectory_changed.emit()
-tab.clear_button.click()
-assert tab.canvas.trajectory.point_count == 0
-assert not tab.save_button.isEnabled() and tab.skip_button.isEnabled()
-writer = tab._capture_catalog.create_writer("演示书写者")
-tab.writer_picker.reload(writer)
-task = CollectionTask.create("快捷键验证", "synthetic", writer, [("永", 1, 0), ("中", 1, 1), ("人", 1, 2)])
-TaskRepository(window.output_root).save(task)
-tab.set_task(task)
-tab.skip_button.setFocus()
-app.processEvents()
-QTest.keyClick(tab.skip_button, QtCore.Qt.Key.Key_Return, QtCore.Qt.KeyboardModifier.ShiftModifier)
-assert task.current_item().character == "中" and task.items[0].status == "skipped"
-window.tabs.setCurrentIndex(1)
-window.symbol_widget.canvas_size_slider.setFocus()
-app.processEvents()
-QTest.keyClick(window.symbol_widget.canvas_size_slider, QtCore.Qt.Key.Key_Return, QtCore.Qt.KeyboardModifier.ShiftModifier)
-assert task.current_item().character == "中"
+def add_ink(tab):
+    x, y = tab.canvas.width() * .42, tab.canvas.height() * .45
+    tab.canvas.trajectory.start_stroke(TrajectoryPoint(x, y, .5, 10))
+    tab.canvas.trajectory.append_point(TrajectoryPoint(x + 15, y, .5, 20))
+    tab.canvas.trajectory_changed.emit()
+
+for tab, chars, steps in ((han, "一中人", (15, 20, 27, 30)), (symbol, ".+=", (10, 17, 20, 30))):
+    window.tabs.setCurrentWidget(tab)
+    app.processEvents()
+    assert not tab.canvas.isVisible()
+    task = CollectionTask.create("布局和快捷键验收", "synthetic", writer,
+                                 [(char, 1, i) for i, char in enumerate(chars)])
+    TaskRepository(tab._capture_catalog.task_root(tab._capture_kind)).save(task)
+    tab.set_task(task)
+    if tab is symbol:
+        assert Path(tab.canvas_settings.fileName()).is_relative_to(Path(sys.argv[1]))
+    for width in (980, 1280):
+        window.resize(width, 710)
+        app.processEvents()
+        for step in steps:
+            check_layout(tab, step)
+    if tab is symbol:
+        window.resize(980, 710)
+        app.processEvents()
+        scrollbar = tab.canvas_scroll.horizontalScrollBar()
+        if scrollbar.maximum():
+            scrollbar.setValue(scrollbar.maximum())
+        check_layout(tab, 30)
+        scrollbar.setValue(0)
+    tab.canvas.setFocus()
+    app.processEvents()
+    add_ink(tab)
+    assert tab.undo_button.isEnabled() and tab.clear_button.isEnabled() and tab.save_button.isEnabled()
+    QTest.keyClick(tab.canvas, QtCore.Qt.Key.Key_Z, QtCore.Qt.KeyboardModifier.ControlModifier)
+    assert tab.canvas.trajectory.point_count == 0
+    add_ink(tab)
+    if tab is symbol:
+        tab.variant_note.setText("写法备注")
+        tab.variant_note.selectAll()
+        tab.variant_note.setFocus()
+        app.processEvents()
+        QTest.keyClick(tab.variant_note, QtCore.Qt.Key.Key_Delete)
+        assert not tab.variant_note.text() and tab.canvas.trajectory.point_count == 2
+        tab.canvas.setFocus()
+    QTest.keyClick(tab.canvas, QtCore.Qt.Key.Key_Delete)
+    assert tab.canvas.trajectory.point_count == 0
+    assert not tab.save_button.isEnabled() and tab.skip_button.isEnabled()
+    add_ink(tab)
+    QTest.keyClick(tab.canvas, QtCore.Qt.Key.Key_Return)
+    assert task.completed_count == 1 and task.current_item().character == chars[1]
+    QTest.keyClick(tab.canvas, QtCore.Qt.Key.Key_Return, QtCore.Qt.KeyboardModifier.ShiftModifier)
+    assert task.current_item().character == chars[2] and task.items[1].status == "skipped"
+assert han.task.completed_count == 1 and han.task.current_item().character == "人"
 window.close()
 """
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(tmp_path)],
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_SCALE_FACTOR": scale},
-        capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
-    )
+    with TemporaryDirectory(prefix="ink-actions-") as work:
+        result = subprocess.run(
+            [sys.executable, "-c", program, work],
+            env={**os.environ, "QT_QPA_PLATFORM": os.environ.get("INKSTRUCT_TEST_QT_PLATFORM", "offscreen"),
+                 "QT_SCALE_FACTOR": scale},
+            capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+        )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
