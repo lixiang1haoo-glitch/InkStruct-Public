@@ -84,6 +84,7 @@ from pathlib import Path
 import sys
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtTest import QTest
+import time
 from handwriting_collector.models import TrajectoryPoint
 from handwriting_collector.tasks import CollectionTask, TaskRepository
 from inkstruct.collector import main
@@ -109,7 +110,15 @@ def position(button):
 
 for step in (15, 20, 27, 30):
     tab.canvas_size_slider.setValue(step)
-    QTest.qWait(30)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        app.processEvents()
+        reference = position(tab.stroke_reference)
+        canvas = position(tab.canvas)
+        column = position(buttons[0]).united(position(buttons[-1]))
+        if abs(column.center().y() - canvas.center().y()) <= 1:
+            break
+        QTest.qWait(10)
     reference = position(tab.stroke_reference)
     canvas = position(tab.canvas)
     assert canvas.width() >= tab.canvas.minimumWidth()
