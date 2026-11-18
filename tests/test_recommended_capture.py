@@ -112,6 +112,7 @@ han.pause_task()
 assert old_path.read_bytes()==old_bytes and han.capture_workspace.recent.topLevelItemCount()==1
 item=han.capture_workspace.recent.topLevelItem(0)
 han.capture_workspace.resume(item.data(0,QtCore.Qt.ItemDataRole.UserRole))
+pump(lambda:han.task is not None)
 assert han.task.task_id==old.task_id
 han.pause_task()
 
@@ -167,6 +168,7 @@ symbol_id=symbol.task.task_id
 assert len(symbol.task.items)==10
 symbol.pause_task()
 symbol.capture_workspace.resume(next(e for e in catalog.tasks() if e["task"].task_id==symbol_id))
+pump(lambda:symbol.task is not None)
 assert symbol.task.task_id==symbol_id
 symbol.pause_task()
 assert legacy_sample.read_bytes()==original_sample and old_path.read_bytes()==old_bytes

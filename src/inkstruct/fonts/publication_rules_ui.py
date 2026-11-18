@@ -26,6 +26,7 @@ class PublicationRulesDialog(QtWidgets.QDialog):
         search.setPlaceholderText("按字符、规则类型或结果筛选")
         layout.addWidget(search)
         self.table = table = QtWidgets.QTreeWidget()
+        table.setProperty("inkDataTable", True)
         table.setObjectName("publication_rule_table")
         table.setHeaderLabels(["本次启用", "规则类型", "目标字符", "依赖来源", "供体选择", "已核对结果"])
         for column in range(5):

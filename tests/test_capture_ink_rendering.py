@@ -102,6 +102,8 @@ p = QtCore.QPoint
 left, right = qt.MouseButton.LeftButton, qt.MouseButton.RightButton
 none = qt.KeyboardModifier.NoModifier
 a, b, c = p(50, 50), p(90, 90), p(140, 100)
+hints = []
+canvas.input_mismatch.connect(hints.append)
 
 def mouse_stroke():
     QTest.mousePress(canvas, left, none, a)
@@ -109,8 +111,10 @@ def mouse_stroke():
     QTest.mouseRelease(canvas, left, none, c)
 
 mouse_stroke()
-assert not canvas.trajectory.strokes
+mouse_stroke()
+assert not canvas.trajectory.strokes and hints == ["mouse"]
 canvas.set_input_mode("mouse")
+assert hints == ["mouse", ""]
 QTest.mouseClick(canvas, left, none, a)
 QTest.mouseClick(canvas, right, none, a)
 assert not canvas.trajectory.strokes
@@ -145,12 +149,12 @@ def touches():
 
 touches().press(0, a, canvas).commit()
 touches().release(0, c, canvas).commit()
-assert not canvas.trajectory.strokes
+assert not canvas.trajectory.strokes and hints[-1] == "finger"
 canvas.set_input_mode("finger")
 mouse_stroke()
-assert not canvas.trajectory.strokes
+assert not canvas.trajectory.strokes and hints[-2:] == ["", "mouse"]
 touches().press(0, a, canvas).commit()
-assert canvas.pen_down
+assert canvas.pen_down and hints[-1] == ""
 touches().move(0, b, canvas).press(1, p(250, 90), canvas).commit()
 touches().release(0, c, canvas).move(1, p(260, 190), canvas).commit()
 assert not canvas.pen_down

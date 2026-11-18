@@ -4,9 +4,9 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 0.1.102 · Python / Qt
+Windows x64 · 0.1.103 · Python / Qt
 
-0.1.102 统一采集任务的新建流程。无任务时可创建任务或继续最近未完成任务；推荐字表按累计 32、100、400 字目标补缺。Windows 提供基础包和体验包。
+0.1.103 统一应用内数据表样式，在后台核对继续录制所需的样本，并在录制输入方式不匹配时提供就地切换。Windows 提供基础包和体验包。
 
 0.1.100 在「采集 → 汉字样本」提供三档推荐录制任务，累计目标为 32、100、400 字。打开任务时按当前书写者的已有合格样本计算剩余字数。
 
@@ -78,15 +78,15 @@ $python = ".\.venv\Scripts\python.exe"
 $env:PYTHONPATH = "$PWD/src;$PWD/artifacts/external/data_collection"
 & $python -B packaging/prepare_public_resources.py
 & $python -B -m pytest -p no:cacheprovider
-& $python -B packaging/build_inkstruct_app.py --output build/0.1.102
-& $python -B packaging/verify_public_windows.py --bundle build/0.1.102/dist/InkStruct --output build/verification
+& $python -B packaging/build_inkstruct_app.py --output build/0.1.103
+& $python -B packaging/verify_public_windows.py --bundle build/0.1.103/dist/InkStruct --output build/verification
 ```
 
 从源码启动可运行 `python -m inkstruct.application --workspace workspace`。构建安装程序时，从 [NSIS 锁](packaging/nsis-win.lock.json) 下载编译器 ZIP，保持原样，并执行：
 
 ```powershell
 & $python -B packaging/build_windows_installer.py --verification build/verification/verification.json --nsis-zip nsis-3.13.zip --output build/installer
-& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.102-Windows-x64.zip --output build/installer-check
+& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.103-Windows-x64.zip --output build/installer-check
 ```
 
 ## 许可与贡献

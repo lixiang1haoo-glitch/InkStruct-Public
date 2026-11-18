@@ -51,6 +51,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         col.addWidget(edit_layout)
         col.addWidget(QtWidgets.QLabel("字段"))
         self.fields = QtWidgets.QTreeWidget()
+        self.fields.setProperty("inkDataTable", True)
         self.fields.setHeaderLabels(["字段", "当前内容"])
         self.fields.setRootIsDecorated(False)
         self.fields.setMaximumHeight(190)

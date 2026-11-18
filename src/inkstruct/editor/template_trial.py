@@ -79,6 +79,7 @@ class TemplateTrialDialog(QtWidgets.QDialog):
         self.preview = FitSvgPreview()
         splitter.addWidget(self.preview)
         self.issues = QtWidgets.QTreeWidget()
+        self.issues.setProperty("inkDataTable", True)
         self.issues.setHeaderLabels(["级别", "问题"])
         self.issues.setColumnWidth(0, 55)
         splitter.addWidget(self.issues)

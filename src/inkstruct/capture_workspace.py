@@ -1,12 +1,19 @@
 """Task-focused capture views reusing the existing recording controls."""
 from PySide6 import QtCore, QtWidgets
 
+from .capture_management import prepare_managed_task
+
 
 class CaptureWorkspace(QtCore.QObject):
     def __init__(self, widget, panel, create_writer, rename_writer, profiles, task_list, samples):
         super().__init__(widget)
         self.widget = widget
         self.recent_key = None
+        self.opening = None
+        self.context_revision = 0
+        widget.canvas.trajectory_changed.connect(self._advance_context)
+        widget.writer_edit.textChanged.connect(self._advance_context)
+        widget._capture_window.tabs.currentChanged.connect(self._advance_context)
         root = widget.layout()
         root.removeWidget(panel)
         panel.hide()
@@ -95,16 +102,23 @@ class CaptureWorkspace(QtCore.QObject):
         idle_layout.addWidget(self.recent_label)
         self.recent = QtWidgets.QTreeWidget()
         self.recent.setObjectName("capture_recent_tasks")
-        self.recent.setHeaderLabels(["任务", "已保存 / 总份数", ""])
+        self.recent.setProperty("inkDataTable", True)
+        self.recent.setHeaderLabels(["任务", "已保存 / 总份数", "操作"])
         self.recent.setRootIsDecorated(False)
         self.recent.setAlternatingRowColors(True)
-        self.recent.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.recent.setMaximumHeight(260)
-        self.recent.header().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        self.recent.header().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self.recent.header().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self.recent.itemDoubleClicked.connect(lambda item, _col: self.resume(item.data(0, QtCore.Qt.ItemDataRole.UserRole)))
-        idle_layout.addWidget(self.recent, 1)
+        self.recent.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.recent.setMaximumWidth(715)
+        self.recent.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.recent.setTextElideMode(QtCore.Qt.TextElideMode.ElideRight)
+        header = self.recent.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(2, 116)
+        self.recent.headerItem().setTextAlignment(1, QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.recent.itemActivated.connect(lambda item, _col: self.resume(item.data(0, QtCore.Qt.ItemDataRole.UserRole)))
+        idle_layout.addWidget(self.recent)
         self.empty_recent = QtWidgets.QLabel("此书写者暂无未完成任务")
         idle_layout.addWidget(self.empty_recent)
         idle_layout.addStretch(1)
@@ -184,19 +198,90 @@ class CaptureWorkspace(QtCore.QObject):
                 task = entry["task"]
                 item = QtWidgets.QTreeWidgetItem([task.name, f"{task.completed_count} / {len(task.items)}", ""])
                 item.setData(0, QtCore.Qt.ItemDataRole.UserRole, entry)
+                item.setToolTip(0, task.name)
+                item.setSizeHint(0, QtCore.QSize(0, 40))
+                item.setTextAlignment(1, QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 self.recent.addTopLevelItem(item)
-                resume = QtWidgets.QPushButton("继续录制")
+                action = QtWidgets.QWidget()
+                action_layout = QtWidgets.QHBoxLayout(action)
+                action_layout.setContentsMargins(8, 0, 8, 0)
+                resume = QtWidgets.QPushButton("继续录制", action)
+                resume.setAccessibleDescription(task.name)
                 resume.clicked.connect(lambda _checked=False, value=entry: self.resume(value))
-                self.recent.setItemWidget(item, 2, resume)
+                action_layout.addWidget(resume)
+                action_layout.addStretch()
+                self.recent.setItemWidget(item, 2, action)
+            self.recent.setFixedHeight(self.recent.header().sizeHint().height() + 2 * self.recent.frameWidth()
+                                       + 40 * self.recent.topLevelItemCount())
+            if tasks:
+                self.recent.setCurrentItem(self.recent.topLevelItem(0))
             self.recent.setVisible(bool(tasks))
             self.recent_label.setVisible(bool(tasks))
+            self.empty_recent.setText("此书写者暂无未完成任务")
             self.empty_recent.setVisible(not tasks)
+            self._update_opening()
         except (OSError, ValueError) as error:
             self.empty_recent.setText("读取最近任务失败，" + str(error))
             self.empty_recent.show()
 
+    def _advance_context(self, *_):
+        self.context_revision += 1
+
+    def _open_context(self, origin):
+        widget = self.widget
+        return (self.context_revision, origin.capture_workspace.context_revision,
+                widget._capture_catalog, widget.task, widget._managed_stamp)
+
+    def _update_opening(self):
+        selected = self.opening[0]["path"] if self.opening else None
+        for row in range(self.recent.topLevelItemCount()):
+            item = self.recent.topLevelItem(row)
+            button = self.recent.itemWidget(item, 2).findChild(QtWidgets.QPushButton)
+            path = item.data(0, QtCore.Qt.ItemDataRole.UserRole)["path"]
+            button.setText("正在打开…" if path == selected else "继续录制")
+            button.setEnabled(selected is None)
+
     def resume(self, entry):
+        from .fonts.ui import Job
+
+        widget = self.widget
+        window = widget._capture_window
+        if getattr(window, "opening_capture_task", None) is not None or not widget._can_switch():
+            return
+        origin = window.tabs.currentWidget()
+        catalog = widget._capture_catalog
+        job = Job(lambda _: prepare_managed_task(entry, catalog))
+        self.opening = entry, origin, self._open_context(origin), job
+        window.opening_capture_task = self
+        origin.task_help.setText("正在打开采集任务…")
+        origin.task_help.show()
+        self._update_opening()
+        job.signals.completed.connect(self._opened, QtCore.Qt.ConnectionType.QueuedConnection)
+        job.signals.failed.connect(self._open_failed, QtCore.Qt.ConnectionType.QueuedConnection)
+        QtCore.QThreadPool.globalInstance().start(job)
+
+    def _end_open(self):
+        entry, origin, context, _job = self.opening
+        self.opening = None
+        self.widget._capture_window.opening_capture_task = None
+        if origin.task_help.text() == "正在打开采集任务…":
+            origin.task_help.clear()
+            origin.task_help.hide()
+        self._update_opening()
+        return entry if context == self._open_context(origin) else None
+
+    @QtCore.Slot(object)
+    def _opened(self, prepared):
+        entry = self._end_open()
+        if entry is None:
+            return
         try:
-            self.widget.open_managed_task(entry)
+            self.widget.finish_managed_task(entry, prepared)
+            self.widget._capture_window.tabs.setCurrentWidget(self.widget)
         except (OSError, ValueError) as error:
+            self.widget._capture_error(error)
+
+    @QtCore.Slot(str)
+    def _open_failed(self, error):
+        if self._end_open() is not None:
             self.widget._capture_error(error)
