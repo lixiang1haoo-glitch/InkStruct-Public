@@ -118,6 +118,15 @@ def test_grbl_work_coordinates_use_offset_and_do_not_move_on_connect(setting):
     assert serial.commands == [b"?", b"$$\n", b"?"]
 
 
+def test_grbl_reconnect_discards_the_startup_ack_before_querying_units():
+    serial = SimulatedGrbl()
+    serial.responses.extend(("Grbl 1.1f ['$' for help]", "ok"))
+    link = GrblLink(serial)
+    assert link.connect().position == (0, 0, 0)
+    assert serial.commands == [b"?", b"$$\n", b"?"]
+    assert not link.responses
+
+
 @pytest.mark.parametrize("setting", ["$13=1", "$13=1 (report inches, bool)", "$13=0.5", "$13=unknown"])
 def test_grbl_connect_rejects_unknown_or_nonmetric_reporting(setting):
     serial = SimulatedGrbl()

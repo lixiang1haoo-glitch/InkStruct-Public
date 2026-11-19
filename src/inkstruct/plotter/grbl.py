@@ -184,6 +184,9 @@ class GrblLink:
                 state = self.status()
         if state.position is None:
             raise MachineError("设备没有返回可核对的工作坐标。")
+        # CX-Elite can send a startup acknowledgement before the first status.
+        # No line command has been sent on this connection yet.
+        self.responses.clear()
         settings = self.command("$$")
         # CX-Elite appends the setting description after the numeric value.
         unit_settings = [line for line in settings if re.match(r"^\$13\s*=", line)]
