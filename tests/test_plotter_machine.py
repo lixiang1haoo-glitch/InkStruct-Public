@@ -18,6 +18,7 @@ class SimulatedGrbl:
     def __init__(self):
         self.responses = deque()
         self.commands = []
+        self.packets = []
         self.position = [0., 0., 0.]
         self.held = False
         self.fail_next_motion = False
@@ -26,8 +27,16 @@ class SimulatedGrbl:
         self.closed = False
         self.trace = []
         self.unit_setting = "$13=0 (report inches, bool)"
+        self.firmware = "[VER:1.1f / CX-Elite V2.1.003:]"
+        self.hard_limits = "$21=0"
+        self.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>"
 
     def write(self, data):
+        self.packets.append(data)
+        for line in data.splitlines(keepends=True):
+            self.write_line(line)
+
+    def write_line(self, data):
         assert not self.closed
         self.commands.append(data)
         self.trace.append(data)
@@ -40,7 +49,7 @@ class SimulatedGrbl:
             else:
                 state = "Idle"
             coords = ",".join(map(str, self.position))
-            self.responses.append(f"<{state}|WPos:{coords}|WCO:0,0,0>")
+            self.responses.append(self.report(state, coords))
         elif data == b"!":
             self.held = True
         elif data == b"~":
@@ -50,7 +59,9 @@ class SimulatedGrbl:
             self.responses.clear()
         else:
             if data == b"$$\n":
-                self.responses.extend((self.unit_setting, "$20=0", "$21=0"))
+                self.responses.extend((self.unit_setting, "$20=0", self.hard_limits))
+            elif data == b"$I\n":
+                self.responses.extend((self.firmware, "[OPT:VMPHL,15,1023]"))
             elif data.startswith(b"G1 "):
                 if self.fail_next_motion:
                     raise OSError("USB disconnected")
@@ -115,7 +126,7 @@ def test_grbl_work_coordinates_use_offset_and_do_not_move_on_connect(setting):
     serial.unit_setting = setting
     link = GrblLink(serial)
     assert link.connect().position == (0, 0, 0)
-    assert serial.commands == [b"?", b"$$\n", b"?"]
+    assert serial.commands == [b"?", b"$$\n", b"$I\n", b"?"]
 
 
 def test_grbl_reconnect_discards_the_startup_ack_before_querying_units():
@@ -123,7 +134,7 @@ def test_grbl_reconnect_discards_the_startup_ack_before_querying_units():
     serial.responses.extend(("Grbl 1.1f ['$' for help]", "ok"))
     link = GrblLink(serial)
     assert link.connect().position == (0, 0, 0)
-    assert serial.commands == [b"?", b"$$\n", b"?"]
+    assert serial.commands == [b"?", b"$$\n", b"$I\n", b"?"]
     assert not link.responses
 
 
@@ -141,6 +152,7 @@ def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_
     placed = position_page(page_fixture(), PaperRegistration((10, 20)))
     progress = []
     serial = SimulatedGrbl()
+    serial.position[:] = [10, 20, 0]
     link = GrblLink(serial, progress=lambda n, total: progress.append((n, total)))
     link.connect()
     state = link.run_page(placed, WorkArea(0, 0, 100, 100), MotionControl(), dry_run=dry_run)
@@ -151,8 +163,100 @@ def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_
     assert actual_motion[0] == actual_motion[-1] == b"G1 Z0 F5000\n"
     assert progress == [(1, 2), (2, 2)]
     tail = serial.trace[serial.trace.index(actual_motion[-1], serial.trace.index(b"G1 X19.0000 Y29.0000 F900\n")):]
-    assert tail[1] == "ok" and any(str(value).startswith("<Run") for value in tail)
+    assert any(str(value).startswith("<Run") for value in serial.trace[serial.trace.index(b"G1 X19.0000 Y29.0000 F900\n"):])
+    assert tail[-1].startswith("<Idle") and any(value == "ok" for value in tail)
     assert state.state == "Idle" and state.position == (19, 29, 0)
+
+
+def test_short_points_are_batched_to_six_and_preserve_pen_order():
+    serial = SimulatedGrbl()
+    serial.position[:] = [10, 10, 0]
+    link = GrblLink(serial)
+    link.connect()
+    points = tuple((10 + i / 2, 10.0) for i in range(15))
+    page = PlotPage(0, 50, 50, (PlotStroke("dense", points),))
+    link.run_page(position_page(page, PaperRegistration((0, 0))), WorkArea(0, 0, 50, 50), MotionControl(), feed=2500)
+    packets = [p.splitlines() for p in serial.packets if p.startswith(b"G1 X")]
+    assert [len(p) for p in packets] == [6, 6, 2]
+    assert [line for p in packets for line in p] == [link.xy_command(point, 2500).encode() for point in points[1:]]
+    arm = serial.commands.index(b"G1 Z-1.6 F5000\n")
+    assert b"G1 X10.5000 Y10.0000 F2500\n" in serial.commands[arm + 1:]
+
+
+@pytest.mark.parametrize("pin", ["X", "Y"])
+def test_qualified_interior_single_axis_report_is_verified_at_clear_endpoint(pin, caplog):
+    serial = SimulatedGrbl()
+    serial.position[:] = [10, 10, 0]
+    link = GrblLink(serial)
+    link.connect()
+    def report(state, xyz):
+        if xyz.startswith("12.") and state == "Run":
+            return f"<Run|WPos:11,10,0|Pn:{pin}>"
+        return f"<{state}|WPos:{xyz}>"
+    serial.report = report
+    status = link.move_to((12, 10), WorkArea(0, 0, 30, 30), MotionControl())
+    assert status.position == (12, 10, 0) and status.limits == ""
+    assert f"Pn:{pin}" in caplog.text
+    assert b"!" not in serial.commands and b"\x18" not in serial.commands
+
+
+@pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "hard_limits", "Z", "XY", "deviation"])
+def test_limit_review_fails_closed(case):
+    serial = SimulatedGrbl()
+    serial.position[:] = [10, 10, 0]
+    if case == "unknown":
+        serial.firmware = "[VER:1.1f.20170801:]"
+    if case == "hard_limits":
+        serial.hard_limits = "$21=1"
+    link = GrblLink(serial)
+    link.connect()
+    target = 12.0
+    limits = case if case in {"Z", "XY"} else "Y"
+    def report(state, xyz):
+        triggered = xyz.startswith("12.") and (state == "Run" or case == "persist")
+        if triggered and case == "deviation":
+            xyz = "12,15,0"
+        return f"<{state}|WPos:{xyz}" + (f"|Pn:{limits}>" if triggered else ">")
+    serial.report = report
+    area = WorkArea(0, 0, 13 if case == "boundary" else 30, 30)
+    with pytest.raises(MachineError):
+        link.move_to((target, 10), area, MotionControl())
+
+
+def test_pin_review_stops_sending_next_packet_until_verified_idle():
+    serial = SimulatedGrbl()
+    serial.position[:] = [10, 10, 0]
+    link = GrblLink(serial)
+    link.connect()
+    link.motion_active = True
+    def report(state, xyz):
+        return f"<{state}|WPos:{xyz}" + ("|Pn:X>" if xyz.startswith("16.") and state == "Run" else ">")
+    serial.report = report
+    link.move_path(link.last_status, tuple((10 + i, 10.0) for i in range(1, 14)),
+                   WorkArea(0, 0, 100, 100), 2500, 0, MotionControl())
+    first = serial.trace.index(b"G1 X16.0000 Y10.0000 F2500\n")
+    second = serial.trace.index(b"G1 X17.0000 Y10.0000 F2500\n")
+    interval = serial.trace[first:second]
+    assert any(isinstance(x, str) and x.endswith("|Pn:X>") for x in interval)
+    assert sum(isinstance(x, str) and x.startswith("<Idle|WPos:16") for x in interval) == 2
+
+
+def test_joint_xy_report_on_diagonal_can_clear_but_alarm_still_aborts():
+    serial = SimulatedGrbl()
+    serial.position[:] = [10, 10, 0]
+    link = GrblLink(serial)
+    link.connect()
+    def diagonal_report(state, xyz):
+        if xyz.startswith("12.") and state == "Run":
+            return "<Run|WPos:11,11,0|Pn:XY>"
+        return f"<{state}|WPos:{xyz}>"
+    serial.report = diagonal_report
+    area = WorkArea(0, 0, 30, 30)
+    assert link.move_to((12, 12), area, MotionControl()).position == (12, 12, 0)
+    link.motion_active = False
+    serial.report = lambda state, xyz: "ALARM:1" if state == "Run" and xyz.startswith("14.") else f"<{state}|WPos:{xyz}>"
+    with pytest.raises(MachineError, match="ALARM:1"):
+        link.move_to((14, 14), area, MotionControl())
 
 
 def test_preflight_rejects_out_of_bounds_before_any_motion():
@@ -162,13 +266,13 @@ def test_preflight_rejects_out_of_bounds_before_any_motion():
     placed = position_page(page_fixture(), PaperRegistration((9, 9)))
     with pytest.raises(ValueError, match="超出"):
         link.run_page(placed, WorkArea(0, 0, 15, 15), MotionControl())
-    assert all(command in {b"?", b"$$\n"} for command in serial.commands)
+    assert all(command in {b"?", b"$$\n", b"$I\n"} for command in serial.commands)
     with pytest.raises(ValueError, match="点动终点"):
         link.jog((-1, 0), WorkArea(0, 0, 15, 15), MotionControl())
     serial.position[2] = -5
     with pytest.raises(MachineError, match="升降笔范围"):
         link.touch(WorkArea(0, 0, 15, 15), MotionControl())
-    assert all(command in {b"?", b"$$\n"} for command in serial.commands)
+    assert all(command in {b"?", b"$$\n", b"$I\n"} for command in serial.commands)
 
 
 def test_pause_consumes_the_hold_report_without_losing_the_pending_ack():
@@ -239,7 +343,7 @@ try:
     assert not dialog.write_button.isEnabled() and not dialog.dry_button.isEnabled()
     dialog.link_button.click()
     wait_for(lambda: dialog.device is not None and dialog.busy is None)
-    assert transport.commands == [b"?", b"$$\n", b"?"]
+    assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?"]
     dialog.area_confirm.setChecked(True)
     dialog.origin[0].setValue(10)
     dialog.origin[1].setValue(15)
