@@ -98,3 +98,41 @@ def test_conflicts_and_changed_bytes_are_rejected(tmp_path):
         open_bundle(bad)
     with pytest.raises(ValueError, match='已变化'):
         read_row(replace(rows[0], raw_hash='0' * 64))
+
+
+def test_unselected_import_registers_bundle_owner_only_after_success(tmp_path, monkeypatch):
+    writer = 'w_00112233445546778899aabbccddeeff'
+    sender = catalog(tmp_path / 'sender', writer, '测试书写者')
+    specimen_value = {**specimen('1'), 'writer_id': writer}
+    original = write(sender, 'symbol', writer, specimen_value)
+    write(sender, 'han', writer, {
+        'schema_version': 'handwriting_single_v1', 'writer_id': writer, 'sample_id': 'han-1', 'character': '人',
+        'capture': {'canvas_width': 100, 'canvas_height': 100}, 'strokes': specimen_value['strokes'],
+    })
+    archive = tmp_path / 'samples.inkcapture'
+    export_bundle(archive, writer, '测试书写者', inventory(sender, writer)[0])
+    bundle = open_source(archive)
+    target = CaptureCatalog(tmp_path / 'target')
+    library = SampleLibrary(target)
+    preview = library.review(bundle, '')
+    assert (preview.writer, preview.name, preview.create_writer) == (writer, '测试书写者', True)
+    assert len(preview.new) == 2 and not target.writers()
+    assert not target.index.exists()
+
+    def cannot_save(*_):
+        raise OSError('模拟索引写入失败')
+
+    with monkeypatch.context() as patch:
+        patch.setattr('inkstruct.sample_library.atomic_json', cannot_save)
+        with pytest.raises(OSError, match='模拟索引写入失败'):
+            library.import_confirmed(bundle, '', preview)
+    assert not target.writers() and not target.index.exists()
+
+    assert library.import_confirmed(bundle, '', preview) == 2
+    assert target.writers() == {writer: {'name': '测试书写者'}}
+    rows, errors = inventory(target, writer)
+    assert not errors and {row.kind for row in rows} == {'han', 'symbol'}
+    symbol = next(row for row in rows if row.kind == 'symbol')
+    assert symbol.path.with_suffix('.raw').read_bytes() == original.read_bytes()
+    duplicates = library.review(bundle, '')
+    assert not duplicates.create_writer and not duplicates.new and len(duplicates.duplicates) == 2
