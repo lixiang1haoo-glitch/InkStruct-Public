@@ -1391,6 +1391,18 @@ def verify_windows_style(window, app, out, font_path=None):
     Image.new("RGB", (120, 60), (90, 20, 150)).save(jpeg)
     raster = RasterResource.from_file(jpeg, jpeg.name)
     assert (raster.width_px, raster.height_px) == (120, 60)
+    editor = window.editor
+    window.tabs.setCurrentWidget(editor)
+    for key in ("body", "page"):
+        editor.findChild(QtWidgets.QToolButton, "document_settings_" + key).click()
+        app.processEvents()
+        panel = editor.document_settings
+        assert panel.isVisible() and editor.scroll.isVisible() and panel.key == key
+        assert panel.document_name.text().startswith("当前文档")
+        assert panel.apply_button.text() == "应用" and not panel.apply_button.isEnabled()
+        assert panel.defaults_button.text() == "设为新建默认…"
+    panel.close_button.click()
+    assert not panel.isVisible()
     dialog = SettingsDialog(window.editor, window.collector, window, category="body")
     dialog.show()
     spin = dialog.pages["body"].style.controls["em_mm"]
@@ -1490,6 +1502,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_capture_viewport": True,
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
+            "document_layout_controls": True,
             "recommended_recording": recommended_recording,
             "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,

@@ -21,6 +21,7 @@ from .settings_pages import (
     compact_form_parameters,
     embed,
     label,
+    section,
 )
 from .theme import set_tone
 
@@ -49,7 +50,7 @@ CATEGORIES = (
 
 
 class BodyPage(QtWidgets.QWidget):
-    def __init__(self, owner):
+    def __init__(self, owner, *, for_document=False):
         super().__init__()
         self.owner = owner
         column = QtWidgets.QVBoxLayout(self)
@@ -81,6 +82,10 @@ class BodyPage(QtWidgets.QWidget):
         self.digit_spacing_edited = False
         self.latin_spacing.currentIndexChanged.connect(self.record_digit_spacing_edit)
         form.addRow("字母与数字间距", self.latin_spacing)
+        if for_document:
+            self.digits_follow = QtWidgets.QCheckBox("正文数字采用字母间距")
+            self.digits_follow.setChecked(owner.flow.digits_follow_latin)
+            form.addRow(self.digits_follow)
         self.punctuation_spacing = QtWidgets.QComboBox()
         self.punctuation_spacing.addItem("按笔迹紧凑排列（推荐）", "handwriting")
         self.punctuation_spacing.addItem("保留采集位置留白（旧版）", "capture")
@@ -95,7 +100,8 @@ class BodyPage(QtWidgets.QWidget):
         self.paragraph_align.addItem("左对齐（保留行尾空白）", "left")
         self.paragraph_align.setCurrentIndex(self.paragraph_align.findData(owner.flow.paragraph_align))
         self.paragraph_align.setToolTip("自动折行时，将余量分摊到汉字间隙、词间空格及公式边界；段尾与手动换行不拉伸，英文单词及公式内部不拆开。")
-        form.addRow("正文对齐", self.paragraph_align)
+        if not for_document:
+            form.addRow("正文对齐", self.paragraph_align)
         variation = owner.flow.han_variation
         self.original_variation = variation
         self.upgrade_variation = False
@@ -136,7 +142,8 @@ class BodyPage(QtWidgets.QWidget):
             self.upgrade_natural = QtWidgets.QPushButton("使用新版自然书写")
             self.upgrade_natural.clicked.connect(self.choose_natural_version)
             natural_form.addRow(self.upgrade_natural)
-        column.addLayout(form)
+        if not for_document:
+            column.addLayout(form)
         self.style = ProfileForm(
             owner.style,
             [
@@ -168,8 +175,11 @@ class BodyPage(QtWidgets.QWidget):
                 ]
             ],
         )
+        if for_document:
+            self.flow.layout().insertRow(1, "正文对齐", self.paragraph_align)
         column.addWidget(self.flow)
-        column.addWidget(natural)
+        if not for_document:
+            column.addWidget(natural)
         headings = QtWidgets.QWidget()
         heading_form = QtWidgets.QFormLayout(headings)
         self.headings, self.initial_headings = [], []
@@ -183,8 +193,18 @@ class BodyPage(QtWidgets.QWidget):
             heading_form.addRow(f"H{i} 标题字号", control)
             self.headings.append(control)
             self.initial_headings.append(control.value())
-        column.addWidget(label("标题字号"))
-        column.addWidget(headings)
+        if for_document:
+            extra = QtWidgets.QWidget()
+            details = QtWidgets.QVBoxLayout(extra)
+            details.setContentsMargins(0, 0, 0, 0)
+            details.addLayout(form)
+            details.addWidget(natural)
+            details.addWidget(label("标题字号"))
+            details.addWidget(headings)
+            section(column, "更多正文设置", extra)
+        else:
+            column.addWidget(label("标题字号"))
+            column.addWidget(headings)
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
         column.addStretch()
         compact_form_parameters(self)
@@ -250,13 +270,14 @@ class BodyPage(QtWidgets.QWidget):
 
 class SettingsDialog(QtWidgets.QDialog):
     def __init__(
-        self, editor, collector=None, parent=None, *, category=None
+        self, editor, collector=None, parent=None, *, category=None, application_only=False
     ):
         super().__init__(parent or editor)
         from .ui_behavior import protect_parameter_wheels
 
         protect_parameter_wheels(QtWidgets.QApplication.instance())
         self.editor, self.collector = editor, collector
+        self.application_only = application_only
         self.defaults_store = GlobalDefaultsStore()
         defaults, self.defaults_warning = self.defaults_store.load()
         self.flow, self.style, self.page, self.mode = (
@@ -306,8 +327,9 @@ class SettingsDialog(QtWidgets.QDialog):
         self.error.setProperty("inkRole", "status")
         set_tone(self.error, "danger")
         outer.addWidget(self.error)
-        self.has_current_document = bool(editor.session_path or editor.dirty or editor.source_session.source
-                                         or editor.document_started)
+        self.has_current_document = not application_only and bool(
+            editor.session_path or editor.dirty or editor.source_session.source or editor.document_started
+        )
         footer = QtWidgets.QHBoxLayout()
         self.reset = QtWidgets.QPushButton("恢复本分类初始值")
         self.reset.setAutoDefault(False)
@@ -342,6 +364,8 @@ class SettingsDialog(QtWidgets.QDialog):
         for key, group, title, words in CATEGORIES:
             if key == "capture" and collector is None:
                 continue
+            if application_only and key not in {"appearance", "preview", "capture", "about"}:
+                continue
             if group not in groups:
                 item = QtWidgets.QTreeWidgetItem(self.navigation, [group])
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
@@ -362,7 +386,7 @@ class SettingsDialog(QtWidgets.QDialog):
             min(max(self.minimumHeight(), size.height()), available.height() - 64),
         )
         initial = category or self.preferences.value("last_layout_category", "body", str)
-        self.select(initial if initial in self.items else "body")
+        self.select(initial if initial in self.items else next(iter(self.items)))
 
     def select(self, key):
         self.items[key].setHidden(False)
@@ -382,7 +406,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
         group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
         self.heading.setText(f"{group} › {title}")
-        app_setting = key in {"appearance", "preview"}
+        app_setting = key in {"appearance", "preview", "capture"}
         about = key == "about"
         self.reset.setVisible(not about)
         self.scope_info.setVisible(not about)
@@ -423,41 +447,12 @@ class SettingsDialog(QtWidgets.QDialog):
             page.acceleration.toggled.connect(self.editor.canvas.set_render_acceleration)
         elif key == "capture":
             page = CapturePage(self.collector)
-        elif key == "body":
-            page = BodyPage(self)
-        elif key in {"table", "image"}:
-            page = ElementPage(key, self.document, self.flow, scrollable=False)
-            page.scope.hide()
-            page.explanation.setText(
-                "保存为全局默认，重启后保留；新文档使用这些值，已有文档保持原设置。"
-            )
-            page.status.setText("全局默认；单个表格或图片的独立属性请在排版右侧调整。")
-            page.scope.currentIndexChanged.connect(
-                lambda: self.reset.setText(
-                    "恢复沿用文档默认" if page.current_key else "恢复本分类初始值"
-                )
-            )
-        elif key == "math":
-            from .editor.math_settings import MathSettingsDialog
-
-            page = embed(MathSettingsDialog(
-                self.flow.math, resolver=self.resolver, stroke_width=self.style.stroke_width_mm,
-                embedded=True, font_path=self.run or self.editor.run_path,
-            ))
-
-            page.reset_defaults = page.reset_category
+        else:
+            page = layout_settings_page(self, key)
+        if key == "math":
             self.stack.addWidget(page)
             self.pages[key] = page
             return
-        else:
-            if key == "code":
-                from .editor.code_settings import CodeSettingsDialog
-
-                page = embed(CodeSettingsDialog(self.flow.code))
-            else:
-                from .editor.footnote_settings import FootnoteSettingsDialog
-
-                page = embed(FootnoteSettingsDialog(self.flow.footnote))
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -541,8 +536,10 @@ class SettingsDialog(QtWidgets.QDialog):
             preview_changed = preview is not None and preview.changed
             to_document = to_document and self.current != "preview"
             save_defaults = (
-                not (theme_changed or preview_changed or self.current == "preview") or to_document
-                or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
+                not self.application_only and (
+                    not (theme_changed or preview_changed or self.current == "preview") or to_document
+                    or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
+                )
             )
             inspector = getattr(w, "element_inspector", None)
             if to_document and not self.has_current_document:
@@ -586,6 +583,7 @@ class SettingsDialog(QtWidgets.QDialog):
                 "已更新当前文档并存为默认。" if to_document
                 else "已保存预览绘制设置。" if self.current == "preview" and not save_defaults
                 else "已保存应用主题。" if theme_changed and not save_defaults
+                else "已保存应用设置。" if self.application_only
                 else "已保存为新文档默认。"
             )
             return True
@@ -623,8 +621,38 @@ class SettingsDialog(QtWidgets.QDialog):
                 timer.stop()
 
 
+def layout_settings_page(owner, key, *, for_document=False):
+    if key == "body":
+        return BodyPage(owner, for_document=for_document)
+    if key in {"table", "image"}:
+        page = ElementPage(key, owner.document, owner.flow, scrollable=False)
+        page.scope.hide()
+        page.explanation.setText(
+            "适用于当前文档。单个表格或图片的独立设置可在右侧元素属性中编辑。"
+            if for_document else "新建文档使用这些值。"
+        )
+        page.status.hide()
+        return page
+    if key == "math":
+        from .editor.math_settings import MathSettingsDialog
+
+        page = embed(MathSettingsDialog(
+            owner.flow.math, resolver=owner.resolver, stroke_width=owner.style.stroke_width_mm,
+            embedded=True, font_path=owner.run,
+        ))
+        page.reset_defaults = page.reset_category
+        return page
+    if key == "code":
+        from .editor.code_settings import CodeSettingsDialog
+
+        return embed(CodeSettingsDialog(owner.flow.code))
+    from .editor.footnote_settings import FootnoteSettingsDialog
+
+    return embed(FootnoteSettingsDialog(owner.flow.footnote))
+
+
 def open_settings(editor, collector=None, parent=None, *, category=None):
-    dialog = SettingsDialog(editor, collector, parent, category=category)
+    dialog = SettingsDialog(editor, collector, parent, category=category, application_only=True)
     try:
         return dialog.exec()
     finally:
