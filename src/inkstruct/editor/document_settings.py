@@ -1,4 +1,4 @@
-"""Document layout drafts shown alongside the existing rendered preview."""
+"""Scoped drafts shared by document and new-document layout settings."""
 
 from dataclasses import asdict, is_dataclass, replace
 from types import SimpleNamespace
@@ -9,12 +9,11 @@ from ..document.flow_template import FlowTemplate
 from ..document.markdown import parse_markdown
 from ..global_defaults import GlobalDefaultsStore
 from ..settings_dialog import CATEGORIES, layout_settings_page
-from ..settings_pages import CompactSpinBox, acceptable, compact_form_parameters, label, section
-from ..theme import set_tone
+from ..settings_pages import CompactSpinBox, acceptable, compact_form_parameters, label, scroll_page, section
 
 
-LAYOUT_TITLES = {key: title for key, group, title, _ in CATEGORIES if group == "排版默认设置"}
-LAYOUT_TITLES["page"] = "页面设置"
+LAYOUT_TITLES = {"body": "正文与段落", "page": "页面设置"}
+LAYOUT_TITLES.update({key: title for key, group, title, _ in CATEGORIES if group == "排版默认设置"})
 PAPER_SIZES = {"A4": (210, 297), "A5": (148, 210), "B5": (176, 250)}
 PAGE_FIELDS = ("width_mm", "height_mm", "top_mm", "right_mm", "bottom_mm", "left_mm")
 NAMES = {
@@ -70,9 +69,12 @@ class PageSetup(QtWidgets.QWidget):
 
             column.addWidget(label(description(self.template)))
             column.addWidget(label("纸张与正文区域由模板定义。"))
-            button = QtWidgets.QPushButton("编辑当前文档模板…")
-            button.clicked.connect(advanced)
-            column.addWidget(button, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+            if advanced is not None:
+                button = QtWidgets.QPushButton("编辑当前文档模板…")
+                button.clicked.connect(advanced)
+                column.addWidget(button, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+            else:
+                column.addWidget(label("可在模板库中调整默认模板。"))
             column.addStretch()
             return
         self.original = page_geometry(self.template)
@@ -172,109 +174,67 @@ def display_value(key, value):
     return OPTIONS.get(value, str(value))
 
 
-class DocumentSettings(QtWidgets.QWidget):
-    dismissed = QtCore.Signal()
+class LayoutSettings(QtWidgets.QStackedWidget):
+    """Keep one draft per category for a single document or the new-document defaults."""
 
-    def __init__(self, editor):
-        super().__init__(editor)
+    changed = QtCore.Signal()
+
+    def __init__(self, editor, *, defaults=False):
+        super().__init__()
         self.editor = editor
-        self.key = None
-        self.session = None
+        self.defaults = defaults
+        self.session = editor.source_session
         self.drafts = {}
-        self.changed_categories = set()
-        self.setObjectName("document_layout_settings")
-        column = QtWidgets.QVBoxLayout(self)
-        self.title = label("")
-        self.title.setProperty("inkRole", "title")
-        self.document_name = label("")
-        column.addWidget(self.title)
-        column.addWidget(self.document_name)
-        self.stack = QtWidgets.QStackedWidget()
-        column.addWidget(self.stack, 1)
-        self.message = label("")
-        self.message.hide()
-        column.addWidget(self.message)
-        row = QtWidgets.QHBoxLayout()
-        self.defaults_button = QtWidgets.QPushButton("设为新建默认…")
-        self.defaults_button.clicked.connect(self.save_default)
-        row.addWidget(self.defaults_button)
-        row.addStretch()
-        self.close_button = QtWidgets.QPushButton("关闭")
-        self.close_button.clicked.connect(self.dismissed)
-        row.addWidget(self.close_button)
-        self.apply_button = QtWidgets.QPushButton("应用")
-        self.apply_button.setProperty("inkRole", "primary")
-        self.apply_button.clicked.connect(self.apply)
-        row.addWidget(self.apply_button)
-        column.addLayout(row)
+        self.pending = set()
+        self.current = None
+        self.select_error = None
+        self.store = GlobalDefaultsStore() if defaults else None
 
-    def refresh_document(self):
-        name = self.editor.session_path.name if self.editor.session_path else "未命名文档"
-        self.document_name.setText(f"当前文档 · {name}")
-        if self.session is not self.editor.source_session:
-            active = self.key
-            self.clear()
-            self.session = self.editor.source_session
-            if active is not None:
-                self.open_category(active)
+    @property
+    def pages(self):
+        return {key: entry[1] for key, entry in self.drafts.items()}
 
-    def clear(self):
-        self.key = None
-        self.session = None
-        self.drafts.clear()
-        self.changed_categories.clear()
-        while self.stack.count():
-            page = self.stack.widget(0)
-            self.stack.removeWidget(page)
-            page.deleteLater()
-
-    def open_category(self, key, *, focus=False):
-        if self.session is not self.editor.source_session:
-            self.clear()
-            self.refresh_document()
-        self.key = key
-        self.title.setText(LAYOUT_TITLES[key])
-        self.message.hide()
+    def select(self, key):
+        self.current = key
         if key not in self.drafts:
             self.make_draft(key)
-        panel, page, _ = self.drafts[key]
-        self.stack.setCurrentWidget(panel)
-        self.update_actions()
-        if focus:
-            editable = next((field for field in page.findChildren(QtWidgets.QWidget)
-                             if isinstance(field, (QtWidgets.QAbstractSpinBox, QtWidgets.QComboBox))
-                             and field.isEnabled() and field.isVisible()), None)
-            (editable or self.close_button).setFocus()
+        self.setCurrentWidget(self.drafts[key][0])
+        self.changed.emit()
+
+    def draft_owner(self):
+        editor = self.editor
+        if self.defaults:
+            layout, _ = self.store.for_new_document()
+            return SimpleNamespace(style=layout.style, flow=layout.flow, mode=layout.mode,
+                                   page=layout.page, session_path=None, run_path=layout.run)
+        return editor
 
     def make_draft(self, key):
-        editor = self.editor
+        state = self.draft_owner()
         owner = SimpleNamespace(
-            style=editor.style, flow=editor.flow, mode=editor.mode, run=editor.run_path,
-            resolver=editor.resolver, document=parse_markdown("") if key in {"table", "image"} else None,
+            style=state.style, flow=state.flow, mode=state.mode, run=state.run_path,
+            resolver=self.editor.resolver, document=parse_markdown("") if key in {"table", "image"} else None,
         )
-        page = PageSetup(editor, self.edit_template) if key == "page" else layout_settings_page(
-            owner, key, for_document=True
+        advanced = self.edit_template if not self.defaults else None
+        page = PageSetup(state, advanced) if key == "page" else layout_settings_page(
+            owner, key, for_document=True, defaults=self.defaults,
         )
-        if key == "body" and (editor.session_path or editor.run_path.endswith(".inkfont")):
+        if key == "body" and (state.session_path or state.run_path.endswith(".inkfont")):
             page.mode.setEnabled(False)
-            page.mode.setToolTip("已打开的项目沿用其内容模式。")
-        panel = page
-        if key != "math":
-            panel = QtWidgets.QScrollArea()
-            panel.setWidgetResizable(True)
-            panel.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-            panel.setWidget(page)
-        self.stack.addWidget(panel)
+            page.mode.setToolTip("当前项目或字体沿用其内容模式。")
+        panel = page if key == "math" else scroll_page(page)
+        self.addWidget(panel)
         self.drafts[key] = (panel, page, self.values(key, page))
         for field in page.findChildren(QtWidgets.QWidget):
-            if isinstance(field, (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox, QtWidgets.QLineEdit)):
-                signal = (field.valueChanged if isinstance(field, (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox))
-                          else field.currentIndexChanged if isinstance(field, QtWidgets.QComboBox)
-                          else field.textChanged)
-                signal.connect(self.update_actions)
+            if isinstance(field, (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox)):
+                field.valueChanged.connect(lambda _value, name=key: self.update_pending(name))
+            elif isinstance(field, QtWidgets.QComboBox):
+                field.currentIndexChanged.connect(lambda _index, name=key: self.update_pending(name))
+            elif isinstance(field, QtWidgets.QLineEdit):
+                field.textChanged.connect(lambda _text, name=key: self.update_pending(name))
             elif isinstance(field, QtWidgets.QAbstractButton):
-                field.clicked.connect(self.update_actions)
-                field.toggled.connect(self.update_actions)
+                field.clicked.connect(lambda _checked, name=key: self.update_pending(name))
+                field.toggled.connect(lambda _checked, name=key: self.update_pending(name))
 
     def values(self, key, page):
         if key == "body":
@@ -288,78 +248,93 @@ class DocumentSettings(QtWidgets.QWidget):
         acceptable(page)
         return {key: page.configuration()}
 
-    def draft(self):
-        _, page, initial = self.drafts[self.key]
-        return page, initial, self.values(self.key, page)
-
-    def update_actions(self, *_):
-        if self.key not in self.drafts:
+    def update_pending(self, key):
+        if key not in self.drafts:
             return
+        _, page, initial = self.drafts[key]
         try:
-            _, initial, values = self.draft()
-            changed = initial != values
+            changed = initial != self.values(key, page)
         except (ValueError, TypeError):
-            changed = True  # Apply exposes the existing field validator's message.
+            changed = True
         if changed:
-            self.changed_categories.add(self.key)
+            self.pending.add(key)
         else:
-            self.changed_categories.discard(self.key)
-        self.apply_button.setEnabled(changed)
-        self.close_button.setText("取消" if self.changed_categories else "关闭")
-        page = self.drafts[self.key][1]
-        self.defaults_button.setVisible(self.key != "page" or page.editable)
+            self.pending.discard(key)
+        self.changed.emit()
 
-    def report(self, message, *, error=False):
-        set_tone(self.message, "danger" if error else "success")
-        self.message.setText(message)
-        self.message.show()
+    def collect_changes(self):
+        changes, geometry = {}, None
+        for key, (_, page, initial) in self.drafts.items():
+            if key not in self.pending:
+                continue
+            try:
+                values = self.values(key, page)
+                if key == "page":
+                    geometry = with_geometry(page.template, values)
+                else:
+                    changes.update({name: value for name, value in values.items() if value != initial[name]})
+            except (ValueError, TypeError):
+                self.select_error = key
+                raise
+        return changes, geometry
+
+    def reload(self, keys):
+        for key in keys:
+            entry = self.drafts.pop(key, None)
+            if entry is not None:
+                panel, _, _ = entry
+                self.removeWidget(panel)
+                panel.deleteLater()
+            self.pending.discard(key)
+        if self.current is not None:
+            self.select(self.current)
+
+    def validate_document(self):
+        if self.editor.source_session is not self.session:
+            raise ValueError("当前文档已更换，请重新打开设置。")
 
     def apply(self):
-        if self.session is not self.editor.source_session:
-            self.refresh_document()
+        self.select_error = None
+        changes, geometry = self.collect_changes()
+        if not changes and geometry is None:
             return False
-        try:
-            page, initial, values = self.draft()
-            if values == initial:
-                return False
-            editor = self.editor
-            key = self.key
-            if key in {"table", "image"} and editor.element_inspector.has_pending():
-                raise ValueError("请先应用或取消右侧的元素修改。")
-            changes = {key: value for key, value in values.items() if value != initial[key]}
-            if key == "page":
-                template = with_geometry(page.template, values)
-                if editor.mode == "markdown":
-                    if editor.flow.template is not None and editor.flow.template != page.template:
-                        raise ValueError("当前文档的模板已变化，请重新打开页面设置。")
-                    editor.template_content_panel.apply_template(template)
-                else:
-                    editor.page = replace(editor.page, width_mm=template.width_mm, height_mm=template.height_mm,
-                                          margin_mm=template.margins_mm[0])
-                    editor.mark_dirty()
-                    editor.schedule_layout()
-            else:
-                style, flow, mode = self.updated_layout(editor.style, editor.flow, editor.mode, changes)
-                editor.loaded_style, editor.flow, editor.mode = style, flow, mode
-                editor._sync_document_controls(style)
-                editor.mark_dirty()
-                editor.schedule_layout()
-            self.reload_category()
-            self.report("已应用到当前文档。按 Ctrl+S 保存项目。")
-            return True
-        except (ValueError, TypeError) as error:
-            self.report(str(error), error=True)
-            return False
+        if self.defaults:
+            defaults, warning = self.store.load()
+            if warning:
+                raise ValueError(warning)
+            self.persist_defaults(self.store, defaults, changes, geometry)
+        else:
+            self.apply_to_document(changes, geometry)
+        self.reload(tuple(self.pending))
+        return True
 
-    def reload_category(self):
-        panel, _, _ = self.drafts.pop(self.key)
-        self.stack.removeWidget(panel)
-        panel.deleteLater()
-        self.open_category(self.key)
+    def apply_to_document(self, changes, geometry):
+        self.validate_document()
+        editor = self.editor
+        if {"table", "image"} & changes.keys() and editor.element_inspector.has_pending():
+            raise ValueError("请先在右侧元素属性中应用或取消修改，再应用文档设置。")
+        style, flow, mode = self.updated_layout(editor.style, editor.flow, editor.mode, changes)
+        if editor.run_path.endswith(".inkfont") and mode != "markdown":
+            raise ValueError("当前字体包须使用 Markdown 模式。")
+        page = editor.page
+        if geometry is not None:
+            opened = self.drafts["page"][1].template
+            if editor.mode == "markdown" and editor.flow.template is not None and editor.flow.template != opened:
+                raise ValueError("当前文档的模板已变化，请重新打开设置。")
+            if mode == "plain-text":
+                page = replace(page, width_mm=geometry.width_mm, height_mm=geometry.height_mm,
+                               margin_mm=min(geometry.margins_mm))
+        editor.loaded_style, editor.flow, editor.page, editor.mode = style, flow, page, mode
+        editor._sync_document_controls(style)
+        if geometry is not None and mode == "markdown" and geometry != flow.template:
+            editor.template_content_panel.apply_template(geometry)
+        else:
+            editor.mark_dirty()
+            editor.schedule_layout()
 
     def edit_template(self):
         self.editor.template_settings()
-        self.reload_category()
+        self.reload(("page",))
 
     @staticmethod
     def updated_layout(style, flow, mode, values):
@@ -368,93 +343,80 @@ class DocumentSettings(QtWidgets.QWidget):
         fields = {key: values.pop(key) for key in tuple(values) if hasattr(style, key)}
         return replace(style, **fields), replace(flow, **values), mode
 
-    def save_default(self):
-        try:
-            _, initial, values = self.draft()
-            store = GlobalDefaultsStore()
-            defaults, warning = store.load()
-            if warning:
-                raise ValueError(warning)
-            if self.key == "page":
+    def default_geometry(self, store, defaults):
+        if defaults.mode == "plain-text":
+            return simple_template(defaults.page)
+        return defaults.flow.template or store.ordinary_template(defaults.page)
+
+    def persist_defaults(self, store, defaults, values, geometry):
+        style, flow, mode = self.updated_layout(defaults.style, defaults.flow, defaults.mode, values)
+        if defaults.run.endswith(".inkfont") and mode != "markdown":
+            raise ValueError("使用字体包的新建文档须使用 Markdown 模式。")
+        page, ordinary = defaults.page, None
+        if geometry is not None:
+            if mode == "plain-text":
+                page = replace(page, width_mm=geometry.width_mm, height_mm=geometry.height_mm,
+                               margin_mm=min(geometry.margins_mm))
+            else:
                 previous = defaults.flow.template or store.ordinary_template(defaults.page)
                 if not isinstance(previous, FlowTemplate) or previous.kind != "simple":
-                    raise ValueError("新建文档的默认模板有专用版式，请在模板库中编辑。")
-                new_template = with_geometry(previous, values)
-                old_values = page_geometry(previous)
+                    raise ValueError("新建文档默认使用专用模板，请在模板库中调整版式。")
+                template = with_geometry(previous, page_geometry(geometry))
                 if defaults.flow.template is None:
-                    save = lambda: store.save_ordinary(previous, new_template)
+                    ordinary = (previous, template)
                 else:
-                    save = lambda: store.save(replace(defaults, flow=replace(defaults.flow, template=new_template)))
-            else:
-                old_values = {key: defaults.mode if key == "mode" else
-                              getattr(defaults.style, key) if hasattr(defaults.style, key) else
-                              getattr(defaults.flow, key) for key in values}
-                style, flow, mode = self.updated_layout(defaults.style, defaults.flow, defaults.mode, values)
-                if defaults.run.endswith(".inkfont") and mode != "markdown":
-                    raise ValueError("使用字体包的新建文档须使用 Markdown 模式。")
-                save = lambda: store.save(replace(defaults, style=style, flow=flow, mode=mode))
-            old_fields = dict(flattened(old_values))
-            changes = [(path, old_fields.get(path), value) for path, value in flattened(values)
-                       if old_fields.get(path) != value]
-            if not changes:
-                self.report("面板中的值已经是新建默认。")
-                return False
-            if not self.confirm_default(changes, values != initial):
-                return False
-            save()
-            self.report("已保存本分类的新建默认。"
-                        + ("面板中的改动仍待应用到当前文档。" if values != initial else ""))
-            return True
-        except (OSError, ValueError, TypeError) as error:
-            self.report(str(error), error=True)
-            return False
+                    flow = replace(flow, template=template)
+        updated = replace(defaults, style=style, flow=flow, mode=mode, page=page)
+        store.save(updated, ordinary=ordinary)
 
-    def confirm_default(self, changes, pending):
-        dialog = QtWidgets.QDialog(self)
-        dialog.setObjectName("document_layout_default_confirmation")
-        dialog.setWindowTitle("设为新建文档默认")
-        column = QtWidgets.QVBoxLayout(dialog)
-        scope = f"更新「{LAYOUT_TITLES[self.key]}」的新建默认，用于此后新建的文档。"
-        if pending:
-            scope += " 面板中的改动仍待应用到当前文档。"
-        column.addWidget(label(scope))
-        table = QtWidgets.QTreeWidget()
-        table.setHeaderLabels(["设置项", "现有默认", "新默认"])
-        table.setRootIsDecorated(False)
-        table.setAlternatingRowColors(True)
-        table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
-        table.header().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
-        page = self.drafts[self.key][1]
-        for path, before, after in changes:
-            key = path[-1]
-            control = page.findChild(QtWidgets.QWidget, key)
-            caption = control.accessibleName() if control is not None else ""
-            if not caption and control is not None:
-                for form in page.findChildren(QtWidgets.QFormLayout):
-                    field_label = form.labelForField(control)
-                    if isinstance(field_label, QtWidgets.QLabel):
-                        caption = field_label.text()
-                        break
-            if not caption:
-                if self.key != "page" and key in {"width_mm", "height_mm"}:
-                    caption = "宽度" if key == "width_mm" else "高度"
-                else:
-                    caption = NAMES.get(key, key)
-            table.addTopLevelItem(QtWidgets.QTreeWidgetItem(
-                [caption, display_value(key, before), display_value(key, after)]
-            ))
-        column.addWidget(table, 1)
-        buttons = QtWidgets.QDialogButtonBox()
-        confirm = buttons.addButton("保存为新建默认", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
-        confirm.setProperty("inkRole", "primary")
-        cancel = buttons.addButton("取消", QtWidgets.QDialogButtonBox.ButtonRole.RejectRole)
-        cancel.setDefault(True)
-        cancel.setFocus()
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        column.addWidget(buttons)
-        dialog.resize(550, min(450, 130 + 28 * len(changes)))
-        try:
-            return dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted
-        finally:
-            dialog.deleteLater()
+    def prepare_default_copy(self):
+        self.validate_document()
+        key = self.current
+        _, page, initial = self.drafts[key]
+        values = self.values(key, page)
+        store = GlobalDefaultsStore()
+        defaults, warning = store.load()
+        if warning:
+            raise ValueError(warning)
+        if key == "page":
+            previous = self.default_geometry(store, defaults)
+            if not isinstance(previous, FlowTemplate) or previous.kind != "simple":
+                raise ValueError("新建文档默认使用专用模板，请在模板库中调整版式。")
+            geometry = with_geometry(previous, values)
+            if defaults.mode == "plain-text" and len(set(geometry.margins_mm)) != 1:
+                raise ValueError("纯文本的新建默认只支持一致的四向页边距。")
+            old_values = page_geometry(previous)
+            save = lambda: self.persist_defaults(store, defaults, {}, geometry)
+        else:
+            old_values = {name: defaults.mode if name == "mode" else
+                          getattr(defaults.style, name) if hasattr(defaults.style, name) else
+                          getattr(defaults.flow, name) for name in values}
+            save = lambda: self.persist_defaults(store, defaults, values, None)
+        old_fields = dict(flattened(old_values))
+        rows = []
+        for path, value in flattened(values):
+            previous = old_fields.get(path)
+            if previous != value:
+                name = path[-1]
+                rows.append((field_caption(page, key, name), display_value(name, previous),
+                             display_value(name, value)))
+        return key, rows, values != initial, save
+
+    def can_copy(self):
+        return self.current is not None and (
+            self.current != "page" or self.pages["page"].editable
+        )
+
+
+def field_caption(page, category, key):
+    control = page.findChild(QtWidgets.QWidget, key)
+    if control is not None:
+        if caption := control.accessibleName():
+            return caption
+        for form in page.findChildren(QtWidgets.QFormLayout):
+            field_label = form.labelForField(control)
+            if isinstance(field_label, QtWidgets.QLabel):
+                return field_label.text()
+    if category != "page" and key in {"width_mm", "height_mm"}:
+        return "宽度" if key == "width_mm" else "高度"
+    return NAMES.get(key, key)

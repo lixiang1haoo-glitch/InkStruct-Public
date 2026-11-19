@@ -190,7 +190,8 @@ class InkStructWindow(QtWidgets.QMainWindow):
         from .settings_dialog import open_settings
         if category is None and self.tabs.currentIndex() == 0:
             category = 'capture'
-        return open_settings(self.editor, self.collector, self, category=category)
+        scope = "document" if category is None and self.tabs.currentWidget() is self.editor else "app"
+        return open_settings(self.editor, self.collector, self, category=category, scope=scope)
 
     def sample_library_activated(self, index):
         if self.tabs.widget(index) is self.sample_library:

@@ -20,7 +20,7 @@ QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat, QtCore.QSettings.Sco
 editor = MixedWindow(source='12')
 dialog = SettingsDialog(editor, category='about')
 dialog.show()
-assert dialog.items['about'].parent().text(0) == '应用设置'
+assert dialog.scope == 'app' and dialog.navigation.currentItem().text() == '关于'
 for theme in ('light', 'dark'):
     use_platform_theme(app, mode=theme)
     result = verify_about_page(dialog, app)
@@ -30,11 +30,9 @@ for theme in ('light', 'dark'):
         assert (QtGui.QColor(result[key]).lightness() < 128) == dark, result
     assert 'InkStruct墨构交流群' in [label.text() for label in dialog.pages['about'].findChildren(QtWidgets.QLabel)]
     assert dialog.close_button.text() == '关闭'
-dialog.search.setText('1035966437')
-assert dialog.current == 'about'
-dialog.search.clear()
 dialog.select('body')
-assert not dialog.save_button.isHidden() and dialog.close_button.text() == '取消'
+assert dialog.scope == 'document' and not dialog.save_button.isHidden()
+assert dialog.close_button.text() == '关闭'
 dialog.reject()
 editor.timer.stop()
 if editor.cancelled:

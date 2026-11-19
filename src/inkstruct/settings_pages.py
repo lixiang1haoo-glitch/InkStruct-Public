@@ -44,6 +44,14 @@ def label(text):
     return result
 
 
+def scroll_page(page):
+    scroll = QtWidgets.QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+    scroll.setWidget(page)
+    return scroll
+
+
 class AboutPage(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
