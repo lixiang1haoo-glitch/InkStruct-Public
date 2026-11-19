@@ -136,11 +136,6 @@ def organize_workspace(w):
     w.export_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     w.export_button.setObjectName("document_export")
     w.export_button.setEnabled(False)
-    if sys.platform == "win32":
-        w.machine_button = tool("写字机…", w.open_machine)
-        w.machine_button.setObjectName("document_machine")
-        w.machine_button.setEnabled(False)
-
     split = QtWidgets.QSplitter()
     split.setObjectName("document_splitter")
     split.setChildrenCollapsible(False)
@@ -233,11 +228,36 @@ def organize_workspace(w):
     w.element_properties_dock = properties
     w.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, properties)
     w.tabifyDockWidget(dock, properties)
+    if sys.platform == "win32":
+        from .machine_panel import MachinePanel
+
+        machine = QtWidgets.QDockWidget("写字机", w)
+        machine.setObjectName("document_machine_dock")
+        machine.setAllowedAreas(QtCore.Qt.DockWidgetArea.RightDockWidgetArea)
+        w.machine_panel = MachinePanel(machine)
+        w.machine_dock = machine
+        machine.setWidget(w.machine_panel)
+        w.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, machine)
+        w.tabifyDockWidget(properties, machine)
+        w.setTabPosition(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, QtWidgets.QTabWidget.TabPosition.North)
+        w.machine_panel.page_selected.connect(lambda index: w.page_picker.setValue(index + 1))
+        machine_status = QtWidgets.QLabel()
+        machine_status.setWordWrap(True)
+        machine_status.hide()
+        footer.insertWidget(1, machine_status, 1)
+
+        def show_machine_status(text):
+            machine_status.setText(text)
+            machine_status.setVisible(bool(text))
+
+        w.machine_panel.status_changed.connect(show_machine_status)
+        view_menu.addAction(machine.toggleViewAction())
     properties.raise_()
     w.resizeDocks([properties], [330], QtCore.Qt.Orientation.Horizontal)
     view_menu.addAction(properties.toggleViewAction())
     w.setCentralWidget(root)
-    dock.hide()
+    if sys.platform != "win32":
+        dock.hide()
     old.deleteLater()
     # Schedule after initial show so keyboard input works immediately on launch.
     QtCore.QTimer.singleShot(0, w.workspace_views.focus_current)

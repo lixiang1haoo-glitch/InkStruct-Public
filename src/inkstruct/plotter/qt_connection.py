@@ -110,6 +110,10 @@ class N1Worker(QtCore.QThread):
                         result = link.require_idle(control)
                     elif kind == "jog":
                         result = link.jog(*args, control)
+                    elif kind == "return":
+                        result = link.move_to(*args, control)
+                    elif kind == "pen":
+                        result = link.set_pen(*args, control)
                     elif kind == "touch":
                         result = link.touch(*args, control)
                     else:
