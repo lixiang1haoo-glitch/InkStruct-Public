@@ -285,7 +285,7 @@ def inspect():
     d=app.activeModalWidget();assert isinstance(d,SettingsDialog)
     navigation_checks.append((
         ('capture' in d.pages)==(w.tabs.currentIndex()==0),
-        set(d.items)=={'appearance','preview','about','capture','body','math','table','image','code','footnote'},
+        set(d.items)=={'appearance','preview','about','capture'},
     ))
     d.reject()
 for i in range(w.tabs.count()):
