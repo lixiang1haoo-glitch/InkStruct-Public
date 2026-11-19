@@ -10,8 +10,12 @@ class WorkspaceViews(QtCore.QObject):
         self.splitter = splitter
         self.source_pane = source_pane
         self.preview_pane = preview_pane
-        self.settings = QtCore.QSettings("InkStruct", "WorkspaceViews")
+        self.settings = QtCore.QSettings(
+            QtCore.QSettings.defaultFormat(), QtCore.QSettings.Scope.UserScope,
+            "InkStruct", "WorkspaceViews",
+        )
         self.mode = None
+        self.settings_return_mode = None
         try:
             self.split_sizes = [int(n) for n in self.settings.value("split_sizes", [480, 680])]
             if len(self.split_sizes) != 2 or min(self.split_sizes) <= 0:
@@ -47,12 +51,16 @@ class WorkspaceViews(QtCore.QObject):
                       persist=False, focus=False)
 
     def remember_sizes(self, *_):
-        if self.mode == "split" and all(n > 0 for n in self.splitter.sizes()):
+        if self.settings_return_mode is None and self.mode == "split" and all(n > 0 for n in self.splitter.sizes()):
             self.split_sizes = self.splitter.sizes()
             self.settings.setValue("split_sizes", self.split_sizes)
 
     def set_mode(self, mode, *, persist=True, focus=True):
+        if persist and self.settings_return_mode is not None:
+            self.hide_settings(restore=False)
         if mode == self.mode:
+            if persist:
+                self.settings.setValue("mode", mode)
             return
         self.remember_sizes()
         self.mode = mode
@@ -71,6 +79,27 @@ class WorkspaceViews(QtCore.QObject):
         target.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
 
     def focus_source(self):
+        if self.settings_return_mode is not None:
+            self.hide_settings()
         if self.mode == "preview":
             self.set_mode("split")
         self.owner.editor.setFocus(QtCore.Qt.FocusReason.ShortcutFocusReason)
+
+    def show_settings(self):
+        if self.settings_return_mode is None:
+            self.remember_sizes()
+            self.settings_return_mode = self.mode
+            self.source_pane.setCurrentWidget(self.owner.document_settings)
+            self.set_mode("split", persist=False, focus=False)
+
+    def hide_settings(self, restore=True):
+        if self.settings_return_mode is None:
+            return
+        previous, self.settings_return_mode = self.settings_return_mode, None
+        self.owner.document_settings.clear()
+        self.source_pane.setCurrentIndex(0)
+        if restore:
+            self.set_mode(previous, persist=False, focus=False)
+            if previous == "split":
+                self.splitter.setSizes(self.split_sizes)
+        self.focus_current()

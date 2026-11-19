@@ -568,6 +568,8 @@ class MixedWindow(ReviewWindow):
             + ("Markdown 混排" if markdown else "纯文本字形检查")
             + (" *" if self.dirty else "")
         )
+        if hasattr(self, "document_settings"):
+            self.document_settings.refresh_document()
 
     def mark_dirty(self, *_):
         if not self.integrated:
