@@ -1082,7 +1082,7 @@ def verify_about_page(dialog, app):
     assert page.product.text() == "InkStruct 墨构" and page.version.text() == APP_VERSION
     assert page.qq_number.isVisible() and page.qq_number.isReadOnly()
     assert page.qq_number.text() == "1035966437"
-    assert dialog.reset.isHidden() and dialog.save_button.isHidden() and dialog.apply_document.isHidden()
+    assert dialog.reset.isHidden() and dialog.save_button.isHidden() and dialog.copy_button.isHidden()
 
     opened = []
     open_url = QtGui.QDesktopServices.openUrl
@@ -1261,6 +1261,10 @@ def verify_windows_style(window, app, out, font_path=None):
     export = window.editor.export_button
     assert export.text() == '导出…' and not export.icon().isNull()
     assert export.toolButtonStyle() == QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+    from PySide6.QtSerialPort import QSerialPort
+    from inkstruct.editor.machine_dialog import MachineDialog
+    assert window.editor.machine_button.text() == "写字机…"
+    assert QSerialPort.BaudRate.Baud115200 == 115200 and issubclass(MachineDialog, QtWidgets.QDialog)
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
     export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
@@ -1361,18 +1365,23 @@ def verify_windows_style(window, app, out, font_path=None):
     assert (raster.width_px, raster.height_px) == (120, 60)
     editor = window.editor
     window.tabs.setCurrentWidget(editor)
-    for key in ("body", "page"):
-        editor.findChild(QtWidgets.QToolButton, "document_settings_" + key).click()
-        app.processEvents()
-        panel = editor.document_settings
-        assert panel.isVisible() and editor.scroll.isVisible() and panel.key == key
-        assert panel.document_name.text().startswith("当前文档")
-        assert panel.apply_button.text() == "应用" and not panel.apply_button.isEnabled()
-        assert panel.defaults_button.text() == "设为新建默认…"
-    panel.close_button.click()
-    assert not panel.isVisible()
-    dialog = SettingsDialog(window.editor, window.collector, window, category="body")
+    views = editor.workspace_views
+    workspace_before = views.mode, views.splitter.sizes(), editor.source_session.source
+    for key in ("body", "page", "more"):
+        assert editor.findChild(QtWidgets.QToolButton, "document_settings_" + key) is None
+    dialog = SettingsDialog(editor, window.collector, window)
     dialog.show()
+    for key in ("page", "body"):
+        dialog.select(key)
+        app.processEvents()
+        assert dialog.scope == "document" and dialog.current == key
+        assert dialog.scope_info.text().startswith("当前文档")
+        assert dialog.save_button.text() == "应用到当前文档" and not dialog.save_button.isEnabled()
+        assert dialog.copy_button.text() == "设为新建默认…"
+        assert (views.mode, views.splitter.sizes(), editor.source_session.source) == workspace_before
+    dialog.select("body", scope="defaults")
+    assert dialog.save_button.text() == "保存新建默认" and dialog.copy_button.isHidden()
+    dialog.select("body", scope="document")
     spin = dialog.pages["body"].style.controls["em_mm"]
     editor = window.editor
     dialog.select("math")
@@ -1461,6 +1470,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
             "document_layout_controls": True,
+            "machine_control_entry": True,
             "recommended_recording": recommended_recording,
             "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,

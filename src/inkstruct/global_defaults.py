@@ -169,7 +169,7 @@ class GlobalDefaultsStore:
             # Preserve the original record. Only an explicit Apply can replace it.
             return LayoutDefaults(), f"全局默认未载入，暂用初始值；原配置保留：{error}"
 
-    def save(self, defaults):
+    def save(self, defaults, *, ordinary=None):
         from .document.table_style import omit_default_total_width_mode
 
         record = asdict(defaults)
@@ -188,6 +188,16 @@ class GlobalDefaultsStore:
         current.sync()
         if current.value(self.KEY, None) != self.expected:
             raise ValueError("其他窗口已修改全局默认，请重新打开设置后再试")
+        if ordinary is not None:
+            from .document.template_authoring import template_json
+            from .document.template_revision import version_template
+
+            previous, template = ordinary
+            self.settings.sync()
+            if self.ordinary_template() != previous:
+                raise ValueError("普通页面已在其他窗口修改，请重新打开设置")
+            template = version_template(replace(template, name="普通页面"), parent=previous)
+            current.setValue(self.ORDINARY_KEY, template_json(template))
         current.setValue(self.KEY, raw)
         current.setValue(self.FRACTION_DEFAULT_KEY, True)
         current.setValue(self.PUNCTUATION_DEFAULT_KEY, True)
