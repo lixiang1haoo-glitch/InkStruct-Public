@@ -1262,9 +1262,13 @@ def verify_windows_style(window, app, out, font_path=None):
     assert export.text() == '导出…' and not export.icon().isNull()
     assert export.toolButtonStyle() == QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
     from PySide6.QtSerialPort import QSerialPort
-    from inkstruct.editor.machine_dialog import MachineDialog
-    assert window.editor.machine_button.text() == "写字机…"
-    assert QSerialPort.BaudRate.Baud115200 == 115200 and issubclass(MachineDialog, QtWidgets.QDialog)
+    machine = window.editor.machine_dock
+    assert machine.windowTitle() == "写字机"
+    assert machine.widget() is window.editor.machine_panel
+    assert set(window.editor.tabifiedDockWidgets(machine)) == {
+        window.editor.problems_dock, window.editor.element_properties_dock,
+    }
+    assert QSerialPort.BaudRate.Baud115200 == 115200
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
     export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
