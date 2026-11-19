@@ -70,6 +70,8 @@ def organize_workspace(w):
     ):
         action(edit_menu, title, lambda m=method: edit(m), shortcut)
     action(edit_menu, "聚焦 Markdown 源码", lambda: w.workspace_views.focus_source(), "Ctrl+1")
+    toolbar.addStretch()
+
     # Keep backing controls owned but hidden. The unified dialog edits a draft,
     # while existing load/save paths continue using these authoritative controls.
     storage = QtWidgets.QWidget(w)
@@ -128,24 +130,6 @@ def organize_workspace(w):
     w.settings_shortcut = w.settings_button.settings_shortcut
     w.menuBar().setCornerWidget(w.settings_button, QtCore.Qt.Corner.TopRightCorner)
     action(file_menu, '载入当前字库全部字', w.load_all)
-
-    from .document_settings import DocumentSettings, LAYOUT_TITLES
-
-    def open_layout(key):
-        w.workspace_views.show_settings()
-        w.document_settings.open_category(key, focus=True)
-
-    for key in ("body", "page"):
-        button = tool(LAYOUT_TITLES[key] + "…", lambda name=key: open_layout(name))
-        button.setObjectName("document_settings_" + key)
-    more = tool("更多排版设置")
-    more.setObjectName("document_settings_more")
-    more.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-    menu = QtWidgets.QMenu(more)
-    more.setMenu(menu)
-    for key in ("math", "table", "image", "code", "footnote"):
-        action(menu, LAYOUT_TITLES[key] + "…", lambda name=key: open_layout(name))
-    toolbar.addStretch()
     w.export_button = tool("导出…", w.export_document)
     w.export_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     w.export_button.setObjectName("document_export")
@@ -181,11 +165,7 @@ def organize_workspace(w):
         "在这里输入或粘贴 Markdown…\n\n例如：12.34\n\n右侧会实时显示手写页面。"
     )
     w.editor.setProperty("inkRole", "sourceEditor")
-    source_stack = QtWidgets.QStackedWidget()
-    source_stack.addWidget(left)
-    w.document_settings = DocumentSettings(w)
-    source_stack.addWidget(w.document_settings)
-    split.addWidget(source_stack)
+    split.addWidget(left)
     right = QtWidgets.QWidget()
     right_layout = QtWidgets.QVBoxLayout(right)
     right_layout.setContentsMargins(0, 0, 0, 0)
@@ -203,11 +183,7 @@ def organize_workspace(w):
     split.setStretchFactor(1, 6)
     from .workspace_views import WorkspaceViews
     w.scroll.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-    w.workspace_views = WorkspaceViews(w, split, source_stack, right)
-    w.document_settings.dismissed.connect(w.workspace_views.hide_settings)
-    cancel_settings = QtGui.QShortcut(QtGui.QKeySequence("Esc"), w.document_settings)
-    cancel_settings.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
-    cancel_settings.activated.connect(w.workspace_views.hide_settings)
+    w.workspace_views = WorkspaceViews(w, split, left, right)
     toolbar.insertWidget(0, w.workspace_views.widget)
 
     footer = QtWidgets.QHBoxLayout()

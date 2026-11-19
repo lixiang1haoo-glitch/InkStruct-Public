@@ -327,7 +327,7 @@ before = (editor.flow, editor.style, editor.page, editor.source_session.atom_ids
 dialog = SettingsDialog(editor, window.collector, window, category="appearance")
 page = dialog.pages["appearance"]
 assert page.theme.currentData() == "system"
-assert dialog.apply_document.isHidden()
+assert dialog.scope == 'app' and dialog.copy_button.isHidden()
 page.theme.setCurrentIndex(page.theme.findData("dark"))
 dialog.reject()
 assert theme_preference(settings) == "system"

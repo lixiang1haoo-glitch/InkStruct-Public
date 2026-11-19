@@ -1,14 +1,12 @@
-"""Persistent application defaults with an optional explicit document update."""
+"""Unified settings with separate document, defaults and application scopes."""
 
 from dataclasses import replace
-from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .document.han_variation import HanVariation
-from .document.markdown import parse_markdown
 from .document.styles import FlowStyle
-from .global_defaults import GlobalDefaultsStore, LayoutDefaults, apply_to_document
+from .global_defaults import GlobalDefaultsStore
 from .settings_elements import ElementPage
 from .settings_pages import (
     AboutPage,
@@ -21,6 +19,7 @@ from .settings_pages import (
     compact_form_parameters,
     embed,
     label,
+    scroll_page,
     section,
 )
 from .theme import set_tone
@@ -268,360 +267,354 @@ class BodyPage(QtWidgets.QWidget):
             c.setValue(value)
 
 
+class ApplicationPreferences(QtWidgets.QStackedWidget):
+    changed = QtCore.Signal()
+
+    def __init__(self, editor, collector, preferences):
+        super().__init__()
+        self.editor, self.collector, self.preferences = editor, collector, preferences
+        self.pages, self.panels = {}, {}
+        self.active = False
+
+    def select(self, key):
+        if key not in self.pages:
+            if key == "appearance":
+                page = AppearancePage(self.preferences)
+                page.theme.currentIndexChanged.connect(self.changed)
+            elif key == "preview":
+                from .editor.preview_settings import PreviewSettingsPage
+
+                page = PreviewSettingsPage()
+                page.acceleration.toggled.connect(self.changed)
+                page.acceleration.toggled.connect(self.refresh_preview)
+                page.backend.currentIndexChanged.connect(self.changed)
+            elif key == "capture":
+                page = CapturePage(self.collector)
+                page.grid.valueChanged.connect(self.changed)
+            else:
+                page = AboutPage()
+            self.pages[key] = page
+            self.panels[key] = scroll_page(page)
+            self.addWidget(self.panels[key])
+        self.setCurrentWidget(self.panels[key])
+
+    def set_active(self, active):
+        self.active = active
+        self.refresh_preview()
+
+    def refresh_preview(self, *_):
+        if preview := self.pages.get("preview"):
+            value = preview.acceleration.isChecked() if self.active else preview.saved_acceleration
+            self.editor.canvas.set_render_acceleration(value)
+
+    @property
+    def pending(self):
+        capture = self.pages.get("capture")
+        if capture is not None:
+            try:
+                if capture.configuration() != self.collector.ui_settings:
+                    return True
+            except (ValueError, TypeError):
+                return True
+        return any(self.pages[key].changed for key in ("appearance", "preview") if key in self.pages)
+
+    def apply(self):
+        if not self.pending:
+            return False
+        capture = self.pages.get("capture")
+        if capture is not None:
+            settings = capture.configuration()
+            if settings != self.collector.ui_settings:
+                self.collector.ui_settings_store.save(settings)
+                self.collector.ui_settings = settings
+                self.collector.apply_ui_settings(settings)
+                capture.base = settings
+                capture.initial = capture.grid.value()
+        preview = self.pages.get("preview")
+        if preview is not None and preview.changed:
+            preview.save()
+            self.editor.canvas.set_render_acceleration(preview.saved_acceleration)
+        appearance = self.pages.get("appearance")
+        if appearance is not None:
+            appearance.save()
+        self.changed.emit()
+        return True
+
+
 class SettingsDialog(QtWidgets.QDialog):
-    def __init__(
-        self, editor, collector=None, parent=None, *, category=None, application_only=False
-    ):
+    """One settings dialog with independent document, default and app transactions."""
+
+    SCOPES = (("document", "当前文档"), ("defaults", "新建文档默认"), ("app", "应用偏好"))
+    ACTIONS = {"document": "应用到当前文档", "defaults": "保存新建默认", "app": "保存应用偏好"}
+
+    def __init__(self, editor, collector=None, parent=None, *, category=None, scope=None):
         super().__init__(parent or editor)
+        from .editor.document_settings import LAYOUT_TITLES, LayoutSettings
         from .ui_behavior import protect_parameter_wheels
 
         protect_parameter_wheels(QtWidgets.QApplication.instance())
-        self.editor, self.collector = editor, collector
-        self.application_only = application_only
-        self.defaults_store = GlobalDefaultsStore()
-        defaults, self.defaults_warning = self.defaults_store.load()
-        self.flow, self.style, self.page, self.mode = (
-            defaults.flow,
-            defaults.style,
-            defaults.page,
-            defaults.mode,
-        )
-        self.run, self.symbols, self.resolver = defaults.run, defaults.symbols, editor.resolver
-        self.document = parse_markdown("", dialect=self.flow.markdown_dialect)
-        self.pages, self.items = {}, {}
-        self.current = None
+        self.editor = editor
+        self.preferences = GlobalDefaultsStore.make_settings()
         self.setObjectName("unified_settings_dialog")
         self.setWindowTitle("设置 · InkStruct")
         self.setModal(True)
         self.setSizeGripEnabled(True)
-        self.preferences = GlobalDefaultsStore.make_settings()
+        self.scope = None
+        self.current = None
+        self.confirmation = None
+        self.categories = {
+            "document": LAYOUT_TITLES,
+            "defaults": LAYOUT_TITLES,
+            "app": {key: ("采集显示" if key == "capture" else title)
+                    for key, group, title, _ in CATEGORIES if group != "排版默认设置"
+                    and (key != "capture" or collector is not None)},
+        }
+        self.selected = {name: next(iter(self.categories[name])) for name, _ in self.SCOPES}
+        self.document = LayoutSettings(editor)
+        self.defaults = LayoutSettings(editor, defaults=True)
+        self.application = ApplicationPreferences(editor, collector, self.preferences)
+        self.sections = {"document": self.document, "defaults": self.defaults, "app": self.application}
+        for section in self.sections.values():
+            section.changed.connect(self.update_actions)
+
         outer = QtWidgets.QVBoxLayout(self)
-        self.search = QtWidgets.QLineEdit()
-        self.search.setPlaceholderText("搜索设置，例如：行高、上下标、跨页表头")
-        self.search.setAccessibleName("搜索设置")
-        outer.addWidget(self.search)
-        if self.defaults_warning:
-            warning = label(self.defaults_warning)
-            set_tone(warning, "warning")
-            outer.addWidget(warning)
-        splitter = QtWidgets.QSplitter()
-        outer.addWidget(splitter, 1)
-        self.navigation = QtWidgets.QTreeWidget()
-        self.navigation.setHeaderHidden(True)
-        self.navigation.setMinimumWidth(150)
-        self.navigation.setMaximumWidth(190)
-        self.navigation.setFixedWidth(180)
-        splitter.addWidget(self.navigation)
-        right = QtWidgets.QWidget()
-        column = QtWidgets.QVBoxLayout(right)
+        self.views = QtWidgets.QStackedWidget()
+        outer.addWidget(self.views)
+        self.edit = QtWidgets.QWidget()
+        self.views.addWidget(self.edit)
+        column = QtWidgets.QVBoxLayout(self.edit)
+        column.setContentsMargins(0, 0, 0, 0)
+        self.scope_picker = QtWidgets.QTabBar()
+        self.scope_picker.setAccessibleName("设置范围")
+        self.scope_picker.setExpanding(False)
+        for key, title in self.SCOPES:
+            self.scope_picker.setTabData(self.scope_picker.addTab(title), key)
+        column.addWidget(self.scope_picker)
+        row = QtWidgets.QHBoxLayout()
+        column.addLayout(row, 1)
+        self.navigation = QtWidgets.QListWidget()
+        self.navigation.setAccessibleName("设置分类")
+        self.navigation.setFixedWidth(150)
+        row.addWidget(self.navigation)
+        content = QtWidgets.QVBoxLayout()
+        row.addLayout(content, 1)
+        self.scope_info = label("")
+        self.scope_info.setProperty("inkRole", "status")
+        content.addWidget(self.scope_info)
         self.heading = label("")
         self.heading.setProperty("inkRole", "title")
-        column.addWidget(self.heading)
-        self.scope_info = label("")
-        column.addWidget(self.scope_info)
+        content.addWidget(self.heading)
         self.stack = QtWidgets.QStackedWidget()
-        column.addWidget(self.stack, 1)
-        splitter.addWidget(right)
-        splitter.setStretchFactor(1, 1)
+        for section in self.sections.values():
+            self.stack.addWidget(section)
+        content.addWidget(self.stack, 1)
+
         self.error = label("")
-        self.error.setProperty("inkRole", "status")
-        set_tone(self.error, "danger")
-        outer.addWidget(self.error)
-        self.has_current_document = not application_only and bool(
-            editor.session_path or editor.dirty or editor.source_session.source or editor.document_started
-        )
-        footer = QtWidgets.QHBoxLayout()
-        self.reset = QtWidgets.QPushButton("恢复本分类初始值")
-        self.reset.setAutoDefault(False)
-        self.reset.clicked.connect(self.reset_current)
-        footer.addWidget(self.reset)
-        footer.addStretch()
+        self.error.hide()
+        column.addWidget(self.error)
         self.buttons = QtWidgets.QWidget()
         actions = QtWidgets.QHBoxLayout(self.buttons)
         actions.setContentsMargins(0, 0, 0, 0)
-        for text, callback in [("取消", self.reject), ("存为默认", self.accept),
-                               ("应用并保存", lambda: self.apply(to_document=True))]:
-            button = QtWidgets.QPushButton(text)
-            button.setMinimumWidth(72)
-            button.clicked.connect(callback)
+        self.copy_button = QtWidgets.QPushButton("设为新建默认…")
+        self.copy_button.clicked.connect(self.begin_copy)
+        actions.addWidget(self.copy_button)
+        self.reset = QtWidgets.QPushButton("恢复本分类初始值")
+        self.reset.clicked.connect(self.reset_current)
+        actions.addWidget(self.reset)
+        actions.addStretch()
+        self.close_button = QtWidgets.QPushButton("关闭")
+        self.close_button.clicked.connect(self.reject)
+        actions.addWidget(self.close_button)
+        self.save_button = QtWidgets.QPushButton("")
+        self.save_button.setProperty("inkRole", "primary")
+        self.save_button.clicked.connect(self.apply)
+        actions.addWidget(self.save_button)
+        column.addWidget(self.buttons)
+        for button in self.buttons.findChildren(QtWidgets.QPushButton):
             button.setAutoDefault(False)
-            if text == ("应用并保存" if self.has_current_document else "存为默认"):
-                button.setProperty("inkRole", "primary")
-            if text == "存为默认":
-                self.save_button = button
-            elif text == "取消":
-                self.close_button = button
-            actions.addWidget(button)
-            if text == "应用并保存":
-                self.apply_document = button
-                hint = "更新当前文档，并保存为新文档默认"
-                button.setToolTip(hint)
-                button.setAccessibleDescription(hint)
-                button.setVisible(self.has_current_document)
-        footer.addWidget(self.buttons)
-        outer.addLayout(footer)
-        groups = {}
-        for key, group, title, words in CATEGORIES:
-            if key == "capture" and collector is None:
-                continue
-            if application_only and key not in {"appearance", "preview", "capture", "about"}:
-                continue
-            if group not in groups:
-                item = QtWidgets.QTreeWidgetItem(self.navigation, [group])
-                item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsSelectable)
-                groups[group] = item
-            item = QtWidgets.QTreeWidgetItem(groups[group], [title])
-            item.setData(0, QtCore.Qt.ItemDataRole.UserRole, key)
-            item.setToolTip(0, f"{group} › {title}：{words}")
-            self.items[key] = item
-        self.navigation.expandAll()
-        self.navigation.currentItemChanged.connect(self.category_selected)
-        self.search.textChanged.connect(self.filter_categories)
-        self.finished.connect(self.remember)
-        size = self.preferences.value("size", QtCore.QSize(1480, 900))
-        available = (parent or editor).screen().availableGeometry().size()
-        self.setMinimumSize(min(840, available.width() - 40), min(640, available.height() - 64))
-        self.resize(
-            min(max(self.minimumWidth(), size.width()), available.width() - 40),
-            min(max(self.minimumHeight(), size.height()), available.height() - 64),
-        )
-        initial = category or self.preferences.value("last_layout_category", "body", str)
-        self.select(initial if initial in self.items else next(iter(self.items)))
 
-    def select(self, key):
-        self.items[key].setHidden(False)
-        if self.items[key].parent() is not None:
-            self.items[key].parent().setHidden(False)
-        self.navigation.setCurrentItem(self.items[key])
+        self.confirm_page = QtWidgets.QWidget()
+        self.views.addWidget(self.confirm_page)
+        confirmation = QtWidgets.QVBoxLayout(self.confirm_page)
+        title = label("设为新建文档默认")
+        title.setProperty("inkRole", "title")
+        confirmation.addWidget(title)
+        self.confirm_scope = label("")
+        confirmation.addWidget(self.confirm_scope)
+        self.diff = QtWidgets.QTreeWidget()
+        self.diff.setHeaderLabels(["设置项", "现有默认", "新默认"])
+        self.diff.setRootIsDecorated(False)
+        self.diff.setAlternatingRowColors(True)
+        self.diff.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
+        self.diff.header().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+        confirmation.addWidget(self.diff, 1)
+        self.confirm_error = label("")
+        set_tone(self.confirm_error, "danger")
+        self.confirm_error.hide()
+        confirmation.addWidget(self.confirm_error)
+        confirm_actions = QtWidgets.QHBoxLayout()
+        confirm_actions.addStretch()
+        self.back_button = QtWidgets.QPushButton("返回编辑")
+        self.back_button.clicked.connect(self.cancel_copy)
+        confirm_actions.addWidget(self.back_button)
+        self.confirm_button = QtWidgets.QPushButton("保存为新建默认")
+        self.confirm_button.setProperty("inkRole", "primary")
+        self.confirm_button.clicked.connect(self.confirm_copy)
+        confirm_actions.addWidget(self.confirm_button)
+        confirmation.addLayout(confirm_actions)
+
+        self.scope_picker.currentChanged.connect(self.scope_changed)
+        self.navigation.currentItemChanged.connect(self.category_selected)
+        self.finished.connect(lambda _: self.preferences.setValue("size", self.size()))
+        self.finished.connect(lambda _: self.application.set_active(False))
+        size = self.preferences.value("size", QtCore.QSize(960, 720))
+        available = (parent or editor).screen().availableGeometry().size()
+        width, height = available.width() - 40, available.height() - 64
+        self.setMinimumSize(min(760, width), min(550, height))
+        self.resize(min(max(self.minimumWidth(), size.width()), width),
+                    min(max(self.minimumHeight(), size.height()), height))
+        initial = scope or ("app" if category in self.categories["app"] else "document")
+        self.select(category or self.selected[initial], scope=initial)
+
+    @property
+    def items(self):
+        return self.categories[self.scope]
+
+    @property
+    def pages(self):
+        return self.sections[self.scope].pages
+
+    def select(self, key, *, scope=None):
+        if scope is None:
+            scope = "app" if key in self.categories["app"] else (
+                "defaults" if self.scope == "defaults" else "document"
+            )
+        self.selected[scope] = key
+        index = next(i for i, (name, _) in enumerate(self.SCOPES) if name == scope)
+        with QtCore.QSignalBlocker(self.scope_picker):
+            self.scope_picker.setCurrentIndex(index)
+        if self.scope != scope:
+            self.scope_changed(index)
+        else:
+            row = list(self.items).index(key)
+            self.navigation.setCurrentRow(row)
+
+    def scope_changed(self, index):
+        self.scope = self.scope_picker.tabData(index)
+        self.application.set_active(self.scope == "app")
+        self.stack.setCurrentWidget(self.sections[self.scope])
+        with QtCore.QSignalBlocker(self.navigation):
+            self.navigation.clear()
+            self.navigation.addItems(list(self.items.values()))
+            self.navigation.setCurrentRow(list(self.items).index(self.selected[self.scope]))
+        self.category_selected(self.navigation.currentItem())
 
     def category_selected(self, item, previous=None):
-        if item is None or not item.data(0, QtCore.Qt.ItemDataRole.UserRole):
+        if item is None:
             return
-        key = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
-        self.current = key
-        self.error.clear()
-        if key not in self.pages:
-            self.make_page(key)
-        page = self.pages[key]
-        self.stack.setCurrentWidget(page if key == "math" else page.parentWidget().parentWidget())
-        group, title = next((group, title) for k, group, title, _ in CATEGORIES if k == key)
-        self.heading.setText(f"{group} › {title}")
-        app_setting = key in {"appearance", "preview", "capture"}
-        about = key == "about"
-        self.reset.setVisible(not about)
-        self.scope_info.setVisible(not about)
+        self.current = list(self.items)[self.navigation.row(item)]
+        self.selected[self.scope] = self.current
+        self.heading.setText(self.items[self.current])
+        name = self.editor.session_path.name if self.editor.session_path else "未命名文档"
+        self.scope_info.setText({
+            "document": f"当前文档 · {name}",
+            "defaults": "新建文档默认 · 仅用于此后新建的文档",
+            "app": "应用偏好 · 保存在本机",
+        }[self.scope])
+        self.sections[self.scope].select(self.current)
+        self.error.hide()
+        self.update_actions()
+
+    def update_actions(self, *_):
+        if self.scope is None:
+            return
+        section = self.sections[self.scope]
+        about = self.scope == "app" and self.current == "about"
+        self.reset.setVisible(self.scope == "app" and not about)
+        self.copy_button.setVisible(self.scope == "document" and self.document.can_copy())
         self.save_button.setVisible(not about)
-        self.close_button.setText("关闭" if about else "取消")
-        self.apply_document.setVisible(self.has_current_document and not (app_setting or about))
-        self.save_button.setText("保存" if app_setting else "存为默认")
-        role = "primary" if self.apply_document.isHidden() else None
-        if self.save_button.property("inkRole") != role:
-            self.save_button.setProperty("inkRole", role)
-            self.save_button.style().unpolish(self.save_button)
-            self.save_button.style().polish(self.save_button)
-        self.scope_info.setText(
-            "生效范围：本机采集显示"
-            if key == "capture"
-            else "生效范围：本机应用界面，保存后立即切换。"
-            if key == "appearance"
-            else "渲染加速切换后立即重绘，保存后保留选择。绘制后端在下次启动时生效。"
-            if key == "preview"
-            else "生效范围：全局默认，保存后新文档使用；已有文档保持原设置。"
-        )
-        self.reset.setText(
-            "恢复沿用文档默认"
-            if key in {"table", "image"} and self.pages[key].current_key
-            else "恢复本分类初始值"
-        )
-        if key not in {"capture", "about"}:
-            self.preferences.setValue("last_layout_category", key)
+        self.save_button.setEnabled(bool(section.pending))
+        self.save_button.setText(self.ACTIONS[self.scope])
+        self.close_button.setText("取消" if any(section.pending for section in self.sections.values()) else "关闭")
 
-    def make_page(self, key):
-        if key == "appearance":
-            page = AppearancePage(self.preferences)
-        elif key == "about":
-            page = AboutPage()
-        elif key == "preview":
-            from .editor.preview_settings import PreviewSettingsPage
-            page = PreviewSettingsPage()
-            page.acceleration.toggled.connect(self.editor.canvas.set_render_acceleration)
-        elif key == "capture":
-            page = CapturePage(self.collector)
-        else:
-            page = layout_settings_page(self, key)
-        if key == "math":
-            self.stack.addWidget(page)
-            self.pages[key] = page
-            return
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        scroll.setWidget(page)
-        self.stack.addWidget(scroll)
-        self.pages[key] = page
+    def report(self, message, *, error=False):
+        self.error.setText(message)
+        set_tone(self.error, "danger" if error else "success")
+        self.error.show()
 
-    def filter_categories(self, text):
-        query = text.strip().casefold()
-        found = []
-        for key, group, title, words in CATEGORIES:
-            if key not in self.items:
-                continue
-            item = self.items[key]
-            visible = not query or query in f"{group} {title} {words}".casefold()
-            item.setHidden(not visible)
-            if visible:
-                found.append(key)
-        for i in range(self.navigation.topLevelItemCount()):
-            group = self.navigation.topLevelItem(i)
-            if group.childCount():
-                group.setHidden(all(group.child(j).isHidden() for j in range(group.childCount())))
-        if query and found:
-            self.select(found[0])
-            self.scope_info.setVisible(found[0] != "about")
-            if found[0] not in {"about", "preview"}:
-                self.scope_info.setText(f"搜索结果：{self.heading.text()}。修改仅在点击应用后生效。")
-        elif query:
-            self.scope_info.show()
-            self.scope_info.setText("没有匹配的设置，可尝试“行高”“图片”“公式”等关键词。")
-        elif self.current == "about":
-            self.scope_info.hide()
-        page = self.pages[self.current]
-        for widget in page.findChildren(QtWidgets.QWidget):
-            text = (
-                widget.text()
-                if isinstance(widget, (QtWidgets.QLabel, QtWidgets.QAbstractButton))
-                else widget.accessibleName()
-            )
-            hit = bool(query and query in text.casefold())
-            widget.setProperty("settingsSearchHit", hit)
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
-        if query:
-            for button in page.findChildren(QtWidgets.QToolButton):
-                if button.isCheckable():
-                    button.setChecked(True)
-
-    def collect(self):
-        flow, style, paper, mode = self.flow, self.style, self.page, self.mode
-        capture = None
-        for key, page in self.pages.items():
-            try:
-                if key == "capture":
-                    capture = page.configuration()
-                elif key == "body":
-                    style, changes = page.configuration()
-                    flow = replace(flow, digits_follow_latin=True, **changes)
-                    mode = page.mode.currentData()
-                elif key in {"table", "image"}:
-                    flow = replace(flow, **page.configuration())
-                elif key in {"math", "code", "footnote"}:
-                    acceptable(page)
-                    flow = replace(flow, **{key: page.configuration()})
-            except (ValueError, TypeError) as error:
-                self.select(key)
-                raise ValueError(f"{self.heading.text()}：{error}") from error
-        if self.run and Path(self.run).suffix == ".inkfont" and mode != "markdown":
-            self.select("body")
-            raise ValueError("字体包使用 Markdown 模式；普通文字可直接输入。")
-        return flow, style, paper, mode, capture
-
-    def apply(self, *, to_document=False):
+    def apply(self):
+        section = self.sections[self.scope]
         try:
-            flow, style, paper, mode, capture = self.collect()
-            w = self.editor
-            defaults = LayoutDefaults(paper, style, flow, mode, self.run, self.symbols)
-            appearance = self.pages.get("appearance")
-            theme_changed = appearance is not None and appearance.changed
-            preview = self.pages.get("preview")
-            preview_changed = preview is not None and preview.changed
-            to_document = to_document and self.current != "preview"
-            save_defaults = (
-                not self.application_only and (
-                    not (theme_changed or preview_changed or self.current == "preview") or to_document
-                    or (flow, style, paper, mode) != (self.flow, self.style, self.page, self.mode)
-                )
-            )
-            inspector = getattr(w, "element_inspector", None)
-            if to_document and not self.has_current_document:
-                raise ValueError("没有当前文档。")
-            if to_document and inspector and inspector.has_pending():
-                raise ValueError("右侧有未应用的元素修改，请先应用或取消，再应用全局默认。")
-            if (
-                to_document
-                and w.run_path.endswith(".inkfont")
-                and mode != "markdown"
-            ):
-                raise ValueError("当前字体包文档须使用 Markdown 模式。")
-            previous_capture = self.collector.ui_settings if self.collector else None
-            capture_changed = capture is not None and capture != previous_capture
-            if capture_changed:
-                self.collector.ui_settings_store.save(capture)
-            try:
-                if save_defaults:
-                    self.defaults_store.save(defaults)
-            except (ValueError, OSError, TypeError) as error:
-                if capture_changed:
-                    try:
-                        self.collector.ui_settings_store.save(previous_capture)
-                    except (ValueError, OSError, TypeError) as rollback_error:
-                        raise OSError(f"{error}；采集显示配置恢复失败：{rollback_error}") from error
-                raise
-            if capture_changed:
-                self.collector.ui_settings = capture
-                self.collector.apply_ui_settings(capture)
-            if to_document:
-                body = self.pages.get("body")
-                apply_digits = self.current == "body" or (body is not None and body.digit_spacing_edited)
-                apply_to_document(w, defaults, apply_digit_spacing=apply_digits)
-            self.flow, self.style, self.page, self.mode = flow, style, paper, mode
-            if preview is not None:
-                preview.save()
-            if theme_changed:
-                appearance.save()
-            set_tone(self.error, "success")
-            self.error.setText(
-                "已更新当前文档并存为默认。" if to_document
-                else "已保存预览绘制设置。" if self.current == "preview" and not save_defaults
-                else "已保存应用主题。" if theme_changed and not save_defaults
-                else "已保存应用设置。" if self.application_only
-                else "已保存为新文档默认。"
-            )
+            if not section.apply():
+                return True
+            self.report({"document": "已应用到当前文档。按 Ctrl+S 保存项目。",
+                         "defaults": "已保存新建文档默认。",
+                         "app": "已保存应用偏好。"}[self.scope])
             return True
         except (ValueError, OSError, TypeError) as error:
-            set_tone(self.error, "danger")
-            self.error.setText(str(error))
+            if key := getattr(section, "select_error", None):
+                self.select(key, scope=self.scope)
+            self.report(str(error), error=True)
             return False
 
     def accept(self):
-        if self.apply():
+        if not self.sections[self.scope].pending or self.apply():
             super().accept()
+
+    def reject(self):
+        if self.confirmation is not None:
+            self.cancel_copy()
+        else:
+            super().reject()
 
     def reset_current(self):
         page = self.pages[self.current]
-        if self.current == "code":
-            from .document.code_style import CodeStyle
-
-            default = CodeStyle()
-            page.original = default
-            for key, control in page.controls.items():
-                control.setValue(getattr(default, key))
-                page.initial[key] = control.value()
-            page.tabs.setValue(default.tab_columns)
-            page.wrap.setChecked(default.wrap_lines)
-        elif hasattr(page, "reset_defaults"):
+        if hasattr(page, "reset_defaults"):
             page.reset_defaults()
 
-    def remember(self, result):
-        self.preferences.setValue("size", self.size())
-        if preview := self.pages.get("preview"):
-            self.editor.canvas.set_render_acceleration(preview.saved_acceleration)
-        for page in self.pages.values():
-            timer = getattr(page, "timer", None)
-            if timer:
-                timer.stop()
+    def begin_copy(self):
+        try:
+            key, rows, pending, save = self.document.prepare_default_copy()
+            if not rows:
+                self.report("本分类的值与新建默认一致。")
+                return
+            self.confirmation = key, save
+            text = f"更新「{self.items[key]}」的新建默认，用于此后新建的文档。"
+            if pending:
+                text += " 文档修改仍待应用。"
+            if key in self.defaults.pending:
+                text += " 本分类尚未保存的默认修改将被替换。"
+            self.confirm_scope.setText(text)
+            self.confirm_error.hide()
+            self.diff.clear()
+            self.diff.addTopLevelItems([QtWidgets.QTreeWidgetItem(list(row)) for row in rows])
+            self.views.setCurrentWidget(self.confirm_page)
+            self.back_button.setFocus()
+        except (OSError, ValueError, TypeError) as error:
+            self.report(str(error), error=True)
+
+    def cancel_copy(self):
+        self.confirmation = None
+        self.views.setCurrentWidget(self.edit)
+        self.copy_button.setFocus()
+
+    def confirm_copy(self):
+        key, save = self.confirmation
+        try:
+            save()
+        except (OSError, ValueError, TypeError) as error:
+            self.confirm_error.setText(str(error))
+            self.confirm_error.show()
+            return
+        self.defaults.store = GlobalDefaultsStore()
+        self.defaults.reload((key,))
+        self.cancel_copy()
+        self.update_actions()
+        self.report("已保存本分类的新建默认。"
+                    + (" 文档修改仍待应用。" if key in self.document.pending else ""))
 
 
-def layout_settings_page(owner, key, *, for_document=False):
+def layout_settings_page(owner, key, *, for_document=False, defaults=False):
     if key == "body":
         return BodyPage(owner, for_document=for_document)
     if key in {"table", "image"}:
@@ -629,7 +622,7 @@ def layout_settings_page(owner, key, *, for_document=False):
         page.scope.hide()
         page.explanation.setText(
             "适用于当前文档。单个表格或图片的独立设置可在右侧元素属性中编辑。"
-            if for_document else "新建文档使用这些值。"
+            if for_document and not defaults else "新建文档使用这些值。"
         )
         page.status.hide()
         return page
@@ -651,8 +644,8 @@ def layout_settings_page(owner, key, *, for_document=False):
     return embed(FootnoteSettingsDialog(owner.flow.footnote))
 
 
-def open_settings(editor, collector=None, parent=None, *, category=None):
-    dialog = SettingsDialog(editor, collector, parent, category=category, application_only=True)
+def open_settings(editor, collector=None, parent=None, *, category=None, scope=None):
+    dialog = SettingsDialog(editor, collector, parent, category=category, scope=scope)
     try:
         return dialog.exec()
     finally:

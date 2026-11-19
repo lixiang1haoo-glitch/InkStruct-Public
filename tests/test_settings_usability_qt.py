@@ -21,7 +21,9 @@ QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat,QtCore.QSettings.Scop
 w=MixedWindow();w.timer.stop();w.show()
 d=SettingsDialog(w,category='body');d.resize(d.minimumWidth(),650);d.show();app.processEvents()
 body=d.pages['body'];scroll=body.parentWidget().parentWidget()
-assert not body.findChildren(QtWidgets.QToolButton)
+details = next(b for b in body.findChildren(QtWidgets.QToolButton) if b.text() == '更多正文设置')
+assert not details.isChecked()
+details.click()
 for control in [*body.flow.controls.values(),*body.headings]:
     assert not control.isHidden()
     ancestor=control.parentWidget()
@@ -38,7 +40,7 @@ def wheel(widget,delta=-120):
     app.sendEvent(widget,event);app.processEvents()
 for focused in (False,True):
     if focused:spin.setFocus()
-    else:d.search.setFocus()
+    else:d.navigation.setFocus()
     before=spin.value();scroll.verticalScrollBar().setValue(0)
     wheel(spin);assert spin.value()==before
     assert scroll.verticalScrollBar().value()>0
