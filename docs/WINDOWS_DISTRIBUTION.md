@@ -26,6 +26,7 @@ Windows 构建通过 PySide6 动态加载 Qt。对应版本为 6.9.2，构建资
 | --- | --- |
 | PySide6 Python 扩展、Shiboken | [pyside-setup 6.9.2](https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.9.2-src/) |
 | Core、Gui、Network、OpenGL、Test、Widgets、Windows 平台与样式插件 | [qtbase 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtbase-everywhere-src-6.9.2.tar.xz) |
+| SerialPort | [qtserialport 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtserialport-everywhere-src-6.9.2.tar.xz) |
 | Qml、Quick | [qtdeclarative 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtdeclarative-everywhere-src-6.9.2.tar.xz) |
 | Svg、SvgWidgets | [qtsvg 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtsvg-everywhere-src-6.9.2.tar.xz) |
 | 额外图片格式插件、翻译文件 | [Qt 6.9.2 组件归档](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/)中的 qtimageformats、qttranslations |

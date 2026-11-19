@@ -8,6 +8,11 @@
       "sha256": "44be9c9ecfe04129c4dea0a7e1b36ad476c9cc07c292016ac98e7b41514f2440"
     },
     {
+      "file": "qtserialport-everywhere-src-6.9.2.tar.xz",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtserialport-everywhere-src-6.9.2.tar.xz",
+      "sha256": "8b90b2f0c2c07ab13085acf584a34201931477422f2d37a9694d62a2d56ce26b"
+    },
+    {
       "file": "qtdeclarative-everywhere-src-6.9.2.tar.xz",
       "url": "https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtdeclarative-everywhere-src-6.9.2.tar.xz",
       "sha256": "477f2d2c0bd98916107818725e6d498206e033dfb2859c52121e01a06ac42664"
