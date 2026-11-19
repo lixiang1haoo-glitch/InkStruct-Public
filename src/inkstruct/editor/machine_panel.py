@@ -6,7 +6,7 @@ import math
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
-from ..plotter.grbl import PEN_UP, Z_TOLERANCE_MM
+from ..plotter.grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
 from ..plotter.physical import PaperRegistration, WorkArea, position_page, registration_marks
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
@@ -245,8 +245,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.scan = self.button("重新扫描串口", self.refresh_ports)
         device_options.addRow(self.scan)
         self.feed = QtWidgets.QSpinBox()
-        self.feed.setRange(60, 3000)
-        self.feed.setValue(900)
+        self.feed.setRange(60, MAX_WRITE_FEED)
+        self.feed.setValue(DEFAULT_WRITE_FEED)
         self.feed.setSuffix(" mm/min")
         device_options.addRow("书写速度", self.feed)
         device_options.addRow("连接速率", label("115200"))

@@ -27,9 +27,13 @@ class WorkArea:
                 or self.left >= self.right or self.top >= self.bottom):
             raise ValueError("工作范围需要有效的 X、Y 最小值和最大值。")
 
+    def contains(self, point: Point, *, inset=0.0):
+        x, y = point
+        return self.left + inset <= x <= self.right - inset and self.top + inset <= y <= self.bottom - inset
+
     def require(self, point: Point, label: str):
         x, y = point
-        if not (self.left <= x <= self.right and self.top <= y <= self.bottom):
+        if not self.contains(point):
             raise ValueError(f"{label} ({x:g}, {y:g}) mm 超出已确认的工作范围。")
 
 
