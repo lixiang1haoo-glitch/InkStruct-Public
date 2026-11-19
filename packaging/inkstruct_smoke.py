@@ -1392,7 +1392,7 @@ def verify_windows_style(window, app, out, font_path=None):
     raster = RasterResource.from_file(jpeg, jpeg.name)
     assert (raster.width_px, raster.height_px) == (120, 60)
     editor = window.editor
-    window.navigation_buttons[2].click()
+    window.tabs.setCurrentWidget(editor)
     for key in ("body", "page"):
         editor.findChild(QtWidgets.QToolButton, "document_settings_" + key).click()
         app.processEvents()
