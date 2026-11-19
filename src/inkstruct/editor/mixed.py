@@ -1026,8 +1026,8 @@ class MixedWindow(ReviewWindow):
         if hasattr(self, "export_button"):
             self.export_button.setEnabled(bool(ready and self.snapshot and self.snapshot.pages
                                                and self.export_job is None))
-        if hasattr(self, "machine_button"):
-            self.machine_button.setEnabled(bool(ready and self.snapshot and self.snapshot.pages))
+        if hasattr(self, "machine_panel"):
+            self.machine_panel.set_document(self.snapshot, self.page_picker.value() - 1, ready)
         self.update_diagnostic_action()
 
     def current_table(self):
@@ -1257,18 +1257,6 @@ class MixedWindow(ReviewWindow):
 
     def export_preference_changed(self, _value):
         self.export_preference_epoch += 1
-
-    def open_machine(self):
-        if (not self.snapshot or not self.snapshot.pages or not self.canvas.isEnabled()
-                or self.timer.isActive() or self.worker or self.editor.composing):
-            return
-        from .machine_dialog import MachineDialog
-
-        dialog = MachineDialog(self.snapshot, self.page_picker.value() - 1, self)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
 
     def export_document(self):
         if (self.export_preparing or self.export_job is not None or not self.snapshot
@@ -1761,6 +1749,13 @@ class MixedWindow(ReviewWindow):
                 self.message_error(error)
 
     def closeEvent(self, event):
+        machine = getattr(self, "machine_panel", None)
+        if machine is not None and (reason := machine.close_blocker()):
+            self.machine_dock.show()
+            self.machine_dock.raise_()
+            QtWidgets.QMessageBox.information(self, "写字机", reason)
+            event.ignore()
+            return
         if self.export_job is not None:
             self.export_progress.cancel()
             self.export_progress.show()
@@ -1773,4 +1768,6 @@ class MixedWindow(ReviewWindow):
             return
         super().closeEvent(event)
         if event.isAccepted():
+            if machine is not None:
+                machine.shutdown()
             self.recovery_timer.stop()

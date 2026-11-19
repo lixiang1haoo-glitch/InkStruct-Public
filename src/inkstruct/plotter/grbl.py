@@ -260,11 +260,29 @@ class GrblLink:
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
+        return self.move_from(start, end, area, control)
+
+    def move_to(self, target: Point, area: WorkArea, control: MotionControl):
+        state = self.require_idle(control, for_motion=True)
+        return self.move_from(state.position[:2], machine_point(target), area, control)
+
+    def move_from(self, start, end, area, control):
         area.require(start, "当前笔尖位置")
         area.require(end, "点动终点")
         self.enter_motion(control)
         self.xy(end, TRAVEL_FEED, control)
         return self.wait_idle(control, z=PEN_UP)
+
+    def set_pen(self, down: bool, area: WorkArea, control: MotionControl):
+        state = self.require_idle(control, for_motion=True)
+        if down:
+            area.require(state.position[:2], "落笔位置")
+        self.motion_active = True
+        self.phase("running")
+        height = PEN_DOWN if down else PEN_UP
+        self.command("G21 G90 G94", control)
+        self.pen(height, control)
+        return self.wait_idle(control, z=height)
 
     def touch(self, area: WorkArea, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
