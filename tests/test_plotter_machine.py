@@ -203,7 +203,7 @@ def test_stop_clears_queued_motion():
     assert serial.commands.count(b"G1 Z-1.6 F5000\n") == 0
 
 
-def test_qt_dialog_requires_dry_run_and_disconnect_invalidates_registration():
+def test_qt_panel_requires_dry_run_and_disconnect_invalidates_registration():
     code = r"""
 import sys
 from pathlib import Path
@@ -213,7 +213,7 @@ sys.path.insert(0, str(Path.cwd()/'tests'))
 from test_plotter_machine import SimulatedGrbl
 from PySide6 import QtWidgets
 from inkstruct.document.schema import PageProfile
-from inkstruct.editor.machine_dialog import MachineDialog
+from inkstruct.editor.machine_panel import MachinePanel
 from inkstruct.plotter.qt_connection import N1Worker
 from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
 
@@ -224,7 +224,8 @@ snapshot = LayoutSnapshot("snapshot", "key", "document", 0, PageProfile(70, 60, 
                           (page,), (), "resource", "test")
 worker = lambda parent: N1Worker(parent, serial_factory=lambda _port: transport)
 ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
-dialog = MachineDialog(snapshot, 0, None, worker_factory=worker, ports=ports)
+dialog = MachinePanel(None, worker_factory=worker, ports=ports)
+dialog.set_document(snapshot, 0, True)
 dialog.show()
 try:
     def wait_for(condition):
@@ -256,6 +257,7 @@ try:
     assert b"G1 Z-1.6 F5000\n" in transport.commands
     assert not dialog.write_button.isEnabled()
 
+    dialog.options.setChecked(True)
     dialog.mode.setCurrentIndex(dialog.mode.findData("preprinted"))
     for index, (x, y) in enumerate(((60, 30), (60, 70), (30, 31))):
         transport.position[:] = [x, y, 0]
@@ -280,11 +282,144 @@ try:
     assert dialog.registration is None and dialog.confirmed_area is None and dialog.dry_job is None
     assert transport.closed and "重新连接" in dialog.report.text()
 finally:
-    dialog.reject()
-    dialog.worker.wait(5000)
+    dialog.shutdown()
+    dialog.close()
 """
     result = run([sys.executable, "-c", code],
                  env={**os.environ, "QT_QPA_PLATFORM": os.environ.get("INKSTRUCT_TEST_QT_PLATFORM", "offscreen"),
                       "PYTHONUTF8": "1"},
                  capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+def test_qt_sidebar_preserves_views_and_waits_between_paper_pages(tmp_path):
+    code = r"""
+import sys
+from dataclasses import replace
+from functools import partial
+from pathlib import Path
+from types import SimpleNamespace
+from time import monotonic, sleep
+from unittest.mock import patch
+sys.path.insert(0, str(Path.cwd()/'tests'))
+from test_plotter_machine import SimulatedGrbl
+from PySide6 import QtCore, QtWidgets
+from inkstruct.document.schema import PageProfile
+from inkstruct.editor import machine_panel, workspace
+from inkstruct.editor.mixed import MixedWindow
+from inkstruct.plotter.qt_connection import N1Worker
+from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
+
+app = QtWidgets.QApplication([])
+settings = QtCore.QSettings
+settings.setDefaultFormat(settings.Format.IniFormat)
+settings.setPath(settings.Format.IniFormat, settings.Scope.UserScope, sys.argv[1])
+transport = SimulatedGrbl()
+factory = partial(N1Worker, serial_factory=lambda _port: transport)
+ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
+panel = partial(machine_panel.MachinePanel, worker_factory=factory, ports=ports)
+with patch.object(workspace, "sys", SimpleNamespace(platform="win32")), \
+        patch.object(machine_panel, "MachinePanel", panel):
+    w = MixedWindow(source="test source")
+w.timer.stop()
+w.resize(1350, 840)
+w.show()
+p = w.machine_panel
+try:
+    def wait_for(condition):
+        end = monotonic() + 8
+        while monotonic() < end:
+            app.processEvents()
+            if condition():
+                return
+            sleep(.005)
+        raise AssertionError(p.report.text())
+    assert set(w.tabifiedDockWidgets(w.machine_dock)) == {w.problems_dock, w.element_properties_dock}
+    assert w.findChild(QtWidgets.QToolButton, "document_machine") is None
+    assert not p.worker.isRunning()
+    pages = tuple(Page(index, (), (PaintOp(str(index), ((3.,4.), (5.,6.)), .3),))
+                  for index in range(2))
+    snap = LayoutSnapshot("snapshot", "key", "document", 0, PageProfile(70, 60, 5),
+                          pages, (), "resource", "test")
+    w.snapshot = snap
+    w.page_picker.setMaximum(2)
+    p.set_document(snap, 0, True)
+    w.workspace_views.set_mode("split", persist=False)
+    app.processEvents()
+    before = w.workspace_views.splitter.sizes()
+    w.machine_dock.raise_()
+    wait_for(lambda: p.page_list.count() == 2)
+    p.page_list.setCurrentRow(1)
+    assert w.page_picker.value() == 2 and p.paper_page.index == 1
+    p.scope.setCurrentIndex(p.scope.findData("all"))
+    assert p.paper_page.index == 0 and not p.page_list.isEnabled()
+    p.link_button.click()
+    wait_for(lambda: p.device is not None and p.busy is None)
+    assert not p.jog_buttons[0].isEnabled()
+    p.area_confirm.setChecked(True)
+    p.confirm = lambda *_: True
+    p.pen_button.click()
+    wait_for(lambda: not p.pen_raised and p.busy is None)
+    assert p.pen_button.text() == "抬笔" and not p.link_button.isEnabled()
+    p.pen_button.click()
+    wait_for(lambda: p.pen_raised and p.busy is None)
+    p.origin_capture.click()
+    wait_for(lambda: p.job is not None)
+    p.dry_button.click()
+    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+
+    p.write_button.click()
+    assert p.is_moving and p.close_blocker()
+    p.write_button.click()
+    wait_for(lambda: b"!" in transport.commands)
+    w.problems_dock.raise_()
+    app.processEvents()
+    w.element_properties_dock.raise_()
+    app.processEvents()
+    p.set_document(None, 0, False)
+    assert p.snapshot is snap and p.batch_active
+    w.machine_dock.raise_()
+    app.processEvents()
+    assert p.busy == "write" and p.write_button.text() == "继续" and p.snapshot is snap
+    assert w.editor.toPlainText() == "test source"
+    assert w.workspace_views.mode == "split" and w.workspace_views.splitter.sizes() == before
+    p.set_document(snap, 0, True)
+    p.write_button.click()
+    wait_for(lambda: p.waiting_for_paper)
+    assert p.page_list.currentRow() == 1 and p.completed_pages == {0}
+    assert p.job is None and p.close_blocker() and p.write_button.text() == "换纸完成"
+    count = len(transport.commands)
+    p.write_button.click()
+    app.processEvents()
+    assert p.batch_active and not p.waiting_for_paper and len(transport.commands) == count
+    assert not p.dry_button.isEnabled() and not p.write_button.isEnabled()
+    p.origin_capture.click()
+    wait_for(lambda: p.job is not None)
+    p.dry_button.click()
+    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+    p.write_button.click()
+    wait_for(lambda: not p.batch_active and p.busy is None)
+    assert p.completed_pages == {0, 1} and not p.close_blocker()
+
+    p.scope.setCurrentIndex(p.scope.findData("single"))
+    p.dry_button.click()
+    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+    previous = len(transport.commands)
+    transport.on_write = lambda data: sleep(.05) if data.startswith(b"G1 ") else None
+    p.write_button.click()
+    wait_for(lambda: any(command.startswith(b"G1 ") for command in transport.commands[previous:]))
+    p.stop_button.click()
+    wait_for(lambda: p.busy is None and p.device is None)
+    assert b"\x18" in transport.commands and transport.closed
+    assert not p.dry_button.isEnabled() and p.registration is None
+    p.set_document(replace(snap, snapshot_id="new", revision=1), 0, True)
+    assert p.snapshot.revision == 1 and p.completed_pages == set()
+finally:
+    p.shutdown()
+    w.dirty = False
+    w.close()
+"""
+    result = run([sys.executable, "-c", code, str(tmp_path)],
+                 env={**os.environ, "QT_QPA_PLATFORM": os.environ.get("INKSTRUCT_TEST_QT_PLATFORM", "offscreen"),
+                      "PYTHONUTF8": "1"},
+                 capture_output=True, text=True, encoding="utf-8", timeout=35)
     assert result.returncode == 0, result.stdout + result.stderr
