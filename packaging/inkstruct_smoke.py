@@ -1287,6 +1287,10 @@ def verify_windows_style(window, app, out, font_path=None):
     export = window.editor.export_button
     assert export.text() == '导出…' and not export.icon().isNull()
     assert export.toolButtonStyle() == QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+    from PySide6.QtSerialPort import QSerialPort
+    from inkstruct.editor.machine_dialog import MachineDialog
+    assert window.editor.machine_button.text() == "写字机…"
+    assert QSerialPort.BaudRate.Baud115200 == 115200 and issubclass(MachineDialog, QtWidgets.QDialog)
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
     export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
@@ -1508,6 +1512,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "sample_library_variant_wrap": True,
             "layout_export_controls": True,
             "document_layout_controls": True,
+            "machine_control_entry": True,
             "recommended_recording": recommended_recording,
             "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,

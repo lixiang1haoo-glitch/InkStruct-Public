@@ -1,5 +1,7 @@
 """Writing-first workspace: document panes, export and optional properties."""
 
+import sys
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 def organize_workspace(w):
@@ -134,6 +136,10 @@ def organize_workspace(w):
     w.export_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     w.export_button.setObjectName("document_export")
     w.export_button.setEnabled(False)
+    if sys.platform == "win32":
+        w.machine_button = tool("写字机…", w.open_machine)
+        w.machine_button.setObjectName("document_machine")
+        w.machine_button.setEnabled(False)
 
     split = QtWidgets.QSplitter()
     split.setObjectName("document_splitter")
