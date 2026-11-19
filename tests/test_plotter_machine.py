@@ -25,6 +25,7 @@ class SimulatedGrbl:
         self.run_reports = 0
         self.closed = False
         self.trace = []
+        self.unit_setting = "$13=0 (report inches, bool)"
 
     def write(self, data):
         assert not self.closed
@@ -49,7 +50,7 @@ class SimulatedGrbl:
             self.responses.clear()
         else:
             if data == b"$$\n":
-                self.responses.extend(("$13=0", "$20=0", "$21=0"))
+                self.responses.extend((self.unit_setting, "$20=0", "$21=0"))
             elif data.startswith(b"G1 "):
                 if self.fail_next_motion:
                     raise OSError("USB disconnected")
@@ -102,7 +103,8 @@ def test_rigid_and_similarity_registration_share_frozen_geometry_and_test_marks(
         registration_marks(page, rigid, ((5, 5), (10, 5), (15, 5)))
 
 
-def test_grbl_work_coordinates_use_offset_and_do_not_move_on_connect():
+@pytest.mark.parametrize("setting", ["$13=0", "$13=0 (report inches, bool)"])
+def test_grbl_work_coordinates_use_offset_and_do_not_move_on_connect(setting):
     status = decode_status("<Idle|MPos:10,20,30,40|WCO:2,4,6,0>")
     assert status.position == (8, 16, 24)
     assert decode_status("<Run|MPos:11,22,33>", status.offset).position == (9, 18, 27)
@@ -110,9 +112,19 @@ def test_grbl_work_coordinates_use_offset_and_do_not_move_on_connect():
     with pytest.raises(MachineError):
         decode_status("<Idle|WPos:nan,0,0>")
     serial = SimulatedGrbl()
+    serial.unit_setting = setting
     link = GrblLink(serial)
     assert link.connect().position == (0, 0, 0)
     assert serial.commands == [b"?", b"$$\n", b"?"]
+
+
+@pytest.mark.parametrize("setting", ["$13=1", "$13=1 (report inches, bool)", "$13=0.5", "$13=unknown"])
+def test_grbl_connect_rejects_unknown_or_nonmetric_reporting(setting):
+    serial = SimulatedGrbl()
+    serial.unit_setting = setting
+    with pytest.raises(MachineError, match="毫米"):
+        GrblLink(serial).connect()
+    assert serial.commands == [b"?", b"$$\n"]
 
 
 @pytest.mark.parametrize("dry_run", [True, False])

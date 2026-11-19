@@ -1,6 +1,7 @@
 """Blocking Grbl transactions for the N1. The owning worker holds the serial port."""
 
 import math
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from threading import Event
@@ -95,7 +96,7 @@ class GrblLink:
                 if state.split(":")[0] not in {"Idle", "Run", "Hold"}:
                     raise MachineError(f"作业中设备进入 {state} 状态。")
                 if self.last_status.limits and set(self.last_status.limits) & set("XYZ"):
-                    raise MachineError("作业中设备报告了轴限位。")
+                    raise MachineError(f"作业中设备报告了轴限位（Pn:{self.last_status.limits}）。")
         elif line.lower().startswith(("error:", "alarm:")):
             raise MachineError(f"设备返回 {line}。")
         elif line.startswith("Grbl"):
@@ -184,12 +185,11 @@ class GrblLink:
         if state.position is None:
             raise MachineError("设备没有返回可核对的工作坐标。")
         settings = self.command("$$")
-        report_units = next((line.split("=", 1)[1].strip() for line in settings if line.startswith("$13=")), None)
-        try:
-            metric_reports = report_units is not None and float(report_units) == 0
-        except ValueError:
-            metric_reports = False
-        if not metric_reports:
+        # CX-Elite appends the setting description after the numeric value.
+        unit_settings = [line for line in settings if re.match(r"^\$13\s*=", line)]
+        if len(unit_settings) != 1 or not re.fullmatch(
+            r"\$13\s*=\s*0(?:\.0+)?\s*(?:\([^()]*\))?", unit_settings[0]
+        ):
             raise MachineError("无法确认设备状态使用毫米。请在设备侧核对 Grbl 的 $13 设置。")
         self.metric = True
         return self.require_idle()
@@ -199,7 +199,7 @@ class GrblLink:
         if not self.metric or status.state != "Idle" or status.position is None:
             raise MachineError(f"需要设备处于 Idle 并返回有效的毫米工作坐标，当前状态为 {status.state}。")
         if set(status.limits) & set("XYZ"):
-            raise MachineError("设备报告了轴限位，无法移动。")
+            raise MachineError(f"设备报告了轴限位（Pn:{status.limits}），无法移动。")
         if for_motion and not PEN_DOWN - Z_TOLERANCE_MM <= status.position[2] <= PEN_UP + Z_TOLERANCE_MM:
             raise MachineError("Z 工作坐标超出升降笔范围，请在设备侧核对笔尖位置。")
         return status
