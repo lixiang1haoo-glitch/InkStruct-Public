@@ -4,9 +4,9 @@ Windows 版提供安装程序、免安装 ZIP 和对应源码。应用源码、�
 
 ## 构建产物和验证
 
-- 基础免安装包 `InkStruct-0.1.106-Windows-x64.zip` 解压后运行 `InkStruct.exe`。基础安装程序 `InkStruct-0.1.106-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
+- 基础免安装包 `InkStruct-0.1.107-Windows-x64.zip` 解压后运行 `InkStruct.exe`。基础安装程序 `InkStruct-0.1.107-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
 
-体验包从同一份 Windows 构建派生。免安装体验包名为 `InkStruct-0.1.106-Windows-x64-Portable-Experience.zip`。安装体验包名为 `InkStruct-0.1.106-Windows-x64-Installer-Experience.zip`，解压后运行其中的 EXE。
+体验包从同一份 Windows 构建派生。免安装体验包名为 `InkStruct-0.1.107-Windows-x64-Portable-Experience.zip`。安装体验包名为 `InkStruct-0.1.107-Windows-x64-Installer-Experience.zip`，解压后运行其中的 EXE。
 
 解压体验包后，在字体库点「导入字体…」并选择「示例资源」中的 `InkStruct 示例手写体.inkfont`。在模板库点「导入模板…」并选择 `双页预印教案.json`，可使用 183 × 259 mm 的双页预印模板。
 - 安装和免安装版本依赖 Microsoft Visual C++ x64 运行库 14.51 或更新版本。安装程序在运行库缺失或版本过低时提供微软下载入口。静默安装返回退出码 10。安装好运行库后重新运行安装程序。[微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
@@ -26,6 +26,7 @@ Windows 构建通过 PySide6 动态加载 Qt。对应版本为 6.9.2，构建资
 | --- | --- |
 | PySide6 Python 扩展、Shiboken | [pyside-setup 6.9.2](https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.9.2-src/) |
 | Core、Gui、Network、OpenGL、Test、Widgets、Windows 平台与样式插件 | [qtbase 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtbase-everywhere-src-6.9.2.tar.xz) |
+| SerialPort | [qtserialport 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtserialport-everywhere-src-6.9.2.tar.xz) |
 | Qml、Quick | [qtdeclarative 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtdeclarative-everywhere-src-6.9.2.tar.xz) |
 | Svg、SvgWidgets | [qtsvg 6.9.2](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/qtsvg-everywhere-src-6.9.2.tar.xz) |
 | 额外图片格式插件、翻译文件 | [Qt 6.9.2 组件归档](https://download.qt.io/archive/qt/6.9/6.9.2/submodules/)中的 qtimageformats、qttranslations |

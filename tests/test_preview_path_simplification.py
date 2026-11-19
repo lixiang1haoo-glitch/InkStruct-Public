@@ -140,7 +140,7 @@ def test_acceleration_settings_redraw_live_and_preserve_export(tmp_path):
         dialog.show()
         page = dialog.pages['preview']
         assert page.acceleration.text() == '渲染加速' and page.acceleration.isChecked()
-        assert not dialog.apply_document.isVisible()
+        assert dialog.scope == 'app' and dialog.copy_button.isHidden()
         page.acceleration.click()
         assert not canvas.render_acceleration and not config.contains(key)
         assert on_key != canvas._key(0, FULL)
@@ -152,6 +152,7 @@ def test_acceleration_settings_redraw_live_and_preserve_export(tmp_path):
             (p.name, p.read_bytes()) for p in sorted(after.glob('*.svg'))
         ]
         dialog.save_button.click()
+        dialog.reject()
         config.sync()
         assert config.value(key, True, bool) is False
         assert w.snapshot is snapshot and w.revision == revision and not w.timer.isActive()

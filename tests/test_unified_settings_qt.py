@@ -69,12 +69,10 @@ elif scenario=='han_spacing':
     store.save(replace(defaults,flow=replace(defaults.flow,han_variation=original.han_variation)))
     d=SettingsDialog(w,category='body');p=d.pages['body']
     assert isinstance(p,BodyPage) and p.han_spacing.currentData()=='full'
-    d.filter_categories('汉字间距')
-    assert p.han_spacing.property('settingsSearchHit')
     p.han_spacing.setCurrentIndex(p.han_spacing.findData('handwriting'))
-    assert d.apply(),d.error.text()
+    d.copy_button.click(); d.confirm_button.click()
     assert w.flow==original and GlobalDefaultsStore().load()[0].flow.han_spacing=='handwriting'
-    assert d.apply(to_document=True),d.error.text();d.reject();ready()
+    assert d.apply(),d.error.text();d.reject();ready()
     assert w.flow.han_spacing=='handwriting' and w.flow.han_variation==original.han_variation
     path=root/'spacing.inkdoc'
     save_package(path,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
@@ -82,7 +80,7 @@ elif scenario=='han_spacing':
     d=SettingsDialog(w,category='body');p=d.pages['body']
     assert p.han_spacing.currentData()=='handwriting'
     p.han_spacing.setCurrentIndex(p.han_spacing.findData('full'))
-    assert d.apply(to_document=True),d.error.text();d.reject();ready()
+    assert d.apply(),d.error.text();d.reject();ready()
     assert w.flow.han_spacing=='full' and w.flow.han_variation==original.han_variation
 elif scenario=='digit_spacing':
     from inkstruct.global_defaults import GlobalDefaultsStore
@@ -93,13 +91,13 @@ elif scenario=='digit_spacing':
     w.load_project_path(old);ready()
     assert w.flow.latin_spacing=='handwriting' and not w.flow.digits_follow_latin
     d=SettingsDialog(w,category='table')
-    assert d.apply(to_document=True),d.error.text()
+    assert d.apply(),d.error.text()
     assert not w.flow.digits_follow_latin
     d.select('body'); p=d.pages['body']
     assert p.latin_spacing.accessibleName()=='字母与数字间距'
-    assert d.apply(),d.error.text()
-    assert not w.flow.digits_follow_latin and GlobalDefaultsStore().load()[0].flow.digits_follow_latin
-    assert d.apply(to_document=True),d.error.text(); d.reject(); ready()
+    assert not p.digits_follow.isChecked()
+    p.digits_follow.setChecked(True)
+    assert d.apply(),d.error.text(); d.reject(); ready()
     assert w.flow.digits_follow_latin
     new=root/'new.inkdoc'
     save_package(new,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
@@ -107,9 +105,9 @@ elif scenario=='digit_spacing':
     assert w.flow.digits_follow_latin and w.flow.latin_spacing=='handwriting'
 elif scenario=='scopes':
     from inkstruct.global_defaults import GlobalDefaultsStore
-    d=SettingsDialog(w,category='table');p=d.pages['table']
+    d=SettingsDialog(w,category='table',scope='defaults');p=d.pages['table']
     d.resize(d.width(), 500); d.show(); app.processEvents()
-    outer = d.stack.currentWidget()
+    outer = d.defaults.currentWidget()
     assert isinstance(outer, QtWidgets.QScrollArea) and outer.verticalScrollBar().maximum() > 0
     assert not p.findChildren(QtWidgets.QScrollArea)
     p.editors[None].controls['width_mm'].setValue(140)
@@ -117,7 +115,11 @@ elif scenario=='scopes':
     assert d.apply(),d.error.text()
     assert w.flow.table.width_mm==160 and w.flow.image.height_mm==60
     assert GlobalDefaultsStore().load()[0].flow.table.width_mm==140
-    assert d.apply(to_document=True),d.error.text();d.reject();ready()
+    d.select('table', scope='document')
+    d.pages['table'].editors[None].controls['width_mm'].setValue(140)
+    d.select('image')
+    d.pages['image'].editors[None].controls['height_mm'].setValue(70)
+    assert d.apply(),d.error.text();d.reject();ready()
     inspector=w.element_inspector
     assert w.element_properties_dock.isVisible()
     def select(node):
@@ -157,47 +159,10 @@ elif scenario=='scopes':
     new.timer.stop()
     if new.cancelled:new.cancelled.set()
     new.pool.waitForDone();new.dirty=False;new.close()
-elif scenario=='footer':
-    from inkstruct.global_defaults import GlobalDefaultsStore
-    w.flow=replace(w.flow,
-        table_overrides=((tables[0].node_id,TableStyle(width_mm=123)),),
-        image_overrides=((images[0].node_id,ImageStyle(width_mm=45)),))
-    def show(editor):
-        dialog=SettingsDialog(editor,category='body')
-        dialog.show();app.processEvents()
-        assert not hasattr(dialog,'apply_current')
-        assert not hasattr(dialog.pages['body'],'preview')
-        actions={b.text():b for b in dialog.buttons.findChildren(QtWidgets.QPushButton)}
-        assert set(actions)=={'取消','存为默认','应用并保存'}
-        return dialog,actions,dialog.pages['body'].style.controls['em_mm']
-    def click(action):
-        QtTest.QTest.mouseClick(action,QtCore.Qt.LeftButton)
-        app.processEvents()
-    d,a,c=show(w)
-    c.setValue(7);click(a['存为默认'])
-    assert not d.isVisible() and GlobalDefaultsStore().load()[0].style.em_mm==7
-    assert w.style.em_mm==6
-    d,a,c=show(w)
-    hint='更新当前文档，并保存为新文档默认'
-    assert a['应用并保存'].toolTip()==a['应用并保存'].accessibleDescription()==hint
-    c.setValue(8);click(a['应用并保存']);ready()
-    assert d.isVisible() and w.style.em_mm==GlobalDefaultsStore().load()[0].style.em_mm==8
-    assert w.flow.table_for(tables[0].node_id).width_mm==123
-    assert w.flow.image_for(images[0].node_id).width_mm==45
-    c.setValue(9);click(a['取消'])
-    assert not d.isVisible() and w.style.em_mm==GlobalDefaultsStore().load()[0].style.em_mm==8
-    blank=MixedWindow()
-    d,a,c=show(blank)
-    assert a['应用并保存'].isHidden()
-    click(a['取消'])
-    blank.new_document()
-    d,a,c=show(blank)
-    assert a['应用并保存'].isVisible()
-    click(a['取消']);blank.dirty=False;blank.close()
 elif scenario=='validation':
     from inkstruct.global_defaults import GlobalDefaultsStore
     before=(w.flow,w.style,w.page)
-    d=SettingsDialog(w,category='body');d.pages['body'].style.controls['em_mm'].setValue(7)
+    d=SettingsDialog(w,category='body',scope='defaults');d.pages['body'].style.controls['em_mm'].setValue(7)
     d.select('table');p=d.pages['table'];panel=p.editors[None]
     panel.mode.setCurrentIndex(panel.mode.findData('fixed'));panel.sizes.setText('1,2')
     d.select('image');assert not d.apply()
@@ -211,15 +176,17 @@ elif scenario=='validation':
 elif scenario in {'navigation','navigation_largefont'}:
     d=SettingsDialog(w,category='body'); d.resize(980,650);d.show(); app.processEvents()
     body = d.pages['body']
+    next(b for b in body.findChildren(QtWidgets.QToolButton) if b.text() == '更多正文设置').click()
+    app.processEvents()
     short_fields = (body.han_seed, body.style.controls['em_mm'], body.mode)
     widths = [field.width() for field in short_fields]
     for field in short_fields:
         assert field.sizeHint().width() <= field.width() < 300
-    search_width = d.search.width()
+    heading_width = d.heading.width()
     d.resize(1260, 650);app.processEvents()
     assert [field.width() for field in short_fields] == widths
-    assert d.search.width() > search_width
-    core_fields = (body.mode, body.style.controls['em_mm'], body.flow.controls['paragraph_gap_mm'])
+    assert d.heading.width() > heading_width
+    core_fields = (body.style.controls['em_mm'], body.flow.controls['paragraph_gap_mm'])
     assert len({field.mapTo(body, QtCore.QPoint()).x() for field in core_fields}) == 1
     assert body.style.controls['em_mm'].mapTo(body, QtCore.QPoint()).y() < body.han_seed.mapTo(body, QtCore.QPoint()).y()
     d.resize(980, 650);app.processEvents()
@@ -228,7 +195,7 @@ elif scenario in {'navigation','navigation_largefont'}:
         assert d.buttons.isVisible()==(key!='templates')
         if key!='templates':assert d.rect().contains(d.buttons.geometry())
         assert d.width()>=d.minimumWidth() and d.height()==650
-    d.search.setText('上下标'); assert d.current=='math'
+    d.select('math'); assert d.current=='math'
     math=d.pages['math']; assert math.categories.isVisible()
     for i in range(math.categories.count()):
         math.categories.setCurrentRow(i);app.processEvents()
@@ -246,7 +213,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
-@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "digit_spacing", "scopes", "footer", "validation", "navigation", "navigation_largefont"])
+@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "digit_spacing", "scopes", "validation", "navigation", "navigation_largefont"])
 def test_settings_transactions_and_navigation(tmp_path, dpi, scenario):
     result = subprocess.run(
         [sys.executable, "-c", PROGRAM, str(tmp_path), scenario],
@@ -285,7 +252,8 @@ def inspect():
     d=app.activeModalWidget();assert isinstance(d,SettingsDialog)
     navigation_checks.append((
         ('capture' in d.pages)==(w.tabs.currentIndex()==0),
-        set(d.items)=={'appearance','preview','about','capture'},
+        set(d.categories['app'])=={'appearance','preview','about','capture'},
+        d.scope == ('document' if w.tabs.currentWidget() is w.editor else 'app'),
     ))
     d.reject()
 for i in range(w.tabs.count()):
@@ -296,7 +264,7 @@ for i in range(w.tabs.count()):
     if i==0:QtTest.QTest.keySequence(w,QtGui.QKeySequence('Ctrl+,'))
     else:QtTest.QTest.mouseClick(w.settings_button,QtCore.Qt.LeftButton)
 assert all(p==positions[0] for p in positions)
-assert navigation_checks==[(True,True)]*w.tabs.count()
+assert navigation_checks==[(True,True,True)]*w.tabs.count()
 def inspect_about():
     d=app.activeModalWidget()
     assert isinstance(d,SettingsDialog) and d.current=='about'
@@ -325,19 +293,23 @@ assert canvas.stroke_width_scale == 3
 assert collector.ui_settings_store.load()[0] == collector.ui_settings
 before=(w.editor.style,w.editor.flow,collector.ui_settings)
 p.grid.setValue(80)
-d.select('body');d.pages['body'].style.controls['em_mm'].setValue(7)
+d.select('body', scope='defaults');d.pages['body'].style.controls['em_mm'].setValue(7)
+d.select('capture')
 save=collector.ui_settings_store.save
 def fail(settings):raise OSError('write denied')
 collector.ui_settings_store.save=fail
 assert not d.apply() and 'write denied' in d.error.text()
 assert before==(w.editor.style,w.editor.flow,collector.ui_settings)
 collector.ui_settings_store.save=save
-default_save=d.defaults_store.save
-d.defaults_store.save=fail
+d.select('body', scope='defaults')
+default_save=d.defaults.store.save
+def fail_defaults(*args, **kwargs):raise OSError('write denied')
+d.defaults.store.save=fail_defaults
 assert not d.apply() and 'write denied' in d.error.text()
 assert before==(w.editor.style,w.editor.flow,collector.ui_settings)
 assert collector.ui_settings_store.load()[0]==collector.ui_settings
-d.defaults_store.save=default_save
+d.defaults.store.save=default_save
+d.select('capture')
 assert d.apply(),d.error.text()
 assert collector.ui_settings.stroke_width_scale==2.5
 assert collector.ui_settings_store.load()[0]==collector.ui_settings
