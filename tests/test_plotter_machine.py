@@ -155,7 +155,7 @@ def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_
     serial.position[:] = [10, 20, 0]
     link = GrblLink(serial, progress=lambda n, total: progress.append((n, total)))
     link.connect()
-    state = link.run_page(placed, WorkArea(0, 0, 100, 100), MotionControl(), dry_run=dry_run)
+    state = link.run_page(placed, WorkArea(0, 0, 100, 100), MotionControl(), dry_run=dry_run, feed=900)
     xy = [command.decode().split()[1:3] for command in serial.commands if command.startswith(b"G1 X")]
     assert xy == [[f"X{x:.4f}", f"Y{y:.4f}"] for stroke in placed.strokes for x, y in stroke.points]
     assert serial.commands.count(b"G1 Z-1.6 F5000\n") == (0 if dry_run else 2)
@@ -283,7 +283,7 @@ def test_pause_consumes_the_hold_report_without_losing_the_pending_ack():
             control.pause_requested.clear()
     link = GrblLink(serial, phase=phase)
     link.connect()
-    at = b"G1 X13.0000 Y23.0000 F900\n"
+    at = b"G1 X13.0000 Y23.0000 F2500\n"
     serial.on_write = lambda data: control.pause_requested.set() if data == at else None
     placed = position_page(page_fixture(), PaperRegistration((10, 20)))
     link.run_page(placed, WorkArea(0, 0, 100, 100), control)
@@ -332,6 +332,7 @@ dialog = MachinePanel(None, worker_factory=worker, ports=ports)
 dialog.set_document(snapshot, 0, True)
 dialog.show()
 try:
+    assert dialog.feed.value() == 2500 and dialog.feed.maximum() == 5000
     def wait_for(condition):
         end = monotonic() + 8
         while monotonic() < end:
