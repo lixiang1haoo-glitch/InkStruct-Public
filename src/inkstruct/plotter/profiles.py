@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from ..document.schema import digest
 from ..resource_catalog import atomic_json, catalog_write
-from .grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED
+from .grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED, PEN_DOWN
 from .physical import PaperRegistration, WorkArea, machine_point
 
 
@@ -144,6 +144,12 @@ class DeviceProfile:
     feed: int = DEFAULT_WRITE_FEED
     datum: DeviceDatum | None = None
     limit_area_enabled: bool = False
+    active_pen: str = ""
+    pen_heights: tuple = ()
+
+    @property
+    def writing_height(self):
+        return dict(self.pen_heights).get(self.active_pen, PEN_DOWN)
 
     @classmethod
     def create(cls, name, port, serial=""):
@@ -171,6 +177,12 @@ class DeviceProfile:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
             raise ValueError(f"XY 运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
+        heights = tuple((name, float(value)) for name, value in self.pen_heights)
+        if (any(not isinstance(name, str) or not name.strip() or not PEN_DOWN <= value <= -.1
+                for name, value in heights) or len(dict(heights)) != len(heights)
+                or (self.active_pen and self.active_pen not in dict(heights))):
+            raise ValueError("笔具名称或标定高度无效。")
+        object.__setattr__(self, "pen_heights", heights)
         if type(self.limit_area_enabled) is not bool:
             raise ValueError("工作范围开关无效。")
 

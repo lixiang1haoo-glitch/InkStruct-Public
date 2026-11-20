@@ -68,6 +68,7 @@ def plan_from_snapshot(snapshot: LayoutSnapshot, *, omit_reference_images: bool 
         strokes = []
         counters = Counter()
         assets = {f.occurrence_id: f.asset_id or f.source_resource_id for f in page.fragments}
+        drawings = {f.occurrence_id for f in page.fragments if f.status == "image-vector"}
         for op in page.paint_ops:
             if type(op) is not PaintOp:
                 raise ValueError(f"Unsupported plotter operation: {type(op).__name__}")
@@ -85,6 +86,8 @@ def plan_from_snapshot(snapshot: LayoutSnapshot, *, omit_reference_images: bool 
                     occurrence_id=op.occurrence_id,
                     source_stroke_id=f"{asset}:stroke:{ordinal}" if asset else None,
                     execution_domain=op.execution_domain,
+                    independent=(op.occurrence_id in drawings or op.execution_domain == "template-frame"
+                                 or op.occurrence_id.rpartition(":")[0].endswith((":border", ":note-border"))),
                 )
             )
         pages.append(

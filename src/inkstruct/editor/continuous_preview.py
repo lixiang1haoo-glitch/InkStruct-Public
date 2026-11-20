@@ -437,6 +437,50 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             self.update(self.page_rect(index).toAlignedRect())
         self._queue()
 
+    def set_stroke_progress(self, snapshot, page, done, uncertain):
+        layer = getattr(self, "_plot_layer", None)
+        if not page or snapshot is not self.snapshot or not (done or uncertain):
+            if layer is not None:
+                self._plot_layer = None
+                self.update()
+            return
+        if layer is None or layer["page"] is not page or done < layer["done"]:
+            layer = {"page": page, "snapshot": snapshot, "done": 0, "paths": {}, "base": {}}
+            for stroke in page.strokes:
+                self.add_plot_stroke(layer["base"], stroke)
+            self._plot_layer = layer
+        for stroke in page.strokes[layer["done"]:done]:
+            self.add_plot_stroke(layer["paths"], stroke)
+        layer.update(done=done, uncertain=uncertain)
+        self.update(self.page_rect(page.index).toAlignedRect())
+
+    @staticmethod
+    def add_plot_stroke(paths, stroke):
+        path = paths.setdefault(stroke.width_mm, QtGui.QPainterPath())
+        path.moveTo(*stroke.points[0])
+        for point in stroke.points[1:]:
+            path.lineTo(*point)
+
+    def paint_stroke_progress(self, painter, index, rect):
+        layer = getattr(self, "_plot_layer", None)
+        if layer is None or self.snapshot is not layer["snapshot"] or index != layer["page"].index:
+            return
+        page = layer["page"]
+        painter.save()
+        painter.translate(rect.topLeft())
+        scale = rect.width() / page.width_mm
+        painter.scale(scale, rect.height() / page.height_mm)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        active = {}
+        if layer["uncertain"] and layer["done"] < len(page.strokes):
+            self.add_plot_stroke(active, page.strokes[layer["done"]])
+        for paths, color, pixels in ((layer["base"], "#778899", 1), (layer["paths"], "#147455", 1),
+                                     (active, "#d86200", 3)):
+            for width, path in paths.items():
+                painter.setPen(QtGui.QPen(QtGui.QColor(color), max(width, pixels / scale)))
+                painter.drawPath(path)
+        painter.restore()
+
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         dirty = QtCore.QRectF(event.rect())
@@ -476,6 +520,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 painter.drawText(page, QtCore.Qt.AlignmentFlag.AlignCenter, message)
             elif index == 0 and self._first_painted_generation != self._generation:
                 first_painted = not page.intersected(dirty).intersected(self.viewport_rect()).isEmpty()
+            self.paint_stroke_progress(painter, index, page)
             reviews = self.reviews if self.show_marks else {}
             geometry = tuple((fragment, self.rect_for(fragment, page))
                              for fragment in self.snapshot.pages[index].fragments

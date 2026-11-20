@@ -1,7 +1,10 @@
 """Control a USB-connected N1 from the layout sidebar."""
 
 import base64
-from dataclasses import replace
+import json
+from hashlib import sha256
+from time import monotonic
+from dataclasses import asdict, replace
 from math import hypot
 from uuid import uuid4
 
@@ -13,6 +16,7 @@ from ..plotter.physical import PaperRegistration, WorkArea, machine_point, posit
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
+from ..plotter.write_session import ProgressFile, estimate_seconds, lengths, record_time, route_page, timing_factor
 from ..renderers.pages import page_draw
 from ..resource_catalog import workspace_for
 from ..settings_pages import label, scroll_page
@@ -48,7 +52,10 @@ class MachinePreview(QtWidgets.QWidget):
         self.job = None
         self.point = None
         self.mark_points = ()
+        self.confirmed_paths = {}
+        self.active_path = {}
         self.paths = {}
+        self.stroke_state = None
         self.paper = None
 
     def set_paper(self, snapshot, index):
@@ -73,16 +80,35 @@ class MachinePreview(QtWidgets.QWidget):
         return QtGui.QImage.fromData(base64.b64decode(data)) if data else QtGui.QImage()
 
     def set_paths(self, job, coords, area, mark_points):
-        if job is not self.job:
+        state = self.stroke_state
+        if job is not self.job or bool(state) != bool(getattr(self, "_previous_state", None)):
             self.paths = {}
+            self.confirmed_paths = {}
+            self.colored = 0
             if job:
                 for stroke in job.strokes:
-                    path = self.paths.setdefault(stroke.width_mm, QtGui.QPainterPath())
-                    path.moveTo(*stroke.points[0])
-                    for point in stroke.points[1:]:
-                        path.lineTo(*point)
+                    self.add_path(self.paths, stroke, "#778899" if state else "#075a9c")
+        if state and job:
+            done, uncertain = state
+            if done < self.colored:
+                self.confirmed_paths.clear()
+                self.colored = 0
+            for stroke in job.strokes[self.colored:done]:
+                self.add_path(self.confirmed_paths, stroke, "#147455")
+            self.colored = done
+        self.active_path = {}
+        if job and state and state[1] and state[0] < len(job.strokes):
+            self.add_path(self.active_path, job.strokes[state[0]], "#d86200")
+        self._previous_state = state
         self.job, self.coords, self.area, self.mark_points = job, coords, area, mark_points
         self.update()
+
+    @staticmethod
+    def add_path(paths, stroke, color):
+        path = paths.setdefault((stroke.width_mm, color), QtGui.QPainterPath())
+        path.moveTo(*stroke.points[0])
+        for point in stroke.points[1:]:
+            path.lineTo(*point)
 
     def paintEvent(self, _event):
         painter = QtGui.QPainter(self)
@@ -120,8 +146,8 @@ class MachinePreview(QtWidgets.QWidget):
             painter.drawPath(path)
         painter.restore()
 
-        for width, path in self.paths.items():
-            pen = QtGui.QPen(QtGui.QColor("#075a9c"), max(width, 1 / scale))
+        for (width, color), path in (self.paths | self.confirmed_paths | self.active_path).items():
+            pen = QtGui.QPen(QtGui.QColor(color), max(width, (3 if color == "#d86200" else 1) / scale))
             pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
@@ -142,6 +168,7 @@ class MachinePanel(QtWidgets.QWidget):
     page_selected = QtCore.Signal(int)
     status_changed = QtCore.Signal(str)
     machine_state = QtCore.Signal()
+    stroke_progress = QtCore.Signal(object, object, int, bool)
 
     def __init__(self, parent, *, worker_factory=N1Worker, ports=n1_ports):
         super().__init__(parent)
@@ -152,6 +179,9 @@ class MachinePanel(QtWidgets.QWidget):
         self.candidate = None
         self.candidate_template = None
         self.plan = self.paper_page = self.unplaced_preview = None
+        self.journal = self.raw_page = self.elapsed_start = None
+        self.done, self.uncertain = 0, False
+        self.progress_error = ""
         self.plan_error = ""
         self.device = self.busy = None
         self.connection_id = None
@@ -230,8 +260,24 @@ class MachinePanel(QtWidgets.QWidget):
         self.stop_button = self.button("停止", self.stop)
         self.stop_button.setProperty("inkRole", "danger")
         write_layout.addWidget(pair_widget((self.preview_button, self.dry_button)))
+        self.estimate_label = label("")
+        write_layout.addWidget(self.estimate_label)
+        self.details_toggle = QtWidgets.QCheckBox("查看抬笔与空走详情")
+        write_layout.addWidget(self.details_toggle)
+        self.route_stats = label("")
+        self.optimize = QtWidgets.QCheckBox("减少独立表线和图形之间的空走")
+        self.optimize.setChecked(True)
+        self.optimize.toggled.connect(self.change_routing)
+        for control in (self.route_stats, self.optimize):
+            write_layout.addWidget(control)
+            control.hide()
+            self.details_toggle.toggled.connect(control.setVisible)
+        self.resume_hint = label("")
+        write_layout.addWidget(self.resume_hint)
         write_layout.addWidget(self.write_button)
         controls.addWidget(writing)
+        self.finish_stroke = self.button("写完本笔并保留进度", self.interrupt_after_stroke)
+        root.addWidget(self.finish_stroke)
         root.addWidget(self.stop_button)
 
         self.preview = MachinePreview()
@@ -349,6 +395,10 @@ class MachinePanel(QtWidgets.QWidget):
                     self.confirmed_area = self.profile.datum.to_work_area(self.profile.datum.area, self.frame)
             else:
                 self.confirmed_area = self.profile.area
+        if self.raw_page is not None:
+            self.prepare_session()
+            self.unplaced_preview = (position_page(self.paper_page, PaperRegistration((0, 0)))
+                                     if self.paper_page.strokes else None)
         self.show_position()
         if keep_alignment:
             self.update_preview()
@@ -494,7 +544,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     @property
     def is_moving(self):
-        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "pen"}
+        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "pen", "calibrate-line", "calibrate-height"}
 
     @property
     def pen_raised(self):
@@ -581,6 +631,8 @@ class MachinePanel(QtWidgets.QWidget):
         paper = self.snapshot.page_profile
         self.paper_page = (self.plan.pages[index] if self.plan else
                            PlotPage(index, paper.width_mm, paper.height_mm, ()))
+        self.raw_page = self.paper_page
+        self.prepare_session()
         self.unplaced_preview = None
         if self.paper_page.strokes:
             try:
@@ -589,6 +641,88 @@ class MachinePanel(QtWidgets.QWidget):
                 pass
         self.preview.set_paper(self.snapshot, index)
         self.invalidate_registration()
+
+    def prepare_session(self):
+        page = self.raw_page
+        self.journal = None
+        self.progress_error = ""
+        self.saved_placement = None
+        self.done, self.uncertain = 0, False
+        if self.plan and page and page.strokes and self.profile:
+            background = self.snapshot.pages[page.index].background
+            background_id = background.sha256 if background else ""
+            self.journal = ProgressFile.for_page(self.store.path.parent, self.plan.document_id, page,
+                                                 background_id, self.profile.id)
+            try:
+                self.done, self.uncertain = self.journal.read()
+                if self.journal.path.exists():
+                    data = json.loads(self.journal.path.read_bytes())
+                    optimized = data["optimized"]
+                    self.saved_placement = data.get("placement")
+                    if type(optimized) is not bool:
+                        raise ValueError("笔序记录损坏")
+                    with QtCore.QSignalBlocker(self.optimize):
+                        self.optimize.setChecked(optimized)
+            except (KeyError, TypeError, ValueError, OSError) as error:
+                self.progress_error = f"无法读取续写记录：{error}"
+            self.journal = replace(self.journal, optimized=self.optimize.isChecked())
+        self.paper_page = route_page(page) if self.optimize.isChecked() and page else page
+        self.optimize.setEnabled(not (self.journal and self.journal.path.exists()))
+
+    def placement_details(self):
+        if not self.registration or not self.profile:
+            return None
+        marks = self.registration
+        return {"anchor": list(marks.anchor), "origin": list(marks.origin),
+                "axes": asdict(self.profile.axes), "setup": self.setup,
+                "pen": self.profile.active_pen, "connection": self.connection_id}
+
+    def change_routing(self):
+        if self.raw_page is None or self.busy:
+            return
+        self.prepare_session()
+        if self.paper_page.strokes:
+            self.unplaced_preview = position_page(self.paper_page, PaperRegistration((0, 0)))
+            if self.registration:
+                self.job = position_page(self.paper_page, self.registration)
+        self.update_preview()
+        self.refresh_buttons()
+
+    def update_estimate(self):
+        if not self.paper_page or not self.paper_page.strokes or not self.profile:
+            self.estimate_label.clear()
+            self.route_stats.clear()
+            return
+        page = self.job or self.unplaced_preview
+        if page is None:
+            return
+        start = self.device.position[:2] if self.job and self.device else None
+        remaining = page.strokes[self.done:]
+        self.base_estimate = estimate_seconds(remaining, self.profile.feed, start)
+        key = sha256(f"{self.profile.id}|{self.profile.active_pen}|{self.profile.feed}".encode()).hexdigest()
+        self.timing_path = self.store.path.parent / "plotter-times" / (key + ".json")
+        seconds = round(self.base_estimate * timing_factor(self.timing_path))
+        self.estimate_label.setText(f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒")
+        baseline = position_page(self.raw_page, page.registration)
+        before = lengths(baseline.strokes, start)[0]
+        after = lengths(page.strokes, start)[0]
+        self.route_stats.setText(f"剩余抬笔 {len(remaining)} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
+
+    def show_progress_preview(self):
+        state = (self.done, self.uncertain) if self.done or self.uncertain else None
+        self.preview.stroke_state = state
+        if state and self.preview_enabled:
+            self.preview.set_paths(self.job or self.unplaced_preview, self.registration, self.confirmed_area,
+                                   (self.registration.origin,) if self.registration else ())
+        self.stroke_progress.emit(self.snapshot, self.paper_page, self.done, self.uncertain)
+        text = self.progress_error
+        if state:
+            text = f"绿色已完成 {self.done} 笔。"
+            if self.uncertain:
+                text += f"请核对橙色的第 {self.done + 1} 笔。"
+            text += "灰色为待写笔迹。请保留原稿并确认本页对位。"
+        self.resume_hint.setText(text)
+        self.resume_hint.setVisible(bool(text))
 
     def invalidate_registration(self):
         self.registration = self.job = None
@@ -631,6 +765,12 @@ class MachinePanel(QtWidgets.QWidget):
 
     def update_preview(self):
         coords = self.registration
+        if (self.done or self.uncertain) and not self.preview_enabled:
+            self.preview_enabled = True
+            self.preview_button.setChecked(True)
+            self.preview.show()
+        self.show_progress_preview()
+        self.update_estimate()
         if self.preview_enabled:
             self.preview.set_paths(self.job or self.unplaced_preview, coords, self.confirmed_area,
                                    (coords.origin,) if coords else ())
@@ -679,9 +819,11 @@ class MachinePanel(QtWidgets.QWidget):
             self.write_button.setToolTip(f"纸张两边靠齐 · {self.setup}" if can_reuse else "")
             self.write_button.setEnabled(available)
         else:
-            self.write_button.setText("开始书写…")
+            self.write_button.setText("核对纸面并续写…" if self.done or self.uncertain else "开始书写…")
             self.write_button.setToolTip("")
-            self.write_button.setEnabled(safe and ready and self.pen_raised and self.job is not None)
+            self.write_button.setEnabled(safe and ready and self.pen_raised and self.job is not None and not self.progress_error)
+        self.finish_stroke.setVisible(self.busy == "write")
+        self.finish_stroke.setEnabled(self.busy == "write" and not canceling)
         self.stop_button.setVisible(moving or self.batch_active)
         self.stop_button.setEnabled(not self.closing and not canceling)
         self.machine_state.emit()
@@ -794,17 +936,36 @@ class MachinePanel(QtWidgets.QWidget):
                 return
             pending = list(range(1, len(self.plan.pages)))
         job, connection = self.job, self.connection_id
+        start = self.done
+        if self.uncertain:
+            box = QtWidgets.QMessageBox(self)
+            box.setWindowTitle("核对中断笔")
+            box.setText(f"请对照原稿与预览中橙色的第 {start + 1} 笔。未写完整可重写，已完整可从下一笔继续。")
+            rewrite = box.addButton("重写这一笔", QtWidgets.QMessageBox.ButtonRole.ActionRole)
+            skip = box.addButton("从下一笔继续", QtWidgets.QMessageBox.ButtonRole.ActionRole)
+            box.setDefaultButton(box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel))
+            box.exec()
+            if box.clickedButton() == skip:
+                start += 1
+            elif box.clickedButton() != rewrite:
+                return
+        placement_note = ""
+        if (self.done or self.uncertain) and self.saved_placement:
+            old = self.saved_placement
+            placement_note = f"上次使用「{old['setup']}」，纸面 A 为 {old['anchor']} mm。"
+            if old != self.placement_details():
+                placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
         if self.confirm(
-            "开始书写", f"将按已对位的笔序书写第 {self.job.index + 1} 页。确认纸张与笔尖均已就绪？",
+            "原稿已对位，继续书写" if start or self.uncertain else "开始书写", f"{placement_note}第 {self.job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。",
         ) and self.job is job and connection == self.connection_id:
-            if self.run_job("write") and not self.batch_active:
+            if self.run_job("write", start=start) and not self.batch_active:
                 self.completed_pages.clear()
                 self.update_page_states()
                 if multi:
                     self.batch_active = True
                     self.pending_pages = pending
 
-    def run_job(self, kind):
+    def run_job(self, kind, *, start=0):
         job = self.job
         area = self.confirmed_area
         if (job is None or not self.range_ready or self.device is None or self.waiting_for_paper or
@@ -816,9 +977,22 @@ class MachinePanel(QtWidgets.QWidget):
             except ValueError as error:
                 self.message(str(error), error=True)
                 return False
-        if self.submit(kind, job, area, self.profile.feed):
+        options = []
+        if kind == "write":
+            if self.progress_error:
+                return False
+            if self.journal is None and self.raw_page:
+                self.prepare_session()
+            if self.journal:
+                self.journal = replace(self.journal, placement=self.placement_details())
+            options.append(dict(height=self.profile.writing_height, start=start, journal=self.journal))
+        if self.submit(kind, job, area, self.profile.feed, *options):
+            if kind == "write":
+                self.elapsed_start = monotonic()
+                self.run_estimate = estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2])
+                self.optimize.setEnabled(False)
             self.progress.setRange(0, len(job.strokes))
-            self.progress.setValue(0)
+            self.progress.setValue(start)
             self.progress.show()
             return True
         return False
@@ -838,6 +1012,11 @@ class MachinePanel(QtWidgets.QWidget):
         if self.closing or self.busy not in {"write", "dry"}:
             return
         self.progress.setValue(done)
+        if self.busy == "write":
+            self.done, self.uncertain = done, False
+            self.stroke_progress.emit(self.snapshot, self.paper_page, self.done, False)
+            if self.preview_enabled:
+                self.show_progress_preview()
         if done == total:
             self.message("指令已发送，正在等待设备抬笔和 Idle…")
 
@@ -849,7 +1028,14 @@ class MachinePanel(QtWidgets.QWidget):
             pause.clear()
         else:
             pause.set()
+            self.elapsed_start = None
         self.refresh_buttons()
+
+    def interrupt_after_stroke(self):
+        if self.busy == "write":
+            self.worker.control.finish_stroke.set()
+            self.worker.control.pause_requested.clear()
+            self.message("正在写完当前笔，抬笔后将保留本页进度。")
 
     def stop(self):
         if self.busy is not None:
@@ -925,6 +1111,16 @@ class MachinePanel(QtWidgets.QWidget):
             if kind == "position-datum" and self.datum_located:
                 message = f"机身已定位 · {self.profile.datum.label}"
         elif kind == "write":
+            try:
+                if self.journal:
+                    self.journal.path.unlink(missing_ok=True)
+                if self.elapsed_start and self.run_estimate and hasattr(self, "timing_path"):
+                    record_time(self.timing_path, monotonic() - self.elapsed_start, self.run_estimate)
+            except OSError as error:
+                message += f" 本机进度或耗时记录未能更新：{error}"
+            self.done, self.uncertain = 0, False
+            self.optimize.setEnabled(True)
+            self.update_preview()
             page = self.page_list.currentRow()
             self.completed_pages.add(page)
             self.update_page_states()
@@ -948,6 +1144,11 @@ class MachinePanel(QtWidgets.QWidget):
         self.end_batch()
         self.progress.hide()
         if kind == "write" and self.job:
+            if self.journal:
+                try:
+                    self.done, self.uncertain = self.journal.read()
+                except (ValueError, OSError) as error:
+                    self.progress_error = str(error)
             done = max(0, self.progress.value())
             detail += f" 第 {self.job.index + 1} 页已确认完成 {done}/{len(self.job.strokes)} 笔。"
             if done < len(self.job.strokes):

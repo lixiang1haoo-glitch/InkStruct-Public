@@ -80,6 +80,7 @@ def decode_status(line: str, previous_offset=None):
 class MotionControl:
     pause_requested: Event = field(default_factory=Event)
     stop_requested: Event = field(default_factory=Event)
+    finish_stroke: Event = field(default_factory=Event)
 
 
 @dataclass
@@ -471,26 +472,35 @@ class GrblLink:
 
     def run_page(self, page: MachinePage, area: WorkArea | None, control: MotionControl, *,
                  dry_run=False, feed=DEFAULT_WRITE_FEED, state=None,
-                 review_pins=True, commissioning=False):
+                 review_pins=True, commissioning=False, height=PEN_DOWN, start=0, journal=None):
         validate_feed(feed)
+        if not PEN_DOWN <= height <= -.1 or not 0 <= start <= len(page.strokes):
+            raise ValueError('笔高或续写笔序无效。')
         review_pins = review_pins and not commissioning
         if state is None:
             state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
         state = self.enter_motion(control)
         total = len(page.strokes)
-        for number, stroke in enumerate(page.strokes, 1):
+        for number, stroke in enumerate(page.strokes[start:], start + 1):
             state = self.move_path(state, stroke.points[:1], area, feed, PEN_UP, control,
                                    review_pins=review_pins)
             if not dry_run:
-                self.pen(PEN_DOWN, control)
-                state = self.wait_idle(control, z=PEN_DOWN, poll=.02)
+                if journal is not None:
+                    journal.save(number - 1, True)
+                self.pen(height, control)
+                state = self.wait_idle(control, z=height, poll=.02)
             state = self.move_path(state, stroke.points[1:], area, feed,
-                                   PEN_UP if dry_run else PEN_DOWN, control, review_pins=review_pins)
+                                   PEN_UP if dry_run else height, control, review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_UP, control)
                 state = self.wait_idle(control, z=PEN_UP, poll=.02)
+                if journal is not None:
+                    journal.save(number, False)
             self.progress(number, total)
+            if not dry_run and number < total and control.finish_stroke.is_set():
+                self.motion_active = False
+                raise ValueError('本笔已写完并抬笔，续写进度已保存在本机。')
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 
@@ -549,13 +559,15 @@ class GrblLink:
         state = self.enter_motion(control)
         return self.move_path(state, (end,), area, feed, PEN_UP, control, review_pins=review_pins)
 
-    def set_pen(self, down: bool, area: WorkArea | None, control: MotionControl):
+    def set_pen(self, down: bool, area: WorkArea | None, control: MotionControl, *, height=PEN_DOWN):
+        if not PEN_DOWN <= height <= 0:
+            raise ValueError('笔尖高度超出设备支持的范围。')
         state = self.require_idle(control, for_motion=True)
         if down and area is not None:
             area.require(state.position[:2], "落笔位置")
         self.motion_active = True
         self.phase("running")
-        height = PEN_DOWN if down else PEN_UP
+        height = height if down else PEN_UP
         self.command("G21 G90 G94", control)
         self.pen(height, control)
         return self.wait_idle(control, z=height)
