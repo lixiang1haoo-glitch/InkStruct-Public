@@ -70,6 +70,69 @@ class PageAlignment:
 
 
 @dataclass(frozen=True)
+class DeviceDatum:
+    """A physical reference on one device with one axis calibration.
+
+    Its work-coordinate origin is observed afresh in each connection and is
+    deliberately not part of the saved profile.
+    """
+
+    id: str
+    device_id: str
+    axes: DeviceAxes
+    label: str
+    area: WorkArea | None = None
+    checkpoint: tuple[float, float] | None = None
+
+    @classmethod
+    def create(cls, profile, label):
+        return cls(uuid4().hex, profile.id, profile.axes, label.strip())
+
+    def __post_init__(self):
+        if not self.id or not self.device_id or not self.label.strip():
+            raise ValueError("请填写纸张限位及基准点名称。")
+        if isinstance(self.axes, dict):
+            object.__setattr__(self, "axes", DeviceAxes(**self.axes))
+        if isinstance(self.area, dict):
+            object.__setattr__(self, "area", WorkArea(**self.area))
+        if self.checkpoint is not None:
+            object.__setattr__(self, "checkpoint", machine_point(self.checkpoint))
+
+    def to_body(self, work_point, origin):
+        x, y = machine_point(work_point)
+        ox, oy = machine_point(origin)
+        return machine_point(self.axes.unmap(x - ox, y - oy))
+
+    def to_work(self, body_point, origin):
+        x, y = self.axes.map(*machine_point(body_point))
+        ox, oy = machine_point(origin)
+        return machine_point((ox + x, oy + y))
+
+    def origin_from_checkpoint(self, work_point):
+        if self.checkpoint is None:
+            raise ValueError("请先登记备用基准点。")
+        x, y = machine_point(work_point)
+        dx, dy = self.axes.map(*self.checkpoint)
+        return machine_point((x - dx, y - dy))
+
+    @staticmethod
+    def _area_between(a, b):
+        return WorkArea(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+
+    def to_body_area(self, work_area, origin):
+        # Axis swapping and mirroring keep the rectangle axis-aligned.
+        ox, oy = machine_point(origin)
+        return self._area_between(self.axes.unmap(work_area.left - ox, work_area.top - oy),
+                                  self.axes.unmap(work_area.right - ox, work_area.bottom - oy))
+
+    def to_work_area(self, body_area, origin):
+        ox, oy = machine_point(origin)
+        ax, ay = self.axes.map(body_area.left, body_area.top)
+        bx, by = self.axes.map(body_area.right, body_area.bottom)
+        return self._area_between((ox + ax, oy + ay), (ox + bx, oy + by))
+
+
+@dataclass(frozen=True)
 class DeviceProfile:
     id: str
     name: str
@@ -79,6 +142,7 @@ class DeviceProfile:
     area: WorkArea | None = None
     offset: tuple[float, float] | None = None
     feed: int = DEFAULT_WRITE_FEED
+    datum: DeviceDatum | None = None
 
     @classmethod
     def create(cls, name, port, serial=""):
@@ -91,6 +155,10 @@ class DeviceProfile:
             object.__setattr__(self, "axes", DeviceAxes(**self.axes))
         if isinstance(self.area, dict):
             object.__setattr__(self, "area", WorkArea(**self.area))
+        if isinstance(self.datum, dict):
+            object.__setattr__(self, "datum", DeviceDatum(**self.datum))
+        if self.datum and (self.datum.device_id != self.id or self.datum.axes != self.axes):
+            object.__setattr__(self, "datum", None)
         if self.offset is not None:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
@@ -117,14 +185,37 @@ class PlotterProfiles:
         data["selected"] = profile.id
         atomic_json(self.path, data)
 
-    def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *, connection=None):
+    def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *,
+              connection=None, datum_origin=None):
         scope = digest([profile.id, page])
-        key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
+        legacy_key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
+        datum = profile.datum
+        key = digest([legacy_key, datum.id]) if datum else legacy_key
         if position is not None:
-            self.record(key, {"point": machine_point(position), "offset": offset, "scope": scope,
-                              "connection": connection,
-                              "setup": setup, "correction": asdict(correction or alignment)})
-        return self.read()["placements"].get(key)
+            record = {"point": machine_point(position), "offset": offset, "scope": scope,
+                      "connection": connection, "setup": setup, "correction": asdict(correction or alignment)}
+            if datum is not None or datum_origin is not None:
+                if datum is None or datum_origin is None or not connection:
+                    raise ValueError("请先在本次连接中找回机身基准。")
+                record.update(datum_id=datum.id, body_point=datum.to_body(position, datum_origin))
+            self.record(key, record)
+        placements = self.read()["placements"]
+        return placements.get(key) or placements.get(legacy_key)
+
+    @staticmethod
+    def placed_position(profile, record, *, connection, offset, datum_origin=None):
+        """Return this session's work XY, or None when only angle/scale can be recalled."""
+        if not connection or not record:
+            return None
+        if profile.datum or "datum_id" in record:
+            if profile.datum and record.get("datum_id") == profile.datum.id and datum_origin is not None:
+                return profile.datum.to_work(record["body_point"], datum_origin)
+            return None
+        saved_offset = record.get("offset")
+        offset = list(offset) if offset is not None else None
+        if record.get("connection") == connection and saved_offset == offset:
+            return machine_point(record["point"])
+        return None
 
     @catalog_write
     def record(self, key, value):
