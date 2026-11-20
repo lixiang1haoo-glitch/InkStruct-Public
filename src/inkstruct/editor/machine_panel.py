@@ -228,6 +228,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.preview = MachinePreview()
         self.preview.setMinimumSize(0, 180)
         controls.addWidget(self.preview)
+        controls.addStretch()
         self.preview.hide()
         self.worker = worker_factory(self)
         self.worker.succeeded.connect(self.succeeded)
