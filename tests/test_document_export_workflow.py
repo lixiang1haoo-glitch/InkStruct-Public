@@ -187,6 +187,9 @@ def test_editor_preserves_old_reviews_and_character_correction(tmp_path, monkeyp
         window.select_fragment(fragment)
         assert window.properties_tabs.tabText(window.properties_tabs.currentIndex()) == '字符校正'
         inspector = window.glyph_inspector
+        QtTest.QTest.qWait(10)
+        assert all(inspector.nudge.rect().contains(button.geometry())
+                   for button in inspector.nudge.buttons.values())
         inspector.nudge.step.setValue(5)
         inspector.nudge.buttons[(1, 0)].click()
         inspector.nudge.buttons[(0, -1)].click()
