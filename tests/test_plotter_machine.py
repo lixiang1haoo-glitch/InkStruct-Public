@@ -525,27 +525,25 @@ try:
     assert (canvas.drawing_transform().map(point) - anchor).manhattanLength() < 1e-6
     QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=anchor)
     assert abs(preview.a[0].value() - point.x()) < .001 and abs(preview.a[1].value() - point.y()) < .001
-    preview.pick.setCurrentIndex(1)
+    assert preview.canvas.points == [("原点", tuple(spin.value() for spin in preview.a))]
+    assert not preview.record_b.isVisible() and not preview.check_c.isVisible() and not preview.pick.isVisible()
     dest = anchor + QtCore.QPoint(30, 20)
     QtTest.QTest.mousePress(canvas, qt.LeftButton, pos=anchor)
     QtTest.QTest.mouseMove(canvas, dest)
     QtTest.QTest.mouseRelease(canvas, qt.LeftButton, pos=dest)
-    assert not preview.use_b.isChecked()
     assert (canvas.drawing_transform().map(point) - dest).manhattanLength() < 1e-6
     b_pixel = dest + QtCore.QPoint(12, 18)
     b_mm = canvas.drawing_transform().inverted()[0].map(QtCore.QPointF(b_pixel))
     QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=b_pixel)
-    assert preview.use_b.isChecked()
-    assert abs(preview.b[0].value() - b_mm.x()) < .001 and abs(preview.b[1].value() - b_mm.y()) < .001
+    assert abs(preview.a[0].value() - b_mm.x()) < .001 and abs(preview.a[1].value() - b_mm.y()) < .001
     preview.zoom_reset.click()
     assert canvas.drawing_transform() == initial and preview.zoom_reset.text() == "100%"
     preview.close()
 
-    measure = AlignmentDialog(panel, panel, *context, configure=True)
+    measure = AlignmentDialog(panel, panel, *context, calibration=True)
     transport.position[:] = [35., 29., 0.]
     measure.record_a.click()
     wait()
-    measure.use_b.setChecked(True)
     measure.b[0].setValue(15)
     measure.show()
     app.processEvents()
@@ -578,9 +576,19 @@ try:
     measure.save.click()
     assert measure.result() and measure.alignment.scale == 1.2 and measure.alignment.angle == 0.
 
+    assert panel.store.devices()[0].paper_calibration == (0., 1.2)
+    assert panel.registration is None
     # Rebooting at the current pen position can reset WPos without changing WCO.
     old_connection, old_offset = panel.connection_id, panel.offset
     reopened = DeviceDialog(panel)
+    inspected = []
+    def inspect_initialization():
+        dialog = app.activeModalWidget()
+        inspected.append((dialog.calibration, dialog.record_b.isVisible(), dialog.check_c.isVisible()))
+        dialog.reject()
+    QtCore.QTimer.singleShot(0, inspect_initialization)
+    reopened.paper_calibrate.click()
+    assert inspected == [(True, True, True)]
     assert reopened.use_range.isChecked() and panel.confirmed_area == profile.area
     reopened.link.click()
     wait()
@@ -601,15 +609,15 @@ try:
     reopened.close()
 
     page_key, size, _, title = context
-    restore = AlignmentDialog(panel, panel, page_key, size, measure.alignment, title, snapshot=snapshot)
+    restore = AlignmentDialog(panel, panel, page_key, size, context[2], title, snapshot=snapshot)
     restore.recall.click()
     assert not restore.result() and restore.position is None and not restore.save.isEnabled()
-    assert "重新记录实地 A 点" in restore.status.text()
-    assert restore.markings().scale == 1.2
+    assert "重新记录原点" in restore.status.text()
+    assert panel.profile.calibrated(restore.markings()).scale == 1.2
     restore.record_a.click()
     wait()
     restore.save.click()
-    assert restore.result() and restore.position == (0., 0.) and restore.alignment.scale == 1.2
+    assert restore.result() and restore.position == (0., 0.) and panel.profile.calibrated(restore.alignment).scale == 1.2
     panel.use_alignment(restore.alignment, restore.position)
     assert panel.registration and panel.confirmed_area is None and panel.write_button.isEnabled()
     # This transformed character crosses the old rectangle's y=0 boundary.
@@ -1147,3 +1155,16 @@ def test_confirmed_page_region_reviews_recorded_writing_signal():
         else:
             with pytest.raises(MachineError, match="Pn:Y"):
                 window.observe(decode_status(reports[1]), True)
+
+
+def test_device_calibration_overrides_legacy_page_fit_without_changing_origin(tmp_path):
+    from inkstruct.plotter.profiles import DeviceProfile, PageAlignment, PlotterProfiles
+
+    store = PlotterProfiles(tmp_path)
+    profile = DeviceProfile("first", "N1", "test", paper_calibration=(math.pi / 2, 1.1))
+    store.save(profile)
+    loaded, = store.devices()
+    for origin in ((5., 10.), (25., 35.)):
+        legacy = PageAlignment(origin, (80., 60.), .2, .9)
+        assert loaded.calibrated(legacy) == PageAlignment(origin, legacy.b, math.pi / 2, 1.1)
+        assert DeviceProfile("second", "N1", "test2").calibrated(legacy) == legacy

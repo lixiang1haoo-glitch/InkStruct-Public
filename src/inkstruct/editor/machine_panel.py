@@ -241,10 +241,10 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(self.progress)
         self.report = label("连接设备后可定位。")
         write_layout.addWidget(self.report)
-        self.align_button = self.button("当前页对位…", self.open_alignment)
+        self.align_button = self.button("设置当前页原点…", self.open_alignment)
         self.nudge = self.motion_controls(self.jog)
         write_layout.addWidget(self.nudge)
-        self.return_button = self.button("抬笔回到 A 点", self.return_to_origin)
+        self.return_button = self.button("抬笔回到原点", self.return_to_origin)
         self.pen_button = self.button("落笔", self.toggle_pen)
         write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
         self.alignment_status = label("当前页未对位")
@@ -269,7 +269,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.optimize.setChecked(True)
         self.optimize.toggled.connect(self.change_routing)
         write_layout.addWidget(self.optimize)
-        self.auto_return = QtWidgets.QCheckBox("写完本页后抬笔回到 A 点")
+        self.auto_return = QtWidgets.QCheckBox("写完本页后抬笔回到原点")
         self.auto_return.clicked.connect(self.set_auto_return)
         write_layout.addWidget(self.auto_return)
         write_layout.addWidget(self.route_stats)
@@ -348,6 +348,8 @@ class MachinePanel(QtWidgets.QWidget):
             confirm_range = False
         same_axes = bool(old and (old.id, old.axes, old.serial, old.port) ==
                                  (profile.id, profile.axes, profile.serial, profile.port))
+        if old and old.id == profile.id and not same_axes:
+            profile = replace(profile, paper_calibration=None)
         same_datum = bool(same_axes and profile.datum and old.datum and old.datum.id == profile.datum.id)
         same_coordinates = same_datum or (same_axes and not profile.datum and not old.datum)
         if self.device is not None and (old.serial, old.port) != (profile.serial, profile.port):
@@ -368,7 +370,8 @@ class MachinePanel(QtWidgets.QWidget):
                 self.connection_id = uuid4().hex
         retain_area = (same_coordinates and self.confirmed_area is not None and profile.limit_area_enabled
                        and old.area == profile.area)
-        self.apply_profile(activate=confirm_range or retain_area, keep_alignment=same_coordinates)
+        keep_alignment = same_coordinates and old.paper_calibration == profile.paper_calibration
+        self.apply_profile(activate=confirm_range or retain_area, keep_alignment=keep_alignment)
 
     def _persist_profile(self, profile):
         self.store.save(profile)
@@ -499,6 +502,7 @@ class MachinePanel(QtWidgets.QWidget):
         if self.profile is None or self.paper_page is None:
             return
         self.placement_work.cancel()
+        alignment = self.profile.calibrated(alignment)
         registration = self.profile.axes.register(alignment.a, position, angle=alignment.angle, scale=alignment.scale)
         self.registration, self.inherited_placement, self.job = registration, fixture, None
         if fixture is not None:
@@ -818,7 +822,7 @@ class MachinePanel(QtWidgets.QWidget):
         setup = self.setup if setup is None else setup
         datum = self.profile.datum
         context = (self.connection_id, self.profile.id, self.profile.axes, self.offset,
-                   datum.id if datum else None, self.frame, setup)
+                   datum.id if datum else None, self.frame, setup, self.profile.paper_calibration)
         if self.group is None or self.group.template is not template or self.group.context != context:
             group = SessionPageGroup(template, context, setup, self.profile.axes)
             if self.datum_located:
@@ -894,7 +898,7 @@ class MachinePanel(QtWidgets.QWidget):
         if coords:
             source = self.inherited_placement
             state = f"已沿用「{source.setup}」 · {source.source}" if source else f"已对位 · {self.setup}"
-            self.alignment_status.setText(f"{page}{state} · A 点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm")
+            self.alignment_status.setText(f"{page}{state} · 原点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm")
         else:
             self.alignment_status.setText(f"{page}未对位")
 
@@ -1044,7 +1048,7 @@ class MachinePanel(QtWidgets.QWidget):
         try:
             self._persist_profile(replace(self.profile, return_after_page=enabled))
         except (OSError, ValueError) as error:
-            self.message(f"回到 A 点的设置未能保存。{error}", error=True)
+            self.message(f"回到原点的设置未能保存。{error}", error=True)
         self.refresh_buttons()
 
     def return_to_origin(self):
@@ -1119,14 +1123,14 @@ class MachinePanel(QtWidgets.QWidget):
         placement_note = ""
         if (self.done or self.uncertain) and self.saved_placement:
             old = self.saved_placement
-            placement_note = f"上次使用「{old['setup']}」，纸面 A 为 {old['anchor']} mm。"
+            placement_note = f"上次使用「{old['setup']}」，纸面原点为 {old['anchor']} mm。"
             if old != self.placement_details():
                 placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
         title = "原稿已对位，继续书写" if start or self.uncertain else "开始书写"
         text = f"{placement_note}第 {job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。"
         return_target = job.registration.origin if self.auto_return.isChecked() else None
         if return_target is not None:
-            text += " 写完后将抬笔回到本页对位 A 点，再取纸。"
+            text += " 写完后将抬笔回到本页原点，再取纸。"
         position = self.device.position[:2]
         local_area = None
         checkbox = None
@@ -1164,7 +1168,7 @@ class MachinePanel(QtWidgets.QWidget):
         if area is not None:
             try:
                 if target is not None:
-                    area.require(target, "本页对位 A 点")
+                    area.require(target, "本页原点")
                 job.check(area, self.device.position[:2], dry_run=kind == "dry")
             except ValueError as error:
                 self.message(str(error), error=True)
@@ -1209,7 +1213,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def on_phase(self, phase):
         if not self.closing and self.is_moving:
-            running = "本页已写完，正在抬笔回到 A 点…" if self.busy == "page-return" else "设备正在执行…"
+            running = "本页已写完，正在抬笔回到原点…" if self.busy == "page-return" else "设备正在执行…"
             self.message({"running": running, "pausing": "正在等待设备暂停…",
                           "paused": "设备已暂停。"}[phase])
 
@@ -1282,7 +1286,7 @@ class MachinePanel(QtWidgets.QWidget):
                    "jog": "点动完成。",
                    "device-jog": "点动完成。",
                    "return": "笔尖已抬起并到达目标位置。",
-                   "page-return": "本页已写完，笔尖已抬起并回到 A 点，可以取纸。",
+                   "page-return": "本页已写完，笔尖已抬起并回到原点，可以取纸。",
                    "pen": "笔尖已抬起。" if self.pen_raised else "笔尖已落下。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
@@ -1337,10 +1341,10 @@ class MachinePanel(QtWidgets.QWidget):
             elif move is not None:
                 if self.submit("page-return", *move):
                     self.show_position()
-                    self.message("本页已写完，正在抬笔回到 A 点…")
+                    self.message("本页已写完，正在抬笔回到原点…")
                     return
                 self.end_batch()
-                message += " 回到 A 点的操作未能开始。"
+                message += " 回到原点的操作未能开始。"
         if kind in {"write", "page-return"}:
             if self.pending_pages and not self.worker.control.stop_requested.is_set():
                 page = self.page_list.currentRow()
@@ -1363,7 +1367,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.progress.hide()
         self.page_return = None
         if kind == "page-return":
-            detail = f"本页已写完，回到 A 点未完成。{detail}"
+            detail = f"本页已写完，回到原点未完成。{detail}"
         if kind == "write" and self.job:
             if self.journal:
                 try:
