@@ -83,7 +83,22 @@ def exercise(folder):
         assert mock.position[2] == 0 and wizard.save.isEnabled()
         wizard.save.click()
         assert p.profile.writing_height == -.8
-        p.confirm=lambda *_:True
+        def accept_checked_region():
+            box = app.activeModalWidget()
+            assert isinstance(box, QtWidgets.QMessageBox)
+            check = box.checkBox()
+            assert check is not None and not check.isChecked()
+            assert "相对当前笔尖" in box.text()
+            check.setChecked(True)
+            box.button(QtWidgets.QMessageBox.StandardButton.Yes).click()
+        sent_areas = []
+        submit = p.worker.submit
+        def capture_area(kind, *args):
+            if kind == "write":
+                sent_areas.append(args[1])
+            return submit(kind, *args)
+        p.worker.submit = capture_area
+        QtCore.QTimer.singleShot(0, accept_checked_region)
         def stop_mid(done,total):
             if done == total//2 - 1:
                 p.finish_stroke.click()
@@ -93,6 +108,8 @@ def exercise(folder):
         done, pending = p.journal.read()
         assert 3 <= done <= 4 and not pending
         assert p.preview.stroke_state == (done,False)
+        assert len(sent_areas) == 1 and sent_areas[0] is not None
+        assert p.confirmed_area is None and not p.store.devices()[0].limit_area_enabled
     finally:
         p.shutdown()
         p.close()

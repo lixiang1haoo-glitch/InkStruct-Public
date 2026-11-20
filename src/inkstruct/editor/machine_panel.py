@@ -12,7 +12,7 @@ from uuid import uuid4
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
-from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
+from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, PIN_INTERIOR_MM, Z_TOLERANCE_MM
 from ..plotter.physical import PaperRegistration, WorkArea, machine_point, position_page
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
@@ -1025,19 +1025,36 @@ class MachinePanel(QtWidgets.QWidget):
             placement_note = f"上次使用「{old['setup']}」，纸面 A 为 {old['anchor']} mm。"
             if old != self.placement_details():
                 placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
-        if self.confirm(
-            "原稿已对位，继续书写" if start or self.uncertain else "开始书写", f"{placement_note}第 {self.job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。",
-        ) and self.job is job and connection == self.connection_id:
-            if self.run_job("write", start=start) and not self.batch_active:
+        title = "原稿已对位，继续书写" if start or self.uncertain else "开始书写"
+        text = f"{placement_note}第 {job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。"
+        position = self.device.position[:2]
+        local_area = None
+        checkbox = None
+        if not self.profile.limit_area_enabled and self.confirmed_area is None:
+            local_area = job.clearance_box(position, PIN_INTERIOR_MM)
+            text += (f"\n\n本页运动范围（含笔间移动及边缘余量），相对当前笔尖："
+                     f"\n设备 X 方向 {local_area.left - position[0]:+.1f} 至 {local_area.right - position[0]:+.1f} mm"
+                     f"\n设备 Y 方向 {local_area.top - position[1]:+.1f} 至 {local_area.bottom - position[1]:+.1f} mm。"
+                     "\n核实整块区域均可到达并避开夹具后，可勾选下项，启用连续空走和区域内限位复核。")
+            checkbox = QtWidgets.QCheckBox("我已核实上述区域，仅本次书写使用")
+            accepted = self.confirm(title, text, checkbox)
+        else:
+            accepted = self.confirm(title, text)
+        if (accepted and self.job is job and self.device and self.device.position[:2] == position
+                and connection == self.connection_id):
+            area = local_area if checkbox is not None and checkbox.isChecked() else None
+            if self.run_job("write", start=start, local_area=area) and not self.batch_active:
                 self.completed_pages.clear()
                 self.update_page_states()
                 if multi:
                     self.batch_active = True
                     self.pending_pages = pending
 
-    def run_job(self, kind, *, start=0):
+    def run_job(self, kind, *, start=0, local_area=None):
         job = self.job
         area = self.confirmed_area
+        if kind == "write" and self.profile and not self.profile.limit_area_enabled and area is None:
+            area = local_area
         if (job is None or not self.range_ready or self.device is None or self.waiting_for_paper or
                 not self.current_page_ready()):
             return False
@@ -1067,11 +1084,18 @@ class MachinePanel(QtWidgets.QWidget):
             return True
         return False
 
-    def confirm(self, title, text):
-        return QtWidgets.QMessageBox.question(
-            self, title, text, QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-            QtWidgets.QMessageBox.StandardButton.No,
-        ) == QtWidgets.QMessageBox.StandardButton.Yes
+    def confirm(self, title, text, checkbox=None):
+        box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Icon.Question, title, text,
+                                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                                    self)
+        box.setDefaultButton(QtWidgets.QMessageBox.StandardButton.No)
+        if checkbox is not None:
+            box.setCheckBox(checkbox)
+        answer = box.exec()
+        if checkbox is not None:
+            checkbox.setParent(None)
+        box.deleteLater()
+        return answer == QtWidgets.QMessageBox.StandardButton.Yes
 
     def on_phase(self, phase):
         if not self.closing and self.is_moving:
