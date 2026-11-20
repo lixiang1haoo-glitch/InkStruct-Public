@@ -367,13 +367,27 @@ class GenerationWorkflow:
 
             if preparation is not None:
                 preparation("计算生成指标", "按本次目标字和可选字形统计")
-            scores = evaluate(output, writer, requested, source=source_score, diversity=diversity_score,
-                              completed=result['completed_count'])
-            result['scores'] = scores
-            write(output / 'generation-scores.json', scores)
+            def score_progress(done, total):
+                if progress:
+                    progress({"scored_count": done, "score_total": total})
+
+            try:
+                scores = evaluate(output, writer, requested, source=source_score, diversity=diversity_score,
+                                  completed=result['completed_count'], workers=workers,
+                                  progress=score_progress, cancelled=cancelled)
+            except InterruptedError:
+                result["scoring_status"] = "cancelled"
+                summary_path = output / "summary.json"
+                if summary_path.is_file():
+                    write(summary_path, {**read(summary_path), "scoring_status": "cancelled"})
+            else:
+                result['scores'] = scores
+                write(output / 'generation-scores.json', scores)
         variants = result.get("variant_character_count", 0)
         note = f"其中 {variants} 字有多份可用字形。" if variants else ""
         status = "已取消，保留已完成部分。 " if result.get("status") == "cancelled" else ""
+        if result.get("scoring_status") == "cancelled":
+            note += "评分未完成。"
         return {**result, "requested_count": len(requested), "writer": writer, "output": str(output),
                 "started_at": started_at, "completed_preview": "".join(completed_characters[:24]),
                 "message": f"{METHODS[method]} · {status}完成 {result['completed_count']}/{len(requested)} 字，"

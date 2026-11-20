@@ -154,6 +154,7 @@ class GenerationProgress(QtWidgets.QWidget):
 
     def start(self):
         self.total = self.done = self.failed = 0
+        self.scoring = None
         self.latest = ""
         self.state = "正在准备生成"
         self.samples = deque()
@@ -164,6 +165,10 @@ class GenerationProgress(QtWidgets.QWidget):
 
     def record(self, progress):
         if not self.timer.isActive():
+            return
+        if "scored_count" in progress:
+            self.scoring = (progress["scored_count"], progress["score_total"])
+            self._render()
             return
         self.total = progress["requested_count"]
         self.failed = progress["failed_count"]
@@ -194,7 +199,9 @@ class GenerationProgress(QtWidgets.QWidget):
             self.failed = result["failed_count"]
             self.done = result["completed_count"] + self.failed
             self.total = result["requested_count"]
-            if result.get("status") == "cancelled":
+            if result.get("scoring_status") == "cancelled":
+                self.state = "评分未完成，已保留生成结果"
+            elif result.get("status") == "cancelled":
                 self.state = "已取消生成"
             elif self.failed:
                 self.state = "生成结束，部分字失败"
@@ -204,6 +211,12 @@ class GenerationProgress(QtWidgets.QWidget):
         self._render()
 
     def _render(self):
+        if self.scoring is not None:
+            done, total = self.scoring
+            self.heading.setText(self.state)
+            self.detail.setText(f"已评分 {done} / {total} 字")
+            self.graph.set_progress(done / total if total else 0, None, measuring=False)
+            return
         now = monotonic()
         speed = None
         if self.samples:

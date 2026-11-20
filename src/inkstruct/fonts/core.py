@@ -526,7 +526,7 @@ class FontPackage:
 
 
 def write_archive(path, members, manifest):
-    """members are byte values or existing Paths, allowing streamed packaging."""
+    """Members are bytes or objects providing read_bytes (paths or staged slices)."""
     path = Path(path)
     if path.exists():
         raise FileExistsError(path)
@@ -543,7 +543,7 @@ def write_archive(path, members, manifest):
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             total = 0
             for name, value in sorted(members.items()):
-                raw = value.read_bytes() if isinstance(value, Path) else value
+                raw = value if isinstance(value, bytes) else value.read_bytes()
                 if len(raw) > capacity.member_limit(name, local, MAX_MEMBER):
                     raise ValueError("字体成员超限：" + name)
                 total += len(raw)
