@@ -192,6 +192,8 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.recall.setEnabled(idle and connected and bool(self.setup.text().strip()))
         self.record_a.setEnabled(connected and idle)
         self.record_b.setEnabled(connected and idle and self.measurement is not None and self.use_b.isChecked())
+        for spin in self.b:
+            spin.setEnabled(self.use_b.isChecked())
         self.save.setEnabled(idle and (self.configure or self.measurement is not None)
                              and (not self.use_b.isChecked() or self.measurement is None
                                   or self.measurement_b is not None))
