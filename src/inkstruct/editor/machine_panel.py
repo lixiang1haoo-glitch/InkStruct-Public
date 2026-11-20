@@ -55,10 +55,8 @@ class MachinePreview(QtWidgets.QWidget):
         self.job = None
         self.point = None
         self.mark_points = ()
-        self.confirmed_paths = {}
-        self.active_path = {}
         self.paths = {}
-        self.stroke_state = None
+        self.review_path = {}
         self.paper = None
 
     def set_paper(self, snapshot, index):
@@ -82,33 +80,21 @@ class MachinePreview(QtWidgets.QWidget):
     def raster(data):
         return QtGui.QImage.fromData(base64.b64decode(data)) if data else QtGui.QImage()
 
-    def set_paths(self, job, coords, area, mark_points):
-        state = self.stroke_state
-        if job is not self.job or bool(state) != bool(getattr(self, "_previous_state", None)):
-            self.paths = {}
-            self.confirmed_paths = {}
-            self.colored = 0
+    def set_paths(self, job, coords, area, mark_points, review_index=None):
+        if job is not self.job:
+            self.paths.clear()
             if job:
                 for stroke in job.strokes:
-                    self.add_path(self.paths, stroke, "#778899" if state else "#075a9c")
-        if state and job:
-            done, uncertain = state
-            if done < self.colored:
-                self.confirmed_paths.clear()
-                self.colored = 0
-            for stroke in job.strokes[self.colored:done]:
-                self.add_path(self.confirmed_paths, stroke, "#147455")
-            self.colored = done
-        self.active_path = {}
-        if job and state and state[1] and state[0] < len(job.strokes):
-            self.add_path(self.active_path, job.strokes[state[0]], "#d86200")
-        self._previous_state = state
+                    self.add_path(self.paths, stroke)
+        self.review_path.clear()
+        if job and review_index is not None and 0 <= review_index < len(job.strokes):
+            self.add_path(self.review_path, job.strokes[review_index])
         self.job, self.coords, self.area, self.mark_points = job, coords, area, mark_points
         self.update()
 
     @staticmethod
-    def add_path(paths, stroke, color):
-        path = paths.setdefault((stroke.width_mm, color), QtGui.QPainterPath())
+    def add_path(paths, stroke):
+        path = paths.setdefault(stroke.width_mm, QtGui.QPainterPath())
         path.moveTo(*stroke.points[0])
         for point in stroke.points[1:]:
             path.lineTo(*point)
@@ -149,11 +135,14 @@ class MachinePreview(QtWidgets.QWidget):
             painter.drawPath(path)
         painter.restore()
 
-        for (width, color), path in (self.paths | self.confirmed_paths | self.active_path).items():
-            pen = QtGui.QPen(QtGui.QColor(color), max(width, (3 if color == "#d86200" else 1) / scale))
+        for width, path in self.paths.items():
+            pen = QtGui.QPen(QtGui.QColor("#075a9c"), max(width, 1 / scale))
             pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
+            painter.drawPath(path)
+        for width, path in self.review_path.items():
+            painter.setPen(QtGui.QPen(QtGui.QColor("#d86200"), max(width, 3 / scale)))
             painter.drawPath(path)
         if boundary:
             painter.setPen(QtGui.QPen(QtGui.QColor("#34946a"), 1 / scale, QtCore.Qt.PenStyle.DashLine))
@@ -171,7 +160,6 @@ class MachinePanel(QtWidgets.QWidget):
     page_selected = QtCore.Signal(int)
     status_changed = QtCore.Signal(str)
     machine_state = QtCore.Signal()
-    stroke_progress = QtCore.Signal(object, object, int, bool)
 
     def __init__(self, parent, *, worker_factory=N1Worker, ports=n1_ports):
         super().__init__(parent)
@@ -653,7 +641,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.fixture_placement = None
             self.preview.paper = self.preview_source = None
             self.preview.update()
-            self.show_progress_preview()
+            self.update_resume_hint()
             self.alignment_status.setText("正在准备当前页…")
             self.estimate_label.setText("正在计算本页预计用时…")
             self.route_stats.clear()
@@ -754,19 +742,13 @@ class MachinePanel(QtWidgets.QWidget):
         self.estimate_label.setText(f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒")
         self.route_stats.setText(f"剩余抬笔 {count} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
 
-    def show_progress_preview(self):
-        state = (self.done, self.uncertain) if self.done or self.uncertain else None
-        self.preview.stroke_state = state
-        if state and self.preview_enabled:
-            self.preview.set_paths(self.job or self.unplaced_preview, self.registration, self.confirmed_area,
-                                   (self.registration.origin,) if self.registration else ())
-        self.stroke_progress.emit(self.snapshot, self.paper_page, self.done, self.uncertain)
+    def update_resume_hint(self):
         text = self.progress_error
-        if state:
-            text = f"绿色已完成 {self.done} 笔。"
+        if not text and (self.done or self.uncertain):
+            text = f"已确认完成 {self.done} 笔。"
             if self.uncertain:
-                text += f"请核对橙色的第 {self.done + 1} 笔。"
-            text += "灰色为待写笔迹。请保留原稿并确认本页对位。"
+                text += f"请在原稿上核对第 {self.done + 1} 笔，可点「预览落笔区域」查看位置。"
+            text += "续写前请确认本页对位。"
         self.resume_hint.setText(text)
         self.resume_hint.setVisible(bool(text))
 
@@ -811,10 +793,6 @@ class MachinePanel(QtWidgets.QWidget):
 
     def update_preview(self):
         coords = self.registration
-        if (self.done or self.uncertain) and not self.preview_enabled:
-            self.preview_enabled = True
-            self.preview_button.setChecked(True)
-            self.preview.show()
         if self.preview_enabled and self.paper_page:
             index = self.paper_page.index
             if self.preview_source != (id(self.snapshot), index):
@@ -825,11 +803,11 @@ class MachinePanel(QtWidgets.QWidget):
                     self.unplaced_preview = position_page(self.paper_page, PaperRegistration((0, 0)))
                 except ValueError:
                     pass
-        self.show_progress_preview()
+        self.update_resume_hint()
         self.update_estimate()
         if self.preview_enabled:
             self.preview.set_paths(self.job or self.unplaced_preview, coords, self.confirmed_area,
-                                   (coords.origin,) if coords else ())
+                                   (coords.origin,) if coords else (), self.done if self.uncertain else None)
         self.alignment_status.setText(
             f"当前页已对位 · A 点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm"
             if coords else "当前页未对位"
@@ -1031,7 +1009,7 @@ class MachinePanel(QtWidgets.QWidget):
         if self.uncertain:
             box = QtWidgets.QMessageBox(self)
             box.setWindowTitle("核对中断笔")
-            box.setText(f"请对照原稿与预览中橙色的第 {start + 1} 笔。未写完整可重写，已完整可从下一笔继续。")
+            box.setText(f"请在原稿上核对第 {start + 1} 笔。未写完整可重写，已完整可从下一笔继续。")
             rewrite = box.addButton("重写这一笔", QtWidgets.QMessageBox.ButtonRole.ActionRole)
             skip = box.addButton("从下一笔继续", QtWidgets.QMessageBox.ButtonRole.ActionRole)
             box.setDefaultButton(box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel))
@@ -1095,11 +1073,15 @@ class MachinePanel(QtWidgets.QWidget):
                 self.journal = replace(self.journal, placement=self.placement_details())
             options.append(dict(height=self.profile.writing_height, start=start, journal=self.journal))
         if self.submit(kind, job, area, self.profile.feed, *options):
+            self.preview_button.setChecked(False)
+            self.toggle_preview()
+            self.resume_hint.hide()
             if kind == "write":
                 self.elapsed_start = monotonic()
                 self.run_estimate = estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2])
                 self.optimize.setEnabled(False)
             self.progress.setRange(0, len(job.strokes))
+            self.progress.setFormat("%v / %m 笔 · %p%")
             self.progress.setValue(start)
             self.progress.show()
             return True
@@ -1129,9 +1111,6 @@ class MachinePanel(QtWidgets.QWidget):
         self.progress.setValue(done)
         if self.busy == "write":
             self.done, self.uncertain = done, False
-            self.stroke_progress.emit(self.snapshot, self.paper_page, self.done, False)
-            if self.preview_enabled:
-                self.show_progress_preview()
         if done == total:
             self.message("指令已发送，正在等待设备抬笔和 Idle…")
 
@@ -1267,7 +1246,7 @@ class MachinePanel(QtWidgets.QWidget):
                     self.done, self.uncertain = self.journal.read()
                 except (ValueError, OSError) as error:
                     self.progress_error = str(error)
-            done = max(0, self.progress.value())
+            done = self.done
             detail += f" 第 {self.job.index + 1} 页已确认完成 {done}/{len(self.job.strokes)} 笔。"
             if self.uncertain and done < len(self.job.strokes):
                 detail += f"请检查第 {done + 1} 笔的纸面笔迹。"

@@ -254,7 +254,6 @@ def organize_workspace(w):
             machine_status.setText(text)
             machine_status.setVisible(bool(text))
 
-        w.machine_panel.stroke_progress.connect(w.canvas.set_stroke_progress)
         w.machine_panel.status_changed.connect(show_machine_status)
         view_menu.addAction("写字机设备管理…", lambda: w.machine_panel.open_devices(w))
         view_menu.addAction(machine.toggleViewAction())

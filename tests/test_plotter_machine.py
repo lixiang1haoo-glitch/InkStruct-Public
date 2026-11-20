@@ -1061,6 +1061,8 @@ try:
     assert p.is_moving and p.close_blocker()
     p.write_button.click()
     wait_for(lambda: b"!" in transport.commands)
+    assert not w.close() and app.activeModalWidget() is None
+    assert p.busy == "write" and p.stop_button.isEnabled()
     w.problems_dock.raise_()
     app.processEvents()
     w.element_properties_dock.raise_()
