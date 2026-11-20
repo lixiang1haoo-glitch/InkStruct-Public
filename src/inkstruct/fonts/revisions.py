@@ -29,6 +29,8 @@ def replace_generated(source, run, output, *, writer, characters, name, font_ver
     if not requested or not name or not font_version:
         raise ValueError('explicit characters, name and font version required')
     font = FontPackage(source, verify_all=False)
+    if font.manifest["package_kind"] == "exchange":
+        raise ValueError("此操作需要 InkStruct 原版字体；旧字体导入后保存在字体库的 originals 目录。")
     verify_font(font, progress=progress)
     if font.manifest['writer_alias'] != writer:
         raise ValueError('writer differs from source font')

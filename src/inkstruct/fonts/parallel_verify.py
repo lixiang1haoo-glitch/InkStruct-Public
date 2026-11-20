@@ -47,6 +47,8 @@ def _batch(bounds):
 
 
 def verify_font(font, *, progress=None, workers=None, telemetry=None):
+    if font.manifest["package_kind"] == "exchange":
+        return font.verify(progress=progress)
     total = len(font.records)
     count = worker_count(total, workers)
     if telemetry is not None:

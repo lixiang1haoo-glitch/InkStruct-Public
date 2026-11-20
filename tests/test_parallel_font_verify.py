@@ -49,8 +49,9 @@ def test_parallel_statistics_and_import_bytes_match_serial(font_path, tmp_path):
         assert telemetry["worker_pids"] and telemetry["worker_cpu_seconds"] > 0
     assert not multiprocessing.active_children()
     result = library.import_font(font_path, tmp_path / "library", workers=2)
-    assert result["verification"] == expected
-    assert Path(result["path"]).read_bytes() == font_path.read_bytes()
+    assert result["source_verification"] == expected
+    assert result["verification"]["core_sha256"] == FontPackage(result["path"], verify_all=False).manifest["core_hash"]
+    assert Path(result["original_path"]).read_bytes() == font_path.read_bytes()
     assert not multiprocessing.active_children()
 
 

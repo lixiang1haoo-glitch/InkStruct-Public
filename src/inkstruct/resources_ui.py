@@ -34,9 +34,9 @@ class FontPicker(QtWidgets.QDialog):
 
     def choose(self, path):
         self.cancelled = False
-        from .fonts.core import cached_font
+        from .fonts.core import verified_font
         def verify(progress):
-            cached_font(Path(path))
+            verified_font(Path(path), progress)
             return {'path': path, 'picked': True, 'verified': True, 'message': '字体完整验证通过'}
         self.browser.submit(verify)
         self.browser.job.signals.completed.connect(self.chosen)

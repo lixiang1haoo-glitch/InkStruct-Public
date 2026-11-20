@@ -65,7 +65,12 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         title.setProperty("inkRole", "title")
         heading.addWidget(title)
         heading.addStretch()
-        self.import_button = QtWidgets.QPushButton("导入字体…")
+        self.import_button = QtWidgets.QToolButton()
+        self.import_button.setText("导入字体…")
+        self.import_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        menu = QtWidgets.QMenu(self.import_button)
+        menu.addAction("导入旧字体并携带压力与时间…", lambda: self.import_font(include_dynamics=True))
+        self.import_button.setMenu(menu)
         self.import_button.setObjectName("font_import")
         self.import_button.clicked.connect(self.import_font)
         self.create_button = QtWidgets.QPushButton("制作字体…")
@@ -774,7 +779,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 self.show_unselected_font()
         self.update_actions()
 
-    def import_font(self):
+    def import_font(self, *, include_dynamics=False):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "导入字体", "", "InkStruct 字体 (*.inkfont)"
         )
@@ -782,7 +787,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             return
 
         def work(progress):
-            return import_font(path, self.root, progress)
+            return import_font(path, self.root, progress, include_dynamics=include_dynamics)
 
         self.submit(work)
 
@@ -840,11 +845,14 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             source = self.selected()
         except ValueError:
             return
-        kind, ok = QtWidgets.QInputDialog.getItem(self, '导出字体包', '用户版用于排版与分享；完整副本保留原包的全部来源资料。',
-                                                 ['用户版', '完整副本（保留原包类型）'], 0, False)
-        if not ok:
-            return
         summary = self.metadata_for(source)
+        if summary and summary["manifest"]["package_kind"] == "exchange":
+            kind = "统一字库 v1"
+        else:
+            kind, ok = QtWidgets.QInputDialog.getItem(self, '导出字体包', '用户版用于排版与分享；完整副本保留原包的全部来源资料。',
+                                                     ['用户版', '完整副本（保留原包类型）'], 0, False)
+            if not ok:
+                return
         name = (summary['manifest']['name'] + '-' + summary['manifest']['font_version']) if summary else source.stem
         for char in '<>:"/\\|?*':
             name = name.replace(char, '_')
@@ -855,6 +863,9 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                     to_user(source, path)
                 else:
                     import shutil
+                    if kind == '统一字库 v1':
+                        to_user(source, path)
+                        return '已导出统一字库 v1，保留原有扩展与授权'
                     FontPackage(source, verify_all=False).verify(progress=progress)
                     with source.open('rb') as original, Path(path).open('xb') as destination:
                         shutil.copyfileobj(original, destination)

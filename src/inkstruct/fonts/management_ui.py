@@ -641,13 +641,14 @@ class FontManagement:
             self.resource_state.setText('目录摘要正在读取；尚未声明完整验证通过。' + data.get('error', '') + self.catalog_error)
         else:
             manifest = summary['manifest']
+            kind = {"user": "用户版", "developer": "开发者版", "exchange": "统一字库 v1"}[manifest["package_kind"]]
             self.font_title.setText(data.get('alias') or manifest['name'])
             self.font_meta.setText('书写者：' + manifest['writer_alias'] + '  ·  内容版本：' + manifest['font_version'] +
-                                   '  ·  ' + ('用户版' if manifest['package_kind'] == 'user' else '开发者版'))
+                                   '  ·  ' + kind)
             self.font_header.show()
             self.detail.setText((data.get('alias') or manifest['name']) + '\n书写者：' + manifest['writer_alias'] +
                                 ' · 内容版本：' + manifest['font_version'] + ' · ' +
-                                ('用户版' if manifest['package_kind'] == 'user' else '开发者版') + '\n' + summary['detail'])
+                                kind + '\n' + summary['detail'])
             summary_line = (summary['detail'].splitlines() or ['字体摘要无详细统计'])[0]
             self.resource_state.setText(summary_line + '  ·  ' + ('完整验证通过（当前文件）' if data.get('verified_stamp') == list(fingerprint(path)) else '索引可读取 · 完整验证未运行'))
             self.version_info.setPlainText('字体：' + manifest['name'] + '\n书写者：' + manifest['writer_alias'] +
@@ -655,7 +656,7 @@ class FontManagement:
                 '\n来源候选：' + str(summary['origins']) + '\n父包关系：' + str(manifest['derived_from_package']) +
                 '\n同一 font_id 按入库文件时间展示最近项；不按名称猜测版本，不自动升级文档。')
             self.file_info.setPlainText('路径：' + str(path) + '\n包类型：' + manifest['package_kind'] +
-                '\n字体格式：1.0（与应用版本独立）\nfont_id：' + manifest['font_id'] +
+                '\n字体格式：' + ('统一 v1' if manifest['package_kind'] == 'exchange' else 'InkStruct 1.0') + '\nfont_id：' + manifest['font_id'] +
                 '\nrelease_id：' + manifest['release_id'] + '\npackage_id：' + manifest['package_id'])
             self.version_list.clear()
             for name, entry in self.catalog.items():
@@ -707,11 +708,11 @@ class FontManagement:
 
     def default_font(self):
         try:
-            from .core import cached_font
+            from .core import verified_font
             path = self.selected()
             def work(progress):
                 progress('正在完整验证默认字体…当前文档保持不变。')
-                cached_font(path)
+                verified_font(path, progress)
                 return {'path': str(path), 'default_ready': True, 'verified': True,
                         'stamp': fingerprint(path), 'message': '已设为新文档默认；当前文档和冻结字形保持原样。'}
             self.submit(work)

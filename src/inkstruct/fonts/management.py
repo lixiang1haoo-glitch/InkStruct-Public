@@ -22,14 +22,19 @@ def group(record):
     return '其他符号'
 
 
+def origin_label(summary):
+    if summary.get("source_kind") in {"composed", "reused", "reuse"} or any(
+            key in summary for key in ("symbol_construction", "confirmed_reuse", "mapped_reuse", "shared_punctuation")):
+        return "合成/复用"
+    return {"recorded": "独立录制", "generated": "生成"}.get(summary.get("source_kind"), "未注明")
+
+
 def summarize(path):
     font = FontPackage(path, verify_all=False)
     title, detail = entry(font)
     counts = {key: len({r['character'] for r in font.records if group(r) == key and r['enabled']})
               for key in GROUPS[1:]}
-    origins = Counter('合成/复用' if any(key in s for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
-                      else '独立录制' if s.get('source_kind') == 'recorded' else '生成'
-                      for s in font.provenance.values())
+    origins = Counter(map(origin_label, font.provenance.values()))
     return {'stamp': list(fingerprint(path)), 'manifest': {k: font.manifest.get(k) for k in
             ('font_id', 'release_id', 'package_id', 'font_version', 'name', 'writer_alias', 'package_kind', 'derived_from_package')},
             'title': title, 'detail': detail, 'groups': counts, 'origins': dict(origins)}
@@ -81,7 +86,7 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0, *, 
             chosen = glyph if selected_char else chosen
             a, _, c, _ = glyph.bounds
             for stroke in glyph.strokes:
-                pts = ' '.join(f'{x+(px-a)*60:.5f},{y+py*60:.5f}' for px, py in stroke)
+                pts = ' '.join(f'{x+(px-a)*60:.5f},{y+(py+.88-glyph.metrics.baseline)*60:.5f}' for px, py in stroke)
                 svg.append(f'<polyline points="{pts}" stroke="#24354b" stroke-width="1.5" fill="none" stroke-linecap="round"/>')
             x += max(16., (c-a+.12)*60)
         else:
@@ -93,8 +98,7 @@ def inspect_font(path, text, char='', sample=0, category='全部', offset=0, *, 
     sample_count = 0
     if chosen:
         summary = chosen.font_core['summary']
-        origin = ('由录制笔迹合成/复用' if any(key in summary for key in ('symbol_construction', 'confirmed_reuse', 'mapped_reuse', 'shared_punctuation'))
-                  else '独立录制' if summary['source_kind'] == 'recorded' else '生成字形')
+        origin = origin_label(summary)
         sample_count = len(glyphs[selected_char])
         source = f'{selected_char} · U+{ord(selected_char):04X} · 样本 {sample % sample_count + 1}/{sample_count}\n{group(chosen.font_core["record"])} · {origin}\n候选 {chosen.sample_id}\n来源状态：{summary["author_source_status"]} · 评价：{summary["review_status"]}'
         if summary.get('warnings'):

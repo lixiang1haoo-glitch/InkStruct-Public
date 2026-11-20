@@ -180,6 +180,9 @@ def main():
             raise ValueError(f"Native smoke did not verify paper corner recovery: {app}")
         if not native["plotter_motion_settings"]:
             raise ValueError(f"Native smoke did not verify plotter motion settings: {app}")
+        exchange = native["inkfont_v1"]
+        if not (exchange["migrated"] and exchange["native_reimport"] and exchange["candidates"] > 0):
+            raise ValueError(f"Native smoke did not verify legacy conversion and v1 import: {app}")
         reports[app] = {"math": math, "native": native}
     tool = extracted / "InkStruct/InkStructTool.exe"
     generation = verify(tool, "v631-generation", "--v631-check", None, output)

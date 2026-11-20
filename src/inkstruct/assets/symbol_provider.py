@@ -70,6 +70,8 @@ class ResolvedGlyph:
         """Read recorded metadata, never infer an axis from shape or defaults."""
         if self.font_core is not None:
             summary = self.font_core['summary']
+            if 'exchange_math_y' in summary:
+                return -summary['exchange_math_y']
             if summary.get('source_kind') == 'composed':
                 return summary.get('symbol_construction', {}).get('math_axis_em')
             return summary.get('capture_guides', {}).get('math_axis_em')
