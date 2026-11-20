@@ -1,7 +1,7 @@
 """Paper marks on the source template and placement readings on this computer."""
 
 import math
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -46,11 +46,19 @@ def fixture_page(page_key, source, snapshot, index):
     return digest(["paper-stops", page_key])
 
 
+@dataclass(frozen=True)
+class FixturePlacement:
+    alignment: PageAlignment
+    position: tuple[float, float]
+    setup: str
+    source: str
+
+
 def fixture_placement(panel, template, snapshot, index):
     """Return the explicitly registered fixture placement in this connection's coordinates."""
     if snapshot is None or not panel.profile or not panel.profile.datum or panel.frame is None:
         return None
-    page_key, size, alignment, _ = page_context(template, snapshot, index)
+    page_key, size, alignment, title = page_context(template, snapshot, index)
     source = template.layout(index) if isinstance(template, FlowTemplate) else None
     key = fixture_page(page_key, source, snapshot, index)
     setup = panel.store.fixture_setup(panel.profile, key, alignment)
@@ -63,8 +71,12 @@ def fixture_placement(panel, template, snapshot, index):
         return None
     saved = PageAlignment(**record["correction"])
     saved.validate_size(*size)
-    panel.setup = setup
-    return saved, position
+    provenance = record.get("source_page")
+    if isinstance(provenance, dict) and provenance.get("document") == snapshot.document_id:
+        number = provenance.get("number")
+        if type(number) is int and number > 0:
+            title += f" · 本稿第 {number} 页登记"
+    return FixturePlacement(saved, position, setup, title)
 
 
 class AlignmentCanvas(InkViewport):
@@ -124,6 +136,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         layout = source
         if layout is None and isinstance(panel.template, FlowTemplate):
             layout = panel.template.layout(index)
+        self.source_page = dict(document=snapshot.document_id, number=index + 1) if snapshot else None
         self.fixture_page = fixture_page(page, layout, snapshot, index)
         self.original = alignment
         self.recalled_alignment = None
@@ -510,6 +523,8 @@ class AlignmentDialog(QtWidgets.QDialog):
                 self.position = position
                 self.accepted_connection = self.panel.connection_id
                 self.panel.setup = setup
+                if not fixed and self.panel.datum_located:
+                    self.panel.store.select_fixture_setup(self.panel.profile, self.fixture_page, key, "")
                 super().accept()
         except (OSError, ValueError, KeyError, TypeError) as error:
             self.status.setText(str(error))
@@ -533,7 +548,10 @@ class AlignmentDialog(QtWidgets.QDialog):
                 page = self.fixture_page if self.fixture.isChecked() else self.page
                 self.panel.store.place(self.panel.profile, page, setup, key, self.measurement,
                                        self.offset, result, connection=self.measured_connection,
-                                       datum_origin=self.measured_frame, select_fixture=self.fixture.isChecked())
+                                       datum_origin=self.measured_frame, select_fixture=self.fixture.isChecked(),
+                                       source_page=self.source_page)
+                if not self.fixture.isChecked() and self.panel.datum_located:
+                    self.panel.store.select_fixture_setup(self.panel.profile, self.fixture_page, key, "")
                 self.accepted_connection = self.measured_connection
                 self.panel.setup = setup
             self.alignment, self.position = result, self.measurement

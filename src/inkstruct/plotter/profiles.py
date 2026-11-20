@@ -211,7 +211,7 @@ class PlotterProfiles:
         atomic_json(self.path, data)
 
     def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *,
-              connection=None, datum_origin=None, select_fixture=False):
+              connection=None, datum_origin=None, select_fixture=False, source_page=None):
         scope = digest([profile.id, page])
         legacy_key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
         datum = profile.datum
@@ -223,6 +223,8 @@ class PlotterProfiles:
                 if datum is None or datum_origin is None or not connection:
                     raise ValueError("请先在本次连接中找回机身基准。")
                 record.update(datum_id=datum.id, body_point=datum.to_body(position, datum_origin))
+            if select_fixture and source_page is not None:
+                record["source_page"] = source_page
             selection = self._fixture_scope(profile, page, alignment) if select_fixture else None
             self.record(key, record, selection)
         placements = self.read()["placements"]
@@ -267,14 +269,20 @@ class PlotterProfiles:
     @catalog_write
     def select_fixture_setup(self, profile, page, alignment, setup):
         key = self._fixture_scope(profile, page, alignment)
-        record = self.place(profile, page, setup, alignment)
-        if not record or record.get("datum_id") != profile.datum.id:
-            raise ValueError("此纸张限位尚未保存该摆放。")
         data = self.read()
         selections = data.setdefault("fixture_setups", {})
-        if selections.get(key) != setup:
+        if setup:
+            record = self.place(profile, page, setup, alignment)
+            if not record or record.get("datum_id") != profile.datum.id:
+                raise ValueError("此纸张限位尚未保存该摆放。")
+            if selections.get(key) == setup:
+                return
             selections[key] = setup
-            atomic_json(self.path, data)
+        elif key in selections:
+            del selections[key]
+        else:
+            return
+        atomic_json(self.path, data)
 
     def setups(self, profile, page):
         scope = digest([profile.id, page])
