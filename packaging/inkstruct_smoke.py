@@ -1304,7 +1304,28 @@ def verify_exchange_import(library, source, wait):
         assert next(package.glyphs(package.records[0]["character"])).strokes
         repeated = import_via_button(active)
         assert not repeated["migration"] and Path(repeated["path"]) == active
-        return {"migrated": bool(result["migration"]), "candidates": len(package.records), "native_reimport": True}
+        local = source.with_name("synthetic-local.inkfont")
+        confirmed = []
+        if local.exists():
+            timer = QtCore.QTimer()
+            def accept_consent():
+                box = QtWidgets.QApplication.activeModalWidget()
+                if isinstance(box, QtWidgets.QMessageBox) and box.windowTitle() == "使用本机大容量字体？":
+                    for button in box.buttons():
+                        if button.text() == "继续导入":
+                            confirmed.append(True)
+                            button.click()
+                            return
+            timer.timeout.connect(accept_consent)
+            timer.start(20)
+            try:
+                installed = import_via_button(local)
+                assert installed["local_capacity"] and len(confirmed) == 1
+                assert FontPackage(installed["path"]).records
+            finally:
+                timer.stop()
+        return {"migrated": bool(result["migration"]), "candidates": len(package.records),
+                "native_reimport": True, "local_import": bool(confirmed)}
     finally:
         QtWidgets.QFileDialog.getOpenFileName = original_picker
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 from .core import FontPackage, exchange_manifest, latin, package_manifest
-from . import exchange_codec
+from . import capacity, exchange_codec
 from .identity import release_identity
 from .parallel_verify import verify_font
 
@@ -22,6 +22,8 @@ def entry(font):
     }
     warnings = sum(s["author_source_status"] != "complete" for s in font.provenance.values())
     kind = {"user": "用户版", "developer": "开发者版", "exchange": "统一字库 v1"}[m["package_kind"]]
+    if capacity.local_package(m) or (m["package_kind"] != "exchange" and len(font.records) > exchange_codec.MAX_CANDIDATES):
+        kind += " · 本机大容量"
     title = f"{m['name']} · {m['writer_alias']} · {len(font.pools)} 字 · {kind}"
     detail = (
         f"{len(font.records)} 份候选 · 来源提示 {warnings} 份\n"
@@ -68,10 +70,25 @@ def publish_copy(staged, target):
             raise ValueError("字体库中存在同一包 ID 的不同文件；原文件保留，请先核查。") from None
 
 
-def import_font(source, root, progress=lambda message: None, *, workers=None, include_dynamics=False):
+class LocalFontConsent(ValueError):
+    def __init__(self, count, content_hash):
+        super().__init__("导入本机大容量字体需要确认")
+        self.count, self.content_hash = count, content_hash
+
+
+def import_font(source, root, progress=lambda message: None, *, workers=None, include_dynamics=False,
+                approved_hash=None):
     """Verify the source snapshot and publish an exchange copy or a validated legacy fallback."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    if approved_hash is None:
+        with ZipFile(source) as archive:
+            manifest = package_manifest(archive)
+        if not exchange_manifest(manifest) and capacity.local_package(manifest):
+            count = manifest.get("candidate_count")
+            if type(count) is not int or count <= 0:
+                count = len(FontPackage(source, verify_all=False).records)
+            raise LocalFontConsent(count, manifest["content_hash"])
     progress("正在复制字体到临时导入区…")
     with tempfile.TemporaryDirectory(dir=root) as temp:
         staged = Path(temp) / "import.inkfont"
@@ -80,12 +97,15 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
         font = FontPackage(staged, verify_all=False)
         telemetry = {}
         legacy = not exchange_manifest(font.manifest)
+        local = legacy and (capacity.local_package(font.manifest) or len(font.records) > exchange_codec.MAX_CANDIDATES)
+        if local and approved_hash != font.manifest["content_hash"]:
+            raise LocalFontConsent(len(font.records), font.manifest["content_hash"])
         stats = (verify_font(font, progress=progress, workers=workers, telemetry=telemetry)
                  if legacy else font.verify(progress=progress))
         original = None
         migration = None
         fallback = ""
-        if legacy:
+        if legacy and not local:
             filename = font.manifest["package_id"] + ".inkfont"
             for existing in (root / "originals" / filename, root / filename):
                 if existing.exists() and file_digest(existing) != file_digest(staged):
@@ -133,14 +153,15 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
         "entry": (fingerprint(target), *details),
         "verification": (migration or stats), "source_verification": stats,
         "verification_runtime": telemetry,
+        "local_capacity": local,
         "original_path": str(original) if original else None, "migration": migration,
         "message": (f"字体已导入 · {(migration or stats)['characters']} 字，{(migration or stats)['candidates']} 份候选"
-                    + ("；已转换为统一 v1，原版已保留" if original else "") + fallback),
+                    + ("；已转换为统一 v1，原版已保留" if original else "") + ("；已作为本机大容量字体使用" if local else "") + fallback),
     }
 
 
 def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stamp, expected, progress, rules=None,
-                 writer_links=None):
+                 writer_links=None, local_capacity=False):
     """Build and fully verify on the library volume before creating its visible entry."""
     from ..generation_workflow import identity, write
     from .importer import build_font
@@ -188,7 +209,7 @@ def publish_font(root, *, writer, run, symbols, name, package_kind, groups, stam
             selected_symbols = symbols if groups - {"han"} else None
             build_font(staged, writer=writer, name=name, run=run if "han" in groups else None,
                        symbols=selected_symbols, symbol_groups=groups if symbols else None,
-                       package_kind=package_kind, phase=phase, diagnostics=diagnostics, rules=rules,
+                       package_kind=package_kind, local_capacity=local_capacity, phase=phase, diagnostics=diagnostics, rules=rules,
                        authorize_symbols=writer_authorizer(writer, run, writer_links),
                        progress=lambda message: progress("准备字形 · " + message))
             phase("完整验证")
