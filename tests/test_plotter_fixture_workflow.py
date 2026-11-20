@@ -85,6 +85,58 @@ def exercise(workspace):
         return dialog.result()
 
     serial = SimulatedGrbl()
+    # Four distinct layouts in a nine-sheet document, using only a continuous USB session.
+    from inkstruct.document.flow_template import PageLayout
+    layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i, plotter_alignment=PageAlignment((5,5)))
+                    for i in range(1,5))
+    cycle = FlowTemplate(kind="custom", layouts=layouts, loop_pages=("1","2","3","4"))
+    nine = replace(snapshot, snapshot_id="group", pages=tuple(replace(pages[0], index=i) for i in range(9)))
+    session = open_panel(serial)
+    try:
+        session.save_profile(DeviceProfile("group-test","测试机","COM-test"))
+        click(session, session.link_button)
+        session.set_document(nine, 0, True, cycle)
+        def record_one(index, xy, *, shift=False, complete=False):
+            session.follow_page(index)
+            serial.position[:] = [*xy,0.]
+            def record(dialog):
+                assert not dialog.fixture.isChecked()
+                click(session, dialog.record_a)
+                assert dialog.shift_group.isEnabled() == complete
+                if shift:
+                    dialog.shift_group.setChecked(True)
+                dialog.save.click()
+                assert dialog.result(), dialog.status.text()
+                return dialog.result()
+            with patch.object(AlignmentDialog, "exec", record):
+                click(session, session.align_button)
+        for i in range(4):
+            record_one(i, (10.+i, 20.+2*i))
+        before = session.store.path.read_bytes()
+        record_one(4, (16.,17.), shift=True, complete=True)
+        assert session.store.path.read_bytes() == before
+        count = len(serial.commands)
+        for i in (5,6,7,8):
+            session.follow_page(i)
+            expected = (16.+i%4,17.+2*(i%4))
+            assert session.registration.origin == expected
+            assert session.job.index == i and session.write_button.isEnabled()
+            if i%4:
+                assert "按第 5 页平移" in session.alignment_status.text()
+        assert len(serial.commands) == count
+        record_one(6, (15.,25.), shift=True, complete=True)
+        session.follow_page(0)
+        assert session.registration.origin == (13.,21.)
+        session.follow_page(3)
+        assert session.registration.origin == (16.,27.)
+        click(session, session.link_button)
+        click(session, session.link_button)
+        session.follow_page(5)
+        assert session.registration is None and not session.write_button.isEnabled()
+    finally:
+        session.shutdown()
+        session.close()
+    serial = SimulatedGrbl()
     serial.position[:] = [35., 30., 0.]
     panel = open_panel(serial)
     try:
