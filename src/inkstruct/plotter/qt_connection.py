@@ -106,10 +106,14 @@ class N1Worker(QtCore.QThread):
                     elif kind == "disconnect":
                         link.serial.close()
                         link = result = None
+                    elif kind == "position-datum":
+                        result = link.confirm_datum_position(control)
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
-                    elif kind == "jog":
-                        result = link.jog(*args, control)
+                    elif kind in {"jog", "device-jog"}:
+                        offset, area = args[:2]
+                        result = link.jog(offset, area, control, commissioning=kind == "device-jog",
+                                          require_bounds=len(args) == 3 and args[2])
                     elif kind == "return":
                         result = link.move_to(*args, control)
                     elif kind == "pen":
@@ -117,12 +121,15 @@ class N1Worker(QtCore.QThread):
                     elif kind == "touch":
                         result = link.touch(*args, control)
                     elif kind == "axis-trial":
-                        result = link.trial_axes(*args, control)
+                        axes, area, feed, confirmed_area = args
+                        result = link.trial_axes(axes, area, feed, control, confirmed_area=confirmed_area)
                     else:
                         page, area, feed = args
                         result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)
                     if link is not None:
                         link.motion_active = False
+                        if link.referenced_idle_xy is not None and result.state == "Idle":
+                            link.referenced_idle_xy = result.position[:2]
                     self.succeeded.emit(kind, result)
                 except (MachineError, OSError, ValueError) as error:
                     motion = bool(link and link.motion_active)

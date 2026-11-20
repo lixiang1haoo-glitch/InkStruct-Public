@@ -1,13 +1,16 @@
 """Control a USB-connected N1 from the layout sidebar."""
 
 import base64
+from dataclasses import replace
+from math import hypot
+from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
 from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
-from ..plotter.physical import PaperRegistration, position_page
-from ..plotter.profiles import PlotterProfiles
+from ..plotter.physical import PaperRegistration, WorkArea, position_page
+from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
 from ..renderers.pages import page_draw
@@ -147,9 +150,13 @@ class MachinePanel(QtWidgets.QWidget):
         self.port_records = ()
         self.snapshot = None
         self.candidate = None
+        self.candidate_template = None
         self.plan = self.paper_page = self.unplaced_preview = None
         self.plan_error = ""
         self.device = self.busy = None
+        self.connection_id = None
+        self.frame = None  # WPos of the physical datum in this connection only.
+        self.fixture_placement = None
         self.registration = self.confirmed_area = None
         self.job = None
         self.pending_pages = []
@@ -212,6 +219,8 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
         self.alignment_status = label("当前页未对位")
         write_layout.addWidget(self.alignment_status)
+        self.reuse_alignment_button = self.button("纸已靠齐，沿用对位", self.reuse_fixture)
+        write_layout.addWidget(self.reuse_alignment_button)
         write_layout.addWidget(self.align_button)
         self.preview_button = self.button("预览落笔区域", self.toggle_preview)
         self.preview_button.setCheckable(True)
@@ -252,6 +261,9 @@ class MachinePanel(QtWidgets.QWidget):
         return self.device.offset[:2] if self.device and self.device.offset is not None else None
 
     def set_workspace(self, workspace):
+        if self.device is not None or self.busy is not None:
+            raise ValueError("请先断开写字机，再切换工作区。")
+        self.frame = None
         self.store = PlotterProfiles(workspace)
         try:
             self.profiles = self.store.devices()
@@ -273,14 +285,41 @@ class MachinePanel(QtWidgets.QWidget):
             if self.profile:
                 self.device_picker.setCurrentIndex(self.device_picker.findData(self.profile.id))
 
-    def save_profile(self, profile):
+    def save_profile(self, profile, *, confirm_range=False):
+        if self.busy is not None or self.batch_active:
+            raise ValueError("请先完成当前设备操作。")
         if self.device is not None and (not self.profile or self.profile.id != profile.id):
             raise ValueError("请先断开当前设备。")
+        old = self.profile
+        if (old and old.id == profile.id and old.datum and
+                (old.axes != profile.axes or old.serial != profile.serial or
+                 (not old.serial and old.port != profile.port))):
+            profile = replace(profile, datum=None, area=None, offset=None)
+            confirm_range = False
+        same_datum = bool(profile.datum and old and old.datum and old.datum.id == profile.datum.id
+                          and (old.id, old.axes, old.serial, old.port) ==
+                              (profile.id, profile.axes, profile.serial, profile.port))
+        if self.device is not None and (old.serial, old.port) != (profile.serial, profile.port):
+            raise ValueError("请断开设备后更改 USB 标识。")
+        if confirm_range and (self.connection_id is None or profile.area is None):
+            raise ValueError("请连接后核对实际工作范围。")
+        if profile.datum and confirm_range:
+            if not same_datum or not self.datum_located:
+                raise ValueError("请先对准已登记的纸角，找回机身基准。")
+            area = profile.datum.to_body_area(profile.area, self.frame)
+            profile = replace(profile, datum=replace(profile.datum, area=area))
+        self._persist_profile(profile)
+        if not same_datum:
+            self.frame = None
+            if old and old.datum and self.connection_id:
+                self.connection_id = uuid4().hex
+        self.apply_profile(activate=confirm_range)
+
+    def _persist_profile(self, profile):
         self.store.save(profile)
         self.profile = profile
         self.profiles = self.store.devices()
         self.reload_profiles()
-        self.apply_profile(activate=self.device is not None)
 
     def select_profile(self, identifier):
         if self.device is not None or self.busy is not None or self.batch_active:
@@ -297,8 +336,70 @@ class MachinePanel(QtWidgets.QWidget):
         return True
 
     def apply_profile(self, *, activate=False):
-        self.confirmed_area = self.profile.area if activate and self.profile else None
+        self.confirmed_area = None
+        if activate and self.profile:
+            if self.profile.datum:
+                if self.datum_located and self.profile.datum.area:
+                    self.confirmed_area = self.profile.datum.to_work_area(self.profile.datum.area, self.frame)
+            else:
+                self.confirmed_area = self.profile.area
+        self.show_position()
         self.invalidate_registration()
+
+    @property
+    def datum_located(self):
+        return bool(self.frame is not None and self.connection_id and self.device and self.profile
+                    and self.profile.datum)
+
+    def _require_datum_reading(self, status):
+        if (status is not self.device or self.connection_id is None or self.profile is None
+                or status.state != "Idle" or not self.pen_raised or status.limits):
+            raise ValueError("请确认已连接对应的设备，抬笔停稳并重新读取基准点。")
+        return status.position[:2]
+
+    def register_datum(self, label, status):
+        origin = self._require_datum_reading(status)
+        datum = DeviceDatum.create(self.profile, label)
+        if self.profile.datum is None and self.confirmed_area is not None:
+            datum = replace(datum, area=datum.to_body_area(self.confirmed_area, origin))
+        self._persist_profile(replace(self.profile, datum=datum))
+        self._set_frame(origin)
+
+    def recover_datum(self, status, *, alternate=False):
+        point = self._require_datum_reading(status)
+        datum = self.profile.datum
+        if datum is None:
+            raise ValueError("请先登记这台设备的固定纸角。")
+        self._set_frame(datum.origin_from_checkpoint(point) if alternate else point)
+
+    def register_alternate(self, status):
+        point = self._require_datum_reading(status)
+        if not self.datum_located:
+            raise ValueError("请先找回机身基准，再登记备用标记。")
+        datum = self.profile.datum
+        body_point = datum.to_body(point, self.frame)
+        if hypot(*body_point) < 1.:
+            raise ValueError("备用标记与纸角至少相距 1 mm。")
+        self._persist_profile(replace(self.profile, datum=replace(datum, checkpoint=body_point)))
+        self.refresh_buttons()
+
+    def invalidate_datum(self):
+        self._set_frame(None)
+
+    def _set_frame(self, origin):
+        # Legacy readings carry this token too. Resetting or refinding a datum
+        # after possible lost steps invalidates same-connection raw readings.
+        self.connection_id = uuid4().hex if self.device else None
+        self.frame = origin
+        self.apply_profile(activate=origin is not None)
+
+    def park_at_datum(self):
+        if not self.datum_located or self.confirmed_area is None:
+            return False
+        if not all(self.confirmed_area.contains(p) for p in (self.device.position[:2], self.frame)):
+            self.message("停车路径超出已确认的工作范围。", error=True)
+            return False
+        return self.submit("return", self.frame, self.confirmed_area)
 
     def open_devices(self, parent=None):
         from .machine_devices import DeviceDialog
@@ -312,11 +413,14 @@ class MachinePanel(QtWidgets.QWidget):
         finally:
             dialog.deleteLater()
 
-    def capture_position(self, callback):
+    def capture_position(self, callback, *, datum=False):
         if self.device is None:
-            return
-        if self.submit("position-read"):
-            self.position_callback = callback
+            return False
+        context = self.connection_id, self.profile, self.frame, self.offset
+        if self.submit("position-datum" if datum else "position-read"):
+            self.position_callback = callback, context
+            return True
+        return False
 
     def toggle_preview(self):
         self.preview_enabled = self.preview_button.isChecked()
@@ -341,15 +445,20 @@ class MachinePanel(QtWidgets.QWidget):
     def open_alignment(self):
         from .machine_alignment import AlignmentDialog, page_context
 
-        if self.candidate is None or self.busy is not None or self.waiting_for_paper:
+        if not self.current_page_ready() or self.busy is not None or self.waiting_for_paper:
             return
+        snapshot, paper_page = self.snapshot, self.paper_page
         page, size, alignment, source = page_context(self.template, self.snapshot, self.paper_page.index)
         dialog = AlignmentDialog(self, self, page, size, alignment, source, snapshot=self.snapshot,
                                  index=self.paper_page.index)
         try:
-            if dialog.exec() and dialog.position is not None:
+            if (dialog.exec() and dialog.position is not None and self.current_page_ready()
+                    and self.snapshot is snapshot and self.paper_page is paper_page
+                    and dialog.accepted_connection == self.connection_id):
                 self.use_alignment(dialog.alignment, dialog.position)
+                self.refresh_fixture()
                 self.message(f"当前页已对位 · {self.setup}")
+                self.refresh_buttons()
         finally:
             dialog.deleteLater()
 
@@ -369,7 +478,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     @property
     def is_moving(self):
-        return self.busy in {"dry", "write", "axis-trial", "jog", "return", "pen"}
+        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "pen"}
 
     @property
     def pen_raised(self):
@@ -382,7 +491,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.refresh_document()
 
     def set_document(self, snapshot, index, ready, template=None):
-        self.template = template
+        self.candidate_template = template
         self.candidate = (snapshot, index) if ready and snapshot and snapshot.pages else None
         if self.isVisible():
             self.refresh_document()
@@ -405,10 +514,11 @@ class MachinePanel(QtWidgets.QWidget):
             self.refresh_buttons()
             return
         snapshot, index = self.candidate
-        if snapshot is self.snapshot:
+        if snapshot is self.snapshot and self.template is self.candidate_template:
             self.refresh_buttons()
             return
         self.snapshot = snapshot
+        self.template = self.candidate_template
         self.plan = None
         self.plan_error = ""
         try:
@@ -466,8 +576,42 @@ class MachinePanel(QtWidgets.QWidget):
 
     def invalidate_registration(self):
         self.registration = self.job = None
+        self.refresh_fixture()
         self.update_preview()
         self.refresh_buttons()
+
+    def current_page_ready(self):
+        if self.paper_page is None:
+            return False
+        return self.batch_active or (self.candidate is not None and self.candidate[0] is self.snapshot
+                                     and self.template is self.candidate_template)
+
+    def refresh_fixture(self):
+        self.fixture_placement = None
+        if self.datum_located and self.paper_page is not None:
+            from .machine_alignment import fixture_placement
+
+            try:
+                self.fixture_placement = fixture_placement(self, self.template, self.snapshot, self.paper_page.index)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.message(f"无法读取此页的纸张限位记录。{error}", error=True)
+
+    def reuse_fixture(self):
+        if not self.current_page_ready() or not self.datum_located or self.busy is not None:
+            return False
+        # Re-read the placement in case it was edited since the page became visible.
+        previous = self.setup, self.fixture_placement
+        self.refresh_fixture()
+        if self.fixture_placement is None:
+            return False
+        if previous != (self.setup, self.fixture_placement):
+            self.message("保存的摆放已变化，请重新核对纸张限位。")
+            self.refresh_buttons()
+            return False
+        self.waiting_for_paper = False
+        self.use_alignment(*self.fixture_placement)
+        self.message(f"纸已靠齐，当前页已沿用对位 · {self.setup}")
+        return True
 
     def update_preview(self):
         coords = self.registration
@@ -486,7 +630,7 @@ class MachinePanel(QtWidgets.QWidget):
         available = connected and not busy
         positioning = available and not self.waiting_for_paper
         safe = positioning and self.confirmed_area is not None
-        ready = (self.batch_active or self.candidate is not None) and self.paper_page is not None
+        ready = self.current_page_ready()
         self.scope.setEnabled(not busy and not self.batch_active and ready)
         self.page_list.setEnabled(self.scope.isEnabled() and self.scope.currentData() == "single")
         self.device_picker.setEnabled(not connected and not busy and not self.batch_active)
@@ -495,6 +639,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.link_button.setEnabled(not busy and not self.batch_active and
                                     (self.pen_raised if connected else self.available_port() is not None))
         self.confirm_range_button.setVisible(connected and self.confirmed_area is None)
+        self.confirm_range_button.setText("找回机身基准…" if self.profile and self.profile.datum
+                                         and not self.datum_located else "确认工作范围…")
         self.confirm_range_button.setEnabled(positioning)
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
@@ -502,16 +648,22 @@ class MachinePanel(QtWidgets.QWidget):
         self.pen_button.setVisible(connected and not self.pen_raised)
         self.pen_button.setEnabled(positioning)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
+        can_reuse = ready and self.datum_located and self.fixture_placement is not None
+        self.reuse_alignment_button.setToolTip(f"纸张两边靠齐 · {self.setup}")
+        self.reuse_alignment_button.setVisible(can_reuse and self.registration is None and not self.waiting_for_paper)
+        self.reuse_alignment_button.setEnabled(can_reuse and available)
         self.dry_button.setEnabled(safe and ready and self.job is not None)
         if moving:
             paused = self.worker.control.pause_requested.is_set()
             self.write_button.setText("继续" if paused else "暂停")
             self.write_button.setEnabled(not canceling)
         elif self.waiting_for_paper:
-            self.write_button.setText("换纸完成")
+            self.write_button.setText("纸已靠齐，沿用对位" if can_reuse else "换纸完成")
+            self.write_button.setToolTip(f"纸张两边靠齐 · {self.setup}" if can_reuse else "")
             self.write_button.setEnabled(available)
         else:
             self.write_button.setText("开始书写…")
+            self.write_button.setToolTip("")
             self.write_button.setEnabled(safe and ready and self.pen_raised and self.job is not None)
         self.stop_button.setVisible(moving or self.batch_active)
         self.stop_button.setEnabled(not self.closing and not canceling)
@@ -520,6 +672,34 @@ class MachinePanel(QtWidgets.QWidget):
     def submit(self, kind, *args):
         if self.busy is not None or self.closing:
             return False
+        if self.profile and self.profile.datum:
+            area = self.confirmed_area
+            if kind == "device-jog" and self.device is not None:
+                dx, dy = args[0]
+                x, y = self.device.position[:2]
+                bounded = area and area.contains((x, y)) and area.contains((x + dx, y + dy))
+                if hypot(*self.profile.axes.unmap(dx, dy)) > 1.000001:
+                    if not bounded:
+                        self.message("范围未确认或点动超出范围，请用不超过 1 mm 的步长抬笔点动。", error=True)
+                        return False
+                    args = (dx, dy), area, True  # Check the freshly read start again on the serial worker.
+            if (kind in {"jog", "return", "axis-trial", "write", "dry"} and
+                    (not self.datum_located or area is None)):
+                self.message("请先找回机身基准并确认工作范围。", error=True)
+                return False
+            if kind == "axis-trial":
+                axes, draft, feed, _ = args
+                # A draft can narrow a registered device's area. It must not
+                # expand the work area or bypass it by unchecking the field.
+                effective = area
+                if draft is not None:
+                    try:
+                        effective = WorkArea(max(area.left, draft.left), max(area.top, draft.top),
+                                             min(area.right, draft.right), min(area.bottom, draft.bottom))
+                    except ValueError:
+                        self.message("试画范围与已确认的工作范围没有重合区域。", error=True)
+                        return False
+                args = axes, effective, feed, area
         self.busy = kind
         if not self.worker.submit(kind, *args):
             self.busy = None
@@ -566,6 +746,8 @@ class MachinePanel(QtWidgets.QWidget):
         if self.is_moving:
             self.toggle_pause()
         elif self.waiting_for_paper:
+            if self.fixture_placement is not None and self.reuse_fixture():
+                return
             self.waiting_for_paper = False
             self.message("请重新确认下一页的书写原点或纸面对位。")
             self.refresh_buttons()
@@ -573,7 +755,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.start_writing()
 
     def start_writing(self):
-        if self.job is None or not self.pen_raised or (self.candidate is None and not self.batch_active):
+        if self.job is None or not self.pen_raised or not self.current_page_ready():
             return
         if self.confirmed_area is None:
             return
@@ -589,9 +771,10 @@ class MachinePanel(QtWidgets.QWidget):
                 self.message("有页面无可书写笔迹。请选择有笔迹的单页。", error=True)
                 return
             pending = list(range(1, len(self.plan.pages)))
+        job, connection = self.job, self.connection_id
         if self.confirm(
             "开始书写", f"将按已对位的笔序书写第 {self.job.index + 1} 页。确认纸张与笔尖均已就绪？",
-        ):
+        ) and self.job is job and connection == self.connection_id:
             if self.run_job("write") and not self.batch_active:
                 self.completed_pages.clear()
                 self.update_page_states()
@@ -603,7 +786,7 @@ class MachinePanel(QtWidgets.QWidget):
         job = self.job
         area = self.confirmed_area
         if (job is None or area is None or self.device is None or self.waiting_for_paper or
-                (self.candidate is None and not self.batch_active)):
+                not self.current_page_ready()):
             return False
         try:
             job.check(area, self.device.position[:2], dry_run=kind == "dry")
@@ -624,11 +807,13 @@ class MachinePanel(QtWidgets.QWidget):
         ) == QtWidgets.QMessageBox.StandardButton.Yes
 
     def on_phase(self, phase):
-        if not self.closing:
+        if not self.closing and self.is_moving:
             self.message({"running": "设备正在执行…", "pausing": "正在等待设备暂停…",
                           "paused": "设备已暂停。"}[phase])
 
     def on_progress(self, done, total):
+        if self.closing or self.busy not in {"write", "dry"}:
+            return
         self.progress.setValue(done)
         if done == total:
             self.message("指令已发送，正在等待设备抬笔和 Idle…")
@@ -664,36 +849,57 @@ class MachinePanel(QtWidgets.QWidget):
             self.preview.point = None
         else:
             x, y, z = self.device.position
+            if self.datum_located:
+                bx, by = self.profile.datum.to_body((x, y), self.frame)
+                prefix = f"机身已定位 · X {bx:.3f} · Y {by:.3f} mm\n"
+            else:
+                prefix = "机身待定位\n" if self.profile and self.profile.datum else ""
             self.position_label.setText(
-                f"{self.device.state} · X {x:.3f} · Y {y:.3f} · Z {z:.3f} mm"
+                prefix + f"{self.device.state} · 本次连接 X {x:.3f} · Y {y:.3f} · Z {z:.3f} mm"
                 + (" · 已抬笔" if abs(z - PEN_UP) <= Z_TOLERANCE_MM else "")
             )
             self.preview.point = (x, y)
         self.preview.update()
 
     def succeeded(self, kind, status):
-        if self.closing:
+        if self.closing or self.busy != kind:
             return
         self.busy = None
         self.device = status
-        self.show_position()
         message = {"connect": "请确认工作范围，再移动笔尖。",
                    "disconnect": "已断开。", "dry": "抬笔试走完成，可以开始书写。",
                    "write": "书写完成。设备已抬笔并处于 Idle。",
                    "jog": "点动完成。",
-                   "return": "笔尖已抬起并回到书写原点。",
+                   "device-jog": "点动完成。",
+                   "return": "笔尖已抬起并到达目标位置。",
                    "pen": "笔尖已抬起。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
+            self.connection_id = uuid4().hex if kind == "connect" else None
+            self.frame = None
+            self.position_callback = None
             self.apply_profile()
             if kind == "connect":
                 message = "已连接。请在设备管理中确认当前坐标下的工作范围。"
                 if self.profile and self.profile.area and self.profile.offset != self.offset:
                     message = "已连接。设备工作零点已变化，请重新核对安全范围与纸面对位。"
-        elif kind == "position-read":
-            callback, self.position_callback = self.position_callback, None
-            if callback is not None:
-                callback(status)
+                if self.profile and self.profile.datum:
+                    message = f"机身待定位。请在设备管理中对准「{self.profile.datum.label}」找回笔位。"
+        elif kind in {"position-read", "position-datum"}:
+            pending, self.position_callback = self.position_callback, None
+            if pending is not None:
+                callback, context = pending
+                if context == (self.connection_id, self.profile, self.frame, self.offset):
+                    try:
+                        callback(status)
+                    except (OSError, ValueError) as error:
+                        self.message(str(error), error=True)
+                        self.refresh_buttons()
+                        return
+                else:
+                    message = "设备坐标已变化，已舍弃此前的位置读取。"
+            if kind == "position-datum" and self.datum_located:
+                message = f"机身已定位 · {self.profile.datum.label}"
         elif kind == "write":
             page = self.page_list.currentRow()
             self.completed_pages.add(page)
@@ -701,22 +907,31 @@ class MachinePanel(QtWidgets.QWidget):
             if self.pending_pages:
                 self.waiting_for_paper = True
                 self.page_list.setCurrentRow(self.pending_pages.pop(0))
-                message = f"第 {page + 1} 页已完成。换纸后点「换纸完成」。"
+                action = "纸已靠齐，沿用对位" if self.fixture_placement else "换纸完成"
+                message = f"第 {page + 1} 页已完成。换纸后点「{action}」。"
             else:
                 self.end_batch()
+        self.show_position()
         self.refresh_document()
         self.message(message)
         self.refresh_buttons()
 
     def failed(self, kind, detail, disconnected):
-        if self.closing:
+        if self.closing or self.busy != kind:
             return
         self.busy = None
         self.position_callback = None
         self.end_batch()
         self.progress.hide()
+        if kind == "write" and self.job:
+            done = max(0, self.progress.value())
+            detail += f" 第 {self.job.index + 1} 页已确认完成 {done}/{len(self.job.strokes)} 笔。"
+            if done < len(self.job.strokes):
+                detail += f"请检查第 {done + 1} 笔的纸面笔迹。"
         if disconnected:
             self.device = None
+            self.connection_id = None
+            self.frame = None
             self.apply_profile()
         self.show_position()
         self.update_preview()

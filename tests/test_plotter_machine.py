@@ -85,11 +85,41 @@ class SimulatedGrbl:
         self.closed = True
 
 
+def test_referenced_long_jog_rechecks_bounds_from_fresh_start():
+    serial = SimulatedGrbl()
+    serial.position[:] = (1., 2., 0.)
+    link, control = GrblLink(serial), MotionControl()
+    link.connect()
+    link.confirm_datum_position(control)
+    # The UI admitted an 8 mm jog to the edge. The next status differs by
+    # 0.04 mm, within the continuity tolerance but now outside the bounds.
+    serial.position[1] += .04
+    with pytest.raises(ValueError, match="点动终点"):
+        link.jog((0., 8.), WorkArea(0, 0, 10, 10), control, commissioning=True, require_bounds=True)
+    assert not any(line.startswith(b"G1 ") for line in serial.commands)
+
+
 def page_fixture():
     return PlotPage(0, 100, 80, (
         PlotStroke("one", ((2, 3), (3, 3), (3, 4))),
         PlotStroke("two", ((8, 8), (9, 9))),
     ))
+
+
+def test_registered_datum_rejects_idle_position_jump_before_sending_motion():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    control = MotionControl()
+    serial.position[:] = [21., 18., -1.6]
+    with pytest.raises(ValueError, match="抬笔"):
+        link.confirm_datum_position(control)
+    serial.position[2] = 0.
+    assert link.confirm_datum_position(control).position == (21., 18., 0.)
+    serial.position[:] = [0., 0., 0.]  # Same WCO and still inside the software bounds.
+    with pytest.raises(MachineError, match="待机期间"):
+        link.move_to((30., 25.), WorkArea(-5, -5, 50, 50), control)
+    assert not any(cmd.startswith(b"G1") for cmd in serial.commands)
 
 
 def test_rigid_and_similarity_registration_share_frozen_geometry_and_test_marks():
@@ -130,9 +160,22 @@ def test_axis_inversion_and_trial_use_the_same_logical_coordinates():
     with pytest.raises(ValueError, match="超出"):
         link.trial_axes(axes, WorkArea(0, 0, 80, 80), 2500, MotionControl())
     assert not any(command.startswith(b"G1 ") for command in serial.commands)
-    link.trial_axes(axes, WorkArea(0, -20, 85, 100), 2500, MotionControl())
+    area = WorkArea(0, -20, 85, 100)
+
+    def report(state, xyz):
+        pin = "|Pn:Y" if state == "Run" and xyz == "30.0,-15.0,-1.6" else ""
+        return f"<{state}|WPos:{xyz}{pin}>"
+
+    serial.report = report
+    link.trial_axes(axes, area, 2500, MotionControl(), confirmed_area=area)
+    assert any(isinstance(event, str) and "Pn:Y" in event for event in serial.trace)
     assert (link.xy_command((30, -15), 2500) + "\n").encode("ascii") in serial.commands
     assert (link.xy_command((75, 40), 2500) + "\n").encode("ascii") in serial.commands
+    serial.report = lambda state, xyz: f"<{state}|WPos:{xyz}>"
+    previous = len(serial.commands)
+    link.trial_axes(axes, None, 2500, MotionControl())
+    xy = [line for line in serial.commands[previous:] if line.startswith(b"G1 X")]
+    assert xy and all(line.endswith(b" F500\n") for line in xy)
 
 
 def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
@@ -141,11 +184,37 @@ def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
     link.connect()
     with pytest.raises(ValueError, match="超出"):
         link.jog((-1, 0), WorkArea(0, 0, 10, 10), MotionControl())
-    link.jog((-1, 0), None, MotionControl())
+    area = WorkArea(0, 0, 10, 10)
+    link.jog((-1, 0), area, MotionControl(), commissioning=True)
     assert serial.position == [-1, 0, 0]
+    assert b"G1 X-1.0000 Y0.0000 F500\n" in serial.commands
     serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
     with pytest.raises(MachineError, match="限位"):
         link.jog((-1, 0), None, MotionControl())
+
+
+@pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "alarm"])
+def test_device_jog_does_not_resume_after_unsafe_pin(case):
+    serial = SimulatedGrbl()
+    if case == "unknown":
+        serial.firmware = "[VER:1.1f.20170801:]"
+    serial.position[:] = [10., 10., 0.]
+    link = GrblLink(serial)
+    link.connect()
+
+    def report(state, xyz):
+        triggered = xyz == "10.0,13.0,0.0" and (state == "Run" or case == "persist")
+        if triggered and case == "alarm":
+            return "ALARM:1"
+        return f"<{state}|WPos:{xyz}" + ("|Pn:Y>" if triggered else ">")
+
+    serial.report = report
+    area = WorkArea(0, 0, 30, 14 if case == "boundary" else 30)
+    with pytest.raises(MachineError, match="限位|ALARM|复核"):
+        link.jog((0, 3), area, MotionControl(), commissioning=True)
+    xy = [line for line in serial.commands if line.startswith(b"G1 X")]
+    expected_feed = 500 if case in {"boundary", "unknown"} else 1500
+    assert xy == [(link.xy_command((10, 13), expected_feed) + "\n").encode("ascii")]
 
 
 def test_template_and_local_placement_persist_separately(tmp_path):
@@ -201,7 +270,12 @@ settings.setPath(settings.Format.IniFormat, settings.Scope.UserScope, sys.argv[1
 transport = SimulatedGrbl()
 transport.position[:] = [35., 30., 0.]
 port = SimpleNamespace(portName=lambda: "COM3", serialNumber=lambda: "first")
-panel = MachinePanel(None, worker_factory=lambda parent: N1Worker(parent, serial_factory=lambda _: transport),
+
+def reopen(_port):
+    transport.closed = False
+    return transport
+
+panel = MachinePanel(None, worker_factory=lambda parent: N1Worker(parent, serial_factory=reopen),
                      ports=lambda: [port])
 panel.set_workspace(Path(sys.argv[1]))
 def wait():
@@ -225,6 +299,7 @@ try:
     assert not setup.stop.isHidden()
     wait()
     assert transport.position == [35., 29., 0.] and not panel.profile.axes.swap
+    assert b"G1 X35.0000 Y29.0000 F500\n" in transport.commands
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     setup.record_buttons[0].click()
     wait()
@@ -235,6 +310,21 @@ try:
     setup.save_button.click()
     profile = panel.store.devices()[0]
     assert profile.axes.swap and profile.axes.mirror_x and panel.confirmed_area == profile.area
+    normal_report = transport.report
+    transport.report = lambda state, xyz: (
+        "<Run|WPos:35,27.5,0|Pn:Y>" if state == "Run" and xyz == "35.0,26.0,0.0"
+        else normal_report(state, xyz)
+    )
+    setup.nudge.step.setValue(3)
+    setup.nudge.buttons[(1, 0)].click()
+    wait()
+    assert transport.position == [35., 26., 0.] and panel.device is not None
+    assert "点动完成" in panel.report.text()
+    assert b"G1 X35.0000 Y26.0000 F1500\n" in transport.commands
+    assert not transport.closed and b"\x18" not in transport.commands
+    transport.report = normal_report
+    setup.nudge.buttons[(-1, 0)].click()
+    wait()
     setup.close()
 
     template = FlowTemplate(width_mm=70, height_mm=60, plotter_alignment=PageAlignment((5, 5)))
@@ -271,6 +361,36 @@ try:
     wait()
     measure.save.click()
     assert measure.result() and measure.alignment.scale == 1.2 and measure.alignment.angle == 0.
+
+    # Rebooting at the current pen position can reset WPos without changing WCO.
+    old_connection, old_offset = panel.connection_id, panel.offset
+    reopened = DeviceDialog(panel)
+    assert reopened.use_range.isChecked() and panel.confirmed_area == profile.area
+    reopened.link.click()
+    wait()
+    assert panel.device is None and panel.connection_id is None
+    transport.position[:] = [0., 0., 0.]
+    reopened.link.click()
+    wait()
+    assert panel.device.position[:2] == (0., 0.) and panel.offset == old_offset
+    assert panel.connection_id != old_connection
+    assert not reopened.use_range.isChecked() and panel.confirmed_area is None
+    reopened.feed.setValue(2400)
+    reopened.save_button.click()
+    assert panel.profile.area == profile.area and panel.confirmed_area is None
+    assert panel.profile.feed == 2400
+    reopened.close()
+
+    page_key, size, _, title = context
+    restore = AlignmentDialog(panel, panel, page_key, size, measure.alignment, title, snapshot=snapshot)
+    restore.recall.click()
+    assert not restore.result() and restore.position is None and not restore.save.isEnabled()
+    assert "重新记录实地 A 点" in restore.status.text()
+    assert restore.markings().scale == 1.2
+    restore.record_a.click()
+    wait()
+    restore.save.click()
+    assert restore.result() and restore.position == (0., 0.) and restore.alignment.scale == 1.2
 finally:
     panel.shutdown()
     panel.close()
@@ -523,6 +643,8 @@ try:
     assert not dialog.nudge.isEnabled()
     assert dialog.confirm_range_button.isVisible()
     settings = DeviceDialog(dialog)
+    assert not settings.use_range.isChecked()
+    settings.use_range.setChecked(True)
     settings.save_button.click()
     assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
     settings.close()
@@ -646,7 +768,7 @@ try:
     p.link_button.click()
     wait_for(lambda: p.device is not None and p.busy is None)
     assert not p.nudge.isEnabled()
-    p.save_profile(profile)
+    p.save_profile(profile, confirm_range=True)
     p.confirm = lambda *_: True
     assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()
     p.pen_button.click()
