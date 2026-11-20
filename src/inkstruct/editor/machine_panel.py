@@ -369,7 +369,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     @property
     def is_moving(self):
-        return self.busy in {"dry", "write", "axis-trial", "jog", "return", "pen"}
+        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "pen"}
 
     @property
     def pen_raised(self):
@@ -681,6 +681,7 @@ class MachinePanel(QtWidgets.QWidget):
                    "disconnect": "已断开。", "dry": "抬笔试走完成，可以开始书写。",
                    "write": "书写完成。设备已抬笔并处于 Idle。",
                    "jog": "点动完成。",
+                   "device-jog": "点动完成。",
                    "return": "笔尖已抬起并回到书写原点。",
                    "pen": "笔尖已抬起。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")

@@ -108,8 +108,8 @@ class N1Worker(QtCore.QThread):
                         link = result = None
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
-                    elif kind == "jog":
-                        result = link.jog(*args, control)
+                    elif kind in {"jog", "device-jog"}:
+                        result = link.jog(*args, control, commissioning=kind == "device-jog")
                     elif kind == "return":
                         result = link.move_to(*args, control)
                     elif kind == "pen":
@@ -117,7 +117,8 @@ class N1Worker(QtCore.QThread):
                     elif kind == "touch":
                         result = link.touch(*args, control)
                     elif kind == "axis-trial":
-                        result = link.trial_axes(*args, control)
+                        axes, area, feed, confirmed_area = args
+                        result = link.trial_axes(axes, area, feed, control, confirmed_area=confirmed_area)
                     else:
                         page, area, feed = args
                         result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)

@@ -130,9 +130,22 @@ def test_axis_inversion_and_trial_use_the_same_logical_coordinates():
     with pytest.raises(ValueError, match="超出"):
         link.trial_axes(axes, WorkArea(0, 0, 80, 80), 2500, MotionControl())
     assert not any(command.startswith(b"G1 ") for command in serial.commands)
-    link.trial_axes(axes, WorkArea(0, -20, 85, 100), 2500, MotionControl())
+    area = WorkArea(0, -20, 85, 100)
+
+    def report(state, xyz):
+        pin = "|Pn:Y" if state == "Run" and xyz == "30.0,-15.0,-1.6" else ""
+        return f"<{state}|WPos:{xyz}{pin}>"
+
+    serial.report = report
+    link.trial_axes(axes, area, 2500, MotionControl(), confirmed_area=area)
+    assert any(isinstance(event, str) and "Pn:Y" in event for event in serial.trace)
     assert (link.xy_command((30, -15), 2500) + "\n").encode("ascii") in serial.commands
     assert (link.xy_command((75, 40), 2500) + "\n").encode("ascii") in serial.commands
+    serial.report = lambda state, xyz: f"<{state}|WPos:{xyz}>"
+    previous = len(serial.commands)
+    link.trial_axes(axes, None, 2500, MotionControl())
+    xy = [line for line in serial.commands[previous:] if line.startswith(b"G1 X")]
+    assert xy and all(line.endswith(b" F500\n") for line in xy)
 
 
 def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
@@ -141,11 +154,37 @@ def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
     link.connect()
     with pytest.raises(ValueError, match="超出"):
         link.jog((-1, 0), WorkArea(0, 0, 10, 10), MotionControl())
-    link.jog((-1, 0), None, MotionControl())
+    area = WorkArea(0, 0, 10, 10)
+    link.jog((-1, 0), area, MotionControl(), commissioning=True)
     assert serial.position == [-1, 0, 0]
+    assert b"G1 X-1.0000 Y0.0000 F500\n" in serial.commands
     serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
     with pytest.raises(MachineError, match="限位"):
         link.jog((-1, 0), None, MotionControl())
+
+
+@pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "alarm"])
+def test_device_jog_does_not_resume_after_unsafe_pin(case):
+    serial = SimulatedGrbl()
+    if case == "unknown":
+        serial.firmware = "[VER:1.1f.20170801:]"
+    serial.position[:] = [10., 10., 0.]
+    link = GrblLink(serial)
+    link.connect()
+
+    def report(state, xyz):
+        triggered = xyz == "10.0,13.0,0.0" and (state == "Run" or case == "persist")
+        if triggered and case == "alarm":
+            return "ALARM:1"
+        return f"<{state}|WPos:{xyz}" + ("|Pn:Y>" if triggered else ">")
+
+    serial.report = report
+    area = WorkArea(0, 0, 30, 14 if case == "boundary" else 30)
+    with pytest.raises(MachineError, match="限位|ALARM|复核"):
+        link.jog((0, 3), area, MotionControl(), commissioning=True)
+    xy = [line for line in serial.commands if line.startswith(b"G1 X")]
+    expected_feed = 500 if case in {"boundary", "unknown"} else 1500
+    assert xy == [(link.xy_command((10, 13), expected_feed) + "\n").encode("ascii")]
 
 
 def test_template_and_local_placement_persist_separately(tmp_path):
@@ -225,6 +264,7 @@ try:
     assert not setup.stop.isHidden()
     wait()
     assert transport.position == [35., 29., 0.] and not panel.profile.axes.swap
+    assert b"G1 X35.0000 Y29.0000 F500\n" in transport.commands
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     setup.record_buttons[0].click()
     wait()
@@ -235,6 +275,21 @@ try:
     setup.save_button.click()
     profile = panel.store.devices()[0]
     assert profile.axes.swap and profile.axes.mirror_x and panel.confirmed_area == profile.area
+    normal_report = transport.report
+    transport.report = lambda state, xyz: (
+        "<Run|WPos:35,27.5,0|Pn:Y>" if state == "Run" and xyz == "35.0,26.0,0.0"
+        else normal_report(state, xyz)
+    )
+    setup.nudge.step.setValue(3)
+    setup.nudge.buttons[(1, 0)].click()
+    wait()
+    assert transport.position == [35., 26., 0.] and panel.device is not None
+    assert "点动完成" in panel.report.text()
+    assert b"G1 X35.0000 Y26.0000 F1500\n" in transport.commands
+    assert not transport.closed and b"\x18" not in transport.commands
+    transport.report = normal_report
+    setup.nudge.buttons[(-1, 0)].click()
+    wait()
     setup.close()
 
     template = FlowTemplate(width_mm=70, height_mm=60, plotter_alignment=PageAlignment((5, 5)))

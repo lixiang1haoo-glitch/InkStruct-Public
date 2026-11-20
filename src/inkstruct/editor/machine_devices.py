@@ -82,7 +82,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=20)
         self.nudge.moved.connect(self.move)
         actions.addRow(self.nudge)
-        actions.addRow(label("调试点动可超出已设软件范围。"))
+        actions.addRow(label("调试点动可超出软件范围。确认范围后，其内部可复核瞬时 X/Y 限位。"
+                             "其余调试移动以 500 mm/min 为上限。"))
         self.trial = panel.button("试画 X/Y", self.draw)
         actions.addRow(self.trial, label(TRIAL_HELP))
         form.addWidget(bench)
@@ -208,13 +209,14 @@ class DeviceDialog(QtWidgets.QDialog):
             self.error.setText(str(error))
 
     def move(self, x, y):
-        self.panel.submit("jog", self.draft_axes().map(x, y), None)
+        self.panel.submit("device-jog", self.draft_axes().map(x, y), self.panel.confirmed_area)
 
     def draw(self):
         try:
             area = self.draft_area()
             if self.panel.confirm("试画 X/Y", TRIAL_HELP + "\n确认测试纸、笔尖和设备已就位？"):
-                self.panel.submit("axis-trial", self.draft_axes(), area, self.feed.value())
+                self.panel.submit("axis-trial", self.draft_axes(), area, self.feed.value(),
+                                  self.panel.confirmed_area)
         except ValueError as error:
             self.error.setText(str(error))
 

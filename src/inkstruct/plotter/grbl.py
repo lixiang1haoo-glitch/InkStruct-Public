@@ -15,6 +15,8 @@ PEN_UP = 0.0
 PEN_DOWN = -1.6
 Z_TOLERANCE_MM = .05
 TRAVEL_FEED = 1500
+# On the N1, the 5 mm Y-axis jog passed eight runs at this feed.
+COMMISSIONING_FEED = 500
 DEFAULT_WRITE_FEED = 2500
 MAX_WRITE_FEED = 5000
 XY_TOLERANCE_MM = .075
@@ -433,16 +435,22 @@ class GrblLink:
         return self.wait_idle(control, z=PEN_UP)
 
     def run_page(self, page: MachinePage, area: WorkArea, control: MotionControl, *,
-                 dry_run=False, feed=DEFAULT_WRITE_FEED, state=None, review_pins=True):
+                 dry_run=False, feed=DEFAULT_WRITE_FEED, state=None,
+                 review_pins=True, commissioning=False):
         if type(feed) is not int or not 60 <= feed <= MAX_WRITE_FEED:
             raise ValueError(f"书写速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
+        travel_feed = TRAVEL_FEED
+        if commissioning:
+            travel_feed = COMMISSIONING_FEED
+            feed = min(feed, COMMISSIONING_FEED)
+            review_pins = False
         if state is None:
             state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
         state = self.enter_motion(control)
         total = len(page.strokes)
         for number, stroke in enumerate(page.strokes, 1):
-            state = self.move_path(state, stroke.points[:1], area, TRAVEL_FEED, PEN_UP, control,
+            state = self.move_path(state, stroke.points[:1], area, travel_feed, PEN_UP, control,
                                    review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_DOWN, control)
@@ -456,35 +464,47 @@ class GrblLink:
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 
-    def trial_axes(self, axes, area, feed, control):
+    def trial_axes(self, axes, area, feed, control, *, confirmed_area=None):
         state = self.require_idle(control, for_motion=True)
         page = axis_trial(axes.register((0, 0), state.position[:2]))
+        points = tuple(point for stroke in page.strokes for point in stroke.points)
+        review = self.can_review_path(confirmed_area, (state.position[:2], *points))
+        if review:
+            if area is not None and area != confirmed_area:
+                page.check(area, state.position[:2])
+            return self.run_page(page, confirmed_area, control, feed=feed, state=state)
         if area is None:
-            x, y = zip(*(point for stroke in page.strokes for point in stroke.points), strict=True)
-            area = WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
-        return self.run_page(page, area, control, feed=feed, state=state, review_pins=False)
+            area = self.travel_envelope(points)
+        return self.run_page(page, area, control, feed=feed, state=state, commissioning=True)
 
-    def jog(self, offset: Point, area: WorkArea | None, control: MotionControl):
+    def can_review_path(self, area, points):
+        return (self.pin_review and area is not None
+                and all(area.contains(point, inset=PIN_INTERIOR_MM) for point in points))
+
+    @staticmethod
+    def travel_envelope(points):
+        # This guards against trajectory deviations. It does not establish hardware clearance.
+        x, y = zip(*points, strict=True)
+        return WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
+
+    def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *, commissioning=False):
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
-        if area is None:
-            # Device-manager diagnostics use only the requested travel envelope.
-            # Hardware limits and every moving-axis pin report still stop motion.
-            x, y = zip(start, end, strict=True)
-            area = WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
-            return self.move_from(start, end, area, control, review_pins=False)
+        if area is None or (commissioning and not self.can_review_path(area, (start, end))):
+            return self.move_from(start, end, self.travel_envelope((start, end)), control,
+                                  feed=COMMISSIONING_FEED, review_pins=False)
         return self.move_from(start, end, area, control)
 
     def move_to(self, target: Point, area: WorkArea, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
         return self.move_from(state.position[:2], machine_point(target), area, control)
 
-    def move_from(self, start, end, area, control, *, review_pins=True):
+    def move_from(self, start, end, area, control, *, feed=TRAVEL_FEED, review_pins=True):
         area.require(start, "当前笔尖位置")
         area.require(end, "点动终点")
         state = self.enter_motion(control)
-        return self.move_path(state, (end,), area, TRAVEL_FEED, PEN_UP, control, review_pins=review_pins)
+        return self.move_path(state, (end,), area, feed, PEN_UP, control, review_pins=review_pins)
 
     def set_pen(self, down: bool, area: WorkArea, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
