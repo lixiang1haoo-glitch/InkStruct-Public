@@ -25,6 +25,8 @@ FORMAT = "inkstruct_font"
 VERSION = "1.0"
 PROVIDER = "inkfont-core-v1"
 FEATURES = ["centerline-em-v1", "candidate-pools-v1", "latin-style-pools-v1"]
+from . import capacity
+
 MAX_MEMBER = 32 * 1024**2
 MAX_TOTAL = 4 * 1024**3
 MAX_POINTS = 100_000
@@ -342,13 +344,16 @@ class FontPackage:
 
     def __new__(cls, path, *, verify_all=True):
         with zipfile.ZipFile(path) as archive:
-            if exchange_manifest(package_manifest(archive)):
+            manifest = package_manifest(archive)
+            if exchange_manifest(manifest):
                 from .exchange import ExchangeFont
                 font = ExchangeFont(path)
                 if verify_all:
                     font.verify()
                 return font
-        return super().__new__(cls)
+        instance = super().__new__(cls)
+        instance.manifest = manifest
+        return instance
 
     def __init__(self, path, *, verify_all=True):
         self.path = Path(path)
@@ -356,9 +361,10 @@ class FontPackage:
         with zipfile.ZipFile(self.path) as z:
             infos = z.infolist()
             names = [i.filename for i in infos]
-            if len(names) > 100_000 or len({n.casefold() for n in names}) != len(names):
+            local = capacity.local_package(self.manifest)
+            if len(names) > (capacity.LOCAL_FILES if local else 100_000) or len({n.casefold() for n in names}) != len(names):
                 raise ValueError("字体成员过多或路径重复")
-            if sum(i.file_size for i in infos) > MAX_TOTAL:
+            if sum(i.file_size for i in infos) > (capacity.LOCAL_TOTAL if local else MAX_TOTAL):
                 raise ValueError("字体展开大小超限")
             for info in infos:
                 p = PurePosixPath(info.filename)
@@ -367,12 +373,11 @@ class FontPackage:
                     or ".." in p.parts
                     or "\\" in info.filename
                     or ":" in info.filename
-                    or info.file_size > MAX_MEMBER
+                    or info.file_size > capacity.member_limit(info.filename, local, MAX_MEMBER)
                     or info.flag_bits & 1
                     or (info.external_attr >> 16) & 0o170000 == 0o120000
                 ):
                     raise ValueError("不安全的字体成员")
-            self.manifest = decode(self._read(z, "manifest.json"))
             m = self.manifest
             for identity_key in ("font_id", "release_id", "package_id"):
                 if str(uuid.UUID(m[identity_key])) != m[identity_key]:
@@ -381,7 +386,7 @@ class FontPackage:
                 raise ValueError("不支持的字体包格式")
             if (
                 m.get("package_kind") not in {"user", "developer"}
-                or m.get("required_features") != FEATURES
+                or m.get("required_features") != (FEATURES + [capacity.FEATURE] if local else FEATURES)
             ):
                 raise ValueError("不支持的字体包特性")
             if (
@@ -409,6 +414,8 @@ class FontPackage:
         if m["package_kind"] == "user" and any(n.startswith("development/") for n in names):
             raise ValueError("用户版不能包含开发记录")
         self.records = self.index["candidates"]
+        if local and "candidate_count" in m and m["candidate_count"] != len(self.records):
+            raise ValueError("本机大容量字体候选数与索引不一致")
         self.pools = {}
         ids = set()
         for r in self.records:
@@ -429,11 +436,11 @@ class FontPackage:
             raise ValueError("度量和来源索引与候选不一致")
         self.identity = {k: m[k] for k in ("font_id", "release_id", "core_hash", "writer_alias")}
 
-    @staticmethod
-    def _read(z, name):
+    def _read(self, z, name):
+        limit = capacity.member_limit(name, capacity.local_package(self.manifest), MAX_MEMBER)
         with z.open(name) as f:
-            raw = f.read(MAX_MEMBER + 1)
-        if len(raw) > MAX_MEMBER:
+            raw = f.read(limit + 1)
+        if len(raw) > limit:
             raise ValueError("字体成员超限")
         return raw
 
@@ -523,7 +530,9 @@ def write_archive(path, members, manifest):
     path = Path(path)
     if path.exists():
         raise FileExistsError(path)
-    if len(members) + 1 > 100_000:
+    local = capacity.local_package(manifest)
+    total_limit = capacity.LOCAL_TOTAL if local else MAX_TOTAL
+    if len(members) + 1 > (capacity.LOCAL_FILES if local else 100_000):
         raise ValueError("字体成员过多")
     path.parent.mkdir(parents=True, exist_ok=True)
     m = dict(manifest)
@@ -535,10 +544,10 @@ def write_archive(path, members, manifest):
             total = 0
             for name, value in sorted(members.items()):
                 raw = value.read_bytes() if isinstance(value, Path) else value
-                if len(raw) > MAX_MEMBER:
+                if len(raw) > capacity.member_limit(name, local, MAX_MEMBER):
                     raise ValueError("字体成员超限：" + name)
                 total += len(raw)
-                if total > MAX_TOTAL:
+                if total > total_limit:
                     raise ValueError("字体展开大小超限")
                 z.writestr(name, raw)
                 m["members"][name] = {"sha256": sha(raw), "bytes": len(raw)}
@@ -548,9 +557,9 @@ def write_archive(path, members, manifest):
             m["core_hash"] = core_digest(m)
             m["content_hash"] = sha(encoded({k: v for k, v in m.items() if k != "content_hash"}))
             raw_manifest = encoded(m)
-            if len(raw_manifest) > MAX_MEMBER:
+            if len(raw_manifest) > capacity.member_limit("manifest.json", local, MAX_MEMBER):
                 raise ValueError("字体成员超限：manifest.json")
-            if total + len(raw_manifest) > MAX_TOTAL:
+            if total + len(raw_manifest) > total_limit:
                 raise ValueError("字体展开大小超限")
             z.writestr("manifest.json", raw_manifest)
         # Never overwrite an existing publication, even if another process won the race.
@@ -602,7 +611,8 @@ from functools import lru_cache
 @lru_cache(maxsize=2)
 def _cached_font(path, stamp):
     with zipfile.ZipFile(path) as archive:
-        legacy = not exchange_manifest(package_manifest(archive))
+        manifest = package_manifest(archive)
+        legacy = not exchange_manifest(manifest) and not capacity.local_package(manifest)
     font = FontPackage(path, verify_all=legacy)
     font.preview_token = path, stamp, font.manifest["core_hash"]
     return font

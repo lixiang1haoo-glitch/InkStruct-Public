@@ -14,6 +14,7 @@ from ..assets.glyph_provider import GlyphMetrics, adapt_glyph
 from ..assets.symbol_provider import DEFAULT_SYMBOL_PROFILE, adapt_symbol
 from ..punctuation import CHINESE_PUNCTUATION, POLICY, SHARED_PUNCTUATION, shared_characters
 from .publication_rules import PublicationRules
+from . import capacity
 from .core import (
     FEATURES,
     FORMAT,
@@ -559,7 +560,7 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
 def build_font(
     output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
     symbol_groups=None, diagnostics=None, phase=None, rules=PublicationRules(), rule_evidence=None,
-    authorize_symbols=None,
+    authorize_symbols=None, local_capacity=False,
 ):
     """Prepare the same candidates for review (output=None) or for packaging."""
     from .publication import symbol_group
@@ -700,10 +701,12 @@ def build_font(
             "font_version": "0.1",
             "name": name,
             "writer_alias": writer,
-            "required_features": FEATURES,
+            "required_features": FEATURES + ([capacity.FEATURE] if local_capacity else []),
             "derived_from_package": None,
             "adapter": "inkfont-import-v1",
         }
+        if local_capacity:
+            manifest["candidate_count"] = len(candidates)
         if phase:
             phase("封装")
         return write_archive(output, members, manifest)

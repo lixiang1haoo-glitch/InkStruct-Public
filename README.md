@@ -4,11 +4,13 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 0.1.117 本机测试版 · Python / Qt
+Windows x64 · 0.1.118 本机测试版 · Python / Qt
 
 左下角「设置」集中提供当前文档、新建文档默认与应用偏好。Windows 排版页右侧的「写字机」标签可控制炽写 N1。
 
-0.1.117 本机测试版可从字体库直接导入 InkStruct / OpenInk 通用 v1 字库。导入旧字体包时，程序会在后台转换，并保留原版供已有文档使用。
+0.1.118 可确认制作或导入本机大容量字体。需要分享时，可选择候选另存为通用 v1 副本。
+
+0.1.117 可从字体库直接导入 InkStruct / OpenInk 通用 v1 字库。导入旧字体包时，程序会在后台转换，并保留原版供已有文档使用。
 
 0.1.116 支持在「书写原点与对位」中直接抬笔点动，放大预览后可就地记录 A、B 点。
 
@@ -88,15 +90,15 @@ $python = ".\.venv\Scripts\python.exe"
 $env:PYTHONPATH = "$PWD/src;$PWD/artifacts/external/data_collection"
 & $python -B packaging/prepare_public_resources.py
 & $python -B -m pytest -p no:cacheprovider
-& $python -B packaging/build_inkstruct_app.py --output build/0.1.117
-& $python -B packaging/verify_public_windows.py --bundle build/0.1.117/dist/InkStruct --output build/verification
+& $python -B packaging/build_inkstruct_app.py --output build/0.1.118
+& $python -B packaging/verify_public_windows.py --bundle build/0.1.118/dist/InkStruct --output build/verification
 ```
 
 从源码启动可运行 `python -m inkstruct.application --workspace workspace`。构建安装程序时，从 [NSIS 锁](packaging/nsis-win.lock.json) 下载编译器 ZIP，保持原样，并执行：
 
 ```powershell
 & $python -B packaging/build_windows_installer.py --verification build/verification/verification.json --nsis-zip nsis-3.13.zip --output build/installer
-& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.117-Windows-x64.zip --output build/installer-check
+& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.118-Windows-x64.zip --output build/installer-check
 ```
 
 ## 许可与贡献

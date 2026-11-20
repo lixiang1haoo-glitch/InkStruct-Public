@@ -36,8 +36,8 @@ def summarize(path):
               for key in GROUPS[1:]}
     origins = Counter(map(origin_label, font.provenance.values()))
     return {'stamp': list(fingerprint(path)), 'manifest': {k: font.manifest.get(k) for k in
-            ('font_id', 'release_id', 'package_id', 'font_version', 'name', 'writer_alias', 'package_kind', 'derived_from_package')},
-            'title': title, 'detail': detail, 'groups': counts, 'origins': dict(origins)}
+            ('font_id', 'release_id', 'package_id', 'font_version', 'name', 'writer_alias', 'package_kind', 'required_features', 'derived_from_package')},
+            'title': title, 'detail': detail, 'candidate_count': len(font.records), 'groups': counts, 'origins': dict(origins)}
 
 
 def inspect_font(path, text, char='', sample=0, category='全部', offset=0, *, preset='custom'):

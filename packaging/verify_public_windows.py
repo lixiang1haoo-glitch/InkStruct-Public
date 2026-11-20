@@ -42,6 +42,8 @@ def synthetic_font(output):
         (samples / f"{ord(char):04x}.json").write_text(json.dumps(record), encoding="utf-8")
     target = output / "synthetic-font.inkfont"
     build_font(target, writer="fixture", name="Synthetic verification font", symbols=samples)
+    build_font(output / "synthetic-local.inkfont", writer="fixture", name="Local verification font",
+               symbols=samples, local_capacity=True)
     FontPackage(target).verify()
     return target
 
@@ -183,7 +185,7 @@ def main():
         if not native["plotter_motion_settings"]:
             raise ValueError(f"Native smoke did not verify plotter motion settings: {app}")
         exchange = native["inkfont_v1"]
-        if not (exchange["migrated"] and exchange["native_reimport"] and exchange["candidates"] > 0):
+        if not (exchange["migrated"] and exchange["native_reimport"] and exchange["candidates"] > 0 and exchange["local_import"]):
             raise ValueError(f"Native smoke did not verify legacy conversion and v1 import: {app}")
         reports[app] = {"math": math, "native": native}
     tool = extracted / "InkStruct/InkStructTool.exe"

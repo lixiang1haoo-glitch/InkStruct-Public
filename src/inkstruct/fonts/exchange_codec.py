@@ -15,6 +15,8 @@ from uuid import UUID
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 
+from . import capacity
+
 MIB = 1024**2
 MAX_LEGACY_MEMBER = 32 * MIB
 MAX_MEMBER = 384 * MIB
@@ -95,11 +97,15 @@ def validate_font_identity(manifest):
 
 
 class CheckedArchive:
-    def __init__(self, archive, *, legacy=False):
+    def __init__(self, archive, *, legacy=False, local_source=False):
         self.archive = archive
         infos = archive.infolist()
-        require(len(infos) <= (100_000 if legacy else MAX_FILES), "ZIP 文件成员过多")
-        require(sum(i.file_size for i in infos) <= (4 * MAX_UNPACKED if legacy else MAX_UNPACKED),
+        file_limit = 100_000 if legacy else MAX_FILES
+        total_limit = 4 * MAX_UNPACKED if legacy else MAX_UNPACKED
+        if local_source:
+            file_limit, total_limit = capacity.LOCAL_FILES, capacity.LOCAL_TOTAL
+        require(len(infos) <= file_limit, "ZIP 文件成员过多")
+        require(sum(i.file_size for i in infos) <= total_limit,
                 "ZIP 解压大小超限")
         member_limit = MAX_LEGACY_MEMBER if legacy else MAX_MEMBER
         names = set()
@@ -113,7 +119,7 @@ class CheckedArchive:
             mode = (info.external_attr >> 16) & 0o170000
             require(mode in (0, 0o100000) and not info.flag_bits & 1,
                     f"不是普通未加密文件：{name}")
-            require(info.file_size <= member_limit, f"成员解压大小超限（{member_limit // MIB} MiB）：{name}")
+            require(info.file_size <= capacity.member_limit(name, local_source, member_limit), f"成员解压大小超限（{member_limit // MIB} MiB）：{name}")
             require(info.compress_type in (ZIP_STORED, ZIP_DEFLATED), f"不支持的压缩方式：{name}")
             key = name.casefold()
             require(key not in names, f"重复 ZIP 成员：{name}")
@@ -374,20 +380,30 @@ def provenance(record, summary):
     return result
 
 
-def convert(src, dst, *, full_precision=False, extensions=(), legacy_context=False):
+def convert(src, dst, *, full_precision=False, extensions=(), legacy_context=False, candidate_ids=None):
     require(src.resolve() != dst.resolve(), "输出必须另存为新文件")
     if dst.exists():
         raise FileExistsError(f"目标已存在：{dst}")
+    if candidate_ids is not None:
+        candidate_ids = frozenset(candidate_ids)
+        require(0 < len(candidate_ids) <= MAX_CANDIDATES, "请选择 1 至 30,000 份候选")
     before = src.stat()
     stats = {"source_compressed_bytes": before.st_size, "points": 0, "strokes": 0,
              "coincident_adjacent_pairs": 0, "max_quantization_error_em": 0.0}
     skipped, available, styles_by_character = Counter(), Counter(), {}
     with ZipFile(src) as old, tempfile.TemporaryDirectory(dir=dst.absolute().parent) as tmp:
         temp = Path(tmp)
-        checked = CheckedArchive(old, legacy=True)
+        local_source = False
+        if candidate_ids is not None:
+            from .core import package_manifest
+            local_source = capacity.local_package(package_manifest(old))
+        checked = CheckedArchive(old, legacy=True, local_source=local_source)
         m = checked.manifest
+        features = LEGACY_FEATURES
+        if candidate_ids is not None and capacity.local_package(m):
+            features = [*features, capacity.FEATURE]
         require(m.get("format") == "inkstruct_font" and m.get("format_version") == "1.0" and
-                m.get("required_features") == LEGACY_FEATURES, "需要 InkStruct 1.0 字体包")
+                m.get("required_features") == features, "需要 InkStruct 1.0 字体包")
         actual_manifest_hash = digest(encode(
             {k: v for k, v in m.items() if k != "content_hash"}, sort_keys=True))
         require(actual_manifest_hash == m["content_hash"], "旧清单完整性校验失败")
@@ -412,6 +428,8 @@ def convert(src, dst, *, full_precision=False, extensions=(), legacy_context=Fal
                     require(isinstance(cid, str) and ID.fullmatch(cid) and cid not in ids,
                             f"重复或无效的旧候选 ID：{cid}")
                     ids.add(cid)
+                    if candidate_ids is not None and cid not in candidate_ids:
+                        continue
                     require(type(record["enabled"]) is bool, "旧候选启用字段无效")
                     summary = sources[cid]
                     if not record["enabled"]:
@@ -456,6 +474,8 @@ def convert(src, dst, *, full_precision=False, extensions=(), legacy_context=Fal
                         if entry is not None:
                             writer.append(cid, {"trajectory_digest": track_hash, **entry})
                 require(index, "没有可转换的候选")
+                if candidate_ids is not None:
+                    require(sum(map(len, index.values())) == len(candidate_ids), "部分所选候选失效，请重新选择")
                 require(set(measurements) == ids and set(sources) == ids, "旧候选与度量或来源不一致")
                 for writer in writers.values():
                     writer.close()

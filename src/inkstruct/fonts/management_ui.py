@@ -641,7 +641,11 @@ class FontManagement:
             self.resource_state.setText('目录摘要正在读取；尚未声明完整验证通过。' + data.get('error', '') + self.catalog_error)
         else:
             manifest = summary['manifest']
+            from .capacity import local_package
             kind = {"user": "用户版", "developer": "开发者版", "exchange": "统一字库 v1"}[manifest["package_kind"]]
+            from .exchange_codec import MAX_CANDIDATES
+            if local_package(manifest) or summary.get("candidate_count", 0) > MAX_CANDIDATES:
+                kind += " · 本机大容量"
             self.font_title.setText(data.get('alias') or manifest['name'])
             self.font_meta.setText('书写者：' + manifest['writer_alias'] + '  ·  内容版本：' + manifest['font_version'] +
                                    '  ·  ' + kind)

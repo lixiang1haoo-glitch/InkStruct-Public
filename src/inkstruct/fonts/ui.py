@@ -11,8 +11,9 @@ from ..symbol_catalog import SYMBOL_GROUPS, character_preview
 from ..theme import set_tone
 from ..ui_behavior import compact_field
 from ..writer_links import WriterLinkRequired, WriterLinks
+from . import capacity, exchange_codec
 from .core import FontPackage, to_user
-from .library import entry, fingerprint, import_font, publish_font
+from .library import LocalFontConsent, entry, fingerprint, import_font, publish_font
 from .management_ui import DEFAULT_FONT_LABEL, DEFAULT_FONT_ROLE, FontList, FontManagement
 from .publication import (COVERAGE, GROUPS, PublicationInputsChanged, batch_label, display_coverage, generated_batches, publication_stamp,
                           require_publication_stamp, review_selection, rule_rows)
@@ -153,6 +154,9 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.kind.addItem("用户版 · 用于排版与分享", "user")
         self.kind.addItem("开发者版 · 附来源详情", "developer")
         form.addRow("包类型", compact_field(self.kind))
+        self.local_capacity = QtWidgets.QCheckBox("使用本机大容量模式")
+        self.local_capacity.setToolTip("保留全部候选，可单独导出符合通用 v1 规格的副本。")
+        form.addRow("", self.local_capacity)
         table_title = QtWidgets.QLabel("待制包清单")
         table_title.setProperty("inkRole", "sectionTitle")
         publication_layout.addWidget(table_title)
@@ -239,6 +243,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         self.author_chosen()
         self.refresh_publication_batches()
         self.source_toggle.setChecked(True)
+        self.local_capacity.setChecked(False)
         self.publication.show()
         self.publication.raise_()
         self.invalidate_publication()
@@ -651,6 +656,18 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def completed(self, result):
         self.last_result = result
         self.job = None
+        if isinstance(result, dict) and "local_consent" in result:
+            path, count, content_hash = result["local_consent"]
+            self.update_actions()
+            if self.confirm_local(count, importing=True):
+                self.import_path(path, approved_hash=content_hash)
+            else:
+                self.set_progress("已取消导入。")
+            return
+        if isinstance(result, dict) and "subset_choices" in result:
+            self.update_actions()
+            self.choose_exchange_subset(result)
+            return
         target = result.get("path") if isinstance(result, dict) else None
         if isinstance(result, dict) and result.get('default_ready'):
             try:
@@ -710,6 +727,9 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                     data = self.catalog.get(p.name, {})
                     summary = self.metadata_for(p)
                     title = data.get('alias') or (summary['manifest']['name'] if summary else p.stem)
+                    if summary and (capacity.local_package(summary['manifest']) or
+                                    summary.get('candidate_count', 0) > exchange_codec.MAX_CANDIDATES):
+                        title += ' · 本机大容量'
                     if data.get('error'):
                         title += ' · 不可读取'
                     if data.get('archived'):
@@ -786,10 +806,34 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         if not path:
             return
 
-        def work(progress):
-            return import_font(path, self.root, progress, include_dynamics=include_dynamics)
+        self.import_path(path, include_dynamics=include_dynamics)
 
+    def import_path(self, path, *, include_dynamics=False, approved_hash=None):
+        def work(progress):
+            try:
+                return import_font(path, self.root, progress, include_dynamics=include_dynamics,
+                                   approved_hash=approved_hash)
+            except LocalFontConsent as request:
+                return {"local_consent": (path, request.count, request.content_hash)}
         self.submit(work)
+
+    def confirm_local(self, count, *, importing=False):
+        parent = self if importing else self.publication
+        box = QtWidgets.QMessageBox(parent)
+        box.setWindowTitle("使用本机大容量字体？")
+        box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        limit = exchange_codec.MAX_CANDIDATES
+        size = f"本字体有 {count:,} 份候选。"
+        if count > limit:
+            size += f"通用 v1 最多支持 {limit:,} 份。"
+        box.setText(size)
+        box.setInformativeText("将保留全部候选及包内来源详情。制作和校验可能耗时较长，并占用更多内存和磁盘。"
+                               "其他软件可能无法打开此包；可另选候选导出通用 v1 副本。")
+        cancel = box.addButton("取消导入" if importing else "返回调整", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        proceed = box.addButton("继续导入" if importing else "保留全部，继续制作", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        box.setDefaultButton(cancel)
+        box.exec()
+        return box.clickedButton() is proceed
 
     def build(self):
         inputs = self.publication_inputs()
@@ -799,11 +843,15 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         kind, stamp = self.kind.currentData(), self.review_stamp
         groups, expected = self.review_groups, self.review_result["coverage"]
         rules = self.rule_settings
+        count = sum(expected.values())
+        local = self.local_capacity.isChecked() or count > exchange_codec.MAX_CANDIDATES
+        if local and not self.confirm_local(count):
+            return
 
         def work(progress):
             result = publish_font(self.root, writer=writer, run=run, symbols=symbols, name=name,
                                   package_kind=kind, groups=groups, stamp=stamp, expected=expected,
-                                  progress=progress, rules=rules, writer_links=self.writer_links)
+                                  progress=progress, rules=rules, writer_links=self.writer_links, local_capacity=local)
             stats = result["verification"]
             actual, difference = display_coverage(result["coverage"]), result["difference"]
             lines = [f"字体已验证并入库 · {stats['characters']} 字，{stats['candidates']} 份候选"]
@@ -849,10 +897,15 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         if summary and summary["manifest"]["package_kind"] == "exchange":
             kind = "统一字库 v1"
         else:
+            options = ['用户版', '完整副本（保留原包类型）', '通用 v1 副本（选择候选）']
             kind, ok = QtWidgets.QInputDialog.getItem(self, '导出字体包', '用户版用于排版与分享；完整副本保留原包的全部来源资料。',
-                                                     ['用户版', '完整副本（保留原包类型）'], 0, False)
+                                                     options, 0, False)
             if not ok:
                 return
+        if kind == '通用 v1 副本（选择候选）':
+            from .subset_ui import subset_choices
+            self.submit(lambda _: subset_choices(source))
+            return
         name = (summary['manifest']['name'] + '-' + summary['manifest']['font_version']) if summary else source.stem
         for char in '<>:"/\\|?*':
             name = name.replace(char, '_')
@@ -873,3 +926,25 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             self.submit(
                 export
             )
+
+    def choose_exchange_subset(self, result):
+        from .subset_ui import SubsetDialog
+        source = result["source"]
+        dialog = SubsetDialog(result["subset_choices"], self)
+        if not dialog.exec():
+            self.set_progress("已取消导出。")
+            return
+        target, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "导出通用 v1 副本", "".join("_" if c in '<>:"/\\|?*' else c for c in result["name"]) + "-通用.inkfont", "字体 (*.inkfont)")
+        if not target:
+            self.set_progress("已取消导出。")
+            return
+        chosen = frozenset(dialog.selected)
+        def export(progress):
+            if fingerprint(source) != result["stamp"]:
+                raise ValueError("源字体已变化，请重新选择候选")
+            progress("正在转换所选候选并校验通用 v1 容量…")
+            stats = exchange_codec.convert(source, Path(target), candidate_ids=chosen,
+                                          extensions=("math", "provenance"), legacy_context=True)
+            return f"已导出通用 v1 副本 · {stats['characters']} 字 / {stats['candidates']} 份候选"
+        self.submit(export)

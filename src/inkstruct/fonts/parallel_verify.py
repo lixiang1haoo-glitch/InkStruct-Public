@@ -50,7 +50,9 @@ def verify_font(font, *, progress=None, workers=None, telemetry=None):
     if font.manifest["package_kind"] == "exchange":
         return font.verify(progress=progress)
     total = len(font.records)
-    count = worker_count(total, workers)
+    # Each spawned process would duplicate the complete large provenance and index.
+    from .capacity import local_package
+    count = 1 if local_package(font.manifest) else worker_count(total, workers)
     if telemetry is not None:
         telemetry.update(workers=count, worker_cpu_seconds=0.0, worker_pids=[])
     if count == 1:
