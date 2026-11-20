@@ -194,6 +194,14 @@ def test_desktop_workflow_uses_connected_index_and_candidate_budget(setup, tmp_p
     off = run(4, False, source_score=True)
     assert list(generated_records(Path(off["output"]), "alice"))[0][0].get("segments") is None
     assert off["scores"] == {"target_count": 1, "covered_count": 1, "source_score": 0, "replayed_count": 0}
+    events = []
+    stopped = run(4, True, source_score=True, diversity_score=True,
+                  progress=events.append, cancelled=lambda: any("scored_count" in e for e in events))
+    assert stopped["scoring_status"] == "cancelled" and "评分未完成" in stopped["message"]
+    stopped_batch = Path(stopped["output"])
+    assert read(stopped_batch / "summary.json")["scoring_status"] == "cancelled"
+    assert not (stopped_batch / "generation-scores.json").exists()
+    assert list(generated_records(stopped_batch, "alice"))
     with pytest.raises(ValueError, match="可靠笔画映射"):
         service.generate("alice", source, "v62", "明", workers=1, preparation=lambda *_: None)
     assert service.state("alice", source) == state

@@ -249,6 +249,13 @@ f.completed({**done,'scores':{'diversity_score':0,'covered_count':0,'target_coun
 assert '多样性分 0.00' in f.score_summary.text() and '来源分' not in f.score_summary.text()
 f.completed(done)
 assert f.score_summary.isHidden()
+panel = f.progress_panel
+panel.start()
+panel.preparation('计算生成指标','')
+panel.record({'scored_count': 32, 'score_total': 80})
+assert '已评分 32 / 80 字' == panel.detail.text()
+panel.finish({'completed_count':80,'requested_count':80,'failed_count':0,'scoring_status':'cancelled'})
+assert '评分未完成' in panel.heading.text()
 f.method.setCurrentIndex(1)
 fresh=main(['check'], create_only=True, workspace=Path(sys.argv[1]))
 assert fresh.centralWidget().method.currentData()=='v63'

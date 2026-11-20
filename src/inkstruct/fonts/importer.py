@@ -7,8 +7,9 @@ import tempfile
 import uuid
 import zipfile
 from contextlib import nullcontext
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from ..assets.glyph_provider import GlyphMetrics, adapt_glyph
 from ..assets.symbol_provider import DEFAULT_SYMBOL_PROFILE, adapt_symbol
@@ -90,6 +91,12 @@ def generated_records(run, writer, *, character=None):
             yield glyph, None, {"legacy_source_hash": sha(path.read_bytes()), "application_generation": generation}, generation
         return
     protocol = _read(root / "protocol.json")
+    characters = protocol["characters"]
+    selected = characters if character is None else (character,) if character in characters else ()
+    yield from protocol_records(root, writer, protocol, selected, include_sources=character is not None)
+
+
+def protocol_records(root, writer, protocol, characters, *, include_sources=False):
     if writer not in protocol.get("writers", []):
         raise ValueError("运行中没有此书写者")
     from ..generation_variants import MAX_CANDIDATES, POOL_VERSION, candidate_payloads
@@ -100,8 +107,7 @@ def generated_records(run, writer, *, character=None):
                 or type(policy.get("limit")) is not int or not 2 <= policy["limit"] <= MAX_CANDIDATES):
             raise ValueError("不支持的生成候选池协议")
         limit = policy["limit"]
-    characters = protocol["characters"]
-    for char in characters if character is None else (character,) if character in characters else ():
+    for char in characters:
         stem = root / writer / f"{ord(char):04X}"
         row = _read(stem.with_suffix(".json"))
         if row.get("writer") != writer or row.get("character") != char:
@@ -134,7 +140,7 @@ def generated_records(run, writer, *, character=None):
                                                  connected.get("limit"), connected.get("same_character", False))
             for group in groups:
                 evidence = {"grouped": True, "legacy_source_hash": sha(encoded(group))}
-                if character is not None:
+                if include_sources:
                     evidence["base_stroke_sources"] = payload.get("stroke_sources", [])
                 yield group, None, evidence, protocol
             if replay_only or (groups and limit == 1):
@@ -557,6 +563,26 @@ def _append_symbols(writer, symbols, groups, append, diagnostics, rules, evidenc
             emit(target, target_style, metadata, "mapped_reuse", "mapped-symbol-share-v1", sid, raw, value, shape)
 
 
+@dataclass(frozen=True, slots=True)
+class _MemberSlice:
+    file: BinaryIO
+    offset: int
+    size: int
+
+    @classmethod
+    def append(cls, file, raw):
+        offset = file.seek(0, 2)
+        file.write(raw)
+        return cls(file, offset, len(raw))
+
+    def read_bytes(self):
+        self.file.seek(self.offset)
+        raw = self.file.read(self.size)
+        if len(raw) != self.size:
+            raise OSError("字体临时数据不完整")
+        return raw
+
+
 def build_font(
     output, *, writer, name, run=None, symbols=None, package_kind="developer", progress=None,
     symbol_groups=None, diagnostics=None, phase=None, rules=PublicationRules(), rule_evidence=None,
@@ -578,8 +604,8 @@ def build_font(
     members = {}
     protocol_record = None
     seen = set()
-    with (nullcontext() if preview else tempfile.TemporaryDirectory()) as directory:
-        folder = Path(directory) if directory else None
+    # Stage members in a single file, including developer evidence for each candidate.
+    with (nullcontext() if preview else tempfile.TemporaryFile()) as spool:
 
         def append(t, m, s, source, source_hash, letter_style="not_applicable"):
             validate_trajectory(t)
@@ -593,9 +619,8 @@ def build_font(
             if preview:
                 trajectories[file] = t
             else:
-                dest = folder / h["trajectory_hash"]
-                dest.write_bytes(encoded(t))
-                members[file] = dest
+                if file not in members:
+                    members[file] = _MemberSlice.append(spool, encoded(t))
             r = {
                 "candidate_id": cid,
                 "character": t["character"],
@@ -615,9 +640,7 @@ def build_font(
             metrics[cid] = m
             provenance[cid] = s
             if package_kind == "developer" and not preview:
-                p = folder / (cid + ".source")
-                p.write_bytes(encoded(public_development(source)))
-                members["development/" + cid + ".json"] = p
+                members["development/" + cid + ".json"] = _MemberSlice.append(spool, encoded(public_development(source)))
             if progress and len(candidates) % 100 == 0:
                 progress(f"已适配 {len(candidates)} 份字形")
 

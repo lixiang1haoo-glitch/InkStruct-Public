@@ -1647,9 +1647,11 @@ def verify_v631(window, out, wait):
     assert fresh_profile['connected']['whole'] >= 1
 
     outputs = []
+    score_results = []
     for workers in (1, 2):
         stages = []
         result = service.generate(writer, source, 'v631', characters, workers=workers, candidate_limit=4,
+                                  source_score=True, diversity_score=True,
                                   preparation=lambda stage, _: stages.append(stage))
         assert '沿用档案' in stages and result['failed_count'] == 0
         assert result['completed_count'] == len(characters)
@@ -1661,7 +1663,9 @@ def verify_v631(window, out, wait):
         package = Path(getattr(sys, '_MEIPASS', repo.path.parents[2] / 'src')) / 'inkstruct/v631'
         assert code == {f'v631/{path.name}': sha256_file(path) for path in package.glob('*.py')}
         assert 'v631/engine.py' in code
+        score_results.append(read(folder / "generation-scores.json"))
         outputs.append(folder)
+    assert score_results[0] == score_results[1] and score_results[0]["covered_count"] == len(characters)
 
     def character_files(folder):
         return {path.name: sha256_file(path) for path in (folder / writer).glob('*.json*')}
@@ -1739,7 +1743,7 @@ def verify_v631(window, out, wait):
         history.close()
     return {'app_version': APP_VERSION, 'frozen': bool(getattr(sys, 'frozen', False)),
             'method': 'v6.3.1', 'engine': ENGINE_VERSION, 'characters': len(characters),
-            'candidates': len(assets), 'implementation_hashes': code, 'workers': [1, 2],
+            'candidates': len(assets), 'implementation_hashes': code, 'workers': [1, 2], 'scoring_serial_parallel_exact': True,
             'fallback': None, 'matching_character_files': len(files), 'old_archive_reused': True,
             'fresh_archive_verified': True, 'frozen_document_reopened': True,
             'generation_history': {'batches': 3, 'nonmodal': True, 'candidate_switch': True,
@@ -1763,7 +1767,30 @@ def main():
     parser.add_argument('--experience-resources', type=Path)
     parser.add_argument("--writer", default="demo_writer")
     parser.add_argument("--export-only", action="store_true")
+    parser.add_argument('--score-replay', type=Path, help="验证既有协议批次的评分和耗时")
     args = parser.parse_args()
+    if args.score_replay is not None:
+        import time
+        from inkstruct.generation_scores import evaluate
+        from inkstruct.generation_workflow import read, write
+
+        run = args.score_replay.resolve()
+        protocol = read(run / "protocol.json")
+        requested = read(run / "target-manifest.json")["requested"]
+        expected = read(run / "generation-scores.json")
+        if args.output.resolve().is_relative_to(run):
+            parser.error("请在批次目录外保存复测结果")
+        for preset in (1, "auto"):
+            start = time.perf_counter()
+            result = evaluate(run, protocol["writers"][0], requested, source="source_score" in expected,
+                              diversity="diversity_score" in expected, completed=len(protocol["characters"]),
+                              workers=preset)
+            write(args.output / f"score-{preset}.json", result)
+            elapsed = time.perf_counter() - start
+            if result != expected:
+                raise ValueError("复测评分与原批次不符")
+            write(args.output / f"timing-{preset}.json", {"seconds": elapsed, "exact": True, "scores": result})
+        return 0
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
