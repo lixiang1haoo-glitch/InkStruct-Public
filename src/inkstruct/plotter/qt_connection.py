@@ -120,7 +120,7 @@ class N1Worker(QtCore.QThread):
                         result = link.jog(offset, area, control, commissioning=kind == "device-jog",
                                           require_bounds=option is True, feed=feed,
                                           range_disabled=len(args) == 4 and args[3] is True)
-                    elif kind == "return":
+                    elif kind in {"return", "page-return"}:
                         target, area = args[:2]
                         feed = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
                         result = link.move_to(target, area, control, feed=feed)

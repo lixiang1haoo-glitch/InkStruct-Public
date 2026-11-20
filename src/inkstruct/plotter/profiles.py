@@ -146,6 +146,7 @@ class DeviceProfile:
     limit_area_enabled: bool = False
     active_pen: str = ""
     pen_heights: tuple = ()
+    return_after_page: bool = False
 
     @property
     def writing_height(self):
@@ -177,6 +178,8 @@ class DeviceProfile:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
             raise ValueError(f"XY 运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
+        if type(self.return_after_page) is not bool:
+            raise ValueError("写完回到 A 点的设置无效。")
         heights = tuple((name, float(value)) for name, value in self.pen_heights)
         if (any(not isinstance(name, str) or not name.strip() or not PEN_DOWN <= value <= -.1
                 for name, value in heights) or len(dict(heights)) != len(heights)
