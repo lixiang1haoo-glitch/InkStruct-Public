@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from ..document.flow_template import FlowTemplate
 from ..document.schema import digest
 from ..plotter.profiles import PageAlignment
+from ..sample_preview import InkViewport, SampleView
 from ..settings_pages import label
 
 
@@ -60,12 +61,14 @@ def fixture_placement(panel, template, snapshot, index):
     return saved, position
 
 
-class AlignmentCanvas(QtWidgets.QWidget):
+class AlignmentCanvas(InkViewport):
     picked = QtCore.Signal(float, float)
 
     def __init__(self, size, backdrop):
-        super().__init__()
-        self.size_mm = size
+        view = SampleView()
+        super().__init__(view)
+        view.bounds = QtCore.QRectF(0, 0, *size)
+        view.reset()
         self.backdrop = backdrop
         self.points = []
         self.editable = False
@@ -73,31 +76,30 @@ class AlignmentCanvas(QtWidgets.QWidget):
         self.setAccessibleName("纸面预览 · 选择对位点")
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
 
-    def geometry_on_screen(self):
-        w, h = self.size_mm
-        scale = min((self.width() - 28) / w, (self.height() - 28) / h)
-        rect = QtCore.QRectF(0, 0, w * scale, h * scale)
-        rect.moveCenter(QtCore.QRectF(self.rect()).center())
-        return rect, scale
+    def has_ink(self):
+        # The paper itself can be aligned even without a background image.
+        return True
 
-    def mousePressEvent(self, event):
-        rect, scale = self.geometry_on_screen()
-        if self.editable and event.button() == QtCore.Qt.MouseButton.LeftButton and rect.contains(event.position()):
-            spot = (event.position() - rect.topLeft()) / scale
+    def ink_clicked(self, position):
+        inverse, invertible = self.drawing_transform().inverted()
+        spot = inverse.map(position)
+        if self.editable and invertible and self.view.bounds.contains(spot):
             self.picked.emit(spot.x(), spot.y())
 
     def paintEvent(self, _event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), self.palette().window())
-        rect, scale = self.geometry_on_screen()
+        transform = self.drawing_transform()
+        rect = transform.mapRect(self.view.bounds)
         painter.fillRect(rect, QtGui.QColor("white"))
         if not self.backdrop.isNull():
+            painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
             painter.drawImage(rect, self.backdrop)
         painter.save()
         painter.setClipRect(rect)
         for title, (x, y) in self.points:
-            spot = rect.topLeft() + QtCore.QPointF(x * scale, y * scale)
+            spot = transform.map(QtCore.QPointF(x, y))
             painter.setPen(QtGui.QPen(QtGui.QColor("#005c92"), 2))
             painter.drawLine(spot - QtCore.QPointF(7, 0), spot + QtCore.QPointF(7, 0))
             painter.drawLine(spot - QtCore.QPointF(0, 7), spot + QtCore.QPointF(0, 7))
@@ -136,7 +138,21 @@ class AlignmentDialog(QtWidgets.QDialog):
                 snapshot.pages[index].background.png_base64 if snapshot.pages[index].background else None
             )
         self.canvas = AlignmentCanvas(size, image)
-        row.addWidget(self.canvas, 1)
+        preview = QtWidgets.QVBoxLayout()
+        row.addLayout(preview, 1)
+        preview.addWidget(self.canvas, 1)
+        tools = QtWidgets.QHBoxLayout()
+        preview.addLayout(tools)
+        tools.addWidget(label("Ctrl + 滚轮缩放 · 放大后拖动"))
+        tools.addStretch()
+        self.zoom_reset = QtWidgets.QToolButton()
+        self.zoom_reset.setText("100%")
+        self.zoom_reset.setToolTip("恢复整页视图")
+        self.zoom_reset.setAccessibleName("恢复整页视图")
+        self.zoom_reset.clicked.connect(self.canvas.view.reset)
+        self.canvas.view.changed.connect(
+            lambda: self.zoom_reset.setText(f"{self.canvas.view.zoom:.0%}"))
+        tools.addWidget(self.zoom_reset)
         form = QtWidgets.QFormLayout()
         row.addLayout(form, 1)
         self.device_name = label("")
