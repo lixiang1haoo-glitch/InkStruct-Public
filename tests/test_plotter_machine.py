@@ -221,6 +221,8 @@ try:
     setup.axes[0].setChecked(True)
     setup.axes[2].setChecked(True)
     setup.jog[2].click()
+    assert isinstance(setup.stop.parentWidget(), QtWidgets.QDialogButtonBox)
+    assert not setup.stop.isHidden()
     wait()
     assert transport.position == [35., 29., 0.] and not panel.profile.axes.swap
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
@@ -257,6 +259,18 @@ try:
     panel.write_button.click()
     wait()
     assert "书写完成" in panel.report.text()
+
+    measure = AlignmentDialog(panel, panel, *context, configure=True)
+    transport.position[:] = [35., 29., 0.]
+    measure.record_a.click()
+    wait()
+    measure.use_b.setChecked(True)
+    measure.b[0].setValue(15)
+    transport.position[:] = [35., 17., 0.]
+    measure.record_b.click()
+    wait()
+    measure.save.click()
+    assert measure.result() and measure.alignment.scale == 1.2 and measure.alignment.angle == 0.
 finally:
     panel.shutdown()
     panel.close()

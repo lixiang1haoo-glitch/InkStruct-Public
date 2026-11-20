@@ -20,7 +20,7 @@ class DeviceDialog(QtWidgets.QDialog):
 
         self.panel = panel
         self.setWindowTitle("写字机设备管理")
-        self.resize(740, 600)
+        self.resize(850, 680)
         col = QtWidgets.QVBoxLayout(self)
         body = QtWidgets.QWidget()
         col.addWidget(scroll_page(body))
@@ -63,8 +63,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.use_range = QtWidgets.QCheckBox("确认设备坐标及实际安全范围")
         ranges.addRow(self.use_range)
         self.bounds = [field() for _ in range(4)]
-        for caption, spin in zip(("X 最小", "Y 最小", "X 最大", "Y 最大"), self.bounds, strict=True):
-            ranges.addRow(caption, spin)
+        ranges.addRow("最小角 X / Y", pair_widget(self.bounds[:2]))
+        ranges.addRow("最大角 X / Y", pair_widget(self.bounds[2:]))
         self.record_buttons = [panel.button(text, lambda i=i: self.record_bound(i)) for i, text in enumerate(
             ("记当前笔位为最小角", "记当前笔位为最大角")
         )]
@@ -99,11 +99,12 @@ class DeviceDialog(QtWidgets.QDialog):
         form.addWidget(bench)
         self.error = label("")
         form.addWidget(self.error)
-        self.stop = panel.button("停止", panel.stop)
-        form.addWidget(self.stop)
         form.addStretch()
         close = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.reject)
+        self.stop = panel.button("停止", panel.stop)
+        self.stop.setProperty("inkRole", "danger")
+        close.addButton(self.stop, QtWidgets.QDialogButtonBox.ButtonRole.ActionRole)
         col.addWidget(close)
         self.devices.currentItemChanged.connect(self.select)
         panel.machine_state.connect(self.refresh)
@@ -231,5 +232,7 @@ class DeviceDialog(QtWidgets.QDialog):
     def reject(self):
         if self.panel.is_moving:
             self.error.setText("请先完成或停止设备运动。")
+            return
+        if self.panel.busy == "position-read":
             return
         super().reject()
