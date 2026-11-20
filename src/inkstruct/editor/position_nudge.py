@@ -3,6 +3,10 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
 
+STEP_PRESETS = (.1, .5, 1, 2, 5, 10, 20, 50, 100)
+FEED_PRESETS = (200, 500, 1000, 2000, 2500, 3500, 5000)
+
+
 class DirectionButton(QtWidgets.QToolButton):
     def __init__(self, title, angle):
         super().__init__()
@@ -31,7 +35,7 @@ class DirectionButton(QtWidgets.QToolButton):
 class PositionNudge(QtWidgets.QWidget):
     moved = QtCore.Signal(float, float)
 
-    def __init__(self, title, *, unit, minimum, maximum, step=1., decimals=3):
+    def __init__(self, title, *, unit, minimum, maximum, step=1., decimals=3, plotter=False):
         super().__init__()
         self.setObjectName("position_nudge")
         self.setAccessibleName(title)
@@ -54,8 +58,7 @@ class PositionNudge(QtWidgets.QWidget):
             ("右", (1, 0), 90, 1, 2), ("下", (0, 1), 180, 2, 1),
         ):
             button = DirectionButton(f"{title} · 向{name}一步", angle)
-            button.clicked.connect(lambda _checked=False, v=vector:
-                                   self.moved.emit(v[0] * self.step.value(), v[1] * self.step.value()))
+            button.clicked.connect(lambda _checked=False, v=vector: self.move_one_step(v))
             pad.addWidget(button, y, x)
             self.buttons[vector] = button
         center = QtWidgets.QLabel("＋")
@@ -66,18 +69,55 @@ class PositionNudge(QtWidgets.QWidget):
 
         settings = QtWidgets.QVBoxLayout()
         settings.setSpacing(4)
-        caption = QtWidgets.QLabel("步长")
-        self.step = QtWidgets.QDoubleSpinBox()
-        self.step.setAccessibleName(title + "步长")
-        self.step.setDecimals(decimals)
-        self.step.setRange(minimum, maximum)
-        self.step.setSingleStep(step)
-        self.step.setValue(step)
-        self.step.setSuffix(f" {unit}")
-        caption.setBuddy(self.step)
         settings.addStretch()
-        settings.addWidget(caption)
-        settings.addWidget(self.step)
+        if plotter:
+            self.step = QtWidgets.QComboBox()
+            for value in STEP_PRESETS:
+                self.step.addItem(f"{value:g} mm", value)
+            self.step.setCurrentIndex(STEP_PRESETS.index(step))
+            self.add_setting(settings, "点动步长", self.step)
+            self.feed = QtWidgets.QComboBox()
+            self.feed.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+            for value in FEED_PRESETS:
+                self.feed.addItem(f"{value} mm/min", value)
+            self.feed.setToolTip("保存到当前设备，点动、空走和书写共用此速度。")
+            self.add_setting(settings, "运动速度", self.feed)
+        else:
+            self.step = QtWidgets.QDoubleSpinBox()
+            self.step.setDecimals(decimals)
+            self.step.setRange(minimum, maximum)
+            self.step.setSingleStep(step)
+            self.step.setValue(step)
+            self.step.setSuffix(f" {unit}")
+            self.add_setting(settings, "步长", self.step)
+            self.step.setAccessibleName(title + "步长")
         settings.addStretch()
         row.addLayout(settings)
         row.addStretch()
+
+    @staticmethod
+    def add_setting(layout, title, control):
+        caption = QtWidgets.QLabel(title)
+        caption.setBuddy(control)
+        control.setAccessibleName(title)
+        layout.addWidget(caption)
+        layout.addWidget(control)
+
+    def move_one_step(self, direction):
+        distance = self.step.currentData() if isinstance(self.step, QtWidgets.QComboBox) else self.step.value()
+        self.moved.emit(direction[0] * distance, direction[1] * distance)
+
+    def show_motion_settings(self, feed, *, can_move, can_edit):
+        self.setEnabled(can_move or can_edit)
+        for button in self.buttons.values():
+            button.setEnabled(can_move)
+        self.step.setEnabled(can_move)
+        self.feed.setEnabled(can_edit)
+        with QtCore.QSignalBlocker(self.feed):
+            if self.feed.count() > len(FEED_PRESETS) and self.feed.itemData(len(FEED_PRESETS)) != feed:
+                self.feed.removeItem(len(FEED_PRESETS))
+            index = self.feed.findData(feed)
+            if index < 0:
+                self.feed.addItem(f"{feed} mm/min（当前值）", feed)
+                index = self.feed.count() - 1
+            self.feed.setCurrentIndex(index)

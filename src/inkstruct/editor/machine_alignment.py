@@ -11,7 +11,11 @@ from ..plotter.profiles import PageAlignment
 from ..sample_preview import InkViewport, SampleView
 from ..settings_pages import label
 from ..theme import set_tone
-from .position_nudge import PositionNudge
+
+
+def same_alignment_profile(first, second):
+    return first == second or (first is not None and second is not None and
+                               replace(first, feed=second.feed) == second)
 
 
 def page_context(template, snapshot=None, index=0, *, layout=None):
@@ -197,8 +201,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.use_b = QtWidgets.QCheckBox("补录 B 点以重测方向与比例")
         form.addRow(self.use_b)
         form.addRow("纸面 B 点 X / Y", pair_widget(self.b))
-        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100)
-        self.nudge.moved.connect(panel.jog)
+        self.nudge = panel.motion_controls(panel.jog)
         form.addRow(self.nudge)
         self.pen_position = label("")
         form.addRow("当前笔位", self.pen_position)
@@ -315,7 +318,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         key = QtCore.Qt.Key
         directions = {key.Key_Left: (-1, 0), key.Key_Right: (1, 0),
                       key.Key_Up: (0, -1), key.Key_Down: (0, 1)}
-        if (event.key() in directions and self.canvas.hasFocus() and self.nudge.isEnabled()
+        if (event.key() in directions and self.canvas.hasFocus() and self.nudge.step.isEnabled()
                 and not event.modifiers() and not event.isAutoRepeat()):
             self.nudge.buttons[directions[event.key()]].click()
             event.accept()
@@ -350,7 +353,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         profile = self.panel.profile
         connected = profile is not None and self.panel.device is not None
         idle = self.panel.busy is None
-        if profile != self.setup_profile:
+        if not same_alignment_profile(profile, self.setup_profile):
             previous = self.setup_profile.datum if self.setup_profile else None
             datum = profile.datum if profile else None
             new_datum = datum and (not previous or previous.id != datum.id)
@@ -374,7 +377,7 @@ class AlignmentDialog(QtWidgets.QDialog):
                 self.setup_names.setStringList(sorted(setups))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.status.setText(str(error))
-        if self.measurement is not None and (self.measured_device != profile or not connected
+        if self.measurement is not None and (not same_alignment_profile(self.measured_device, profile) or not connected
                                              or self.measured_connection != self.panel.connection_id
                                              or self.measured_frame != self.panel.frame
                                              or self.offset != self.panel.offset):
@@ -390,7 +393,8 @@ class AlignmentDialog(QtWidgets.QDialog):
                 hint += "套打前请核对原稿上的标记。"
             self.fixture_hint.setText(hint)
         self.device_name.setText(profile.name if profile else "尚未选择设备")
-        self.nudge.setEnabled(connected and idle and not self.panel.closing and not self.panel.waiting_for_paper)
+        self.panel.refresh_motion_controls(self.nudge, connected and idle and not self.panel.closing
+                                           and not self.panel.waiting_for_paper)
         self.pen_position.setText("正在抬笔点动…" if self.panel.busy == "jog" else
                                   self.panel.position_label.text() if connected else "请在设备管理中连接写字机。")
         self.stop.setVisible(self.panel.busy in {"jog", "return"})

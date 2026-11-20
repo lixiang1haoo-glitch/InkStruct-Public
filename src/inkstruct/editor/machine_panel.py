@@ -11,7 +11,7 @@ from uuid import uuid4
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
-from ..plotter.grbl import PEN_UP, Z_TOLERANCE_MM
+from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
 from ..plotter.physical import PaperRegistration, WorkArea, machine_point, position_page
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
@@ -241,8 +241,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.report = label("连接设备后可定位。")
         write_layout.addWidget(self.report)
         self.align_button = self.button("当前页对位…", self.open_alignment)
-        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100)
-        self.nudge.moved.connect(self.jog)
+        self.nudge = self.motion_controls(self.jog)
         write_layout.addWidget(self.nudge)
         self.return_button = self.button("抬笔回到 A 点", self.return_to_origin)
         self.pen_button = self.button("抬笔", self.raise_pen)
@@ -801,7 +800,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.confirm_range_button.setEnabled(positioning)
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
-        self.nudge.setEnabled(positioning)
+        self.refresh_motion_controls(self.nudge, positioning)
         self.pen_button.setVisible(connected and not self.pen_raised)
         self.pen_button.setEnabled(positioning)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
@@ -892,6 +891,27 @@ class MachinePanel(QtWidgets.QWidget):
                 self.message("所选设备尚未连接 USB。", error=True)
         else:
             self.submit("disconnect")
+
+    def motion_controls(self, move):
+        pad = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100, plotter=True)
+        pad.moved.connect(move)
+        pad.feed.currentIndexChanged.connect(lambda _: self.change_feed(pad.feed.currentData()))
+        return pad
+
+    def refresh_motion_controls(self, pad, can_move):
+        feed = self.profile.feed if self.profile else DEFAULT_WRITE_FEED
+        can_edit = bool(self.profile and self.busy is None and not self.closing and not self.batch_active)
+        pad.show_motion_settings(feed, can_move=can_move, can_edit=can_edit)
+
+    def change_feed(self, value):
+        if not self.profile or self.busy or self.closing or self.batch_active or self.profile.feed == value:
+            return
+        try:
+            self._persist_profile(replace(self.profile, feed=value))
+            self.update_estimate()
+        except (OSError, ValueError) as error:
+            self.message(f"运动速度未能保存。{error}", error=True)
+        self.refresh_buttons()
 
     def jog(self, x, y):
         if self.profile and self.device is not None:

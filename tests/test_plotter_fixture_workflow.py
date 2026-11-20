@@ -69,7 +69,7 @@ def exercise(workspace):
         wait(panel)
 
     def move(panel, dialog, direction, distance):
-        dialog.nudge.step.setValue(distance)
+        dialog.nudge.step.setCurrentIndex(dialog.nudge.step.findData(distance))
         click(panel, dialog.nudge.buttons[direction])
 
     def record_corner(panel, dialog):
@@ -100,7 +100,8 @@ def exercise(workspace):
         click(panel, setup.save_button)
         assert panel.confirmed_area == WorkArea(25, 10, 70, 90)
         move(panel, setup, (1, 0), 5)
-        move(panel, setup, (0, 1), 8)
+        for distance in (5, 2, 1):
+            move(panel, setup, (0, 1), distance)
         assert serial.position == [40., 38., 0.]
         setup.close()
         with patch.object(AlignmentDialog, "exec", capture_page):

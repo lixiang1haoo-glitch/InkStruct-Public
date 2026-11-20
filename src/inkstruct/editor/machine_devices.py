@@ -4,11 +4,9 @@ from dataclasses import replace
 
 from PySide6 import QtCore, QtWidgets
 
-from ..plotter.grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED
 from ..plotter.physical import WorkArea
 from ..plotter.profiles import DeviceAxes, DeviceProfile
 from ..settings_pages import label, scroll_page
-from .position_nudge import PositionNudge
 
 AXIS_HELP = "点左右按钮时笔尖却上下移动，请勾选「交换 XY 轴」。笔尖沿正确的轴走反了方向，请勾选对应轴的镜像。已有纸角时，更改轴向或比例须先保存并重新登记纸角。"
 TRIAL_HELP = "请确保笔尖四周 100 mm 内可绘制。正常书写视角下，X 轴正向指正右方，Y 轴正向指正下方。"
@@ -53,24 +51,8 @@ class DeviceDialog(QtWidgets.QDialog):
         locate.addWidget(label("纸张两边靠齐同一组挡边，保持登记时的朝向。抬笔点动，目视对准纸角。"))
         self.position = label("")
         locate.addWidget(self.position)
-        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100)
-        self.nudge.moved.connect(self.move)
-        jog_row = QtWidgets.QHBoxLayout()
-        jog_row.addWidget(self.nudge)
-        speed_form = QtWidgets.QFormLayout()
-        self.feed = QtWidgets.QSpinBox()
-        self.feed.setAccessibleName("运动速度")
-        self.feed.setRange(60, MAX_WRITE_FEED)
-        self.feed.setValue(DEFAULT_WRITE_FEED)
-        self.feed.setSuffix(" mm/min")
-        self.feed.setToolTip("点动和试画立即使用此 X/Y 速度。保存设备设置后用于排版的抬笔移动和落笔书写。")
-        speed_form.addRow("运动速度", self.feed)
-        speed_form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
-        speed_form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapAllRows)
-        speed_form.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
-        jog_row.addLayout(speed_form)
-        jog_row.addStretch()
-        locate.addLayout(jog_row)
+        self.nudge = panel.motion_controls(self.move)
+        locate.addWidget(self.nudge)
         self.raise_button = panel.button("抬笔", panel.raise_pen)
         locate.addWidget(self.raise_button)
         self.datum_register = panel.button("登记纸角…", self.register_datum)
@@ -157,7 +139,6 @@ class DeviceDialog(QtWidgets.QDialog):
             for check, on in zip(self.axes, (profile.axes.mirror_x, profile.axes.mirror_y, profile.axes.swap),
                                  strict=True):
                 check.setChecked(on)
-            self.feed.setValue(profile.feed)
         self.range_context = None
         self.refresh()
 
@@ -271,7 +252,7 @@ class DeviceDialog(QtWidgets.QDialog):
         self.error.setText(self.panel.report.text())
         self.stop.setVisible(self.panel.is_moving)
         self.stop.setEnabled(self.panel.stop_button.isEnabled())
-        self.nudge.setEnabled(ready)
+        self.panel.refresh_motion_controls(self.nudge, ready)
         for button in self.record_buttons:
             button.setEnabled(ready and not waiting)
         self.trial.setEnabled(ready and self.panel.range_ready and (not datum or located))
@@ -359,7 +340,7 @@ class DeviceDialog(QtWidgets.QDialog):
             old = self.panel.profile
             axes = self.draft_axes()
             enabled = self.use_range.isChecked()
-            profile = replace(old, feed=self.feed.value(), limit_area_enabled=enabled)
+            profile = replace(old, limit_area_enabled=enabled)
             new_calibration = old.datum is not None and axes != old.axes
             if new_calibration:
                 profile = replace(profile, axes=axes, datum=None, area=None, offset=None)
@@ -388,7 +369,7 @@ class DeviceDialog(QtWidgets.QDialog):
         if self.panel.profile.datum and self.panel.profile.axes != axes:
             self.error.setText("请先保存修改后的轴向和比例，再按新方向点动。")
             return
-        self.panel.submit("device-jog", axes.map(x, y), self.panel.confirmed_area, self.feed.value())
+        self.panel.submit("device-jog", axes.map(x, y), self.panel.confirmed_area, self.panel.profile.feed)
 
     def draw(self):
         try:
@@ -396,7 +377,7 @@ class DeviceDialog(QtWidgets.QDialog):
                 raise ValueError("请先保存修改后的轴向和比例，再按新设置试画。")
             area = self.draft_area() if self.panel.profile.limit_area_enabled else None
             if self.panel.confirm("试画 X/Y", TRIAL_HELP + "\n确认测试纸、笔尖和设备已就位？"):
-                self.panel.submit("axis-trial", self.draft_axes(), area, self.feed.value(),
+                self.panel.submit("axis-trial", self.draft_axes(), area, self.panel.profile.feed,
                                   self.panel.confirmed_area)
         except ValueError as error:
             self.error.setText(str(error))
