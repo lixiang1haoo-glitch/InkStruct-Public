@@ -74,6 +74,7 @@ class AlignmentCanvas(InkViewport):
         self.backdrop = backdrop
         self.points = []
         self.editable = False
+        self.checking = False
         self.setMinimumSize(240, 310)
         self.setAccessibleName("纸面预览 · 选择对位点")
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
@@ -85,7 +86,7 @@ class AlignmentCanvas(InkViewport):
     def ink_clicked(self, position):
         inverse, invertible = self.drawing_transform().inverted()
         spot = inverse.map(position)
-        if self.editable and invertible and self.view.bounds.contains(spot):
+        if (self.editable or self.checking) and invertible and self.view.bounds.contains(spot):
             self.picked.emit(spot.x(), spot.y())
 
     def paintEvent(self, _event):
@@ -204,6 +205,16 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.record_a = panel.button("记录实地 A 点", self.capture_a)
         self.record_b = panel.button("记录实地 B 点", self.capture_b)
         form.addRow(pair_widget((self.record_a, self.record_b)))
+        self.c_point = self.c_visit = None
+        self.check_c = QtWidgets.QCheckBox("用第三点复核套打位置（可选）")
+        form.addRow(self.check_c)
+        self.c_help = label("点击预览中离 A 较远的清晰交点 C，再将笔尖移过去。")
+        self.c_move = panel.button("抬笔移到预测的 C 点", self.visit_c)
+        self.c_read = panel.button("已对准纸面交点，读取偏差", self.read_c)
+        self.c_result = label("")
+        for control in (self.c_help, self.c_move, self.c_read, self.c_result):
+            form.addRow(control)
+        self.check_c.toggled.connect(self.toggle_c)
         self.recall = panel.button("使用已保存的摆放…", self.restore)
         form.addRow(self.recall)
         self.details = label("")
@@ -230,15 +241,86 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.buttons.rejected.connect(self.reject)
         col.addWidget(self.buttons)
         panel.machine_state.connect(self.refresh)
+        panel.worker.succeeded.connect(self.c_motion_finished)
         self.alignment = current
         self.refresh()
 
     def pick_point(self, x, y):
+        if self.check_c.isChecked():
+            self.c_point = (x, y)
+            self.c_visit = None
+            self.c_result.clear()
+            self.refresh()
+            return
         point = self.b if self.pick.currentIndex() == 1 else self.a
         if point is self.b:
             self.use_b.setChecked(True)
         for spin, value in zip(point, (x, y), strict=True):
             spin.setValue(value)
+
+    def toggle_c(self, enabled):
+        self.canvas.checking = enabled
+        self.c_visit = None
+        self.c_result.clear()
+        self.refresh()
+        if enabled:
+            self.canvas.setFocus()
+
+    def c_target(self):
+        if self.c_point is None or self.measurement is None or not self.panel.profile:
+            return None
+        marks = self.markings()
+        axes = self.panel.profile.axes
+        angle, scale = marks.angle, marks.scale
+        if self.use_b.isChecked():
+            if self.measurement_b is None:
+                return None
+            angle, scale = axes.measure((marks.a, marks.b), self.measurement, self.measurement_b)
+        return axes.register(marks.a, self.measurement, angle=angle, scale=scale)
+
+    def visit_c(self):
+        try:
+            transform = self.c_target()
+            if transform and self.panel.submit("return", transform.place(self.c_point),
+                                               self.panel.confirmed_area, self.panel.profile.feed):
+                self.c_visit = (self.panel.connection_id, transform, self.c_point)
+                self.c_result.setText("到位后用方向按钮微调至纸面交点。")
+                self.canvas.setFocus()
+        except ValueError as error:
+            self.status.setText(str(error))
+
+    def c_motion_finished(self, kind, status):
+        if kind in {"return", "jog"} and self.c_visit and status and self.check_c.isChecked():
+            dx, dy = self.c_delta(status)
+            self.c_result.setText(f"相对预测点已微调：横向 {dx:+.3f} mm，纵向 {dy:+.3f} mm。"
+                                  "对准交点后读取最终偏差。")
+
+    def c_delta(self, status):
+        _, transform, point = self.c_visit
+        x, y = transform.place(point)
+        u, v = self.panel.profile.axes.unmap(status.position[0] - x, status.position[1] - y)
+        return ((transform.cosine * u + transform.sine * v) / transform.scale,
+                (-transform.sine * u + transform.cosine * v) / transform.scale)
+
+    def read_c(self):
+        context = self.c_visit
+        def measured(status):
+            if context != self.c_visit or context is None:
+                return
+            dx, dy = self.c_delta(status)
+            self.c_result.setText(f"纸面交点相对预测位置：横向 {dx:+.3f} mm，纵向 {dy:+.3f} mm（右、下为正）。")
+        self.panel.capture_position(measured)
+
+    def keyPressEvent(self, event):
+        key = QtCore.Qt.Key
+        directions = {key.Key_Left: (-1, 0), key.Key_Right: (1, 0),
+                      key.Key_Up: (0, -1), key.Key_Down: (0, 1)}
+        if (event.key() in directions and self.canvas.hasFocus() and self.nudge.isEnabled()
+                and not event.modifiers() and not event.isAutoRepeat()):
+            self.nudge.buttons[directions[event.key()]].click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def change_setup(self):
         self.recalled_alignment = None
@@ -251,6 +333,8 @@ class AlignmentDialog(QtWidgets.QDialog):
 
     def clear_b(self):
         self.measurement_b = None
+        self.c_visit = None
+        self.c_result.clear()
         self.refresh()
 
     def points(self):
@@ -309,7 +393,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.nudge.setEnabled(connected and idle and not self.panel.closing and not self.panel.waiting_for_paper)
         self.pen_position.setText("正在抬笔点动…" if self.panel.busy == "jog" else
                                   self.panel.position_label.text() if connected else "请在设备管理中连接写字机。")
-        self.stop.setVisible(self.panel.busy == "jog")
+        self.stop.setVisible(self.panel.busy in {"jog", "return"})
         self.stop.setEnabled(self.panel.stop_button.isEnabled())
         error = self.panel.report.text() if self.panel.report.property("inkTone") == "danger" else ""
         self.motion_error.setText(error)
@@ -329,6 +413,23 @@ class AlignmentDialog(QtWidgets.QDialog):
         initial = self.recalled_alignment or self.original
         if self.use_b.isChecked() or (initial and initial.b):
             self.canvas.points.append(("B", b))
+        checking = self.check_c.isChecked()
+        self.pick.setEnabled(not checking)
+        self.check_c.setEnabled(idle)
+        self.check_c.setVisible(self.pdf_page)
+        for control in (self.c_help, self.c_move, self.c_read, self.c_result):
+            control.setVisible(checking)
+        try:
+            transform = self.c_target()
+        except ValueError:
+            transform = None
+        if not transform or self.c_visit != (self.panel.connection_id, transform, self.c_point):
+            self.c_visit = None
+            self.c_result.clear()
+        self.c_move.setEnabled(bool(idle and connected and transform and self.panel.range_ready))
+        self.c_read.setEnabled(bool(self.c_visit and connected and idle and self.panel.pen_raised))
+        if checking and self.c_point is not None:
+            self.canvas.points.append(("C", self.c_point))
         self.canvas.update()
         marks = []
         for name, point in (("A", self.measurement), ("B", self.measurement_b)):
@@ -387,6 +488,17 @@ class AlignmentDialog(QtWidgets.QDialog):
                 setup = self.setup.text().strip()
                 if fixed:
                     self.panel.store.select_fixture_setup(self.panel.profile, page, key, setup)
+                if self.check_c.isChecked():
+                    self.recalled_alignment = saved
+                    self.use_b.setChecked(False)
+                    for controls, point in ((self.a, saved.a), (self.b, saved.b)):
+                        if point:
+                            for spin, value in zip(controls, point, strict=True):
+                                spin.setValue(value)
+                    self.measured_connection, self.measured_device, self.measured_frame, self.offset = context
+                    self.measurement, self.measurement_b = position, None
+                    self.refresh()
+                    return
                 self.alignment = saved
                 self.position = position
                 self.accepted_connection = self.panel.connection_id
@@ -423,6 +535,6 @@ class AlignmentDialog(QtWidgets.QDialog):
             self.status.setText(str(error))
 
     def reject(self):
-        if self.panel.busy in {"position-read", "jog"}:
+        if self.panel.busy in {"position-read", "jog", "return"}:
             return
         super().reject()

@@ -124,6 +124,12 @@ class N1Worker(QtCore.QThread):
                         target, area = args[:2]
                         feed = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
                         result = link.move_to(target, area, control, feed=feed)
+                    elif kind == "calibrate-height":
+                        height, area = args
+                        result = link.set_pen(True, area, control, height=height)
+                    elif kind == "calibrate-line":
+                        page, area, feed, height = args
+                        result = link.run_page(page, area, control, feed=feed, height=height)
                     elif kind == "pen":
                         result = link.set_pen(*args, control)
                     elif kind == "touch":
@@ -132,8 +138,9 @@ class N1Worker(QtCore.QThread):
                         axes, area, feed, confirmed_area = args
                         result = link.trial_axes(axes, area, feed, control, confirmed_area=confirmed_area)
                     elif kind in {"dry", "write"}:
-                        page, area, feed = args
-                        result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)
+                        page, area, feed, *settings = args
+                        options = settings[0] if settings else {}
+                        result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed, **options)
                     else:
                         raise ValueError(f"无法识别的设备操作：{kind}")
                     if link is not None:

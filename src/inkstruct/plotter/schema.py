@@ -21,6 +21,7 @@ class PlotStroke:
     occurrence_id: str | None = None
     source_stroke_id: str | None = None
     execution_domain: str = "page"
+    independent: bool = False
 
     def __post_init__(self):
         if not self.stroke_id or not self.execution_domain:

@@ -83,6 +83,11 @@ class DeviceDialog(QtWidgets.QDialog):
         self.datum_reset = panel.button("笔位有偏差，重新定位", panel.invalidate_datum)
         locate.addWidget(pair_widget((self.datum_park, self.datum_reset)))
         options.addWidget(locating)
+        self.pen_choice = QtWidgets.QComboBox()
+        self.pen_choice.setAccessibleName("当前笔具")
+        self.pen_choice.activated.connect(self.select_pen)
+        self.calibrate = panel.button("校准笔高…", self.calibrate_pen)
+        options.addWidget(pair_widget((self.pen_choice, self.calibrate)))
 
         axes = QtWidgets.QGroupBox("X/Y 比例与轴向")
         axes_form = QtWidgets.QFormLayout(axes)
@@ -195,6 +200,13 @@ class DeviceDialog(QtWidgets.QDialog):
         connected = self.panel.device is not None
         idle = self.panel.busy is None
         profile = self.panel.profile
+        choices = ["设备默认"] + list(dict(profile.pen_heights)) if profile else []
+        if choices != [self.pen_choice.itemText(i) for i in range(self.pen_choice.count())]:
+            self.pen_choice.clear()
+            self.pen_choice.addItems(choices)
+        self.pen_choice.setCurrentIndex(choices.index(profile.active_pen) if profile and profile.active_pen else 0)
+        self.pen_choice.setEnabled(bool(profile and idle and not self.panel.batch_active))
+        self.calibrate.setEnabled(bool(profile and connected and idle and self.panel.range_ready))
         datum = profile.datum if profile else None
         located = self.panel.frame is not None
         waiting = datum is not None and not located
@@ -263,6 +275,21 @@ class DeviceDialog(QtWidgets.QDialog):
         for button in self.record_buttons:
             button.setEnabled(ready and not waiting)
         self.trial.setEnabled(ready and self.panel.range_ready and (not datum or located))
+
+    def select_pen(self, index):
+        try:
+            self.panel.save_profile(replace(self.panel.profile, active_pen=self.pen_choice.itemText(index) if index else ""))
+        except (OSError, ValueError) as error:
+            self.error.setText(str(error))
+            self.refresh()
+
+    def calibrate_pen(self):
+        from .pen_calibration import PenCalibration
+        dialog = PenCalibration(self.panel, self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     def register_datum(self):
         profile = self.panel.profile
