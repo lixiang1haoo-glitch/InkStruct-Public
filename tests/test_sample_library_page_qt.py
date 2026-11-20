@@ -265,6 +265,72 @@ def test_capture_shortcut_and_sample_page_exchange(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+def test_import_from_menu_without_writer_in_empty_workspace(tmp_path):
+    pytest.importorskip('PySide6')
+    code = r'''
+        import json
+        import sys
+        from pathlib import Path
+        from time import monotonic, sleep
+        from unittest.mock import patch
+
+        sys.path.insert(0, 'tests')
+
+        from PySide6 import QtWidgets
+        from inkstruct.capture_management import CaptureCatalog
+        from inkstruct.sample_library_ui import SampleLibraryPage
+        from test_symbol_provider import specimen
+
+        app = QtWidgets.QApplication([])
+        root = Path(sys.argv[1])
+        catalog = CaptureCatalog(root / 'w')
+        page = SampleLibraryPage(catalog)
+        page.show()
+        source = root / 'sample.json'
+        source.write_text(json.dumps({**specimen('1', 'one'), 'writer_id': 'original'}), encoding='utf-8')
+        buttons = QtWidgets.QMessageBox.StandardButton
+        answer = buttons.Cancel
+        confirmations = []
+
+        def confirm(box):
+            confirmations.append(box.text())
+            return answer
+
+        def wait(condition):
+            deadline = monotonic() + 10
+            while not condition():
+                assert monotonic() < deadline, page.status.text()
+                app.processEvents()
+                sleep(.01)
+
+        assert page.writer.text() == '' and not catalog.writers()
+        assert page.import_button.isEnabled()
+        action = page.import_button.menu().actions()[0]
+        with patch.object(QtWidgets.QFileDialog, 'getOpenFileName', return_value=(str(source), '')), \
+             patch.object(QtWidgets.QMessageBox, 'exec', confirm):
+            action.trigger()
+            assert page.job is not None and not page.import_button.isEnabled()
+            wait(lambda: page.job is None)
+            assert len(confirmations) == 1 and '目标书写者 original（original）' in confirmations[0]
+            assert '导入时登记' in confirmations[0]
+            assert not catalog.writers() and not catalog.index.exists()
+            assert page.writer.text() == '' and page.import_button.isEnabled()
+
+            answer = buttons.Yes
+            action.trigger()
+            wait(lambda: page.job is None and page.writer.text() == 'original')
+            assert catalog.writers() == {'original': {'name': 'original'}}
+            assert page.catalog_count.text() == '1 字 · 1 份'
+            assert page.preview.value['sample_id'] == 'one'
+            assert page.import_button.isEnabled()
+        page.close()
+    '''
+    proc = subprocess.run([sys.executable, '-B', '-c', textwrap.dedent(code), str(tmp_path)],
+                          env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
+                          capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 def test_capture_proportion_preserves_small_marks_and_recorded_positions():
     pytest.importorskip('PySide6')
     from PySide6.QtCore import QRectF

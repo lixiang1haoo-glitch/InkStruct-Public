@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .capture_management import portable_writer
 from .capture_workflow_ui import WriterPicker
 from .fonts.ui import Job
 from .sample_library import CATEGORIES, SampleLibrary, export_bundle, inventory, open_source, read_row
@@ -485,7 +486,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
         ready = self.job is None
         self.writer.setEnabled(ready)
         self.refresh_button.setEnabled(ready)
-        self.import_button.setEnabled(ready and bool(self.writer.text()))
+        self.import_button.setEnabled(ready)
         self.select_button.setEnabled(bool(self.visible_rows))
         count, hidden = self.selection_summary()
         suffix = f' · 含 {hidden} 份在当前筛选之外' if hidden else ''
@@ -621,7 +622,7 @@ class SampleLibraryPage(QtWidgets.QWidget):
             self.task_model.setStringList([])
             self.filter()
         if not writer:
-            self.status.setText('请选择书写者。')
+            self.status.setText('可直接导入样本，或选择书写者查看样本。')
             return
 
         def load():
@@ -865,27 +866,31 @@ class SampleLibraryPage(QtWidgets.QWidget):
             self.preview_import(path)
 
     def preview_import(self, path):
-        writer = self.writer.text()
+        if self.job is not None:
+            return
+        library, writer = self.library, self.writer.text()
 
         def inspect():
             bundle = open_source(path)
-            return bundle, self.library.review(bundle, writer)
+            return bundle, library.review(bundle, writer)
 
-        self.submit(inspect, lambda data: self.confirm_import(writer, *data), '正在校验来源并比对目标库…')
+        self.submit(inspect, lambda data: self.confirm_import(library, writer, *data), '正在校验来源并比对目标库…')
 
-    def confirm_import(self, writer, bundle, review):
-        try:
-            name = self.library.catalog.writers()[writer]['name']
-        except (KeyError, OSError, ValueError):
-            self.failed('目标书写者已变化，请刷新并重新选择。')
-            return
+    def confirm_import(self, library, selected_writer, bundle, review):
         origins = '、'.join(sorted({sample.row.writer for sample in bundle.samples}))
+        target = f'{review.name}（{review.writer}）'
+        if review.create_writer:
+            target += ' · 导入时登记'
+        legacy_hint = ''
+        if not selected_writer and not review.create_writer and not portable_writer(review.writer):
+            legacy_hint = '\n旧书写者 ID 可能在不同设备上重复。请核对后再合入本机书写者。'
         box = QtWidgets.QMessageBox(self)
         box.setWindowTitle('核对样本及书写者归属')
         box.setTextFormat(QtCore.Qt.PlainText)
         box.setText(f'来源书写者 {bundle.name}（{bundle.writer}）\n原始样本书写者 {origins}\n'
-                    f'目标书写者 {name}（{writer}）\n\n新增 {len(review.new)} · 重复 {len(review.duplicates)}'
-                    f' · 冲突 {len(review.conflicts)}\n\n确认新增样本均由目标书写者录制。重复和冲突项会跳过。')
+                    f'目标书写者 {target}\n\n新增 {len(review.new)} · 重复 {len(review.duplicates)}'
+                    f' · 冲突 {len(review.conflicts)}\n\n确认新增样本均由目标书写者录制。重复和冲突项会跳过。'
+                    f'{legacy_hint}')
         headings = (('新增', (item.row for item in review.new)), ('重复', review.duplicates), ('冲突', review.conflicts))
         box.setDetailedText('\n'.join(f'{label} · {row.character} · {row.writer} · {row.sample_id}'
                                       for label, rows in headings for row in rows))
@@ -894,11 +899,15 @@ class SampleLibraryPage(QtWidgets.QWidget):
         box.setDefaultButton(buttons.Cancel if review.new else buttons.Close)
         if review.new:
             box.button(buttons.Yes).setText('确认并导入新增样本')
-        if box.exec() == buttons.Yes and review.new:
-            self.submit(lambda: self.library.import_confirmed(bundle, writer, review), self.imported,
+        if (box.exec() == buttons.Yes and review.new and library is self.library
+                and selected_writer == self.writer.text() and self.job is None):
+            self.submit(lambda: library.import_confirmed(bundle, selected_writer, review),
+                        lambda count: self.imported(count, review.writer),
                         '正在保存样本及原始来源…')
 
-    def imported(self, count):
+    def imported(self, count, writer):
+        if writer != self.writer.text():
+            self.writer.reload(writer)
         self.refresh()
         self.status.setText(f'已导入 {count} 份新样本，正在刷新…')
 

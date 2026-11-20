@@ -4,6 +4,7 @@ import re
 from dataclasses import asdict, dataclass, replace
 from typing import ClassVar
 
+from ..plotter.profiles import PageAlignment
 from .schema import PageProfile, digest
 from .template import Region, TemplateBackground, TemplateRule, _numbers
 from .template_revision import TemplateRevision
@@ -99,8 +100,13 @@ class PageLayout:
     source_page: int | None = None
     source_sha256: str = ""
     source_size_mm: tuple[float, float] | None = None
+    plotter_alignment: PageAlignment | None = None
 
     def __post_init__(self):
+        if isinstance(self.plotter_alignment, dict):
+            object.__setattr__(self, "plotter_alignment", PageAlignment(**self.plotter_alignment))
+        if self.plotter_alignment is not None and not isinstance(self.plotter_alignment, PageAlignment):
+            raise ValueError("无效的页面对位设置。")
         for key, cls in (("frames", TextFrame), ("rules", TemplateRule)):
             raw = getattr(self, key)
             if not isinstance(raw, (tuple, list)) or len(raw) > 100:
@@ -169,8 +175,15 @@ class FlowTemplate:
     migration: tuple[tuple[str, str], ...] = ()
     schema_version: str = SCHEMA
     revision: TemplateRevision | None = None
+    plotter_alignment: PageAlignment | None = None
 
     def __post_init__(self):
+        if isinstance(self.plotter_alignment, dict):
+            object.__setattr__(self, "plotter_alignment", PageAlignment(**self.plotter_alignment))
+        if self.plotter_alignment is not None and (
+            self.kind != "simple" or not isinstance(self.plotter_alignment, PageAlignment)
+        ):
+            raise ValueError("请在各源页面版式分别设置对位。")
         for key, cls in (("layouts", PageLayout), ("fields", NamedField)):
             values = getattr(self, key)
             if not isinstance(values, (list, tuple)) or len(values) > 64:
@@ -228,6 +241,8 @@ class FlowTemplate:
                 raise ValueError("Custom templates require a valid ordered loop page group")
         declared = {f.field_id for f in self.fields}
         for p in self.effective_layouts:
+            if p.plotter_alignment is not None:
+                p.plotter_alignment.validate_size(self.width_mm, self.height_mm)
             for f in p.frames:
                 if f.role == "field" and f.field_id not in declared:
                     raise ValueError(f"Frame references undeclared field: {f.field_id}")
@@ -255,7 +270,7 @@ class FlowTemplate:
             "正文",
             Region("body", left, top, self.width_mm - left - right, self.height_mm - top - bottom),
         )
-        return (PageLayout("simple", "简单模板", (f,)),)
+        return (PageLayout("simple", "简单模板", (f,), plotter_alignment=self.plotter_alignment),)
 
     @property
     def effective_loop(self):

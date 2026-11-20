@@ -117,6 +117,8 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.generator.centralWidget().writer.setText("")
         self.collector.writer_selected.connect(self.generator.centralWidget().capture_writer_chosen)
         self.editor = MixedWindow()
+        if hasattr(self.editor, "machine_panel"):
+            self.editor.machine_panel.set_workspace(self.workspace)
         self.generator.centralWidget().current_document_provider = lambda: (
             self.editor.editor.toPlainText(), self.editor.flow,
             {'kind': 'current-document', 'document_id': self.editor.source_session.document_id,

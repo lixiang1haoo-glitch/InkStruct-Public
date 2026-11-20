@@ -4,14 +4,14 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from shutil import copyfileobj
 import tempfile
 from zipfile import ZIP_DEFLATED, ZipFile, is_zipfile
 
 from .capture_management import check_capture_paths, portable_writer, valid_writer
 from .document.schema import digest
-from .resource_catalog import catalog_write
+from .resource_catalog import atomic_json, catalog_write
 from .symbol_catalog import SYMBOL_GROUPS, symbol_group
 from .writer_samples import (MAX_RECORD, MAX_TOTAL, SCHEMAS, attributed_sample, sample_bytes,
                              sample_identity, validate_sample)
@@ -268,6 +268,9 @@ def open_source(path):
 
 @dataclass(frozen=True)
 class ImportReview:
+    writer: str
+    name: str
+    create_writer: bool
     new: tuple[BundleSample, ...]
     duplicates: tuple[SampleRow, ...]
     conflicts: tuple[SampleRow, ...]
@@ -279,9 +282,22 @@ class SampleLibrary:
         self.lock_path = catalog.lock_path
 
     def review(self, bundle, writer):
-        if writer not in self.catalog.writers():
+        writers = self.catalog.writers()
+        if writer and writer not in writers:
             raise ValueError('请选择已有的目标书写者')
-        rows, errors = inventory(self.catalog, writer)
+        target = writer or bundle.writer
+        create_writer = target not in writers
+        if create_writer:
+            writer_record(target, bundle.name)
+            if os.name == 'nt':
+                is_reserved = getattr(os.path, 'isreserved', None)
+                reserved = is_reserved(target) if is_reserved else PureWindowsPath(target).is_reserved()
+                if reserved or target.endswith('.'):
+                    raise ValueError('来源书写者 ID 不能作为 Windows 目录名，请选择接收者后重试')
+                if any(key.casefold() == target.casefold() for key in writers):
+                    raise ValueError('来源书写者 ID 与本机书写者 ID 仅大小写不同，请核对后选择接收者')
+        name = bundle.name if create_writer else writers[target]['name']
+        rows, errors = inventory(self.catalog, target)
         if errors:
             raise ValueError(f'目标书写者有 {len(errors)} 份样本无法核对，请先检查样本库。\n{errors[0]}')
         by_origin, by_id = {}, {}
@@ -305,14 +321,14 @@ class SampleLibrary:
             elif known or row.raw_hash in by_id.get((row.kind, row.sample_id), ()):
                 duplicate.append(row)
             else:
-                assigned = attributed_sample(row.kind, writer, row.raw_hash, sample.value)['sample_id']
+                assigned = attributed_sample(row.kind, target, row.raw_hash, sample.value)['sample_id']
                 if (row.kind, assigned) in by_id:
                     conflict.append(row)
                 else:
                     new.append(sample)
                     by_origin.setdefault((row.kind, *origin[:2]), set()).add(origin[2])
                     by_id.setdefault((row.kind, assigned), set()).add(row.raw_hash)
-        return ImportReview(tuple(new), tuple(duplicate), tuple(conflict))
+        return ImportReview(target, name, create_writer, tuple(new), tuple(duplicate), tuple(conflict))
 
     @catalog_write
     def import_confirmed(self, bundle, writer, expected):
@@ -321,6 +337,10 @@ class SampleLibrary:
             raise ValueError('目标样本库已变化，请重新预览和确认')
         if not current.new:
             return 0
+        writer = current.writer
+        if current.create_writer:
+            catalog = self.catalog.read()
+            catalog['writers'][writer] = {'name': current.name.strip()}
         published = []
         staging = self.catalog.root / '.staging'
         staging.mkdir(parents=True, exist_ok=True)
@@ -336,9 +356,17 @@ class SampleLibrary:
                 destination = root / 'samples' / writer / ('in-' + identifier)
                 if os.name == 'nt' and len(str((destination / ('0' * 36 + '.json')).resolve())) > 258:
                     raise ValueError('采集目录过深，请改用较短的数据目录后再导入。')
-                destination.parent.mkdir(parents=True, exist_ok=True)
                 staged = Path(folder) / kind
-                staged.mkdir()
+                if current.create_writer:
+                    # Publish the writer folder together with its first batch,
+                    # so rolling back cannot leave an empty discoverable writer.
+                    destination.parent.parent.mkdir(parents=True, exist_ok=True)
+                    ready.append((staged, destination.parent))
+                    staged = staged / destination.name
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    ready.append((staged, destination))
+                staged.mkdir(parents=True)
                 for sample in samples:
                     row = sample.row
                     value = attributed_sample(kind, writer, row.raw_hash, sample.value)
@@ -347,11 +375,12 @@ class SampleLibrary:
                     path = staged / value['sample_id']
                     path.with_suffix('.raw').write_bytes(sample.raw)
                     path.with_suffix('.json').write_bytes(json_bytes(value))
-                ready.append((staged, destination))
             try:
                 for staged, destination in ready:
                     staged.rename(destination)
                     published.append((staged, destination))
+                if current.create_writer:
+                    atomic_json(self.catalog.index, catalog)
             except OSError:
                 for staged, destination in reversed(published):
                     destination.rename(staged)
