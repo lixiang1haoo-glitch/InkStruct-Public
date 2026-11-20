@@ -117,11 +117,12 @@ class PlotterProfiles:
         data["selected"] = profile.id
         atomic_json(self.path, data)
 
-    def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None):
+    def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *, connection=None):
         scope = digest([profile.id, page])
         key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
         if position is not None:
             self.record(key, {"point": machine_point(position), "offset": offset, "scope": scope,
+                              "connection": connection,
                               "setup": setup, "correction": asdict(correction or alignment)})
         return self.read()["placements"].get(key)
 

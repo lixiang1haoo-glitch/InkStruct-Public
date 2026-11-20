@@ -79,6 +79,7 @@ class AlignmentDialog(QtWidgets.QDialog):
 
         self.panel, self.page, self.size_mm = panel, page, size
         self.original = alignment
+        self.recalled_alignment = None
         self.configure = configure
         self.position = None
         self.measurement = self.measurement_b = None
@@ -109,7 +110,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.setup.setCompleter(QtWidgets.QCompleter(self.setup_names, self.setup))
         self.setup_profile = None
         form.addRow("摆放基准", self.setup)
-        self.setup.textChanged.connect(self.clear_measurement)
+        self.setup.textChanged.connect(self.change_setup)
         current = alignment or PageAlignment((min(15., size[0] / 4), min(15., size[1] / 4)))
         self.a = tuple(field(value, low=0, high=limit) for value, limit in zip(current.a, size, strict=True))
         self.b = tuple(field(value, low=0, high=limit) for value, limit in zip(
@@ -158,6 +159,10 @@ class AlignmentDialog(QtWidgets.QDialog):
         for spin, value in zip(point, (x, y), strict=True):
             spin.setValue(value)
 
+    def change_setup(self):
+        self.recalled_alignment = None
+        self.clear_measurement()
+
     def clear_measurement(self):
         self.measurement = None
         self.clear_b()
@@ -171,7 +176,7 @@ class AlignmentDialog(QtWidgets.QDialog):
 
     def markings(self):
         a, b = self.points()
-        initial = self.original
+        initial = self.recalled_alignment or self.original
         return PageAlignment(a, b if self.use_b.isChecked() else initial.b if initial else None,
                              initial.angle if initial else 0., initial.scale if initial else 1.)
 
@@ -181,11 +186,13 @@ class AlignmentDialog(QtWidgets.QDialog):
         idle = self.panel.busy is None
         if profile != self.setup_profile:
             self.setup_profile = profile
+            self.recalled_alignment = None
             try:
                 self.setup_names.setStringList(self.panel.store.setups(profile, self.page) if profile else [])
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.status.setText(str(error))
-        if self.measurement is not None and (self.measured_device != profile or not connected):
+        if self.measurement is not None and (self.measured_device != profile or not connected
+                                             or self.measured_connection != self.panel.connection_id):
             self.measurement = self.measurement_b = None
         self.device_name.setText(profile.name if profile else "尚未选择设备")
         self.manage.setEnabled(idle and not self.panel.batch_active)
@@ -199,7 +206,8 @@ class AlignmentDialog(QtWidgets.QDialog):
                                   or self.measurement_b is not None))
         a, b = self.points()
         self.canvas.points = [("A", a)]
-        if self.use_b.isChecked() or (self.original and self.original.b):
+        initial = self.recalled_alignment or self.original
+        if self.use_b.isChecked() or (initial and initial.b):
             self.canvas.points.append(("B", b))
         self.canvas.update()
         marks = []
@@ -211,9 +219,11 @@ class AlignmentDialog(QtWidgets.QDialog):
     def capture_a(self):
         def read(status):
             self.measured_device = self.panel.profile
+            self.measured_connection = self.panel.connection_id
             self.offset = self.panel.offset
             self.measurement = status.position[:2]
             self.clear_b()
+            self.status.clear()
         self.panel.capture_position(read)
 
     def capture_b(self):
@@ -229,10 +239,22 @@ class AlignmentDialog(QtWidgets.QDialog):
             record = self.panel.store.place(self.panel.profile, self.page, self.setup.text().strip(), key)
             if not record:
                 raise ValueError("此设备、本页和摆放基准下没有保存的实测对位。")
-            if record["offset"] != (list(self.panel.offset) if self.panel.offset is not None else None):
-                raise ValueError("设备工作零点已变化，请重新记录 A 点。")
+            saved = PageAlignment(**record["correction"])
+            offset = list(self.panel.offset) if self.panel.offset is not None else None
+            if (self.panel.connection_id is None or record.get("connection") != self.panel.connection_id
+                    or record["offset"] != offset):
+                self.recalled_alignment = saved
+                self.use_b.setChecked(False)
+                for controls, point in ((self.a, saved.a), (self.b, saved.b)):
+                    if point is not None:
+                        for control, value in zip(controls, point, strict=True):
+                            with QtCore.QSignalBlocker(control):
+                                control.setValue(value)
+                self.clear_measurement()
+                self.status.setText("已载入保存的方向与比例。请按本次连接的坐标重新记录实地 A 点。")
+                return
             if self.panel.confirm("确认纸张摆放", "请确认纸张和设备坐标仍与记录时一致。"):
-                self.alignment = PageAlignment(**record["correction"])
+                self.alignment = saved
                 self.position = tuple(record["point"])
                 self.panel.setup = self.setup.text().strip()
                 super().accept()
@@ -255,7 +277,7 @@ class AlignmentDialog(QtWidgets.QDialog):
                     raise ValueError("请填写摆放基准名称。")
                 key = result if self.configure else self.original
                 self.panel.store.place(self.panel.profile, self.page, setup, key, self.measurement,
-                                       self.offset, result)
+                                       self.offset, result, connection=self.measured_connection)
                 self.panel.setup = setup
             self.alignment, self.position = result, self.measurement
             super().accept()

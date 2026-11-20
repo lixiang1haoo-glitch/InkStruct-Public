@@ -240,7 +240,12 @@ settings.setPath(settings.Format.IniFormat, settings.Scope.UserScope, sys.argv[1
 transport = SimulatedGrbl()
 transport.position[:] = [35., 30., 0.]
 port = SimpleNamespace(portName=lambda: "COM3", serialNumber=lambda: "first")
-panel = MachinePanel(None, worker_factory=lambda parent: N1Worker(parent, serial_factory=lambda _: transport),
+
+def reopen(_port):
+    transport.closed = False
+    return transport
+
+panel = MachinePanel(None, worker_factory=lambda parent: N1Worker(parent, serial_factory=reopen),
                      ports=lambda: [port])
 panel.set_workspace(Path(sys.argv[1]))
 def wait():
@@ -326,6 +331,36 @@ try:
     wait()
     measure.save.click()
     assert measure.result() and measure.alignment.scale == 1.2 and measure.alignment.angle == 0.
+
+    # Rebooting at the current pen position can reset WPos without changing WCO.
+    old_connection, old_offset = panel.connection_id, panel.offset
+    reopened = DeviceDialog(panel)
+    assert reopened.use_range.isChecked() and panel.confirmed_area == profile.area
+    reopened.link.click()
+    wait()
+    assert panel.device is None and panel.connection_id is None
+    transport.position[:] = [0., 0., 0.]
+    reopened.link.click()
+    wait()
+    assert panel.device.position[:2] == (0., 0.) and panel.offset == old_offset
+    assert panel.connection_id != old_connection
+    assert not reopened.use_range.isChecked() and panel.confirmed_area is None
+    reopened.feed.setValue(2400)
+    reopened.save_button.click()
+    assert panel.profile.area == profile.area and panel.confirmed_area is None
+    assert panel.profile.feed == 2400
+    reopened.close()
+
+    page_key, size, _, title = context
+    restore = AlignmentDialog(panel, panel, page_key, size, measure.alignment, title, snapshot=snapshot)
+    restore.recall.click()
+    assert not restore.result() and restore.position is None and not restore.save.isEnabled()
+    assert "重新记录实地 A 点" in restore.status.text()
+    assert restore.markings().scale == 1.2
+    restore.record_a.click()
+    wait()
+    restore.save.click()
+    assert restore.result() and restore.position == (0., 0.) and restore.alignment.scale == 1.2
 finally:
     panel.shutdown()
     panel.close()
@@ -578,6 +613,8 @@ try:
     assert not dialog.nudge.isEnabled()
     assert dialog.confirm_range_button.isVisible()
     settings = DeviceDialog(dialog)
+    assert not settings.use_range.isChecked()
+    settings.use_range.setChecked(True)
     settings.save_button.click()
     assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
     settings.close()
@@ -701,7 +738,7 @@ try:
     p.link_button.click()
     wait_for(lambda: p.device is not None and p.busy is None)
     assert not p.nudge.isEnabled()
-    p.save_profile(profile)
+    p.save_profile(profile, confirm_range=True)
     p.confirm = lambda *_: True
     assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()
     p.pen_button.click()

@@ -1,6 +1,7 @@
 """Control a USB-connected N1 from the layout sidebar."""
 
 import base64
+from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -150,6 +151,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.plan = self.paper_page = self.unplaced_preview = None
         self.plan_error = ""
         self.device = self.busy = None
+        self.connection_id = None
         self.registration = self.confirmed_area = None
         self.job = None
         self.pending_pages = []
@@ -273,14 +275,14 @@ class MachinePanel(QtWidgets.QWidget):
             if self.profile:
                 self.device_picker.setCurrentIndex(self.device_picker.findData(self.profile.id))
 
-    def save_profile(self, profile):
+    def save_profile(self, profile, *, confirm_range=False):
         if self.device is not None and (not self.profile or self.profile.id != profile.id):
             raise ValueError("请先断开当前设备。")
         self.store.save(profile)
         self.profile = profile
         self.profiles = self.store.devices()
         self.reload_profiles()
-        self.apply_profile(activate=self.device is not None)
+        self.apply_profile(activate=confirm_range and self.connection_id is not None)
 
     def select_profile(self, identifier):
         if self.device is not None or self.busy is not None or self.batch_active:
@@ -686,6 +688,7 @@ class MachinePanel(QtWidgets.QWidget):
                    "pen": "笔尖已抬起。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
+            self.connection_id = uuid4().hex if kind == "connect" else None
             self.apply_profile()
             if kind == "connect":
                 message = "已连接。请在设备管理中确认当前坐标下的工作范围。"
@@ -718,6 +721,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.progress.hide()
         if disconnected:
             self.device = None
+            self.connection_id = None
             self.apply_profile()
         self.show_position()
         self.update_preview()

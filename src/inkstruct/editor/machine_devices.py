@@ -20,6 +20,7 @@ class DeviceDialog(QtWidgets.QDialog):
         from .machine_panel import field, pair_widget
 
         self.panel = panel
+        self.range_connection = None
         self.setWindowTitle("写字机设备管理")
         self.resize(850, 680)
         col = QtWidgets.QVBoxLayout(self)
@@ -61,8 +62,9 @@ class DeviceDialog(QtWidgets.QDialog):
 
         limits = QtWidgets.QGroupBox("安全工作范围")
         ranges = QtWidgets.QFormLayout(limits)
-        self.use_range = QtWidgets.QCheckBox("确认设备坐标及实际安全范围")
+        self.use_range = QtWidgets.QCheckBox("确认本次连接的实际安全范围")
         ranges.addRow(self.use_range)
+        ranges.addRow(label("设备重启后可能重新设零。请按当前坐标核对两角。"))
         self.bounds = [field() for _ in range(4)]
         ranges.addRow("最小角 X / Y", pair_widget(self.bounds[:2]))
         ranges.addRow("最大角 X / Y", pair_widget(self.bounds[2:]))
@@ -121,7 +123,7 @@ class DeviceDialog(QtWidgets.QDialog):
             for spin, value in zip(self.bounds, (area.left, area.top, area.right, area.bottom)
                                    if area else (0, 0, 100, 100), strict=True):
                 spin.setValue(value)
-            self.use_range.setChecked(area is not None)
+            self.use_range.setChecked(self.panel.confirmed_area is not None)
             self.feed.setValue(profile.feed)
         self.refresh()
 
@@ -164,6 +166,10 @@ class DeviceDialog(QtWidgets.QDialog):
         connected = self.panel.device is not None
         idle = self.panel.busy is None
         profile = self.panel.profile is not None
+        if self.range_connection != self.panel.connection_id:
+            self.range_connection = self.panel.connection_id
+            self.use_range.setChecked(self.panel.confirmed_area is not None)
+        self.use_range.setEnabled(connected)
         self.devices.setEnabled(idle and not connected)
         self.add_button.setEnabled(idle and not connected)
         self.editor.setEnabled(idle and profile)
@@ -197,13 +203,14 @@ class DeviceDialog(QtWidgets.QDialog):
 
     def save(self):
         try:
-            area = self.draft_area()
+            confirmed = self.draft_area()
             old = self.panel.profile
-            if area != old.area and self.panel.device is None:
+            if confirmed is not None and self.panel.connection_id is None:
                 raise ValueError("请连接设备后确认实际工作范围。")
-            offset = old.offset if self.panel.device is None else self.panel.offset
-            profile = replace(old, axes=self.draft_axes(), area=area, offset=offset, feed=self.feed.value())
-            self.panel.save_profile(profile)
+            profile = replace(old, axes=self.draft_axes(), feed=self.feed.value(),
+                              area=confirmed if confirmed is not None else old.area,
+                              offset=self.panel.offset if confirmed is not None else old.offset)
+            self.panel.save_profile(profile, confirm_range=confirmed is not None)
             self.error.setText("已保存设备设置。")
         except (OSError, ValueError) as error:
             self.error.setText(str(error))
