@@ -52,9 +52,13 @@ def route_page(page):
     return replace(page, strokes=tuple(strokes))
 
 
+def motion_seconds(distance, count, feed):
+    return distance * 60 / feed + count * .35
+
+
 def estimate_seconds(strokes, feed, start=None):
     travel, ink = lengths(strokes, start)
-    return (travel + ink) * 60 / feed + len(strokes) * .35
+    return motion_seconds(travel + ink, len(strokes), feed)
 
 
 @dataclass(frozen=True)
