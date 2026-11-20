@@ -186,8 +186,14 @@ def test_editor_preserves_old_reviews_and_character_correction(tmp_path, monkeyp
         fragment = next(f for f in window.snapshot.fragments if f.asset_id)
         window.select_fragment(fragment)
         assert window.properties_tabs.tabText(window.properties_tabs.currentIndex()) == '字符校正'
-        window.glyph_inspector.controls['dx_em'].setValue(5)
-        window.glyph_inspector.apply()
+        inspector = window.glyph_inspector
+        inspector.nudge.step.setValue(5)
+        inspector.nudge.buttons[(1, 0)].click()
+        inspector.nudge.buttons[(0, -1)].click()
+        assert inspector.controls['dx_em'].value() == 5
+        assert inspector.controls['dy_em'].value() == -5
+        assert not window.flow.glyph_corrections
+        inspector.apply()
         wait_for(lambda: window.canvas.isEnabled() and not window.worker)
         assert window.flow.glyph_corrections
         window.request_project_save()

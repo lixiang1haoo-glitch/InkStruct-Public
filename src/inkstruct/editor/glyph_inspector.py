@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from ..document.glyph_corrections import GlyphCorrection, correction_for, update_corrections
 from ..settings_pages import label
 from .correction_context import surrounding_glyphs
+from .position_nudge import PositionNudge
 
 
 class CorrectionPreview(QtWidgets.QWidget):
@@ -112,6 +113,9 @@ class GlyphInspector(QtWidgets.QWidget):
             form.addRow(title, control)
             self.controls[key] = control
             control.valueChanged.connect(lambda *_: self.preview.update())
+        self.nudge = PositionNudge("字符位置校正", unit="%", minimum=.01, maximum=200, decimals=2)
+        self.nudge.moved.connect(self.move_glyph)
+        form.insertRow(2, self.nudge)
         self.scope = QtWidgets.QComboBox()
         for title, key in (("仅此处", "occurrence"), ("本文同一样本", "sample"),
                            ("本文同一字符的全部样本", "character")):
@@ -154,6 +158,11 @@ class GlyphInspector(QtWidgets.QWidget):
         self.undo_button.clicked.connect(lambda: self.history(False))
         self.redo_button.clicked.connect(lambda: self.history(True))
         self.scope_changed()
+
+    def move_glyph(self, x, y):
+        for key, distance in (("dx_em", x), ("dy_em", y)):
+            control = self.controls[key]
+            control.setValue(control.value() + distance)
 
     def set_ready(self, ready):
         ready = bool(ready and self.fragment and self.glyph and not self.job

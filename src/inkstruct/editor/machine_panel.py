@@ -1,20 +1,20 @@
 """Control a USB-connected N1 from the layout sidebar."""
 
 import base64
-import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
-from ..plotter.grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
-from ..plotter.physical import PaperRegistration, WorkArea, position_page, registration_marks
-from ..plotter.profiles import PageAlignment, PlotterProfiles
+from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
+from ..plotter.physical import PaperRegistration, position_page
+from ..plotter.profiles import PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
 from ..renderers.pages import page_draw
 from ..resource_catalog import workspace_for
 from ..settings_pages import label, scroll_page
 from ..theme import set_tone
+from .position_nudge import PositionNudge
 
 
 def field(value=0, *, low=-2000, high=2000):
@@ -151,15 +151,13 @@ class MachinePanel(QtWidgets.QWidget):
         self.plan_error = ""
         self.device = self.busy = None
         self.registration = self.confirmed_area = None
-        self.captured = {}
-        self.job = self.dry_job = None
+        self.job = None
         self.pending_pages = []
         self.completed_pages = set()
         self.batch_active = self.waiting_for_paper = False
         self.closing = False
         self.profiles = []
         self.profile = None
-        self.connected_port = None
         self.position_callback = None
         self.template = None
         self.setup = "默认摆放"
@@ -174,8 +172,6 @@ class MachinePanel(QtWidgets.QWidget):
 
         self.connection = QtWidgets.QGroupBox("设备")
         connect_layout = QtWidgets.QVBoxLayout(self.connection)
-        self.port_picker = QtWidgets.QComboBox()
-        self.port_picker.setAccessibleName("炽写 N1 USB 串口")
         self.device_picker = QtWidgets.QComboBox()
         self.device_picker.setAccessibleName("当前写字机")
         self.device_picker.currentIndexChanged.connect(
@@ -190,35 +186,6 @@ class MachinePanel(QtWidgets.QWidget):
         self.confirm_range_button = self.button("确认工作范围…", self.open_devices)
         connect_layout.addWidget(self.confirm_range_button)
         controls.addWidget(self.connection)
-
-        self.position_group = QtWidgets.QGroupBox("定位")
-        position_layout = QtWidgets.QVBoxLayout(self.position_group)
-        step_row = QtWidgets.QFormLayout()
-        self.jog_step = field(1, low=.1, high=20)
-        step_row.addRow("步长", self.jog_step)
-        position_layout.addLayout(step_row)
-        pad = QtWidgets.QGridLayout()
-        self.jog_buttons = []
-        for text, name, vector, row, col in (
-            ("↑", "向上", (0, -1), 0, 1), ("←", "向左", (-1, 0), 1, 0),
-            ("→", "向右", (1, 0), 1, 2), ("↓", "向下", (0, 1), 2, 1),
-        ):
-            button = self.button(text, lambda dxdy=vector: self.jog(dxdy))
-            button.setAccessibleName(name + "点动")
-            button.setToolTip(name + "抬笔点动")
-            pad.addWidget(button, row, col)
-            self.jog_buttons.append(button)
-        self.return_button = self.button("原点", self.return_to_origin)
-        self.return_button.setToolTip("抬笔回到书写原点")
-        pad.addWidget(self.return_button, 1, 1)
-        position_layout.addLayout(pad)
-        self.pen_button = self.button("落笔…", self.toggle_pen)
-        self.origin_capture = self.button("设为书写原点", lambda: self.submit("position-origin"))
-        position_layout.addWidget(pair_widget((self.pen_button, self.origin_capture)))
-        self.origin_status = label("书写原点未设置")
-        position_layout.addWidget(self.origin_status)
-        controls.addWidget(self.position_group)
-        self.position_group.hide()
 
         writing = QtWidgets.QGroupBox("书写")
         write_layout = QtWidgets.QVBoxLayout(writing)
@@ -237,6 +204,12 @@ class MachinePanel(QtWidgets.QWidget):
         self.report = label("连接设备后可定位。")
         write_layout.addWidget(self.report)
         self.align_button = self.button("当前页对位…", self.open_alignment)
+        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=20)
+        self.nudge.moved.connect(self.jog)
+        write_layout.addWidget(self.nudge)
+        self.return_button = self.button("抬笔回到 A 点", self.return_to_origin)
+        self.pen_button = self.button("抬笔", self.raise_pen)
+        write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
         self.alignment_status = label("当前页未对位")
         write_layout.addWidget(self.alignment_status)
         write_layout.addWidget(self.align_button)
@@ -246,111 +219,24 @@ class MachinePanel(QtWidgets.QWidget):
         self.write_button = self.button("开始书写…", self.handle_primary)
         self.write_button.setProperty("inkRole", "primary")
         self.stop_button = self.button("停止", self.stop)
+        self.stop_button.setProperty("inkRole", "danger")
         write_layout.addWidget(pair_widget((self.preview_button, self.dry_button)))
-        write_layout.addWidget(pair_widget((self.write_button, self.stop_button)))
+        write_layout.addWidget(self.write_button)
         controls.addWidget(writing)
+        root.addWidget(self.stop_button)
 
-        self.options = QtWidgets.QToolButton()
-        self.options.setText("手动对位与校验")
-        self.options.setCheckable(True)
-        self.options.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.options.setArrowType(QtCore.Qt.ArrowType.RightArrow)
-        controls.addWidget(self.options)
-        advanced = QtWidgets.QWidget()
-        options_layout = QtWidgets.QVBoxLayout(advanced)
-        options_layout.setContentsMargins(0, 0, 0, 0)
-        controls.addWidget(advanced)
-        advanced.hide()
-        self.options.toggled.connect(advanced.setVisible)
-        self.options.toggled.connect(
-            lambda opened: self.options.setArrowType(
-                QtCore.Qt.ArrowType.DownArrow if opened else QtCore.Qt.ArrowType.RightArrow
-            )
-        )
-
-        device_options = QtWidgets.QFormLayout()
-        self.scan = self.button("重新扫描串口", self.refresh_ports)
-        device_options.addRow(self.scan)
-        self.feed = QtWidgets.QSpinBox()
-        self.feed.setRange(60, MAX_WRITE_FEED)
-        self.feed.setValue(DEFAULT_WRITE_FEED)
-        self.feed.setSuffix(" mm/min")
-        device_options.addRow("书写速度", self.feed)
-        device_options.addRow("连接速率", label("115200"))
-        options_layout.addLayout(device_options)
-
-        limits = QtWidgets.QGroupBox("工作范围")
-        limit_form = QtWidgets.QFormLayout(limits)
-        self.area_inputs = tuple(field(value) for value in (0, 0, 100, 100))
-        for name, control in zip(("X 最小", "Y 最小", "X 最大", "Y 最大"), self.area_inputs, strict=True):
-            limit_form.addRow(name, control)
-            control.valueChanged.connect(self.invalidate_area)
-        self.area_confirm = QtWidgets.QCheckBox("确认设备的实际安全范围")
-        self.area_confirm.toggled.connect(self.confirm_area)
-        limit_form.addRow(self.area_confirm)
-        options_layout.addWidget(limits)
-
-        alignment = QtWidgets.QGroupBox("纸面对位")
-        form = QtWidgets.QFormLayout(alignment)
-        form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.align_form = form
-        self.mode = QtWidgets.QComboBox()
-        self.mode.addItem("空白纸", "blank")
-        self.mode.addItem("预印纸 · 两点对位", "preprinted")
-        form.addRow("纸张", self.mode)
-        self.origin = (field(), field())
-        self.origin_row = pair_widget(self.origin)
-        form.addRow("原点 X / Y", self.origin_row)
-        self.scaling = QtWidgets.QCheckBox("等比校正（默认保持 100%）")
-        form.addRow(self.scaling)
-        self.point_fields, self.capture_buttons, self.mark_labels = [], [], []
-        self.point_rows = []
-        for index, title in enumerate(("记录实地第 1 点", "记录实地第 2 点", "核验实地第 3 点")):
-            inputs = (field(0, low=0), field(0, low=0))
-            self.point_fields.append(inputs)
-            row = pair_widget(inputs)
-            self.point_rows.append(row)
-            form.addRow(f"纸面点 {index + 1} X / Y", row)
-            capture = self.button(title, lambda n=index: self.submit(f"position-{n}"))
-            self.capture_buttons.append(capture)
-            measurement = label("未记录")
-            self.mark_labels.append(measurement)
-            form.addRow(pair_widget((capture, measurement)))
-        self.verify_label = label("")
-        form.addRow(self.verify_label)
-        self.confirm_alignment = self.button("确认对位", self.place_job)
-        self.test_button = self.button("画三个测试点…", self.draw_test)
-        form.addRow(pair_widget((self.confirm_alignment, self.test_button)))
-        options_layout.addWidget(alignment)
-        self.read_position = self.button("读取位置", lambda: self.submit("position"))
-        self.touch_button = self.button("试触纸…", self.touch)
-        options_layout.addWidget(pair_widget((self.read_position, self.touch_button)))
         self.preview = MachinePreview()
         self.preview.setMinimumSize(0, 180)
         controls.addWidget(self.preview)
         self.preview.hide()
-        self.advanced = advanced
-        self.options.toggled.connect(self.position_group.setVisible)
-        controls.addStretch()
-
         self.worker = worker_factory(self)
         self.worker.succeeded.connect(self.succeeded)
         self.worker.failed.connect(self.failed)
         self.worker.phase.connect(self.on_phase)
         self.worker.progress.connect(self.on_progress)
 
-        for control in self.origin:
-            control.valueChanged.connect(self.invalidate_registration)
-        for index, pair in enumerate(self.point_fields):
-            for control in pair:
-                control.valueChanged.connect(lambda _value, number=index: self.paper_point_changed(number))
-        self.mode.currentIndexChanged.connect(self.change_mode)
-        self.scaling.toggled.connect(self.invalidate_registration)
         self.page_list.currentRowChanged.connect(self.select_page)
         self.scope.currentIndexChanged.connect(self.change_scope)
-        self.port_picker.currentIndexChanged.connect(self.refresh_buttons)
-        self.feed.valueChanged.connect(self.invalidate_trial)
-        self.change_mode()
         self.scanned = False
         self.set_workspace(workspace_for(self))
 
@@ -410,19 +296,8 @@ class MachinePanel(QtWidgets.QWidget):
         return True
 
     def apply_profile(self, *, activate=False):
+        self.confirmed_area = self.profile.area if activate and self.profile else None
         self.invalidate_registration()
-        self.invalidate_area()
-        if self.profile is not None:
-            area = self.profile.area
-            if area:
-                for control, value in zip(self.area_inputs, (area.left, area.top, area.right, area.bottom),
-                                          strict=True):
-                    with QtCore.QSignalBlocker(control):
-                        control.setValue(value)
-                if activate:
-                    self.area_confirm.setChecked(True)
-            self.feed.setValue(self.profile.feed)
-        self.refresh_buttons()
 
     def open_devices(self, parent=None):
         from .machine_devices import DeviceDialog
@@ -459,8 +334,8 @@ class MachinePanel(QtWidgets.QWidget):
         except ValueError as error:
             self.job = None
             self.message(str(error), error=True)
-        self.invalidate_trial()
         self.update_preview()
+        self.refresh_buttons()
 
     def open_alignment(self):
         from .machine_alignment import AlignmentDialog, page_context
@@ -480,15 +355,8 @@ class MachinePanel(QtWidgets.QWidget):
     def refresh_ports(self):
         self.scanned = True
         self.port_records = tuple(self.ports())
-        with QtCore.QSignalBlocker(self.port_picker):
-            previous = self.port_picker.currentData()
-            self.port_picker.clear()
-            for port in self.port_records:
-                self.port_picker.addItem(port.portName(), port.portName())
-            if (index := self.port_picker.findData(previous)) >= 0:
-                self.port_picker.setCurrentIndex(index)
-        if not self.port_picker.count() and self.device is None:
-            self.message("未发现炽写 N1。连接 USB 后到「设备设置」重新扫描。")
+        if not self.port_records and self.device is None:
+            self.message("未发现炽写 N1。请连接 USB 后打开设备管理。")
         self.refresh_buttons()
 
     def message(self, text, error=False):
@@ -500,7 +368,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     @property
     def is_moving(self):
-        return self.busy in {"dry", "write", "test", "axis-trial", "jog", "touch", "return", "pen"}
+        return self.busy in {"dry", "write", "axis-trial", "jog", "return", "pen"}
 
     @property
     def pen_raised(self):
@@ -515,8 +383,6 @@ class MachinePanel(QtWidgets.QWidget):
     def set_document(self, snapshot, index, ready, template=None):
         self.template = template
         self.candidate = (snapshot, index) if ready and snapshot and snapshot.pages else None
-        if self.candidate is None and not self.batch_active and self.busy is None:
-            self.dry_job = None
         if self.isVisible():
             self.refresh_document()
 
@@ -595,118 +461,22 @@ class MachinePanel(QtWidgets.QWidget):
             except ValueError:
                 pass
         self.preview.set_paper(self.snapshot, index)
-        x, y = min(15., paper.width_mm / 4), min(15., paper.height_mm / 4)
-        for pair, point in zip(self.point_fields, ((x, y), (paper.width_mm - x, y), (x, paper.height_mm - y)),
-                               strict=True):
-            for control, value in zip(pair, point, strict=True):
-                with QtCore.QSignalBlocker(control):
-                    control.setValue(value)
-        self.clear_measurements()
         self.invalidate_registration()
 
-    def clear_measurements(self):
-        self.captured.clear()
-        for measurement in self.mark_labels:
-            measurement.setText("未记录")
-
-    def change_mode(self, *_):
-        preprinted = self.mode.currentData() == "preprinted"
-        self.align_form.setRowVisible(self.origin_row, not preprinted)
-        self.align_form.setRowVisible(self.scaling, preprinted)
-        for row in self.point_rows:
-            self.align_form.setRowVisible(row, preprinted)
-        for capture in self.capture_buttons:
-            self.align_form.setRowVisible(capture.parentWidget(), preprinted)
-        self.align_form.setRowVisible(self.verify_label, preprinted)
-        self.invalidate_registration()
-
-    def invalidate_trial(self, *_):
-        self.dry_job = None
+    def invalidate_registration(self):
+        self.registration = self.job = None
+        self.update_preview()
         self.refresh_buttons()
 
-    def invalidate_registration(self, *_):
-        self.registration = self.job = None
-        self.verify_label.clear()
-        self.invalidate_trial()
-        self.update_preview()
-
-    def invalidate_area(self, *_):
-        self.confirmed_area = None
-        with QtCore.QSignalBlocker(self.area_confirm):
-            self.area_confirm.setChecked(False)
-        self.invalidate_trial()
-        self.update_preview()
-
-    def confirm_area(self, checked):
-        self.confirmed_area = None
-        if checked:
-            left, top, right, bottom = (control.value() for control in self.area_inputs)
-            try:
-                self.confirmed_area = WorkArea(left, top, right, bottom)
-            except ValueError as error:
-                self.invalidate_area()
-                self.message(str(error), error=True)
-        self.invalidate_trial()
-        self.update_preview()
-
-    def paper_points(self):
-        return tuple(tuple(control.value() for control in pair) for pair in self.point_fields)
-
-    def paper_point_changed(self, number):
-        if number != 2 and self.mode.currentData() == "preprinted":
-            self.invalidate_registration()
-        else:
-            self.update_verification()
-            self.update_preview()
-
-    def place_job(self):
-        if self.paper_page is None or self.device is None or self.busy is not None or self.waiting_for_paper:
-            return
-        try:
-            points = self.paper_points()
-            if self.mode.currentData() == "blank":
-                origin = tuple(control.value() for control in self.origin)
-                coords = (self.profile.axes.register((0, 0), origin) if self.profile
-                          else PaperRegistration(origin))
-            elif self.profile is not None:
-                a, b = self.captured[0], self.captured[1]
-                angle, scale = self.profile.axes.measure(points[:2], a, b)
-                coords = self.profile.axes.register(points[0], a, angle=angle,
-                                                   scale=scale if self.scaling.isChecked() else 1.)
-            else:
-                coords = PaperRegistration.two_point(points[:2], (self.captured[0], self.captured[1]),
-                                                     scale=self.scaling.isChecked())
-            self.registration = coords
-            self.job = position_page(self.paper_page, coords) if self.paper_page.strokes else None
-            self.invalidate_trial()
-            self.update_preview()
-            self.update_verification()
-            self.message(f"已确认纸面对位 · 比例 {coords.scale:.3%}"
-                         + ("。当前页无可发送笔迹。" if self.job is None else "。"))
-        except (KeyError, ValueError) as error:
-            self.invalidate_registration()
-            self.message(str(error), error=True)
-
-    def update_preview(self, *, job=None):
+    def update_preview(self):
         coords = self.registration
         if self.preview_enabled:
-            self.preview.set_paths(job or self.job or self.unplaced_preview, coords, self.confirmed_area,
-                                   tuple(map(coords.place, self.paper_points())) if coords else self.paper_points())
-        self.alignment_status.setText("当前页已对位" if coords else "当前页未对位")
-        if coords:
-            x, y = coords.place((0, 0))
-            self.origin_status.setText(f"书写原点 X {x:.3f} · Y {y:.3f} mm")
-        else:
-            self.origin_status.setText("书写原点未设置")
-
-    def update_verification(self):
-        if self.registration is None or 2 not in self.captured:
-            self.verify_label.clear()
-            return
-        actual = self.captured[2]
-        expected = self.registration.place(self.paper_points()[2])
-        dx, dy = (a - b for a, b in zip(actual, expected, strict=True))
-        self.verify_label.setText(f"第三点偏差 {math.hypot(dx, dy):.3f} mm · X {dx:+.3f} · Y {dy:+.3f}")
+            self.preview.set_paths(self.job or self.unplaced_preview, coords, self.confirmed_area,
+                                   (coords.origin,) if coords else ())
+        self.alignment_status.setText(
+            f"当前页已对位 · A 点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm"
+            if coords else "当前页未对位"
+        )
 
     def refresh_buttons(self, *_):
         busy, connected = self.busy is not None or self.closing, self.device is not None
@@ -716,15 +486,10 @@ class MachinePanel(QtWidgets.QWidget):
         positioning = available and not self.waiting_for_paper
         safe = positioning and self.confirmed_area is not None
         ready = (self.batch_active or self.candidate is not None) and self.paper_page is not None
-        preprinted = self.mode.currentData() == "preprinted"
-        self.position_group.setEnabled(not busy and not self.waiting_for_paper)
-        self.advanced.setEnabled(not busy and not self.waiting_for_paper)
         self.scope.setEnabled(not busy and not self.batch_active and ready)
         self.page_list.setEnabled(self.scope.isEnabled() and self.scope.currentData() == "single")
-        self.port_picker.setEnabled(not connected)
         self.device_picker.setEnabled(not connected and not busy and not self.batch_active)
         self.manage_devices.setEnabled(not busy and not self.batch_active)
-        self.scan.setEnabled(not connected)
         self.link_button.setText("断开" if connected else "连接")
         self.link_button.setEnabled(not busy and not self.batch_active and
                                     (self.pen_raised if connected else self.available_port() is not None))
@@ -732,19 +497,10 @@ class MachinePanel(QtWidgets.QWidget):
         self.confirm_range_button.setEnabled(positioning)
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
-        self.area_confirm.setEnabled(available)
-        for button in (*self.jog_buttons, self.touch_button):
-            button.setEnabled(safe)
-        self.pen_button.setText("落笔…" if self.pen_raised or not connected else "抬笔")
-        self.pen_button.setEnabled(positioning and (safe or not self.pen_raised))
-        self.return_button.setEnabled(safe and self.registration is not None)
-        self.read_position.setEnabled(positioning)
-        self.origin_capture.setEnabled(positioning and ready and not preprinted)
-        for button in self.capture_buttons:
-            button.setEnabled(positioning and ready and preprinted)
-        marks_ready = {0, 1} <= self.captured.keys()
-        self.confirm_alignment.setEnabled(positioning and ready and (not preprinted or marks_ready))
-        self.test_button.setEnabled(safe and ready and self.registration is not None and preprinted)
+        self.nudge.setEnabled(safe)
+        self.pen_button.setVisible(connected and not self.pen_raised)
+        self.pen_button.setEnabled(positioning)
+        self.return_button.setEnabled(safe and ready and self.registration is not None)
         self.dry_button.setEnabled(safe and ready and self.job is not None)
         if moving:
             paused = self.worker.control.pause_requested.is_set()
@@ -774,7 +530,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def available_port(self):
         if self.profile is None:
-            return self.port_picker.currentData()
+            return None
         matches = [p.portName() for p in self.port_records
                    if (getattr(p, "serialNumber", lambda: "")() == self.profile.serial
                        if self.profile.serial else p.portName() == self.profile.port)]
@@ -786,52 +542,24 @@ class MachinePanel(QtWidgets.QWidget):
         if self.device is None:
             self.refresh_ports()
             if port := self.available_port():
-                if self.submit("connect", port):
-                    self.connected_port = port
+                self.submit("connect", port)
                 self.message(f"正在读取 {port} 的设备状态…")
             else:
                 self.message("所选设备尚未连接 USB。", error=True)
         else:
             self.submit("disconnect")
 
-    def jog(self, vector):
-        if self.confirmed_area is not None:
-            step = self.jog_step.value()
-            self.submit("jog", tuple(component * step for component in vector), self.confirmed_area)
+    def jog(self, x, y):
+        if self.confirmed_area is not None and self.profile:
+            self.submit("jog", self.profile.axes.map(x, y), self.confirmed_area)
 
     def return_to_origin(self):
         if self.registration is not None and self.confirmed_area is not None:
-            self.submit("return", self.registration.place((0, 0)), self.confirmed_area)
+            self.submit("return", self.registration.origin, self.confirmed_area)
 
-    def toggle_pen(self):
-        if self.device is None:
-            return
-        down = self.pen_raised
-        if down and (self.confirmed_area is None or not self.confirm(
-            "落笔", "笔尖将在当前位置落下并保持。确认纸张和笔尖已就位？",
-        )):
-            return
-        self.submit("pen", down, self.confirmed_area)
-
-    def touch(self):
-        area = self.confirmed_area
-        if area is not None and self.confirm("试触纸", "笔尖将在当前位置落笔并抬起。确认已放好测试纸？"):
-            self.submit("touch", area)
-
-    def draw_test(self):
-        if self.registration is None or self.confirmed_area is None or self.device is None:
-            return
-        try:
-            job = registration_marks(self.paper_page, self.registration, self.paper_points())
-            job.check(self.confirmed_area, self.device.position[:2])
-        except ValueError as error:
-            self.message(str(error), error=True)
-            return
-        self.update_preview(job=job)
-        if self.confirm("画三个测试点", "将在纸上画三个半径 0.5 mm 的圆。确认当前放置的是测试纸？"):
-            self.run_job("test", job)
-        else:
-            self.update_preview()
+    def raise_pen(self):
+        if self.device is not None and not self.pen_raised:
+            self.submit("pen", False, self.confirmed_area)
 
     def handle_primary(self):
         if self.is_moving:
@@ -870,8 +598,8 @@ class MachinePanel(QtWidgets.QWidget):
                     self.batch_active = True
                     self.pending_pages = pending
 
-    def run_job(self, kind, job=None):
-        job = job or self.job
+    def run_job(self, kind):
+        job = self.job
         area = self.confirmed_area
         if (job is None or area is None or self.device is None or self.waiting_for_paper or
                 (self.candidate is None and not self.batch_active)):
@@ -881,7 +609,7 @@ class MachinePanel(QtWidgets.QWidget):
         except ValueError as error:
             self.message(str(error), error=True)
             return False
-        if self.submit(kind, job, area, self.feed.value()):
+        if self.submit(kind, job, area, self.profile.feed if self.profile else DEFAULT_WRITE_FEED):
             self.progress.setRange(0, len(job.strokes))
             self.progress.setValue(0)
             self.progress.show()
@@ -942,11 +670,6 @@ class MachinePanel(QtWidgets.QWidget):
             self.preview.point = (x, y)
         self.preview.update()
 
-    def open_range_settings(self):
-        self.options.setChecked(True)
-        self.scroll.ensureWidgetVisible(self.area_confirm)
-        self.area_confirm.setFocus()
-
     def succeeded(self, kind, status):
         if self.closing:
             return
@@ -956,53 +679,30 @@ class MachinePanel(QtWidgets.QWidget):
         message = {"connect": "请确认工作范围，再移动笔尖。",
                    "disconnect": "已断开。", "dry": "抬笔试走完成，可以开始书写。",
                    "write": "书写完成。设备已抬笔并处于 Idle。",
-                   "test": "三个测试点已画完，设备已抬笔。",
-                   "touch": "试触纸完成，设备已抬笔。", "jog": "点动完成。",
+                   "jog": "点动完成。",
                    "return": "笔尖已抬起并回到书写原点。",
-                   "pen": "笔尖已抬起。" if self.pen_raised else "笔尖已落下。",
-                   "position": "已读取位置。", "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
+                   "pen": "笔尖已抬起。",
+                   "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
-            self.clear_measurements()
             self.apply_profile()
             if kind == "connect":
                 message = "已连接。请在设备管理中确认当前坐标下的工作范围。"
                 if self.profile and self.profile.area and self.profile.offset != self.offset:
                     message = "已连接。设备工作零点已变化，请重新核对安全范围与纸面对位。"
-            if kind == "disconnect":
-                self.connected_port = None
         elif kind == "position-read":
             callback, self.position_callback = self.position_callback, None
             if callback is not None:
                 callback(status)
-        elif kind == "position-origin":
-            for control, coordinate in zip(self.origin, status.position[:2], strict=True):
-                control.setValue(coordinate)
-            self.place_job()
-            message = "已设置书写原点。"
-        elif kind.startswith("position-"):
-            index = int(kind.removeprefix("position-"))
-            point = status.position[:2]
-            self.captured[index] = point
-            self.mark_labels[index].setText(f"X {point[0]:.3f} · Y {point[1]:.3f} mm")
-            if index in (0, 1):
-                self.invalidate_registration()
-            else:
-                self.update_verification()
-        elif kind == "dry":
-            self.dry_job = self.job
         elif kind == "write":
             page = self.page_list.currentRow()
             self.completed_pages.add(page)
             self.update_page_states()
-            self.invalidate_trial()
             if self.pending_pages:
                 self.waiting_for_paper = True
                 self.page_list.setCurrentRow(self.pending_pages.pop(0))
                 message = f"第 {page + 1} 页已完成。换纸后点「换纸完成」。"
             else:
                 self.end_batch()
-        elif kind == "test":
-            self.update_preview()
         self.refresh_document()
         self.message(message)
         self.refresh_buttons()
@@ -1014,13 +714,9 @@ class MachinePanel(QtWidgets.QWidget):
         self.position_callback = None
         self.end_batch()
         self.progress.hide()
-        self.invalidate_trial()
         if disconnected:
             self.device = None
-            self.connected_port = None
-            self.clear_measurements()
-            self.invalidate_area()
-            self.invalidate_registration()
+            self.apply_profile()
         self.show_position()
         self.update_preview()
         self.refresh_document()
