@@ -2,6 +2,7 @@
 
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from time import monotonic
 from dataclasses import asdict, replace
@@ -16,11 +17,12 @@ from ..plotter.physical import PaperRegistration, WorkArea, machine_point, posit
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
-from ..plotter.write_session import ProgressFile, estimate_seconds, lengths, record_time, route_page, timing_factor
+from ..plotter.write_session import estimate_seconds, motion_seconds, record_time, timing_factor
 from ..renderers.pages import page_draw
 from ..resource_catalog import workspace_for
 from ..settings_pages import label, scroll_page
 from ..theme import set_tone
+from .machine_page_work import PageWork, measure_page, prepare_page
 from .position_nudge import PositionNudge
 
 
@@ -199,6 +201,11 @@ class MachinePanel(QtWidgets.QWidget):
         self.template = None
         self.setup = "默认摆放"
         self.preview_enabled = False
+        self.page_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plotter-page")
+        self.session_work = PageWork(self, self.page_executor)
+        self.estimate_work = PageWork(self, self.page_executor)
+        self.prepared = None
+        self.preview_source = None
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -394,14 +401,11 @@ class MachinePanel(QtWidgets.QWidget):
                     self.confirmed_area = self.profile.datum.to_work_area(self.profile.datum.area, self.frame)
             else:
                 self.confirmed_area = self.profile.area
-        if self.raw_page is not None:
-            self.prepare_session()
-            self.unplaced_preview = (position_page(self.paper_page, PaperRegistration((0, 0)))
-                                     if self.paper_page.strokes else None)
         self.show_position()
-        if keep_alignment:
-            self.update_preview()
-            self.refresh_buttons()
+        if not keep_alignment:
+            self.registration = self.job = None
+        if self.raw_page is not None:
+            self.request_session()
         else:
             self.invalidate_registration()
 
@@ -582,6 +586,10 @@ class MachinePanel(QtWidgets.QWidget):
         if snapshot is self.snapshot and self.template is self.candidate_template:
             self.refresh_buttons()
             return
+        for work in (self.session_work, self.estimate_work):
+            work.cancel()
+            work.cache.clear()
+        self.preview_source = None
         self.snapshot = snapshot
         self.template = self.candidate_template
         self.plan = None
@@ -628,30 +636,54 @@ class MachinePanel(QtWidgets.QWidget):
     def change_page(self, *_):
         index = self.page_list.currentRow()
         paper = self.snapshot.page_profile
-        self.paper_page = (self.plan.pages[index] if self.plan else
-                           PlotPage(index, paper.width_mm, paper.height_mm, ()))
-        self.raw_page = self.paper_page
+        self.raw_page = (self.plan.pages[index] if self.plan else
+                         PlotPage(index, paper.width_mm, paper.height_mm, ()))
+        self.registration = self.job = self.unplaced_preview = None
+        self.request_session()
+
+    def request_session(self):
+        page = self.raw_page
+        device_id = self.profile.id if self.profile else None
+        key = self.store.path.parent, page.index, device_id
+        self.estimate_work.cancel()
+        if key not in self.session_work.cache:
+            self.prepared = self.paper_page = self.journal = None
+            self.done, self.uncertain = 0, False
+            self.fixture_placement = None
+            self.preview.paper = self.preview_source = None
+            self.preview.update()
+            self.show_progress_preview()
+            self.alignment_status.setText("正在准备当前页…")
+            self.estimate_label.setText("正在计算本页预计用时…")
+            self.route_stats.clear()
+            self.optimize.setEnabled(False)
+            self.refresh_buttons()
+        background = self.snapshot.pages[page.index].background
+        args = (key[0], self.snapshot.document_id, page, background.sha256 if background else "", device_id)
+        # Trivial pages can restore their checkpoint immediately; dense geometry runs in the worker.
+        small = len(page.strokes) <= 16 and sum(len(s.points) for s in page.strokes) <= 128
+        self.session_work.request(key, prepare_page, args, self.session_ready, self.session_failed, immediate=small)
+
+    def session_failed(self, error):
+        self.progress_error = f"无法准备本页笔迹：{error}"
+        self.estimate_label.setText(self.progress_error)
+        self.message(self.progress_error, error=True)
+        self.refresh_buttons()
+
+    def session_ready(self, prepared):
+        self.prepared = prepared
         self.prepare_session()
-        self.unplaced_preview = None
-        if self.paper_page.strokes:
-            try:
-                self.unplaced_preview = position_page(self.paper_page, PaperRegistration((0, 0)))
-            except ValueError:
-                pass
-        self.preview.set_paper(self.snapshot, index)
-        self.invalidate_registration()
+        self.refresh_fixture()
+        self.update_preview()
+        self.refresh_buttons()
 
     def prepare_session(self):
         page = self.raw_page
-        self.journal = None
         self.progress_error = ""
         self.saved_placement = None
         self.done, self.uncertain = 0, False
-        if self.plan and page and page.strokes and self.profile:
-            background = self.snapshot.pages[page.index].background
-            background_id = background.sha256 if background else ""
-            self.journal = ProgressFile.for_page(self.store.path.parent, self.plan.document_id, page,
-                                                 background_id, self.profile.id)
+        self.journal, routed = self.prepared
+        if self.journal:
             try:
                 self.done, self.uncertain = self.journal.read()
                 if self.journal.path.exists():
@@ -665,7 +697,10 @@ class MachinePanel(QtWidgets.QWidget):
             except (KeyError, TypeError, ValueError, OSError) as error:
                 self.progress_error = f"无法读取续写记录：{error}"
             self.journal = replace(self.journal, optimized=self.optimize.isChecked())
-        self.paper_page = route_page(page) if self.optimize.isChecked() and page else page
+        selected = routed if self.optimize.isChecked() else page
+        if selected is not self.paper_page:
+            self.unplaced_preview = None
+        self.paper_page = selected
         self.optimize.setEnabled(not (self.journal and self.journal.path.exists()))
 
     def placement_details(self):
@@ -677,35 +712,39 @@ class MachinePanel(QtWidgets.QWidget):
                 "pen": self.profile.active_pen, "connection": self.connection_id}
 
     def change_routing(self):
-        if self.raw_page is None or self.busy:
+        if self.prepared is None or self.busy:
             return
         self.prepare_session()
-        if self.paper_page.strokes:
-            self.unplaced_preview = position_page(self.paper_page, PaperRegistration((0, 0)))
-            if self.registration:
-                self.job = position_page(self.paper_page, self.registration)
+        self.unplaced_preview = None
+        if self.paper_page.strokes and self.registration:
+            self.job = position_page(self.paper_page, self.registration)
         self.update_preview()
         self.refresh_buttons()
 
     def update_estimate(self):
         if not self.paper_page or not self.paper_page.strokes or not self.profile:
+            self.estimate_work.cancel()
             self.estimate_label.clear()
             self.route_stats.clear()
             return
-        page = self.job or self.unplaced_preview
-        if page is None:
-            return
-        start = self.device.position[:2] if self.job and self.device else None
-        remaining = page.strokes[self.done:]
-        self.base_estimate = estimate_seconds(remaining, self.profile.feed, start)
-        key = sha256(f"{self.profile.id}|{self.profile.active_pen}|{self.profile.feed}".encode()).hexdigest()
-        self.timing_path = self.store.path.parent / "plotter-times" / (key + ".json")
+        start = tuple(self.device.position[:2]) if self.job and self.device else None
+        key = (self.raw_page.index, self.paper_page is self.raw_page,
+               self.job.registration if self.job else None, self.done, start)
+        profile_key = sha256(f"{self.profile.id}|{self.profile.active_pen}|{self.profile.feed}".encode()).hexdigest()
+        self.timing_path = self.store.path.parent / "plotter-times" / (profile_key + ".json")
+        if key not in self.estimate_work.cache:
+            self.estimate_label.setText("正在计算本页预计用时…")
+            self.route_stats.clear()
+        args = self.raw_page, self.paper_page, self.job, self.done, start
+        self.estimate_work.request(key, measure_page, args, self.show_estimate,
+                                   lambda error: self.estimate_label.setText(f"无法估算本页用时：{error}"))
+
+    def show_estimate(self, measured):
+        distance, count, before, after = measured
+        self.base_estimate = motion_seconds(distance, count, self.profile.feed)
         seconds = round(self.base_estimate * timing_factor(self.timing_path))
         self.estimate_label.setText(f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒")
-        baseline = position_page(self.raw_page, page.registration)
-        before = lengths(baseline.strokes, start)[0]
-        after = lengths(page.strokes, start)[0]
-        self.route_stats.setText(f"剩余抬笔 {len(remaining)} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
+        self.route_stats.setText(f"剩余抬笔 {count} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
 
     def show_progress_preview(self):
         state = (self.done, self.uncertain) if self.done or self.uncertain else None
@@ -768,6 +807,16 @@ class MachinePanel(QtWidgets.QWidget):
             self.preview_enabled = True
             self.preview_button.setChecked(True)
             self.preview.show()
+        if self.preview_enabled and self.paper_page:
+            index = self.paper_page.index
+            if self.preview_source != (id(self.snapshot), index):
+                self.preview.set_paper(self.snapshot, index)
+                self.preview_source = id(self.snapshot), index
+            if self.paper_page.strokes and not self.job and self.unplaced_preview is None:
+                try:
+                    self.unplaced_preview = position_page(self.paper_page, PaperRegistration((0, 0)))
+                except ValueError:
+                    pass
         self.show_progress_preview()
         self.update_estimate()
         if self.preview_enabled:
@@ -786,7 +835,8 @@ class MachinePanel(QtWidgets.QWidget):
         positioning = available and not self.waiting_for_paper
         safe = positioning and self.range_ready
         ready = self.current_page_ready()
-        self.scope.setEnabled(not busy and not self.batch_active and ready)
+        document_ready = self.candidate is not None and self.candidate[0] is self.snapshot
+        self.scope.setEnabled(not busy and not self.batch_active and document_ready)
         self.page_list.setEnabled(self.scope.isEnabled() and self.scope.currentData() == "single")
         self.device_picker.setEnabled(not connected and not busy and not self.batch_active)
         self.manage_devices.setEnabled(not busy and not self.batch_active)
@@ -816,7 +866,7 @@ class MachinePanel(QtWidgets.QWidget):
         elif self.waiting_for_paper:
             self.write_button.setText("纸已靠齐，沿用对位" if can_reuse else "换纸完成")
             self.write_button.setToolTip(f"纸张两边靠齐 · {self.setup}" if can_reuse else "")
-            self.write_button.setEnabled(available)
+            self.write_button.setEnabled(available and ready)
         else:
             self.write_button.setText("核对纸面并续写…" if self.done or self.uncertain else "开始书写…")
             self.write_button.setToolTip("")
@@ -1195,6 +1245,9 @@ class MachinePanel(QtWidgets.QWidget):
 
     def shutdown(self):
         self.closing = True
+        for work in (self.estimate_work, self.session_work):
+            work.cancel()
+        self.page_executor.shutdown(wait=False, cancel_futures=True)
         self.worker.shutdown()
         if self.worker.isRunning():
             self.worker.wait()
