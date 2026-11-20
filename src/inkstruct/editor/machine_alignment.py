@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..document.flow_template import FlowTemplate
 from ..document.schema import digest
+from ..plotter.physical import machine_point
 from ..plotter.profiles import PageAlignment
 from ..sample_preview import InkViewport, SampleView
 from ..settings_pages import label
@@ -52,6 +53,42 @@ class FixturePlacement:
     position: tuple[float, float]
     setup: str
     source: str
+
+
+class SessionPageGroup:
+    """Measurements for one template, device coordinate frame and sheet setup."""
+    def __init__(self, template, context, setup, axes):
+        self.template, self.context, self.setup, self.axes = template, context, setup, axes
+        self.layouts = tuple(dict.fromkeys((*template.start_pages, *template.effective_loop)))
+        self.entries = {}
+        self.translated = False
+
+    @property
+    def complete(self):
+        return len(self.entries) == len(self.layouts) and len(self.layouts) > 1
+
+    def measure(self, layout, alignment, position, source, *, translate=False):
+        if layout not in self.layouts:
+            raise ValueError("当前页面不属于这组模板版式。")
+        if translate:
+            if not self.complete:
+                raise ValueError("请先分别对准此模板的所有版式。")
+            previous = self.entries[layout]
+            if (alignment.angle, alignment.scale) != (previous.alignment.angle, previous.alignment.scale):
+                raise ValueError("方向或比例已变化，请重新测量各版式。")
+            old_registration = self.axes.register(previous.alignment.a, previous.position,
+                                                  angle=alignment.angle, scale=alignment.scale)
+            old_x, old_y = old_registration.place(alignment.a)
+            dx, dy = position[0] - old_x, position[1] - old_y
+            entries = {key: replace(item, position=machine_point((item.position[0] + dx, item.position[1] + dy)),
+                                    source=f"本次连接 · 按{source}平移")
+                       for key, item in self.entries.items()}
+            self.entries = entries
+        elif self.complete and (self.translated or self.entries[layout].alignment.angle != alignment.angle
+                                or self.entries[layout].alignment.scale != alignment.scale):
+            self.entries.clear()
+        self.entries[layout] = FixturePlacement(alignment, position, self.setup, f"本次连接 · {source}实测")
+        self.translated = translate
 
 
 def fixture_placement(panel, template, snapshot, index):
@@ -138,6 +175,10 @@ class AlignmentDialog(QtWidgets.QDialog):
             layout = panel.template.layout(index)
         self.source_page = dict(document=snapshot.document_id, number=index + 1) if snapshot else None
         self.fixture_page = fixture_page(page, layout, snapshot, index)
+        self.document_snapshot = snapshot
+        self.layout_id = layout.layout_id if layout is not None else None
+        self.group = panel.session_group() if snapshot is not None and not configure else None
+        self.live_measurement = False
         self.original = alignment
         self.recalled_alignment = None
         self.configure = configure
@@ -199,7 +240,13 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.fixture_hint = label("")
         form.addRow(self.fixture_hint)
         self.pdf_page = title.startswith("PDF ") or (snapshot is not None and snapshot.pages[index].background is not None)
-        current = alignment or PageAlignment((min(15., size[0] / 4), min(15., size[1] / 4)))
+        self.shift_group = QtWidgets.QCheckBox("纸张方向未变，用本次实测 A 点平移其余版式")
+        self.shift_group.setToolTip("只在本次连接中生效。移动纸张后保持相同朝向和比例，各版式保留原有角度、比例和相对位置。")
+        form.addRow(self.shift_group)
+        self.group_hint = label("")
+        form.addRow(self.group_hint)
+        old = self.group.entries.get(self.layout_id) if self.group else None
+        current = (old.alignment if old else alignment) or PageAlignment((min(15., size[0] / 4), min(15., size[1] / 4)))
         self.a = tuple(field(value, low=0, high=limit) for value, limit in zip(current.a, size, strict=True))
         self.b = tuple(field(value, low=0, high=limit) for value, limit in zip(
             current.b or (size[0] - min(15., size[0] / 4), current.a[1]), size, strict=True
@@ -346,6 +393,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.clear_measurement()
 
     def clear_measurement(self):
+        self.live_measurement = False
         self.measurement = None
         self.clear_b()
 
@@ -360,7 +408,10 @@ class AlignmentDialog(QtWidgets.QDialog):
 
     def markings(self):
         a, b = self.points()
-        initial = self.recalled_alignment or self.original
+        prior = None
+        if self.group and self.group.setup == self.setup.text().strip():
+            prior = self.group.entries.get(self.layout_id)
+        initial = self.recalled_alignment or (prior.alignment if prior else self.original)
         return PageAlignment(a, b if self.use_b.isChecked() else initial.b if initial else None,
                              initial.angle if initial else 0., initial.scale if initial else 1.)
 
@@ -397,6 +448,15 @@ class AlignmentDialog(QtWidgets.QDialog):
                                              or self.measured_frame != self.panel.frame
                                              or self.offset != self.panel.offset):
             self.measurement = self.measurement_b = None
+        group = self.group
+        matched = (group is not None and group is self.panel.session_group()
+                   and group.setup == self.setup.text().strip())
+        self.group_hint.setVisible(matched)
+        if matched:
+            self.group_hint.setText(f"同一摆放已登记 {len(group.entries)} / {len(group.layouts)} 个版式。")
+        self.shift_group.setVisible(matched and group.complete)
+        self.shift_group.setEnabled(bool(matched and group.complete and not self.use_b.isChecked()
+                                        and self.live_measurement and self.measurement is not None and idle))
         self.fixture.setEnabled(idle and bool(profile and profile.datum))
         fixed = self.fixture.isChecked()
         located = not (profile and profile.datum) or self.panel.frame is not None
@@ -430,7 +490,10 @@ class AlignmentDialog(QtWidgets.QDialog):
                                   or self.measurement_b is not None))
         a, b = self.points()
         self.canvas.points = [("A", a)]
-        initial = self.recalled_alignment or self.original
+        prior = None
+        if self.group and self.group.setup == self.setup.text().strip():
+            prior = self.group.entries.get(self.layout_id)
+        initial = self.recalled_alignment or (prior.alignment if prior else self.original)
         if self.use_b.isChecked() or (initial and initial.b):
             self.canvas.points.append(("B", b))
         checking = self.check_c.isChecked()
@@ -464,6 +527,7 @@ class AlignmentDialog(QtWidgets.QDialog):
             self.measured_frame = self.panel.frame
             self.offset = self.panel.offset
             self.measurement = status.position[:2]
+            self.live_measurement = True
             self.clear_b()
             self.status.clear()
         self.panel.capture_position(read)
@@ -476,6 +540,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.panel.capture_position(read)
 
     def restore(self):
+        self.live_measurement = False
         try:
             key = self.markings() if self.configure else self.original
             fixed = self.fixture.isChecked()
@@ -546,12 +611,22 @@ class AlignmentDialog(QtWidgets.QDialog):
                     raise ValueError("请填写摆放基准名称。")
                 key = result if self.configure else self.original
                 page = self.fixture_page if self.fixture.isChecked() else self.page
-                self.panel.store.place(self.panel.profile, page, setup, key, self.measurement,
-                                       self.offset, result, connection=self.measured_connection,
-                                       datum_origin=self.measured_frame, select_fixture=self.fixture.isChecked(),
-                                       source_page=self.source_page)
-                if not self.fixture.isChecked() and self.panel.datum_located:
-                    self.panel.store.select_fixture_setup(self.panel.profile, self.fixture_page, key, "")
+                if self.document_snapshot is not None and self.panel.snapshot is not self.document_snapshot:
+                    raise ValueError("文档已更新，请重新打开当前页对位。")
+                group = self.panel.session_group(setup) if not self.configure and self.source_page else None
+                translate = self.shift_group.isEnabled() and self.shift_group.isChecked()
+                if translate and (group is None or group is not self.group):
+                    raise ValueError("设备定位或摆放已变化，请重新记录 A 点。")
+                if not translate:
+                    self.panel.store.place(self.panel.profile, page, setup, key, self.measurement,
+                                           self.offset, result, connection=self.measured_connection,
+                                           datum_origin=self.measured_frame, select_fixture=self.fixture.isChecked(),
+                                           source_page=self.source_page)
+                    if not self.fixture.isChecked() and self.panel.datum_located:
+                        self.panel.store.select_fixture_setup(self.panel.profile, self.fixture_page, key, "")
+                if group is not None and self.live_measurement:
+                    source = f"第 {self.source_page['number']} 页"
+                    group.measure(self.layout_id, result, self.measurement, source, translate=translate)
                 self.accepted_connection = self.measured_connection
                 self.panel.setup = setup
             self.alignment, self.position = result, self.measurement

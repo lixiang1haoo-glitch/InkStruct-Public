@@ -179,6 +179,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.connection_id = None
         self.frame = None  # WPos of the physical datum in this connection only.
         self.fixture_placement = self.inherited_placement = None
+        self.group = None
         self.page_report = False
         self.registration = self.confirmed_area = None
         self.job = None
@@ -806,15 +807,48 @@ class MachinePanel(QtWidgets.QWidget):
         return self.batch_active or (self.candidate is not None and self.candidate[0] is self.snapshot
                                      and self.template is self.candidate_template)
 
+    def session_group(self, setup=None):
+        from .machine_alignment import SessionPageGroup, fixture_placement
+
+        template = self.template
+        if not (self.device and self.connection_id and self.profile and isinstance(template, FlowTemplate)
+                and template.kind == "custom" and self.snapshot):
+            self.group = None
+            return None
+        setup = self.setup if setup is None else setup
+        datum = self.profile.datum
+        context = (self.connection_id, self.profile.id, self.profile.axes, self.offset,
+                   datum.id if datum else None, self.frame, setup)
+        if self.group is None or self.group.template is not template or self.group.context != context:
+            group = SessionPageGroup(template, context, setup, self.profile.axes)
+            if self.datum_located:
+                for index, layout in enumerate((*template.start_pages, *template.effective_loop)):
+                    if layout not in group.entries:
+                        try:
+                            placement = fixture_placement(self, template, self.snapshot, index)
+                        except (OSError, ValueError, KeyError, TypeError) as error:
+                            self.message(f"无法载入整组摆放：{error}", error=True)
+                            break
+                        if placement and placement.setup == setup:
+                            group.entries[layout] = placement
+            self.group = group
+        return self.group if len(self.group.layouts) > 1 else None
+
     def refresh_fixture(self):
         self.fixture_placement = None
-        if self.datum_located and self.paper_page is not None:
-            from .machine_alignment import fixture_placement
+        try:
+            group = self.session_group()
+            if self.paper_page is None:
+                return
+            index = self.paper_page.index
+            if group and group.translated:
+                self.fixture_placement = group.entries[self.template.layout(index).layout_id]
+            elif self.datum_located:
+                from .machine_alignment import fixture_placement
 
-            try:
-                self.fixture_placement = fixture_placement(self, self.template, self.snapshot, self.paper_page.index)
-            except (OSError, ValueError, KeyError, TypeError) as error:
-                self.message(f"无法读取此页的纸张限位记录。{error}", error=True)
+                self.fixture_placement = fixture_placement(self, self.template, self.snapshot, index)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self.message(f"无法读取此页的摆放记录。{error}", error=True)
 
     def apply_fixture(self):
         fixture = self.fixture_placement
@@ -825,11 +859,11 @@ class MachinePanel(QtWidgets.QWidget):
         if previous is not None and previous == self.fixture_placement:
             return True
         self.invalidate_registration()
-        self.message("保存的摆放已变化，请重新核对纸张限位。", page_specific=True)
+        self.message("摆放或设备坐标已变化，请重新核对本页对位。", page_specific=True)
         return False
 
     def reuse_fixture(self):
-        if not self.current_page_ready() or not self.datum_located or self.busy is not None:
+        if not self.current_page_ready() or not self.device or self.busy is not None:
             return False
         # Re-read the placement in case it was edited since the page became visible.
         if not self.fixture_still_matches(self.inherited_placement or self.fixture_placement):
@@ -892,7 +926,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.refresh_motion_controls(self.nudge, positioning)
         self.refresh_pen_button(self.pen_button)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
-        can_reuse = ready and self.datum_located and self.fixture_placement is not None
+        can_reuse = ready and connected and self.fixture_placement is not None
         self.reuse_alignment_button.setToolTip(f"纸张两边靠齐 · {self.fixture_placement.setup}" if can_reuse else "")
         self.reuse_alignment_button.setVisible(can_reuse and self.registration is None and not self.waiting_for_paper)
         self.reuse_alignment_button.setEnabled(can_reuse and available)
