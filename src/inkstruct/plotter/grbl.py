@@ -18,7 +18,7 @@ DEFAULT_WRITE_FEED = 2500
 MAX_WRITE_FEED = 5000
 XY_TOLERANCE_MM = .075
 PIN_INTERIOR_MM = 2.0
-MANUAL_JOG_SEGMENT_MM = .75
+RAISED_SEGMENT_MM = .75
 MAX_PACKET_LINES = 6
 MAX_PENDING_MM = 15.0
 STATUS_INTERVAL = .04
@@ -94,7 +94,7 @@ class XYWindow:
     pin: str = ""
     seen_run: bool = False
     review_pins: bool = True
-    single_jog_segment: bool = False
+    short_raised_segment: bool = False
 
     def arm(self, targets):
         for point in targets:
@@ -138,11 +138,11 @@ class XYWindow:
 
         axes = set(status.limits) & set("XYZ")
         if axes:
-            if self.single_jog_segment:
-                # Only a single outstanding pen-up jog segment can take this path.
+            if self.short_raised_segment:
+                # Only a single outstanding pen-up segment can take this path.
                 # A second asserted sample, even at Idle, is a stop.
                 eligible = (self.area is None and self.z == PEN_UP and len(self.points) == 2
-                            and self.distance <= MANUAL_JOG_SEGMENT_MM + .001
+                            and self.distance <= RAISED_SEGMENT_MM + .001
                             and status.state == "Run" and status.limits in {"X", "Y"}
                             and self.progress > .015 and not self.pin)
             else:
@@ -178,6 +178,7 @@ class GrblLink:
         self.xy_window = None
         self.referenced_idle_xy = None
         self.pin_review = False
+        self.previous_raised_pulse = False
         self.packet_bytes = 120
 
     def send(self, text: str):
@@ -415,7 +416,28 @@ class GrblLink:
             sleep(.016)
         raise MachineError("设备没有到达已发送行程的终点。")
 
+    def bounded_pen_up(self, state, points, feed, control):
+        """Keep at most one short raised segment outstanding without a measured work area."""
+        try:
+            for end in points:
+                start = state.position[:2]
+                steps = math.ceil(math.dist(start, end) / RAISED_SEGMENT_MM)
+                for index in range(1, steps + 1):
+                    target = machine_point(tuple(a + (b - a) * index / steps
+                                                 for a, b in zip(start, end, strict=True)))
+                    window = XYWindow(None, PEN_UP, [state.position[:2]],
+                                      review_pins=not self.previous_raised_pulse, short_raised_segment=True)
+                    self.xy_window = window
+                    self.send_xy_packet([target], [self.xy_command(target, feed)], control, monotonic())
+                    state = self.finish_xy(window, feed, control)
+                    self.previous_raised_pulse = bool(window.pin)
+            return state
+        finally:
+            self.xy_window = None
+
     def move_path(self, state, points, area, feed, z, control, *, review_pins=True):
+        if self.pin_review and review_pins and area is None and z == PEN_UP:
+            return self.bounded_pen_up(state, points, feed, control)
         start = state.position[:2]
         pending = deque()
         for point in points:
@@ -526,24 +548,7 @@ class GrblLink:
         if require_bounds and area is None:
             raise ValueError("此步长需要已确认的工作范围。")
         if range_disabled and area is None and self.pin_review:
-            validate_feed(feed)
-            state = self.enter_motion(control)
-            if math.dist(start, state.position[:2]) > XY_TOLERANCE_MM:
-                raise MachineError("抬笔后起点坐标变化，点动已停止。")
-            steps = math.ceil(math.dist(start, end) / MANUAL_JOG_SEGMENT_MM)
-            previous_pulse = False
-            try:
-                for index in range(1, steps + 1):
-                    target = machine_point(tuple(a + (b - a) * index / steps for a, b in zip(start, end, strict=True)))
-                    window = XYWindow(None, PEN_UP, [state.position[:2]], review_pins=not previous_pulse,
-                                      single_jog_segment=True)
-                    self.xy_window = window
-                    self.send_xy_packet([target], [self.xy_command(target, feed)], control, monotonic())
-                    state = self.finish_xy(window, feed, control)
-                    previous_pulse = bool(window.pin)
-                return state
-            finally:
-                self.xy_window = None
+            return self.move_from(start, end, area, control, feed=feed)
         review = not commissioning or self.can_review_path(area, (start, end))
         return self.move_from(start, end, area, control, feed=feed, review_pins=review)
 
@@ -557,6 +562,8 @@ class GrblLink:
             area.require(start, "当前笔尖位置")
             area.require(end, "点动终点")
         state = self.enter_motion(control)
+        if math.dist(start, state.position[:2]) > XY_TOLERANCE_MM:
+            raise MachineError("抬笔后起点坐标变化，运动已停止。")
         return self.move_path(state, (end,), area, feed, PEN_UP, control, review_pins=review_pins)
 
     def set_pen(self, down: bool, area: WorkArea | None, control: MotionControl, *, height=PEN_DOWN):

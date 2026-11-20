@@ -1151,7 +1151,7 @@ class MachinePanel(QtWidgets.QWidget):
                     self.progress_error = str(error)
             done = max(0, self.progress.value())
             detail += f" 第 {self.job.index + 1} 页已确认完成 {done}/{len(self.job.strokes)} 笔。"
-            if done < len(self.job.strokes):
+            if self.uncertain and done < len(self.job.strokes):
                 detail += f"请检查第 {done + 1} 笔的纸面笔迹。"
         if disconnected:
             self.device = None

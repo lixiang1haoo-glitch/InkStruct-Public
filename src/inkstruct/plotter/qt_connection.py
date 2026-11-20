@@ -151,17 +151,24 @@ class N1Worker(QtCore.QThread):
                 except (MachineError, OSError, ValueError) as error:
                     motion = bool(link and link.motion_active)
                     disconnected = motion or not isinstance(error, ValueError)
-                    jog_fault = None
-                    if (link and kind in {"jog", "device-jog"} and disconnected
-                            and self.jog_fault_path and not isinstance(error, Stopped)):
-                        jog_fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
-                                     "delta_mm": args[0], "range_confirmed": args[1] is not None,
-                                     "pin_review_firmware": link.pin_review, "error": str(error),
-                                     "reports_before_stop": list(link.recent_reports)}
+                    fault = None
+                    fault_path = self.jog_fault_path
+                    manual = kind in {"jog", "device-jog"}
+                    if (link and (manual or motion) and disconnected
+                            and fault_path and not isinstance(error, Stopped)):
+                        fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
+                                 "pin_review_firmware": link.pin_review, "error": str(error),
+                                 "reports_before_stop": list(link.recent_reports)}
+                        if manual:
+                            fault.update(delta_mm=args[0], range_confirmed=args[1] is not None)
+                        else:
+                            fault_path = fault_path.with_name("plotter-last-motion-fault.json")
                     if link is not None and disconnected:
                         if motion:
                             try:
                                 link.abort()
+                                if fault is not None:
+                                    fault["reports_at_stop"] = list(link.recent_reports)
                             except (MachineError, OSError):
                                 pass
                         link.serial.close()
@@ -169,11 +176,11 @@ class N1Worker(QtCore.QThread):
                     detail = str(error)
                     if motion or isinstance(error, Stopped):
                         detail += " 请检查笔尖、当前位置和纸面对位，再重新连接。"
-                    if jog_fault is not None:
+                    if fault is not None:
                         from ..resource_catalog import atomic_json
                         try:
-                            atomic_json(self.jog_fault_path, jog_fault)
-                            detail += f" 本次回包已保存至 {self.jog_fault_path.name}。"
+                            atomic_json(fault_path, fault)
+                            detail += f" 本次回包已保存至 {fault_path.name}。"
                         except OSError:
                             pass
                     self.failed.emit(kind, detail, disconnected)

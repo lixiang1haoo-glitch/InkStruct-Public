@@ -256,19 +256,38 @@ def test_range_off_manual_jog_stops_on_unverified_signal(signal):
     assert sum(cmd.startswith(b"G1 X") for cmd in serial.commands) == (2 if signal == "adjacent" else 1)
 
 
-def test_page_without_confirmed_area_treats_transient_pin_as_a_stop():
+@pytest.mark.parametrize("entry", ["return", "page", "dry"])
+def test_range_off_automatic_raised_motion_reviews_only_a_verified_short_segment(entry):
     serial = SimulatedGrbl()
     link = GrblLink(serial)
     link.connect()
     page = position_page(page_fixture(), PaperRegistration((0., 0.)))
+    seen = []
     def report(state, xyz):
-        pin = "|Pn:Y" if state == "Run" and xyz == "2.0,3.0,0.0" else ""
-        return f"<{state}|WPos:{xyz}{pin}>"
+        if state == "Run" and xyz != "0.0,0.0,0.0" and not seen:
+            seen.append(xyz)
+            return f"<Run|WPos:{xyz}|Pn:X>"
+        return f"<{state}|WPos:{xyz}>"
     serial.report = report
+    if entry == "return":
+        link.move_to((-3.9,-3.9), None, MotionControl(), feed=2000)
+    else:
+        link.run_page(page, None, MotionControl(), feed=2000, dry_run=entry == "dry")
+    assert seen
+    pulse = next(i for i, s in enumerate(serial.trace) if isinstance(s,str) and "Pn:X" in s)
+    following = next(i for i,s in enumerate(serial.trace[pulse+1:],pulse+1) if isinstance(s,bytes) and s.startswith(b"G1"))
+    assert sum(isinstance(s,str) and s.startswith("<Idle|") for s in serial.trace[pulse:following]) >= 2
+
+
+def test_range_off_ink_contact_remains_strict():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    page = position_page(page_fixture(), PaperRegistration((0., 0.)))
+    serial.report = lambda state, xyz: (f"<{state}|WPos:{xyz}|Pn:Y>" if state=="Run" and xyz.endswith(",-1.6")
+                                        else f"<{state}|WPos:{xyz}>")
     with pytest.raises(MachineError, match="限位"):
-        link.run_page(page, None, MotionControl(), feed=5000)
-    assert xy_feeds_by_pen(serial.commands) == {False: [5000], True: []}
-    assert not any(command.startswith(b"G1 Z-") for command in serial.commands)
+        link.run_page(page, None, MotionControl())
 
 
 @pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "alarm"])
@@ -658,7 +677,19 @@ def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_
     link.connect()
     state = link.run_page(placed, area, MotionControl(), dry_run=dry_run, feed=900)
     xy = [command.decode().split()[1:3] for command in serial.commands if command.startswith(b"G1 X")]
-    assert xy == [[f"X{x:.4f}", f"Y{y:.4f}"] for stroke in placed.strokes for x, y in stroke.points]
+    expected = [point for stroke in placed.strokes for point in stroke.points]
+    if area is not None:
+        assert xy == [[f"X{x:.4f}", f"Y{y:.4f}"] for x, y in expected]
+    else:
+        previous = (10.,20.)
+        for words in xy:
+            target = expected[0]
+            current = tuple(float(word[1:]) for word in words)
+            assert math.dist(previous,current)+math.dist(current,target) == pytest.approx(math.dist(previous,target),abs=.001)
+            if current == target:
+                expected.pop(0)
+            previous = current
+        assert not expected
     assert serial.commands.count(b"G1 Z-1.6 F5000\n") == (0 if dry_run else 2)
     feeds = xy_feeds_by_pen(serial.commands)
     assert set(feeds[False]) == {900} and set(feeds[True]) == (set() if dry_run else {900})
