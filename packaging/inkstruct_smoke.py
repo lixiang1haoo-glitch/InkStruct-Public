@@ -1268,7 +1268,7 @@ def verify_capture_input(window, app):
             "actions_left_of_both_canvases": True}
 
 
-def verify_paper_corner_recovery(panel, out):
+def verify_plotter_controls(panel, out):
     from dataclasses import replace
     from tempfile import TemporaryDirectory
 
@@ -1279,18 +1279,25 @@ def verify_paper_corner_recovery(panel, out):
     try:
         assert not dialog.datum_register.isEnabled()
         assert not dialog.datum_recover.isEnabled()
+        assert dialog.nudge.step.maximum() == panel.nudge.step.maximum() == 100
+        speed_fields = [spin for spin in dialog.findChildren(QtWidgets.QSpinBox) if "mm/min" in spin.suffix()]
+        assert speed_fields == [dialog.feed]
+        assert (dialog.feed.minimum(), dialog.feed.maximum()) == (60, 5000)
+        assert not dialog.use_range.isChecked()
     finally:
         dialog.deleteLater()
     with TemporaryDirectory(dir=out) as directory:
         store = PlotterProfiles(directory)
         profile = DeviceProfile.create("Smoke fixture", "SIM")
-        profile = replace(profile, datum=DeviceDatum.create(profile, "A4 左上角"))
+        assert not profile.limit_area_enabled and profile.feed == 2500
+        profile = replace(profile, datum=DeviceDatum.create(profile, "A4 左上角"), feed=200)
         store.save(profile)
         alignment = PageAlignment((15, 15))
         store.place(profile, "sheet", "fixture", alignment, (42., 53.), (0., 0.), alignment,
                     connection="before", datum_origin=(12., 8.), select_fixture=True)
         reloaded = PlotterProfiles(directory)
         profile, = reloaded.devices()
+        assert profile.feed == 200 and not profile.limit_area_enabled
         assert reloaded.fixture_setup(profile, "sheet", alignment) == "fixture"
         record = reloaded.place(profile, "sheet", "fixture", alignment)
         assert reloaded.placed_position(profile, record, connection="after", offset=(0., 0.)) is None
@@ -1325,7 +1332,7 @@ def verify_windows_style(window, app, out, font_path=None):
         window.editor.problems_dock, window.editor.element_properties_dock,
     }
     assert QSerialPort.BaudRate.Baud115200 == 115200
-    verify_paper_corner_recovery(machine.widget(), out)
+    verify_plotter_controls(machine.widget(), out)
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
     export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
@@ -1549,6 +1556,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "document_layout_controls": True,
             "machine_control_entry": True,
             "paper_corner_recovery": True,
+            "plotter_motion_settings": True,
             "recommended_recording": recommended_recording,
             "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,

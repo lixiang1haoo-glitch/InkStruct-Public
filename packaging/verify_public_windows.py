@@ -180,6 +180,8 @@ def main():
             raise ValueError(f"Native smoke did not verify preview path acceleration: {app}")
         if not native["paper_corner_recovery"]:
             raise ValueError(f"Native smoke did not verify paper corner recovery: {app}")
+        if not native["plotter_motion_settings"]:
+            raise ValueError(f"Native smoke did not verify plotter motion settings: {app}")
         reports[app] = {"math": math, "native": native}
     tool = extracted / "InkStruct/InkStructTool.exe"
     generation = verify(tool, "v631-generation", "--v631-check", None, output)

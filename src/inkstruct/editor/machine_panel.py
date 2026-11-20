@@ -8,8 +8,8 @@ from uuid import uuid4
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
-from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, Z_TOLERANCE_MM
-from ..plotter.physical import PaperRegistration, WorkArea, position_page
+from ..plotter.grbl import PEN_UP, Z_TOLERANCE_MM
+from ..plotter.physical import PaperRegistration, WorkArea, machine_point, position_page
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
@@ -211,7 +211,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.report = label("连接设备后可定位。")
         write_layout.addWidget(self.report)
         self.align_button = self.button("当前页对位…", self.open_alignment)
-        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=20)
+        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100)
         self.nudge.moved.connect(self.jog)
         write_layout.addWidget(self.nudge)
         self.return_button = self.button("抬笔回到 A 点", self.return_to_origin)
@@ -296,13 +296,16 @@ class MachinePanel(QtWidgets.QWidget):
                  (not old.serial and old.port != profile.port))):
             profile = replace(profile, datum=None, area=None, offset=None)
             confirm_range = False
-        same_datum = bool(profile.datum and old and old.datum and old.datum.id == profile.datum.id
-                          and (old.id, old.axes, old.serial, old.port) ==
-                              (profile.id, profile.axes, profile.serial, profile.port))
+        same_axes = bool(old and (old.id, old.axes, old.serial, old.port) ==
+                                 (profile.id, profile.axes, profile.serial, profile.port))
+        same_datum = bool(same_axes and profile.datum and old.datum and old.datum.id == profile.datum.id)
+        same_coordinates = same_datum or (same_axes and not profile.datum and not old.datum)
         if self.device is not None and (old.serial, old.port) != (profile.serial, profile.port):
             raise ValueError("请断开设备后更改 USB 标识。")
         if confirm_range and (self.connection_id is None or profile.area is None):
             raise ValueError("请连接后核对实际工作范围。")
+        if confirm_range:
+            profile = replace(profile, limit_area_enabled=True)
         if profile.datum and confirm_range:
             if not same_datum or not self.datum_located:
                 raise ValueError("请先对准已登记的纸角，找回机身基准。")
@@ -313,7 +316,9 @@ class MachinePanel(QtWidgets.QWidget):
             self.frame = None
             if old and old.datum and self.connection_id:
                 self.connection_id = uuid4().hex
-        self.apply_profile(activate=confirm_range)
+        retain_area = (same_coordinates and self.confirmed_area is not None and profile.limit_area_enabled
+                       and old.area == profile.area)
+        self.apply_profile(activate=confirm_range or retain_area, keep_alignment=same_coordinates)
 
     def _persist_profile(self, profile):
         self.store.save(profile)
@@ -335,16 +340,24 @@ class MachinePanel(QtWidgets.QWidget):
             return False
         return True
 
-    def apply_profile(self, *, activate=False):
+    def apply_profile(self, *, activate=False, keep_alignment=False):
         self.confirmed_area = None
-        if activate and self.profile:
+        if activate and self.profile and self.profile.limit_area_enabled:
             if self.profile.datum:
                 if self.datum_located and self.profile.datum.area:
                     self.confirmed_area = self.profile.datum.to_work_area(self.profile.datum.area, self.frame)
             else:
                 self.confirmed_area = self.profile.area
         self.show_position()
-        self.invalidate_registration()
+        if keep_alignment:
+            self.update_preview()
+            self.refresh_buttons()
+        else:
+            self.invalidate_registration()
+
+    @property
+    def range_ready(self):
+        return self.profile is not None and (not self.profile.limit_area_enabled or self.confirmed_area is not None)
 
     @property
     def datum_located(self):
@@ -394,12 +407,14 @@ class MachinePanel(QtWidgets.QWidget):
         self.apply_profile(activate=origin is not None)
 
     def park_at_datum(self):
-        if not self.datum_located or self.confirmed_area is None:
+        if not self.datum_located or not self.range_ready:
             return False
-        if not all(self.confirmed_area.contains(p) for p in (self.device.position[:2], self.frame)):
+        if self.confirmed_area and not all(
+            self.confirmed_area.contains(p) for p in (self.device.position[:2], self.frame)
+        ):
             self.message("停车路径超出已确认的工作范围。", error=True)
             return False
-        return self.submit("return", self.frame, self.confirmed_area)
+        return self.submit("return", self.frame, self.confirmed_area, self.profile.feed)
 
     def open_devices(self, parent=None):
         from .machine_devices import DeviceDialog
@@ -629,7 +644,7 @@ class MachinePanel(QtWidgets.QWidget):
         canceling = moving and self.worker.control.stop_requested.is_set()
         available = connected and not busy
         positioning = available and not self.waiting_for_paper
-        safe = positioning and self.confirmed_area is not None
+        safe = positioning and self.range_ready
         ready = self.current_page_ready()
         self.scope.setEnabled(not busy and not self.batch_active and ready)
         self.page_list.setEnabled(self.scope.isEnabled() and self.scope.currentData() == "single")
@@ -638,13 +653,14 @@ class MachinePanel(QtWidgets.QWidget):
         self.link_button.setText("断开" if connected else "连接")
         self.link_button.setEnabled(not busy and not self.batch_active and
                                     (self.pen_raised if connected else self.available_port() is not None))
-        self.confirm_range_button.setVisible(connected and self.confirmed_area is None)
+        needs_datum = self.profile and self.profile.datum and not self.datum_located
+        self.confirm_range_button.setVisible(bool(connected and (needs_datum or not self.range_ready)))
         self.confirm_range_button.setText("找回机身基准…" if self.profile and self.profile.datum
                                          and not self.datum_located else "确认工作范围…")
         self.confirm_range_button.setEnabled(positioning)
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
-        self.nudge.setEnabled(safe)
+        self.nudge.setEnabled(positioning)
         self.pen_button.setVisible(connected and not self.pen_raised)
         self.pen_button.setEnabled(positioning)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
@@ -672,27 +688,31 @@ class MachinePanel(QtWidgets.QWidget):
     def submit(self, kind, *args):
         if self.busy is not None or self.closing:
             return False
-        if self.profile and self.profile.datum:
-            area = self.confirmed_area
-            if kind == "device-jog" and self.device is not None:
-                dx, dy = args[0]
+        area = self.confirmed_area
+        if kind in {"device-jog", "jog"}:
+            if self.profile is None or self.device is None:
+                return False
+            offset, _, feed = args
+            if area is not None:
                 x, y = self.device.position[:2]
-                bounded = area and area.contains((x, y)) and area.contains((x + dx, y + dy))
-                if hypot(*self.profile.axes.unmap(dx, dy)) > 1.000001:
-                    if not bounded:
-                        self.message("范围未确认或点动超出范围，请用不超过 1 mm 的步长抬笔点动。", error=True)
-                        return False
-                    args = (dx, dy), area, True  # Check the freshly read start again on the serial worker.
-            if (kind in {"jog", "return", "axis-trial", "write", "dry"} and
-                    (not self.datum_located or area is None)):
-                self.message("请先找回机身基准并确认工作范围。", error=True)
+                target = machine_point((x + offset[0], y + offset[1]))
+                if not (area.contains((x, y)) and area.contains(target)):
+                    self.message("点动路径超出已确认的工作范围。", error=True)
+                    return False
+            args = offset, area, feed
+        elif kind in {"return", "axis-trial", "write", "dry"}:
+            if not self.range_ready:
+                self.message("请先确认已启用的工作范围。", error=True)
                 return False
             if kind == "axis-trial":
                 axes, draft, feed, _ = args
+                if self.profile.datum and not self.datum_located and self.registration is None:
+                    self.message("请先找回已登记的纸角或完成当前纸面对位。", error=True)
+                    return False
                 # A draft can narrow a registered device's area. It must not
                 # expand the work area or bypass it by unchecking the field.
                 effective = area
-                if draft is not None:
+                if area is not None and draft is not None:
                     try:
                         effective = WorkArea(max(area.left, draft.left), max(area.top, draft.top),
                                              min(area.right, draft.right), min(area.bottom, draft.bottom))
@@ -731,12 +751,12 @@ class MachinePanel(QtWidgets.QWidget):
             self.submit("disconnect")
 
     def jog(self, x, y):
-        if self.confirmed_area is not None and self.profile:
-            self.submit("jog", self.profile.axes.map(x, y), self.confirmed_area)
+        if self.profile and self.device is not None:
+            self.submit("jog", self.profile.axes.map(x, y), self.confirmed_area, self.profile.feed)
 
     def return_to_origin(self):
-        if self.registration is not None and self.confirmed_area is not None:
-            self.submit("return", self.registration.origin, self.confirmed_area)
+        if self.registration is not None and self.range_ready:
+            self.submit("return", self.registration.origin, self.confirmed_area, self.profile.feed)
 
     def raise_pen(self):
         if self.device is not None and not self.pen_raised:
@@ -757,13 +777,14 @@ class MachinePanel(QtWidgets.QWidget):
     def start_writing(self):
         if self.job is None or not self.pen_raised or not self.current_page_ready():
             return
-        if self.confirmed_area is None:
+        if not self.range_ready:
             return
-        try:
-            self.job.check(self.confirmed_area, self.device.position[:2])
-        except ValueError as error:
-            self.message(str(error), error=True)
-            return
+        if self.confirmed_area is not None:
+            try:
+                self.job.check(self.confirmed_area, self.device.position[:2])
+            except ValueError as error:
+                self.message(str(error), error=True)
+                return
         pending = []
         multi = not self.batch_active and self.scope.currentData() == "all"
         if multi:
@@ -785,15 +806,16 @@ class MachinePanel(QtWidgets.QWidget):
     def run_job(self, kind):
         job = self.job
         area = self.confirmed_area
-        if (job is None or area is None or self.device is None or self.waiting_for_paper or
+        if (job is None or not self.range_ready or self.device is None or self.waiting_for_paper or
                 not self.current_page_ready()):
             return False
-        try:
-            job.check(area, self.device.position[:2], dry_run=kind == "dry")
-        except ValueError as error:
-            self.message(str(error), error=True)
-            return False
-        if self.submit(kind, job, area, self.profile.feed if self.profile else DEFAULT_WRITE_FEED):
+        if area is not None:
+            try:
+                job.check(area, self.device.position[:2], dry_run=kind == "dry")
+            except ValueError as error:
+                self.message(str(error), error=True)
+                return False
+        if self.submit(kind, job, area, self.profile.feed):
             self.progress.setRange(0, len(job.strokes))
             self.progress.setValue(0)
             self.progress.show()
@@ -866,8 +888,7 @@ class MachinePanel(QtWidgets.QWidget):
             return
         self.busy = None
         self.device = status
-        message = {"connect": "请确认工作范围，再移动笔尖。",
-                   "disconnect": "已断开。", "dry": "抬笔试走完成，可以开始书写。",
+        message = {"disconnect": "已断开。", "dry": "抬笔试走完成，可以开始书写。",
                    "write": "书写完成。设备已抬笔并处于 Idle。",
                    "jog": "点动完成。",
                    "device-jog": "点动完成。",
@@ -880,11 +901,13 @@ class MachinePanel(QtWidgets.QWidget):
             self.position_callback = None
             self.apply_profile()
             if kind == "connect":
-                message = "已连接。请在设备管理中确认当前坐标下的工作范围。"
-                if self.profile and self.profile.area and self.profile.offset != self.offset:
-                    message = "已连接。设备工作零点已变化，请重新核对安全范围与纸面对位。"
+                message = "已连接，可以抬笔点动。书写前请确认纸面对位。"
+                if not self.range_ready:
+                    message = "已连接，可以抬笔点动。自动运动前请确认已启用的工作范围。"
+                    if self.profile.area and self.profile.offset != self.offset:
+                        message = "已连接。设备工作零点已变化，请重新核对已启用的工作范围与纸面对位。"
                 if self.profile and self.profile.datum:
-                    message = f"机身待定位。请在设备管理中对准「{self.profile.datum.label}」找回笔位。"
+                    message = f"已连接，可以抬笔点动。对准「{self.profile.datum.label}」可找回机身定位。"
         elif kind in {"position-read", "position-datum"}:
             pending, self.position_callback = self.position_callback, None
             if pending is not None:

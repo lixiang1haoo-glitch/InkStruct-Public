@@ -86,12 +86,20 @@ class MachinePage:
     strokes: tuple[MachineStroke, ...]
     registration: PaperRegistration
 
-    def check(self, area: WorkArea, start: Point, *, dry_run=False):
-        area.require(start, "当前笔尖位置")
+    def check(self, area: WorkArea | None, start: Point, *, dry_run=False):
+        machine_point(start)
+        if area is not None:
+            area.require(start, "当前笔尖位置")
+        if not self.strokes:
+            raise ValueError("当前页没有可发送的笔迹。")
         for number, stroke in enumerate(self.strokes, 1):
-            area.require(stroke.points[0], f"第 {number} 笔的空走终点")
-            for point in stroke.points[1:]:
-                area.require(point, f"第 {number} 笔的{'抬笔试走' if dry_run else '落笔'}坐标")
+            if len(stroke.points) < 2:
+                raise ValueError(f"第 {number} 笔没有完整的笔段。")
+            for index, point in enumerate(stroke.points):
+                machine_point(point)
+                if area is not None:
+                    kind = "空走终点" if not index else ("抬笔试走坐标" if dry_run else "落笔坐标")
+                    area.require(point, f"第 {number} 笔的{kind}")
 
 
 def position_page(page: PlotPage, registration: PaperRegistration) -> MachinePage:

@@ -70,10 +70,54 @@ def test_legacy_device_profile_load_does_not_promote_range(tmp_path):
     profile = DeviceProfile("old", "N1", "COM3", area=WorkArea(0, 0, 100, 100), offset=(0, 0))
     payload = asdict(profile)
     del payload["datum"]
+    del payload["limit_area_enabled"]
     store.path.write_text(json.dumps({"devices": {"old": payload}, "placements": {}, "selected": "old"}), "utf-8")
     loaded, = store.devices()
     assert loaded.area == profile.area and loaded.datum is None
+    assert loaded.limit_area_enabled and loaded.feed == 2500
     assert DeviceDatum.create(loaded, "纸角").area is None
+
+
+def test_persist_motion_settings_without_discarding_calibration(tmp_path):
+    store = PlotterProfiles(tmp_path)
+    profile = DeviceProfile.create("N1", "COM3")
+    assert not profile.limit_area_enabled and profile.feed == 2500
+    body_area = WorkArea(-5, 0, 250, 220)
+    datum = replace(DeviceDatum.create(profile, "A4 纸角"), area=body_area)
+    payload = asdict(replace(profile, datum=datum, feed=200))
+    del payload["limit_area_enabled"]
+    archived = {"devices": {profile.id: payload}, "placements": {}, "selected": profile.id}
+    store.path.write_text(json.dumps(archived), "utf-8")
+    loaded, = store.devices()
+    assert loaded.area is None and loaded.datum == datum
+    assert loaded.limit_area_enabled and loaded.feed == 200
+    updated = replace(loaded, limit_area_enabled=False)
+    store.save(updated)
+    second = DeviceProfile.create("另一个 N1", "COM4")
+    store.save(replace(second, feed=60))
+    reopened = {p.id: p for p in PlotterProfiles(tmp_path).devices()}
+    assert reopened[profile.id] == updated and reopened[profile.id].feed == 200
+    assert reopened[second.id].feed == 60 and not reopened[second.id].limit_area_enabled
+    store.save(replace(updated, limit_area_enabled=True, feed=5000))
+    assert {p.id: p for p in store.devices()}[profile.id].datum.area == body_area
+
+
+def test_legacy_without_applicable_range_defaults_off():
+    profile = DeviceProfile.create("N1", "COM3")
+    legacy = asdict(profile)
+    del legacy["limit_area_enabled"]
+    assert not DeviceProfile.from_storage(legacy).limit_area_enabled
+    legacy["datum"] = asdict(replace(DeviceDatum.create(profile, "纸角"), device_id="另一个设备",
+                                    area=WorkArea(0, 0, 10, 10)))
+    assert not DeviceProfile.from_storage(legacy).limit_area_enabled
+
+
+@pytest.mark.parametrize("field,value", (("feed", 59), ("feed", 5001), ("feed", 100.5),
+                                         ("limit_area_enabled", 1), ("limit_area_enabled", "false")))
+def test_validate_motion_settings(field, value):
+    profile = DeviceProfile.create("N1", "COM3")
+    with pytest.raises(ValueError):
+        replace(profile, **{field: value})
 
 
 def test_fixture_setup_is_scoped_and_only_changes_on_explicit_use(tmp_path):

@@ -2,7 +2,7 @@
 
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -143,10 +143,18 @@ class DeviceProfile:
     offset: tuple[float, float] | None = None
     feed: int = DEFAULT_WRITE_FEED
     datum: DeviceDatum | None = None
+    limit_area_enabled: bool = False
 
     @classmethod
     def create(cls, name, port, serial=""):
         return cls(uuid4().hex, name.strip(), port, serial)
+
+    @classmethod
+    def from_storage(cls, data):
+        profile = cls(**data)
+        if "limit_area_enabled" not in data and (profile.area or (profile.datum and profile.datum.area)):
+            return replace(profile, limit_area_enabled=True)
+        return profile
 
     def __post_init__(self):
         if not self.id or not self.name.strip() or not self.port:
@@ -162,7 +170,9 @@ class DeviceProfile:
         if self.offset is not None:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
-            raise ValueError("书写速度无效。")
+            raise ValueError(f"XY 运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
+        if type(self.limit_area_enabled) is not bool:
+            raise ValueError("工作范围开关无效。")
 
 
 class PlotterProfiles:
@@ -176,7 +186,7 @@ class PlotterProfiles:
         return json.loads(self.path.read_text("utf-8"))
 
     def devices(self):
-        return [DeviceProfile(**profile) for profile in self.read()["devices"].values()]
+        return [DeviceProfile.from_storage(profile) for profile in self.read()["devices"].values()]
 
     @catalog_write
     def save(self, profile):
