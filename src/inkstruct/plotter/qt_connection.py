@@ -6,7 +6,7 @@ from time import monotonic
 
 from PySide6 import QtCore, QtSerialPort
 
-from .grbl import DEFAULT_WRITE_FEED, GrblLink, MachineError, MotionControl, Stopped
+from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, GrblLink, MachineError, MotionControl, Stopped
 
 N1_USB_ID = (0x28e9, 0x018a)
 
@@ -131,7 +131,9 @@ class N1Worker(QtCore.QThread):
                         page, area, feed, height = args
                         result = link.run_page(page, area, control, feed=feed, height=height)
                     elif kind == "pen":
-                        result = link.set_pen(*args, control)
+                        down, area = args[:2]
+                        height = args[2] if len(args) == 3 else PEN_DOWN
+                        result = link.set_pen(down, area, control, height=height)
                     elif kind == "touch":
                         result = link.touch(*args, control)
                     elif kind == "axis-trial":

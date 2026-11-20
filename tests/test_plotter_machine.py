@@ -1052,7 +1052,7 @@ try:
     assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()
     p.pen_button.click()
     wait_for(lambda: p.pen_raised and p.busy is None)
-    assert not p.pen_button.isVisible()
+    assert p.pen_button.isVisible() and p.pen_button.text() == "落笔"
     p.use_alignment(PageAlignment((0, 0)), transport.position[:2])
     p.dry_button.click()
     wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)

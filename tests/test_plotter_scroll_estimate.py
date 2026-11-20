@@ -88,6 +88,32 @@ def exercise(folder):
             check_time()
             assert calls == [0, 3, 1, 3]
             assert "抬笔 2 次" in panel.route_stats.text()
+
+        # Ordinary handwriting now uses the very same source indices and directions as SVG.
+        import json
+        from inkstruct.plotter.export import ROUTING_VERSION, route_page
+        ops = tuple(PaintOp(str(i), ((x, 3.), (x-1, 3.)), .25)
+                    for i, x in enumerate((26., 4., 24., 6.)))
+        snap = replace(snapshot, pages=(replace(pages[0], paint_ops=ops),))
+        panel.set_document(snap, 0, True)
+        expected = route_page(panel.raw_page, optimize=True).page
+        assert panel.paper_page.strokes == expected.strokes != panel.raw_page.strokes
+        panel.optimize.setChecked(False)
+        assert panel.paper_page is panel.raw_page
+        panel.optimize.setChecked(True)
+        journal = panel.journal
+        journal.save(2, True)
+        record = json.loads(journal.path.read_bytes())
+        assert record.pop("route_version") == ROUTING_VERSION
+        journal.path.write_text(json.dumps(record), encoding="utf-8")
+        panel.change_page()
+        assert panel.paper_page is panel.raw_page and not panel.optimize.isEnabled()
+        assert panel.done == 2 and panel.uncertain
+        panel.journal.save(3, False)
+        assert json.loads(journal.path.read_bytes())["route_version"] != ROUTING_VERSION
+        journal.path.unlink()
+        panel.change_page()
+        assert panel.paper_page.strokes == expected.strokes and panel.optimize.isEnabled()
     finally:
         release.set()
         panel.shutdown()

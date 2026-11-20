@@ -5,8 +5,9 @@ from math import dist
 
 from PySide6 import QtCore
 
+from ..plotter.export import route_page as svg_route_page
 from ..plotter.physical import PaperRegistration, position_page
-from ..plotter.write_session import ProgressFile, lengths, route_page
+from ..plotter.write_session import ProgressFile, lengths, route_page as legacy_route_page
 
 
 class PageWork:
@@ -74,8 +75,9 @@ class PageWork:
 def prepare_page(folder, document_id, page, background_id, device_id):
     journal = (ProgressFile.for_page(folder, document_id, page, background_id, device_id)
                if device_id and page.strokes else None)
-    routed = route_page(page) if any(stroke.independent for stroke in page.strokes) else page
-    return journal, routed
+    routed = svg_route_page(page, optimize=True).page if page.strokes else page
+    legacy = legacy_route_page(page) if any(s.independent for s in page.strokes) else page
+    return journal, routed, legacy
 
 
 def travel_distance(endpoints, start):
