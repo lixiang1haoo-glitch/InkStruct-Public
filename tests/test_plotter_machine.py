@@ -441,7 +441,24 @@ try:
     wait()
     measure.use_b.setChecked(True)
     measure.b[0].setValue(15)
-    transport.position[:] = [35., 17., 0.]
+    measure.show()
+    app.processEvents()
+    assert measure.nudge.isVisible() and measure.nudge.isEnabled()
+    before = len(transport.commands)
+    measure.nudge.step.setValue(100)
+    measure.nudge.buttons[(1, 0)].click()
+    assert "超出" in measure.motion_error.text() and len(transport.commands) == before
+    measure.nudge.step.setValue(12)
+    measure.nudge.buttons[(1, 0)].click()
+    assert panel.busy == "jog" and not measure.nudge.isEnabled() and not measure.record_b.isEnabled()
+    assert measure.stop.isVisible() and measure.stop.isEnabled()
+    measure.reject()
+    assert measure.isVisible()
+    wait()
+    assert measure.measurement == (35., 29.) and transport.position == [35., 17., 0.]
+    assert "Y 17.000" in measure.pen_position.text() and measure.stop.isHidden()
+    assert set(xy_feeds_by_pen(transport.commands[before:])[False]) == {200}
+    assert not any(cmd.startswith(b"G1 Z-") for cmd in transport.commands[before:])
     measure.record_b.click()
     wait()
     measure.save.click()

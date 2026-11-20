@@ -10,6 +10,8 @@ from ..document.schema import digest
 from ..plotter.profiles import PageAlignment
 from ..sample_preview import InkViewport, SampleView
 from ..settings_pages import label
+from ..theme import set_tone
+from .position_nudge import PositionNudge
 
 
 def page_context(template, snapshot=None, index=0, *, layout=None):
@@ -153,8 +155,14 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.canvas.view.changed.connect(
             lambda: self.zoom_reset.setText(f"{self.canvas.view.zoom:.0%}"))
         tools.addWidget(self.zoom_reset)
-        form = QtWidgets.QFormLayout()
-        row.addLayout(form, 1)
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        controls = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(controls)
+        form.setContentsMargins(0, 0, 0, 0)
+        scroll.setWidget(controls)
+        row.addWidget(scroll, 1)
         self.device_name = label("")
         manage = panel.button("设备管理…", lambda: panel.open_devices(self))
         self.manage = manage
@@ -188,6 +196,11 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.use_b = QtWidgets.QCheckBox("补录 B 点以重测方向与比例")
         form.addRow(self.use_b)
         form.addRow("纸面 B 点 X / Y", pair_widget(self.b))
+        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=100)
+        self.nudge.moved.connect(panel.jog)
+        form.addRow(self.nudge)
+        self.pen_position = label("")
+        form.addRow("当前笔位", self.pen_position)
         self.record_a = panel.button("记录实地 A 点", self.capture_a)
         self.record_b = panel.button("记录实地 B 点", self.capture_b)
         form.addRow(pair_widget((self.record_a, self.record_b)))
@@ -197,6 +210,9 @@ class AlignmentDialog(QtWidgets.QDialog):
         form.addRow(self.details)
         self.status = label("")
         form.addRow(self.status)
+        self.motion_error = label("")
+        set_tone(self.motion_error, "danger")
+        form.addRow(self.motion_error)
         for spin in self.a:
             spin.setReadOnly(not self.canvas.editable)
             spin.valueChanged.connect(self.clear_measurement)
@@ -205,6 +221,9 @@ class AlignmentDialog(QtWidgets.QDialog):
             spin.valueChanged.connect(self.clear_b)
         self.use_b.toggled.connect(self.clear_b)
         self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        self.stop = panel.button("停止点动", panel.stop)
+        self.stop.setProperty("inkRole", "danger")
+        self.buttons.addButton(self.stop, QtWidgets.QDialogButtonBox.ButtonRole.ActionRole)
         self.save = self.buttons.addButton("保存页面与对位" if configure else "确认对位",
                                            QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
         self.buttons.accepted.connect(self.accept)
@@ -287,6 +306,14 @@ class AlignmentDialog(QtWidgets.QDialog):
                 hint += "套打前请核对原稿上的标记。"
             self.fixture_hint.setText(hint)
         self.device_name.setText(profile.name if profile else "尚未选择设备")
+        self.nudge.setEnabled(connected and idle and not self.panel.closing and not self.panel.waiting_for_paper)
+        self.pen_position.setText("正在抬笔点动…" if self.panel.busy == "jog" else
+                                  self.panel.position_label.text() if connected else "请在设备管理中连接写字机。")
+        self.stop.setVisible(self.panel.busy == "jog")
+        self.stop.setEnabled(self.panel.stop_button.isEnabled())
+        error = self.panel.report.text() if self.panel.report.property("inkTone") == "danger" else ""
+        self.motion_error.setText(error)
+        self.motion_error.setVisible(bool(error))
         self.manage.setEnabled(idle and not self.panel.batch_active)
         self.recall.setText("纸已靠齐，沿用对位" if fixed else "使用已保存的摆放…")
         self.recall.setEnabled(idle and connected and bool(self.setup.text().strip()))
@@ -307,7 +334,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         for name, point in (("A", self.measurement), ("B", self.measurement_b)):
             if point is not None:
                 marks.append(f"实地 {name} · X {point[0]:.3f} · Y {point[1]:.3f} mm")
-        self.details.setText("\n".join(marks) or "将笔尖移到纸面标记后记录。")
+        self.details.setText("\n".join(marks) or "点击方向按钮，将笔尖移到纸面标记，再记录实地点。")
 
     def capture_a(self):
         def read(status):
@@ -396,6 +423,6 @@ class AlignmentDialog(QtWidgets.QDialog):
             self.status.setText(str(error))
 
     def reject(self):
-        if self.panel.busy == "position-read":
+        if self.panel.busy in {"position-read", "jog"}:
             return
         super().reject()
