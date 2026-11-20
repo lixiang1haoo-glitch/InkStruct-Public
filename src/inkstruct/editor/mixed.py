@@ -1753,7 +1753,7 @@ class MixedWindow(ReviewWindow):
         if machine is not None and (reason := machine.close_blocker()):
             self.machine_dock.show()
             self.machine_dock.raise_()
-            QtWidgets.QMessageBox.information(self, "写字机", reason)
+            machine.message(reason)
             event.ignore()
             return
         if self.export_job is not None:

@@ -118,11 +118,15 @@ def exercise(folder):
             if done == total//2 - 1:
                 p.finish_stroke.click()
         p.worker.progress.connect(stop_mid)
+        p.preview_button.click()
+        assert p.preview_enabled
         p.write_button.click()
         wait(p)
         done, pending = p.journal.read()
         assert 3 <= done <= 4 and not pending
-        assert p.preview.stroke_state == (done,False)
+        assert p.done == done and p.progress.value() == done
+        assert not p.preview_enabled and p.preview.isHidden()
+        assert f"已确认完成 {done} 笔" in p.resume_hint.text()
         assert len(sent_areas) == 1 and sent_areas[0] is not None
         assert p.confirmed_area is None and not p.store.devices()[0].limit_area_enabled
     finally:

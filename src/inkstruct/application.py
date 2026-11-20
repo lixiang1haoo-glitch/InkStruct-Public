@@ -253,6 +253,9 @@ class InkStructWindow(QtWidgets.QMainWindow):
                 event.ignore()
                 return
         if not self.editor.close():
+            machine = getattr(self.editor, "machine_panel", None)
+            if machine is not None and machine.close_blocker():
+                self.tabs.setCurrentWidget(self.editor)
             event.ignore()
             return
         event.accept()
