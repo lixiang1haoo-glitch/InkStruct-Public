@@ -35,6 +35,8 @@ class PositionNudge(QtWidgets.QWidget):
         super().__init__()
         self.setObjectName("position_nudge")
         self.setAccessibleName(title)
+        # Keep the three rows at their natural height inside tall scroll areas.
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed)
         group = QtWidgets.QVBoxLayout(self)
         group.setContentsMargins(0, 0, 0, 0)
         group.setSpacing(4)

@@ -622,9 +622,23 @@ try:
     p.set_document(snap, 0, True)
     w.workspace_views.set_mode("split", persist=False)
     app.processEvents()
-    before = w.workspace_views.splitter.sizes()
     w.machine_dock.raise_()
     wait_for(lambda: p.page_list.count() == 2)
+    # The dock resizes its scroll contents to fill the viewport. Its spare
+    # height must never change the spacing between the directional buttons.
+    for height in (620, 1080):
+        w.resize(1350, height)
+        app.processEvents()
+        up, left, right, down = (p.nudge.buttons[direction].geometry()
+                                 for direction in ((0, -1), (-1, 0), (1, 0), (0, 1)))
+        horizontal_step = up.x() - left.x()
+        assert horizontal_step == right.x() - up.x()
+        assert left.y() - up.y() == horizontal_step, (height, up, left, down)
+        assert down.y() - left.y() == horizontal_step
+        assert p.nudge.rect().contains(down)
+    w.resize(1350, 840)
+    app.processEvents()
+    before = w.workspace_views.splitter.sizes()
     p.page_list.setCurrentRow(1)
     assert w.page_picker.value() == 2 and p.paper_page.index == 1
     p.scope.setCurrentIndex(p.scope.findData("all"))
