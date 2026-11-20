@@ -189,7 +189,7 @@ def test_axis_inversion_and_trial_use_the_same_logical_coordinates():
     assert set(feeds[False]) == set(feeds[True]) == {3150}
 
 
-def test_optional_jog_bounds_and_strict_axis_pin_without_a_range():
+def test_optional_jog_bounds_and_repeated_pin_without_a_range():
     serial = SimulatedGrbl()
     link = GrblLink(serial)
     link.connect()
@@ -205,6 +205,55 @@ def test_optional_jog_bounds_and_strict_axis_pin_without_a_range():
     serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
     with pytest.raises(MachineError, match="限位"):
         link.jog((-1, 0), None, MotionControl())
+
+
+@pytest.mark.parametrize("commissioning", [True, False])
+def test_range_off_manual_jog_checks_single_pulse_before_sending_more(commissioning):
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    sent_pin = False
+    def report(state, xyz):
+        nonlocal sent_pin
+        if state == "Run" and float(xyz.split(",")[1]) != 0 and not sent_pin:
+            sent_pin = True
+            return f"<Run|WPos:{xyz}|Pn:Y>"
+        return f"<{state}|WPos:{xyz}>"
+    serial.report = report
+    end = link.jog((0, 10), None, MotionControl(), commissioning=commissioning, feed=2000, range_disabled=True)
+    assert sent_pin and end.position == (0, 10, 0)
+    commands = [line for line in serial.commands if line.startswith(b"G1 X")]
+    assert all(line.endswith(b"F2000\n") for line in commands)
+    pulse = next(i for i, event in enumerate(serial.trace) if isinstance(event, str) and "Pn:Y" in event)
+    next_move = serial.trace.index(commands[1], pulse)
+    assert sum(isinstance(event, str) and event.startswith("<Idle|") for event in serial.trace[pulse:next_move]) == 2
+    assert all(len(packet.splitlines()) == 1 for packet in serial.packets if packet.startswith(b"G1 X"))
+
+
+@pytest.mark.parametrize("signal", ["persistent", "idle", "alarm", "combined", "stalled", "adjacent"])
+def test_range_off_manual_jog_stops_on_unverified_signal(signal):
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    seen = set()
+    def report(state, xyz):
+        if float(xyz.split(",")[1]) != 0:
+            if signal == "alarm":
+                return "ALARM:1"
+            if signal == "stalled":
+                return "<Run|WPos:0,0,0|Pn:Y>"
+            if signal == "combined":
+                return f"<{state}|WPos:{xyz}|Pn:XY>"
+            if signal == "persistent" or (signal == "idle" and state == "Idle"):
+                return f"<{state}|WPos:{xyz}|Pn:Y>"
+            if signal == "adjacent" and state == "Run" and xyz not in seen:
+                seen.add(xyz)
+                return f"<Run|WPos:{xyz}|Pn:Y>"
+        return f"<{state}|WPos:{xyz}>"
+    serial.report = report
+    with pytest.raises(MachineError):
+        link.jog((0, 10), None, MotionControl(), feed=2000, range_disabled=True)
+    assert sum(cmd.startswith(b"G1 X") for cmd in serial.commands) == (2 if signal == "adjacent" else 1)
 
 
 def test_page_without_confirmed_area_treats_transient_pin_as_a_stop():
@@ -324,6 +373,23 @@ try:
     assert setup.feed.value() == panel.profile.feed == 2500
     assert setup.feed.minimum() == 60 and setup.feed.maximum() == 5000
     assert sum(spin.accessibleName() == "运动速度" for spin in setup.findChildren(QtWidgets.QSpinBox)) == 1
+    ordinary_report = transport.report
+    pulses = []
+    def one_pulse(state, xyz):
+        if not pulses and state == "Run" and float(xyz.split(",")[1]) > 30:
+            pulses.append(xyz)
+            return f"<Run|WPos:{xyz}|WCO:0,0,0|Pn:Y>"
+        return ordinary_report(state, xyz)
+    transport.report = one_pulse
+    panel.nudge.step.setValue(10)
+    panel.nudge.buttons[(0, 1)].click()
+    wait()
+    assert pulses and panel.device is not None and panel.nudge.isEnabled()
+    assert transport.position == [35., 40., 0.] and "点动完成" in panel.report.text()
+    transport.report = ordinary_report
+    panel.nudge.buttons[(0, -1)].click()
+    wait()
+    assert transport.position == [35., 30., 0.]
     panel.nudge.step.setValue(42)
     panel.nudge.buttons[(1, 0)].click()
     wait()
@@ -529,6 +595,15 @@ try:
     assert saved.feed.value() == 3100 and not saved.nudge.isEnabled() and not saved.trial.isEnabled()
     assert not saved.use_range.isChecked()
     saved.close()
+    panel.link_button.click()
+    wait()
+    transport.report = lambda state, xyz: f"<{state}|WPos:{xyz}|Pn:Y>"
+    panel.nudge.buttons[(0, 1)].click()
+    wait()
+    assert panel.device is None and "plotter-last-jog-fault.json" in panel.report.text()
+    import json
+    fault = json.loads((Path(sys.argv[1]) / "plotter-last-jog-fault.json").read_bytes())
+    assert fault["operation"] == "jog" and "|Pn:Y>" in fault["reports_before_stop"][-1]
 finally:
     panel.shutdown()
     panel.close()

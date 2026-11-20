@@ -1,5 +1,6 @@
 """Exclusive Windows serial access for the N1, isolated from the GUI thread."""
 
+from datetime import datetime, timezone
 from queue import Queue
 from time import monotonic
 
@@ -71,6 +72,7 @@ class N1Worker(QtCore.QThread):
         super().__init__(parent)
         self.serial_factory = serial_factory
         self.requests = Queue()
+        self.jog_fault_path = None
         self.control = None
         self.closing = False
 
@@ -112,11 +114,12 @@ class N1Worker(QtCore.QThread):
                         result = link.require_idle(control)
                     elif kind in {"jog", "device-jog"}:
                         offset, area = args[:2]
-                        option = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
+                        option = args[2] if len(args) >= 3 else DEFAULT_WRITE_FEED
                         # Older callers used the third argument to require a confirmed rectangle.
                         feed = DEFAULT_WRITE_FEED if type(option) is bool else option
                         result = link.jog(offset, area, control, commissioning=kind == "device-jog",
-                                          require_bounds=option is True, feed=feed)
+                                          require_bounds=option is True, feed=feed,
+                                          range_disabled=len(args) == 4 and args[3] is True)
                     elif kind == "return":
                         target, area = args[:2]
                         feed = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
@@ -141,6 +144,13 @@ class N1Worker(QtCore.QThread):
                 except (MachineError, OSError, ValueError) as error:
                     motion = bool(link and link.motion_active)
                     disconnected = motion or not isinstance(error, ValueError)
+                    jog_fault = None
+                    if (link and kind in {"jog", "device-jog"} and disconnected
+                            and self.jog_fault_path and not isinstance(error, Stopped)):
+                        jog_fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
+                                     "delta_mm": args[0], "range_confirmed": args[1] is not None,
+                                     "pin_review_firmware": link.pin_review, "error": str(error),
+                                     "reports_before_stop": list(link.recent_reports)}
                     if link is not None and disconnected:
                         if motion:
                             try:
@@ -152,6 +162,13 @@ class N1Worker(QtCore.QThread):
                     detail = str(error)
                     if motion or isinstance(error, Stopped):
                         detail += " 请检查笔尖、当前位置和纸面对位，再重新连接。"
+                    if jog_fault is not None:
+                        from ..resource_catalog import atomic_json
+                        try:
+                            atomic_json(self.jog_fault_path, jog_fault)
+                            detail += f" 本次回包已保存至 {self.jog_fault_path.name}。"
+                        except OSError:
+                            pass
                     self.failed.emit(kind, detail, disconnected)
         finally:
             if link is not None:

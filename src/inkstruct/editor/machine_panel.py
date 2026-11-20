@@ -265,6 +265,7 @@ class MachinePanel(QtWidgets.QWidget):
             raise ValueError("请先断开写字机，再切换工作区。")
         self.frame = None
         self.store = PlotterProfiles(workspace)
+        self.worker.jog_fault_path = self.store.path.with_name("plotter-last-jog-fault.json")
         try:
             self.profiles = self.store.devices()
             selected = self.store.read()["selected"]
@@ -699,7 +700,7 @@ class MachinePanel(QtWidgets.QWidget):
                 if not (area.contains((x, y)) and area.contains(target)):
                     self.message("点动路径超出已确认的工作范围。", error=True)
                     return False
-            args = offset, area, feed
+            args = offset, area, feed, not self.profile.limit_area_enabled
         elif kind in {"return", "axis-trial", "write", "dry"}:
             if not self.range_ready:
                 self.message("请先确认已启用的工作范围。", error=True)
