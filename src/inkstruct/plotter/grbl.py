@@ -18,6 +18,7 @@ DEFAULT_WRITE_FEED = 2500
 MAX_WRITE_FEED = 5000
 XY_TOLERANCE_MM = .075
 PIN_INTERIOR_MM = 2.0
+MANUAL_JOG_SEGMENT_MM = .75
 MAX_PACKET_LINES = 6
 MAX_PENDING_MM = 15.0
 STATUS_INTERVAL = .04
@@ -92,6 +93,7 @@ class XYWindow:
     pin: str = ""
     seen_run: bool = False
     review_pins: bool = True
+    single_jog_segment: bool = False
 
     def arm(self, targets):
         for point in targets:
@@ -135,11 +137,21 @@ class XYWindow:
 
         axes = set(status.limits) & set("XYZ")
         if axes:
-            if (self.area is None or not qualified or not self.review_pins or status.limits not in {"X", "Y", "XY", "YX"}
-                    or status.state not in {"Run", "Idle"} or (len(axes) == 2 and not moving_both)
-                    or not self.area.contains(point, inset=PIN_INTERIOR_MM)
-                    or not all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points)):
-                raise MachineError(f"作业中设备报告了轴限位（Pn:{status.limits}）。")
+            if self.single_jog_segment:
+                # Only a single outstanding pen-up jog segment can take this path.
+                # A second asserted sample, even at Idle, is a stop.
+                eligible = (self.area is None and self.z == PEN_UP and len(self.points) == 2
+                            and self.distance <= MANUAL_JOG_SEGMENT_MM + .001
+                            and status.state == "Run" and status.limits in {"X", "Y"}
+                            and self.progress > .015 and not self.pin)
+            else:
+                eligible = (self.area is not None and status.limits in {"X", "Y", "XY", "YX"}
+                            and status.state in {"Run", "Idle"} and (len(axes) == 1 or moving_both)
+                            and self.area.contains(point, inset=PIN_INTERIOR_MM)
+                            and all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points))
+            if not (qualified and self.review_pins and eligible):
+                raise MachineError(f"设备报告轴限位（Pn:{status.limits}，{status.state}，"
+                                   f"X{x:.3f} Y{y:.3f}），运动已停止。")
             if not self.pin:
                 self.pin = status.limits
                 self.last_progress = monotonic()
@@ -156,6 +168,7 @@ class GrblLink:
         self.phase = phase
         self.progress = progress
         self.responses = deque()
+        self.recent_reports = deque(maxlen=16)
         self.last_status = None
         self.status_count = 0
         self.status_at = 0.0
@@ -174,6 +187,8 @@ class GrblLink:
         if not line:
             return
         line = line.strip()
+        if line.startswith("<") or line.lower().startswith(("alarm:", "error:")):
+            self.recent_reports.append(line[:512])
         if line.startswith("<"):
             previous = self.last_status.offset if self.last_status else None
             self.last_status = decode_status(line, previous)
@@ -494,12 +509,31 @@ class GrblLink:
                 and all(area.contains(point, inset=PIN_INTERIOR_MM) for point in points))
 
     def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *,
-            feed=DEFAULT_WRITE_FEED, commissioning=False, require_bounds=False):
+            feed=DEFAULT_WRITE_FEED, commissioning=False, require_bounds=False, range_disabled=False):
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
         if require_bounds and area is None:
             raise ValueError("此步长需要已确认的工作范围。")
+        if range_disabled and area is None and self.pin_review:
+            validate_feed(feed)
+            state = self.enter_motion(control)
+            if math.dist(start, state.position[:2]) > XY_TOLERANCE_MM:
+                raise MachineError("抬笔后起点坐标变化，点动已停止。")
+            steps = math.ceil(math.dist(start, end) / MANUAL_JOG_SEGMENT_MM)
+            previous_pulse = False
+            try:
+                for index in range(1, steps + 1):
+                    target = machine_point(tuple(a + (b - a) * index / steps for a, b in zip(start, end, strict=True)))
+                    window = XYWindow(None, PEN_UP, [state.position[:2]], review_pins=not previous_pulse,
+                                      single_jog_segment=True)
+                    self.xy_window = window
+                    self.send_xy_packet([target], [self.xy_command(target, feed)], control, monotonic())
+                    state = self.finish_xy(window, feed, control)
+                    previous_pulse = bool(window.pin)
+                return state
+            finally:
+                self.xy_window = None
         review = not commissioning or self.can_review_path(area, (start, end))
         return self.move_from(start, end, area, control, feed=feed, review_pins=review)
 
