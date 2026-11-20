@@ -10,7 +10,7 @@
 latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=build main.tex
 ```
 
-`build/main.pdf` 为结果。当前源码手册版本为 0.1.46；本轮仅同步LaTeX源码，未重编译或验收新版PDF，历史 PDF 不代表当前手册。历史 0.1.3 PDF 保留在 `artifacts/release_0_1_3/release/InkStruct用户手册_0.1.3.pdf`，不得当作新版手册。所有章节和截图都在本目录下，复制整个目录即可继续编译；不要只复制 `main.tex`。此手册包含多个文件和截图，需要本机 TeX Live，不使用仅接受单文件的内置编译器。
+`build/main.pdf` 为编译结果。适用版本见 `main.tex` 标题页。历史 0.1.3 PDF 保存在 `artifacts/release_0_1_3/release/InkStruct用户手册_0.1.3.pdf`。将包含各章节和截图的整个手册目录复制到安装 TeX Live 的电脑，即可重新编译。
 
 ## 维护结构
 
