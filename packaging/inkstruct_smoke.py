@@ -1240,8 +1240,10 @@ def verify_capture_input(window, app):
     touch = QtTest.QTest.createTouchDevice(QtGui.QInputDevice.DeviceType.TouchScreen)
 
     def touch_stroke():
-        QtTest.QTest.touchEvent(han.canvas, touch).press(0, start, han.canvas).commit()
-        QtTest.QTest.touchEvent(han.canvas, touch).release(0, stop, han.canvas).commit()
+        # Address the test window even when another desktop window covers the canvas.
+        target = window.windowHandle()
+        QtTest.QTest.touchEvent(target, touch).press(0, han.canvas.mapTo(window, start), target).commit()
+        QtTest.QTest.touchEvent(target, touch).release(0, han.canvas.mapTo(window, stop), target).commit()
 
     touch_stroke()
     assert hint.isVisible() and hint.message.text() == "收到触屏输入"
