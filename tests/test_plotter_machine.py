@@ -220,7 +220,7 @@ try:
     assert panel.device is not None and not panel.confirmed_area
     setup.axes[0].setChecked(True)
     setup.axes[2].setChecked(True)
-    setup.jog[2].click()
+    setup.nudge.buttons[(1, 0)].click()
     assert isinstance(setup.stop.parentWidget(), QtWidgets.QDialogButtonBox)
     assert not setup.stop.isHidden()
     wait()
@@ -251,7 +251,7 @@ try:
     assert align.result() and align.position == align.measurement
     panel.use_alignment(align.alignment, align.position)
     assert panel.job.strokes[0].points == ((37., 28.), (39., 26.))
-    assert panel.write_button.isEnabled() and panel.dry_job is None
+    assert panel.write_button.isEnabled()
     panel.confirm = lambda *_: True
     reuse = AlignmentDialog(panel, panel, *context, snapshot=snapshot)
     reuse.recall.click()
@@ -484,12 +484,16 @@ sys.path.insert(0, str(Path.cwd()/'tests'))
 from test_plotter_machine import SimulatedGrbl
 from PySide6 import QtWidgets
 from inkstruct.document.schema import PageProfile
+from inkstruct.editor.machine_devices import DeviceDialog
 from inkstruct.editor.machine_panel import MachinePanel
+from inkstruct.plotter.physical import WorkArea
+from inkstruct.plotter.profiles import DeviceAxes, DeviceProfile, PageAlignment
 from inkstruct.plotter.qt_connection import N1Worker
 from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
 
 app = QtWidgets.QApplication([])
 transport = SimulatedGrbl()
+transport.position[:] = [20., 20., 0.]
 page = Page(index=0, fragments=(), paint_ops=(PaintOp("one", ((3.,4.), (5.,6.)), .3),))
 snapshot = LayoutSnapshot("snapshot", "key", "document", 0, PageProfile(70, 60, 5),
                           (page,), (), "resource", "test")
@@ -497,10 +501,13 @@ worker = lambda parent: N1Worker(parent, serial_factory=lambda _port: transport)
 ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
 dialog = MachinePanel(None, worker_factory=worker, ports=ports)
 dialog.set_workspace(Path(sys.argv[1]))
+profile = DeviceProfile("device", "N1", "COM-test", axes=DeviceAxes(mirror_x=True, swap=True),
+                        area=WorkArea(0, 0, 100, 100))
+dialog.save_profile(profile)
 dialog.set_document(snapshot, 0, True)
 dialog.show()
 try:
-    assert dialog.feed.value() == 2500 and dialog.feed.maximum() == 5000
+    assert not any("手动对位" in button.text() for button in dialog.findChildren(QtWidgets.QAbstractButton))
     def wait_for(condition):
         end = monotonic() + 8
         while monotonic() < end:
@@ -513,15 +520,22 @@ try:
     dialog.link_button.click()
     wait_for(lambda: dialog.device is not None and dialog.busy is None)
     assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?"]
-    dialog.area_confirm.setChecked(True)
-    dialog.origin[0].setValue(10)
-    dialog.origin[1].setValue(15)
-    dialog.confirm_alignment.click()
+    assert not dialog.nudge.isEnabled()
+    assert dialog.confirm_range_button.isVisible()
+    settings = DeviceDialog(dialog)
+    settings.save_button.click()
+    assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
+    settings.close()
+    dialog.nudge.step.setValue(2)
+    dialog.nudge.buttons[(1, 0)].click()
+    assert not dialog.nudge.isEnabled() and dialog.stop_button.isVisible()
+    wait_for(lambda: dialog.busy is None)
+    assert transport.position == [20., 18., 0.]
+    dialog.use_alignment(PageAlignment((2, 3)), (20, 18))
     placed = dialog.job
     dialog.preview_button.click()
-    assert dialog.preview.job is placed and placed.strokes[0].points == ((13.,19.), (15.,21.))
+    assert dialog.preview.job is placed and placed.strokes[0].points == ((21., 17.), (23., 15.))
     assert dialog.dry_button.isEnabled() and dialog.write_button.isEnabled()
-    assert dialog.dry_job is None
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     dialog.confirm = lambda *_: True
     dialog.write_button.click()
@@ -529,29 +543,14 @@ try:
     assert b"G1 Z-1.6 F5000\n" in transport.commands
     assert dialog.write_button.isEnabled()
 
-    dialog.options.setChecked(True)
-    dialog.mode.setCurrentIndex(dialog.mode.findData("preprinted"))
-    for index, (x, y) in enumerate(((60, 30), (60, 70), (30, 31))):
-        transport.position[:] = [x, y, 0]
-        dialog.capture_buttons[index].click()
-        wait_for(lambda: index in dialog.captured and dialog.busy is None)
-    dialog.confirm_alignment.click()
-    assert dialog.job.registration.scale == 1
-    assert (dialog.job.registration.cosine, dialog.job.registration.sine) == (0, 1)
-    assert "1.000 mm" in dialog.verify_label.text()
-    registered = dialog.job
-    dialog.point_fields[2][0].setValue(16)
-    assert dialog.job is registered and "0.000 mm" in dialog.verify_label.text()
-    before_marks = transport.commands.count(b"G1 Z-1.6 F5000\n")
-    dialog.test_button.click()
-    wait_for(lambda: "三个测试点已画完" in dialog.report.text() and dialog.busy is None)
-    assert transport.commands.count(b"G1 Z-1.6 F5000\n") == before_marks + 3
-    assert dialog.preview.job is dialog.job and dialog.write_button.isEnabled()
+    dialog.return_button.click()
+    wait_for(lambda: dialog.busy is None)
+    assert transport.position == [20., 18., 0.]
 
     transport.fail_next_motion = True
     dialog.dry_button.click()
     wait_for(lambda: dialog.device is None and dialog.busy is None)
-    assert dialog.registration is None and dialog.confirmed_area is None and dialog.dry_job is None
+    assert dialog.registration is None and dialog.confirmed_area is None
     assert transport.closed and "重新连接" in dialog.report.text()
 finally:
     dialog.shutdown()
@@ -578,6 +577,8 @@ from PySide6 import QtCore, QtWidgets
 from inkstruct.document.schema import PageProfile
 from inkstruct.editor import machine_panel, workspace
 from inkstruct.editor.mixed import MixedWindow
+from inkstruct.plotter.physical import WorkArea
+from inkstruct.plotter.profiles import DeviceProfile, PageAlignment
 from inkstruct.plotter.qt_connection import N1Worker
 from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
 
@@ -586,6 +587,7 @@ settings = QtCore.QSettings
 settings.setDefaultFormat(settings.Format.IniFormat)
 settings.setPath(settings.Format.IniFormat, settings.Scope.UserScope, sys.argv[1])
 transport = SimulatedGrbl()
+transport.position[2] = -1.6
 factory = partial(N1Worker, serial_factory=lambda _port: transport)
 ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
 panel = partial(machine_panel.MachinePanel, worker_factory=factory, ports=ports)
@@ -596,6 +598,9 @@ w.timer.stop()
 w.resize(1350, 840)
 w.show()
 p = w.machine_panel
+p.set_workspace(Path(sys.argv[1]))
+profile = DeviceProfile("device", "N1", "COM-test", area=WorkArea(0, 0, 100, 100))
+p.save_profile(profile)
 try:
     def wait_for(condition):
         end = monotonic() + 8
@@ -626,18 +631,16 @@ try:
     assert p.paper_page.index == 0 and not p.page_list.isEnabled()
     p.link_button.click()
     wait_for(lambda: p.device is not None and p.busy is None)
-    assert not p.jog_buttons[0].isEnabled()
-    p.area_confirm.setChecked(True)
+    assert not p.nudge.isEnabled()
+    p.save_profile(profile)
     p.confirm = lambda *_: True
-    p.pen_button.click()
-    wait_for(lambda: not p.pen_raised and p.busy is None)
-    assert p.pen_button.text() == "抬笔" and not p.link_button.isEnabled()
+    assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()
     p.pen_button.click()
     wait_for(lambda: p.pen_raised and p.busy is None)
-    p.origin_capture.click()
-    wait_for(lambda: p.job is not None)
+    assert not p.pen_button.isVisible()
+    p.use_alignment(PageAlignment((0, 0)), transport.position[:2])
     p.dry_button.click()
-    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+    wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
 
     p.write_button.click()
     assert p.is_moving and p.close_blocker()
@@ -664,17 +667,16 @@ try:
     app.processEvents()
     assert p.batch_active and not p.waiting_for_paper and len(transport.commands) == count
     assert not p.dry_button.isEnabled() and not p.write_button.isEnabled()
-    p.origin_capture.click()
-    wait_for(lambda: p.job is not None)
+    p.use_alignment(PageAlignment((0, 0)), transport.position[:2])
     p.dry_button.click()
-    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+    wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
     p.write_button.click()
     wait_for(lambda: not p.batch_active and p.busy is None)
     assert p.completed_pages == {0, 1} and not p.close_blocker()
 
     p.scope.setCurrentIndex(p.scope.findData("single"))
     p.dry_button.click()
-    wait_for(lambda: p.dry_job is p.job and p.busy is None)
+    wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
     previous = len(transport.commands)
     transport.on_write = lambda data: sleep(.05) if data.startswith(b"G1 ") else None
     p.write_button.click()

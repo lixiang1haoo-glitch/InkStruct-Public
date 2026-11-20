@@ -8,6 +8,7 @@ from ..plotter.grbl import MAX_WRITE_FEED
 from ..plotter.physical import WorkArea
 from ..plotter.profiles import DeviceAxes, DeviceProfile
 from ..settings_pages import label, scroll_page
+from .position_nudge import PositionNudge
 
 AXIS_HELP = "点左右按钮时笔尖却上下移动，请勾选「交换 XY 轴」。笔尖沿正确的轴走反了方向，请勾选对应轴的镜像。勾选后可立即点动或试画确认。"
 TRIAL_HELP = "请确保笔尖四周 100 mm 内可绘制。正常书写视角下，X 轴正向指正右方，Y 轴正向指正下方。"
@@ -78,21 +79,9 @@ class DeviceDialog(QtWidgets.QDialog):
         actions = QtWidgets.QFormLayout(bench)
         self.position = label("")
         actions.addRow("当前笔位", self.position)
-        self.step = field(1, low=.1, high=20)
-        actions.addRow("步长", self.step)
-        pad = QtWidgets.QGridLayout()
-        self.jog = []
-        for text, title, vector, row, col_idx in (
-            ("↑", "向上", (0, -1), 0, 1), ("←", "向左", (-1, 0), 1, 0),
-            ("→", "向右", (1, 0), 1, 2), ("↓", "向下", (0, 1), 2, 1),
-        ):
-            control = panel.button(text, lambda v=vector: self.move(v))
-            control.setAccessibleName(f"{title}抬笔点动")
-            pad.addWidget(control, row, col_idx)
-            self.jog.append(control)
-        pad_widget = QtWidgets.QWidget()
-        pad_widget.setLayout(pad)
-        actions.addRow("抬笔点动", pad_widget)
+        self.nudge = PositionNudge("抬笔点动", unit="mm", minimum=.1, maximum=20)
+        self.nudge.moved.connect(self.move)
+        actions.addRow(self.nudge)
         actions.addRow(label("调试点动可超出已设软件范围。"))
         self.trial = panel.button("试画 X/Y", self.draw)
         actions.addRow(self.trial, label(TRIAL_HELP))
@@ -183,7 +172,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.error.setText(self.panel.report.text())
         self.stop.setVisible(self.panel.is_moving)
         self.stop.setEnabled(self.panel.stop_button.isEnabled())
-        for button in (*self.jog, *self.record_buttons, self.trial):
+        self.nudge.setEnabled(connected and idle and profile)
+        for button in (*self.record_buttons, self.trial):
             button.setEnabled(connected and idle and profile)
 
     def toggle_connection(self):
@@ -217,9 +207,8 @@ class DeviceDialog(QtWidgets.QDialog):
         except (OSError, ValueError) as error:
             self.error.setText(str(error))
 
-    def move(self, vector):
-        distance = self.step.value()
-        self.panel.submit("jog", self.draft_axes().map(*(v * distance for v in vector)), None)
+    def move(self, x, y):
+        self.panel.submit("jog", self.draft_axes().map(x, y), None)
 
     def draw(self):
         try:
