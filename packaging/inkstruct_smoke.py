@@ -1151,7 +1151,7 @@ def verify_experience_resources(window, directory, wait):
         wait(lambda: library.job is None, timeout=600)
         imported = library.last_result
         assert imported and imported["verification"]["characters"] > 0
-        with Path(imported["path"]).open("rb") as stream:
+        with Path(imported["original_path"] or imported["path"]).open("rb") as stream:
             font_hash = hashlib.file_digest(stream, "sha256").hexdigest()
         with font.open("rb") as stream:
             assert font_hash == hashlib.file_digest(stream, "sha256").hexdigest()
@@ -1305,7 +1305,35 @@ def verify_plotter_controls(panel, out):
                                         datum_origin=(-4., 2.)) == (26., 47.)
 
 
-def verify_windows_style(window, app, out, font_path=None):
+def verify_exchange_import(library, source, wait):
+    original_picker = QtWidgets.QFileDialog.getOpenFileName
+
+    def import_via_button(path):
+        QtWidgets.QFileDialog.getOpenFileName = lambda *args, **kwargs: (str(path), "")
+        library.import_button.click()
+        assert library.job is not None
+        wait(lambda: library.job is None)
+        result = library.last_result
+        assert result and Path(result["path"]).is_file()
+        return result
+
+    try:
+        result = import_via_button(source)
+        active = Path(result["path"])
+        if result["migration"]:
+            with Path(result["original_path"]).open("rb") as backup, source.open("rb") as supplied:
+                assert hashlib.file_digest(backup, "sha256").digest() == hashlib.file_digest(supplied, "sha256").digest()
+        package = FontPackage(active)
+        assert package.manifest["format_version"] == 1
+        assert next(package.glyphs(package.records[0]["character"])).strokes
+        repeated = import_via_button(active)
+        assert not repeated["migration"] and Path(repeated["path"]) == active
+        return {"migrated": bool(result["migration"]), "candidates": len(package.records), "native_reimport": True}
+    finally:
+        QtWidgets.QFileDialog.getOpenFileName = original_picker
+
+
+def verify_windows_style(window, app, out, wait, font_path=None):
     from types import SimpleNamespace
 
     from PIL import Image
@@ -1332,6 +1360,7 @@ def verify_windows_style(window, app, out, font_path=None):
         window.editor.problems_dock, window.editor.element_properties_dock,
     }
     assert QSerialPort.BaudRate.Baud115200 == 115200
+    exchange = verify_exchange_import(window.library, font_path, wait) if font_path else None
     verify_plotter_controls(machine.widget(), out)
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
@@ -1552,6 +1581,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "jpeg_reference_imported": True, "sample_library_handoff": True,
             "sample_library_capture_viewport": True,
             "sample_library_variant_wrap": True,
+            "inkfont_v1": exchange,
             "layout_export_controls": True,
             "document_layout_controls": True,
             "machine_control_entry": True,
@@ -1844,7 +1874,7 @@ def main():
             w.close()
         return
     if args.windows_style_check:
-        verify_windows_style(w, app, out, args.font)
+        verify_windows_style(w, app, out, wait, args.font)
         return
     if args.experience_resources:
         try:
@@ -2083,7 +2113,7 @@ def main():
     w.library.job.signals.progress.connect(import_progress.append)
     wait(lambda: w.library.job is None, 300)
     import hashlib
-    imported_font = w.library.selected()
+    imported_font = Path(w.library.last_result["original_path"] or w.library.selected())
     assert hashlib.sha256(imported_font.read_bytes()).digest() == hashlib.sha256(args.font.read_bytes()).digest()
     assert any('正在验证字形' in text for text in import_progress)
     assert '字体已导入' in w.library.progress.text()
