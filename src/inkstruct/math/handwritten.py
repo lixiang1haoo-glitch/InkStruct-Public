@@ -234,7 +234,8 @@ def measure_math(
                     elif (
                         type(axis) not in (int, float)
                         or not math.isfinite(axis)
-                        or not 0 <= axis <= 2
+                        or (not 0 <= axis <= 2 and
+                            not (glyph.font_core and "exchange_math_y" in glyph.font_core["summary"]))
                     ):
                         issues.append(
                             Diagnostic(

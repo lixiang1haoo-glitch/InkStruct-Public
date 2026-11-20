@@ -29,6 +29,8 @@ def correct_font(source, output, glyph, correction, *, all_samples=False,
             (include_styles and not all_samples) or glyph.font_core is None):
         raise ValueError("写入字体包需要已验证的字体候选")
     font = FontPackage(source, verify_all=False)
+    if font.manifest["package_kind"] == "exchange":
+        raise ValueError("此操作需要 InkStruct 原版字体；旧字体导入后保存在字体库的 originals 目录。")
     progress("正在完整校验来源字体…")
     verify_font(font, progress=progress)
     core = glyph.font_core

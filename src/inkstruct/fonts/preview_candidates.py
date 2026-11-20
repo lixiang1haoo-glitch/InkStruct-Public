@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from zipfile import BadZipFile, ZipFile
 
 from ..document.cancellation import check_cancel
-from .core import decode, resolved_candidate
 from .library import fingerprint
 
 
@@ -16,7 +15,6 @@ class PreviewFontError(RuntimeError):
 @dataclass(frozen=True, eq=False)
 class IndexedCandidate:
     sample_id: str
-    metrics_key: str
     font_metadata: dict
 
 
@@ -32,7 +30,7 @@ class PreviewCandidates:
             check_cancel(cancelled)
             if records := font.pools.get(character):
                 self.pools[character] = tuple(
-                    IndexedCandidate(record["candidate_id"], record["metrics_id"], {
+                    IndexedCandidate(record["candidate_id"], {
                         "identity": font.identity, "record": record,
                         "summary": font.provenance[record["candidate_id"]],
                     }) for record in records
@@ -73,9 +71,7 @@ class PreviewCandidates:
         metadata = candidate.font_metadata
         record = metadata["record"]
         try:
-            trajectory = decode(self.font._checked(self.archive, record["file"]))
-            glyph = resolved_candidate(record, trajectory, self.font.metrics[candidate.sample_id],
-                                       metadata["summary"], self.font.identity)
+            glyph = self.font.load_glyph(self.archive, record)
         except (OSError, ValueError, TypeError, KeyError, BadZipFile) as error:
             raise PreviewFontError(f"字体轨迹不可读取：{record['character']} · {error}") from error
         object.__setattr__(glyph, "_preview_font_token", self.token)

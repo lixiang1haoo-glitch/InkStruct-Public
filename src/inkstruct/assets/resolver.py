@@ -115,9 +115,9 @@ class AssetResolver:
                 ):
                     return glyph
             for candidate in indexed:
-                if (candidate.sample_id, candidate.metrics_key) == (previous.sample_id, previous.metrics_key):
+                if candidate.sample_id == previous.sample_id:
                     glyph = self.indexed.load(candidate)
-                    if glyph.asset_id == previous.asset_id:
+                    if (glyph.asset_id, glyph.metrics_key) == (previous.asset_id, previous.metrics_key):
                         self._pools[occurrence.text] = (*pool, glyph)
                         return glyph
             raise ValueError(
@@ -142,9 +142,10 @@ class AssetResolver:
             if supplied:
                 pool = supplied
         from ..fonts.core import latin
-        styled = latin(occurrence.text) or (occurrence.text == "ℏ" and any(
-            g.font_metadata and g.font_metadata["record"]["letter_style"] in {"upright", "italic", "unspecified"}
-            for g in pool))
+        styled = latin(occurrence.text) or any(
+            g.font_metadata and (occurrence.text == "ℏ" or g.font_metadata["identity"].get("exchange_format") == 1)
+            and g.font_metadata["record"]["letter_style"] in {"upright", "italic", "unspecified"}
+            for g in pool)
         requested = letter_style if styled and any(g.font_metadata for g in pool) else ""
         if requested:
             def category(g):
@@ -159,8 +160,8 @@ class AssetResolver:
                 g.font_metadata["summary"]["review_status"] not in {"rejected", "needs_review"}))
             if not enabled:
                 raise ValueError("No enabled glyph candidate")
-            priority = min(g.font_metadata["record"]["priority"] if g.font_metadata else 2 for g in enabled)
-            pool = tuple(g for g in enabled if (g.font_metadata["record"]["priority"] if g.font_metadata else 2) == priority)
+            priority = min(g.font_metadata["record"].get("priority", 0) if g.font_metadata else 2 for g in enabled)
+            pool = tuple(g for g in enabled if (g.font_metadata["record"].get("priority", 0) if g.font_metadata else 2) == priority)
             pool = tuple(sorted(pool, key=lambda g:g.sample_id))
         key = digest([SELECTION_VERSION, self.seed, occurrence.occurrence_id, occurrence.text] + ([requested] if requested else []))
         glyph = pool[int(key[:16], 16) % len(pool)]

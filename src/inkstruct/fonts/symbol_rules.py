@@ -424,6 +424,8 @@ def extend_font(source, output, *, name, font_version='0.3', progress=lambda _: 
     if output.exists():
         raise FileExistsError(output)
     font = FontPackage(source, verify_all=False)
+    if font.manifest["package_kind"] == "exchange":
+        raise ValueError("此操作需要 InkStruct 原版字体；旧字体导入后保存在字体库的 originals 目录。")
     verify_font(font, progress=progress)
     index, metrics, provenance = map(copy.deepcopy, (font.index, font.metrics, font.provenance))
     manifest = {k: v for k, v in font.manifest.items() if k not in ('members', 'core_members', 'core_hash', 'content_hash')}

@@ -7,7 +7,7 @@ from PySide6 import QtCore, QtWidgets
 
 from ..assets.resolver import AssetResolver
 from ..document.editing import SourceSession
-from ..fonts.core import cached_font
+from ..fonts.core import verified_font
 from ..fonts.identity import release_identity
 from ..fonts.library import fingerprint
 from ..fonts.ui import Job
@@ -29,11 +29,21 @@ def font_resolver(font, old):
     """Retain exact old frozen cores only if the new package proves them unchanged."""
     records = {r['candidate_id']: r for r in font.records}
     glyphs = {g.asset_id: g for pool in old.pools.values() for g in pool}
+    exchange = font.manifest["package_kind"] == "exchange"
+    matches = {}
+    if exchange:
+        chars = {choice.character for choice in old.selections.values()}
+        matches = {g.sample_id: g for g in font.glyphs(chars)}
     preserved, selected = {}, []
     for choice in old.selections.values():
         glyph = glyphs.get(choice.asset_id)
         core = glyph.font_core if glyph else None
         record = records.get(choice.sample_id)
+        if exchange:
+            if glyph is not None and matches.get(choice.sample_id) == glyph:
+                preserved[glyph.asset_id] = glyph
+                selected.append(choice)
+            continue
         if (core and record == core['record'] and font.metrics.get(choice.sample_id) == core['metrics']
                 and font.provenance.get(choice.sample_id) == core['summary']
                 and record['enabled'] and core['summary']['review_status'] not in {'rejected', 'needs_review'}):
@@ -239,7 +249,7 @@ class ResourceApplyDialog(QtWidgets.QDialog):
                                       page, style, flow, None)
             if self.is_font:
                 progress('正在验证字体并检查本文…')
-                package = cached_font(Path(self.font))
+                package = verified_font(Path(self.font), progress)
                 if exact_identity and release_identity(package.identity) != exact_identity:
                     raise ValueError('所选字体的字体 ID、发布 ID 或核心哈希与本文原版本不同')
                 if not exact_identity:

@@ -43,7 +43,7 @@ def test_single_validation_without_layout_allocation(font_path, tmp_path, monkey
     progress = []
     result = library.import_font(font_path, tmp_path / "library", progress.append)
     assert len(calls) == len(font.records) == len(set(calls))
-    assert Path(result["path"]).read_bytes() == font_path.read_bytes()
+    assert Path(result["original_path"]).read_bytes() == font_path.read_bytes()
     assert result["entry"][0] == library.fingerprint(result["path"])
     assert progress[0].startswith("正在复制")
     assert any(f"{len(font.records)}/{len(font.records)}" in text for text in progress)
@@ -141,7 +141,7 @@ def test_duplicate_identity_does_not_replace_existing_font(font_path, tmp_path):
     with pytest.raises(ValueError, match="同一包 ID"):
         library.import_font(collision, root)
     assert Path(first["path"]).read_bytes() == original
-    assert len(list(root.iterdir())) == 1
+    assert len(list(root.glob("*.inkfont"))) == len(list((root / "originals").glob("*.inkfont"))) == 1
 
 
 def test_staged_copy_is_verified_instead_of_trusting_source(font_path, tmp_path, monkeypatch):

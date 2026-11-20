@@ -97,13 +97,13 @@ def latin(char):
     return len(char) == 1 and ("A" <= char <= "Z" or "a" <= char <= "z")
 
 
-def validate_trajectory(t):
+def validate_trajectory(t, *, coordinate_space="em-y-down-baseline-0.88"):
     if t.get("schema_version") != "inkfont_trajectory_v1":
         raise ValueError("不支持的字体轨迹版本")
     char = t.get("character", "")
     if not isinstance(char, str) or len(char) != 1 or 0xD800 <= ord(char) <= 0xDFFF:
         raise ValueError("无效的字符")
-    if t.get("coordinate_space") != "em-y-down-baseline-0.88":
+    if t.get("coordinate_space") != coordinate_space:
         raise ValueError("无效的字体坐标协议")
     strokes = t.get("strokes")
     if not isinstance(strokes, list) or not strokes:
@@ -192,6 +192,10 @@ def validate_summary(summary, count):
                 or not isinstance(origin['sample_id'], str) or not origin['sample_id']
                 or not isinstance(origin['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', origin['sha256'])):
             raise ValueError('无效的样本导入来源')
+    if "exchange_math_y" in summary:
+        axis = summary["exchange_math_y"]
+        if type(axis) not in (int, float) or not math.isfinite(axis):
+            raise ValueError("无效的统一字库数学轴")
     construction = summary.get('symbol_construction', {})
     if isinstance(construction, dict) and 'math_axis_em' in construction:
         axis = construction['math_axis_em']
@@ -247,9 +251,9 @@ def core_digest(manifest):
     )
 
 
-def validate_candidate(record, trajectory, metrics, summary):
+def validate_candidate(record, trajectory, metrics, summary, *, coordinate_space="em-y-down-baseline-0.88"):
     """The same checks for import verification and resolved layout glyphs."""
-    points = validate_trajectory(trajectory)
+    points = validate_trajectory(trajectory, coordinate_space=coordinate_space)
     validate_summary(summary, len(trajectory["strokes"]))
     if record["character"] != trajectory["character"]:
         raise ValueError("候选字符不一致")
@@ -284,7 +288,10 @@ def resolved_candidate(record, trajectory, metrics, summary, identity, *, _reuse
         and _reuse.original_json == raw
     ):
         return _reuse
-    _, checked_metrics = validate_candidate(record, trajectory, metrics, summary)
+    relative = (trajectory.get("coordinate_space") == "em-y-down-baseline-zero"
+                and (identity.get("exchange_format") == 1 or identity.get("construction_policy")))
+    space = "em-y-down-baseline-zero" if relative else "em-y-down-baseline-0.88"
+    _, checked_metrics = validate_candidate(record, trajectory, metrics, summary, coordinate_space=space)
     glyph = ResolvedGlyph(
         sha(raw),
         record["character"],
@@ -312,8 +319,36 @@ def from_embedded(raw):
     )
 
 
+def package_manifest(archive):
+    from .exchange_codec import MAX_MEMBER as EXCHANGE_MEMBER
+    info = archive.getinfo("manifest.json")
+    if info.file_size > EXCHANGE_MEMBER:
+        raise ValueError("字体清单过大")
+    return decode(archive.read(info))
+
+
+def exchange_manifest(manifest):
+    if not isinstance(manifest, dict):
+        raise ValueError("无效字体清单")
+    if manifest.get("format") == "inkfont":
+        if type(manifest.get("format_version")) is not int or manifest["format_version"] != 1:
+            raise ValueError("不支持的统一字库版本")
+        return True
+    return False
+
+
 class FontPackage:
     """Index resident; point arrays decoded only for requested characters."""
+
+    def __new__(cls, path, *, verify_all=True):
+        with zipfile.ZipFile(path) as archive:
+            if exchange_manifest(package_manifest(archive)):
+                from .exchange import ExchangeFont
+                font = ExchangeFont(path)
+                if verify_all:
+                    font.verify()
+                return font
+        return super().__new__(cls)
 
     def __init__(self, path, *, verify_all=True):
         self.path = Path(path)
@@ -420,12 +455,13 @@ class FontPackage:
             for char in sorted(chars):
                 for r in self.pools.get(char, ()):
                     check_cancel(cancelled)
-                    t = decode(self._checked(z, r["file"]))
-                    cid = r["candidate_id"]
-                    yield resolved_candidate(
-                        r, t, self.metrics[cid], self.provenance[cid], self.identity,
-                        _reuse=previous.get(cid),
-                    )
+                    yield self.load_glyph(z, r, previous.get(r["candidate_id"]))
+
+    def load_glyph(self, archive, record, reuse=None):
+        cid = record["candidate_id"]
+        trajectory = decode(self._checked(archive, record["file"]))
+        return resolved_candidate(record, trajectory, self.metrics[cid], self.provenance[cid],
+                                  self.identity, _reuse=reuse)
 
     def _verify_record(self, archive, record):
         trajectory = decode(self._checked(archive, record['file']))
@@ -525,7 +561,16 @@ def write_archive(path, members, manifest):
 
 
 def to_user(source, output):
-    font = FontPackage(source)
+    font = FontPackage(source, verify_all=False)
+    if exchange_manifest(font.manifest):
+        import shutil
+        with tempfile.TemporaryDirectory(dir=Path(output).parent) as folder:
+            staged = Path(folder) / "exchange.inkfont"
+            shutil.copyfile(source, staged)
+            FontPackage(staged)
+            os.link(staged, output)
+        return font.manifest
+    font.verify()
     m = {
         k: v
         for k, v in font.manifest.items()
@@ -556,7 +601,9 @@ from functools import lru_cache
 
 @lru_cache(maxsize=2)
 def _cached_font(path, stamp):
-    font = FontPackage(path)
+    with zipfile.ZipFile(path) as archive:
+        legacy = not exchange_manifest(package_manifest(archive))
+    font = FontPackage(path, verify_all=legacy)
     font.preview_token = path, stamp, font.manifest["core_hash"]
     return font
 
@@ -566,6 +613,15 @@ def cached_font(path):
     stat = path.stat()
     stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
     return _cached_font(str(path), stamp)
+
+
+def verified_font(path, progress):
+    """Use an unchanged library verification, or check all members before accepting a font."""
+    font = verified_preview_font(path)
+    if font is None:
+        font = cached_font(path)
+        font.verify(progress=progress)
+    return font
 
 
 def verified_preview_font(path):
