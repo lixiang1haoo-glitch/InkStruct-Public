@@ -108,6 +108,41 @@ def exercise(workspace):
             click(panel, panel.align_button)
         assert panel.job.strokes[0].points == ((41., 40.), (43., 42.))
         assert panel.write_button.isEnabled()
+        from inkstruct.document.flow_template import PageLayout
+        layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i, plotter_alignment=PageAlignment((5,5)))
+                        for i in range(1,5))
+        cycle = FlowTemplate(kind="custom", layouts=layouts, loop_pages=("1","2","3","4"))
+        nine = replace(snapshot, snapshot_id="nine", pages=tuple(replace(pages[0], index=i) for i in range(9)))
+        panel.set_document(nine, 0, True, cycle)
+        with patch.object(AlignmentDialog, "exec", capture_page):
+            click(panel, panel.align_button)
+        count = len(serial.commands)
+        for i in (4,3,8):
+            if i == 4:
+                panel.page_list.setCurrentRow(i)
+            else:
+                panel.follow_page(i)
+            assert panel.progress.isHidden()
+            if i == 3:
+                assert panel.registration is None and not panel.write_button.isEnabled()
+                assert "第 4 页未对位" == panel.alignment_status.text()
+                assert "已对位" not in panel.report.text()
+            else:
+                assert panel.job.index == i and panel.registration.origin == (40.,38.)
+                assert all(text in panel.alignment_status.text() for text in
+                           (f"第 {i+1} 页已沿用", "PDF 第 1 页", "本稿第 1 页登记"))
+        assert len(serial.commands) == count
+        def ordinary_alignment(dialog):
+            dialog.fixture.setChecked(False)
+            click(panel, dialog.record_a)
+            dialog.save.click()
+            return dialog.result()
+        with patch.object(AlignmentDialog, "exec", ordinary_alignment):
+            click(panel, panel.align_button)
+        assert panel.job is not None and panel.inherited_placement is None
+        panel.follow_page(4)
+        assert panel.job is None and "未对位" in panel.alignment_status.text()
+        panel.set_document(snapshot, 0, True, template)
         first_datum = panel.profile.datum.id
     finally:
         panel.shutdown()
@@ -136,24 +171,26 @@ def exercise(workspace):
         assert panel.frame == (0., 0.) and panel.profile.datum.id == first_datum
         assert panel.confirmed_area == WorkArea(-10, -20, 35, 60)
         assert panel.setup == "A4 竖向书写摆放"
-        assert panel.job is None
+        assert panel.job is not None and panel.inherited_placement is not None
+        assert "本稿第 1 页登记" in panel.alignment_status.text()
         assert not any(line.startswith(b"G1 ") for line in serial.commands)
         setup.close()
 
         panel.scope.setCurrentIndex(panel.scope.findData("all"))
-        click(panel, panel.reuse_alignment_button)
+        assert panel.inherited_placement is not None
         assert panel.registration.origin == (5., 8.)
         assert panel.job.strokes[0].points == ((6., 10.), (8., 12.))
         assert not any(line.startswith(b"G1 ") for line in serial.commands)
         click(panel, panel.write_button)
         assert panel.waiting_for_paper and panel.completed_pages == {0}
-        assert panel.registration is None and panel.job is None
+        assert panel.registration is not None and panel.job.index == 1
+        assert panel.progress.isHidden()
         assert b"G1 Z-1.6 F5000\n" in serial.commands
         replacement = replace(template, name="另外的纸张摆放")
         panel.set_document(replace(snapshot, snapshot_id="other-doc"), 0, True, replacement)
         assert panel.snapshot is snapshot and panel.batch_active
         count = len(serial.commands)
-        assert "沿用对位" in panel.write_button.text()
+        assert "确认换纸" in panel.write_button.text()
         click(panel, panel.write_button)
         assert len(serial.commands) == count
         assert panel.job.index == 1 and panel.registration.origin == (5., 8.)
@@ -171,13 +208,13 @@ def exercise(workspace):
         click(panel, setup.datum_use_alternate)
         assert panel.frame == (-8., -12.) and panel.confirmed_area == WorkArea(-18, -32, 27, 48)
         setup.close()
-        click(panel, panel.reuse_alignment_button)
+        assert panel.inherited_placement is not None
         assert panel.registration.origin == (-3., -4.)
 
         outside = Page(0, (), (PaintOp("outside", ((100., 100.), (101., 101.)), .3),))
         panel.set_document(replace(snapshot, snapshot_id="outside", pages=(outside,)), 0, True, template)
         count = len(serial.commands)
-        click(panel, panel.reuse_alignment_button)
+        assert panel.inherited_placement is not None
         if panel.write_button.isEnabled():
             click(panel, panel.write_button)
             assert "超出" in panel.report.text()

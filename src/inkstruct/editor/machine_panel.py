@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..document.flow_template import FlowTemplate
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
 from ..plotter.export import ROUTING_VERSION
 from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, PIN_INTERIOR_MM, Z_TOLERANCE_MM
@@ -177,7 +178,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.device = self.busy = None
         self.connection_id = None
         self.frame = None  # WPos of the physical datum in this connection only.
-        self.fixture_placement = None
+        self.fixture_placement = self.inherited_placement = None
+        self.page_report = False
         self.registration = self.confirmed_area = None
         self.job = None
         self.pending_pages = []
@@ -192,6 +194,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.setup = "默认摆放"
         self.preview_enabled = False
         self.page_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plotter-page")
+        self.placement_work = PageWork(self, self.page_executor)
         self.session_work = PageWork(self, self.page_executor)
         self.estimate_work = PageWork(self, self.page_executor)
         self.prepared = None
@@ -396,7 +399,7 @@ class MachinePanel(QtWidgets.QWidget):
                 self.confirmed_area = self.profile.area
         self.show_position()
         if not keep_alignment:
-            self.registration = self.job = None
+            self.registration = self.inherited_placement = self.job = None
         if self.raw_page is not None:
             self.request_session()
         else:
@@ -491,17 +494,38 @@ class MachinePanel(QtWidgets.QWidget):
             self.update_preview()
             self.scroll.ensureWidgetVisible(self.preview)
 
-    def use_alignment(self, alignment, position):
+    def use_alignment(self, alignment, position, *, fixture=None):
         if self.profile is None or self.paper_page is None:
             return
-        self.registration = self.profile.axes.register(alignment.a, position,
-                                                        angle=alignment.angle, scale=alignment.scale)
-        try:
-            self.job = position_page(self.paper_page, self.registration)
-        except ValueError as error:
-            self.job = None
-            self.message(str(error), error=True)
+        self.placement_work.cancel()
+        registration = self.profile.axes.register(alignment.a, position, angle=alignment.angle, scale=alignment.scale)
+        self.registration, self.inherited_placement, self.job = registration, fixture, None
+        if fixture is not None:
+            self.setup = fixture.setup
+        page = self.paper_page
+        if page.strokes:
+            if fixture is not None:
+                key = (id(page), registration)
+                small = len(page.strokes) <= 16 and sum(len(s.points) for s in page.strokes) <= 128
+                self.placement_work.request(key, position_page, (page, registration), self.positioned,
+                                            self.position_failed, immediate=small)
+            else:
+                try:
+                    self.job = position_page(page, registration)
+                except ValueError as error:
+                    self.position_failed(error)
         self.update_preview()
+        self.refresh_buttons()
+
+    def positioned(self, job):
+        self.job = job
+        self.update_preview()
+        self.refresh_buttons()
+
+    def position_failed(self, error):
+        self.registration = self.inherited_placement = self.job = None
+        self.update_preview()
+        self.message(str(error), error=True, page_specific=True)
         self.refresh_buttons()
 
     def open_alignment(self):
@@ -517,9 +541,9 @@ class MachinePanel(QtWidgets.QWidget):
             if (dialog.exec() and dialog.position is not None and self.current_page_ready()
                     and self.snapshot is snapshot and self.paper_page is paper_page
                     and dialog.accepted_connection == self.connection_id):
+                self.message("")
                 self.use_alignment(dialog.alignment, dialog.position)
                 self.refresh_fixture()
-                self.message(f"当前页已对位 · {self.setup}")
                 self.refresh_buttons()
         finally:
             dialog.deleteLater()
@@ -531,11 +555,12 @@ class MachinePanel(QtWidgets.QWidget):
             self.message("未发现炽写 N1。请连接 USB 后打开设备管理。")
         self.refresh_buttons()
 
-    def message(self, text, error=False):
+    def message(self, text, error=False, *, page_specific=False):
+        self.page_report = page_specific
         self.report.setText(text)
         set_tone(self.report, "danger" if error else "status")
         show_in_workspace = self.batch_active or self.is_moving or error
-        self.status_changed.emit(f"写字机 · {text}" if show_in_workspace else "")
+        self.status_changed.emit(f"写字机 · {text}" if text and show_in_workspace else "")
         self.machine_state.emit()
 
     @property
@@ -602,9 +627,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.update_page_states()
         self.change_page()
         if self.plan_error:
-            self.message(self.plan_error, error=True)
-        elif self.device is not None:
-            self.message("请确认当前页对位。")
+            self.message(self.plan_error, error=True, page_specific=True)
 
     def select_page(self, index):
         if index >= 0:
@@ -631,10 +654,16 @@ class MachinePanel(QtWidgets.QWidget):
         paper = self.snapshot.page_profile
         self.raw_page = (self.plan.pages[index] if self.plan else
                          PlotPage(index, paper.width_mm, paper.height_mm, ()))
-        self.registration = self.job = self.unplaced_preview = None
+        self.registration = self.inherited_placement = self.job = self.unplaced_preview = None
+        self.progress.hide()
+        self.progress.reset()
+        if self.page_report:
+            self.message("")
         self.request_session()
 
     def request_session(self):
+        self.placement_work.cancel()
+        self.placement_work.cache.clear()
         page = self.raw_page
         device_id = self.profile.id if self.profile else None
         key = self.store.path.parent, page.index, device_id
@@ -667,6 +696,12 @@ class MachinePanel(QtWidgets.QWidget):
         self.prepared = prepared
         self.prepare_session()
         self.refresh_fixture()
+        if (isinstance(self.template, FlowTemplate) and self.fixture_placement is not None
+                and (self.registration is None or self.inherited_placement is not None)):
+            self.apply_fixture()
+            return
+        if self.inherited_placement is not None:
+            self.registration = self.inherited_placement = self.job = None
         self.update_preview()
         self.refresh_buttons()
 
@@ -713,6 +748,8 @@ class MachinePanel(QtWidgets.QWidget):
     def change_routing(self):
         if self.prepared is None or self.busy:
             return
+        self.placement_work.cancel()
+        self.placement_work.cache.clear()
         self.prepare_session()
         self.unplaced_preview = None
         if self.paper_page.strokes and self.registration:
@@ -757,7 +794,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.resume_hint.setVisible(bool(text))
 
     def invalidate_registration(self):
-        self.registration = self.job = None
+        self.placement_work.cancel()
+        self.registration = self.inherited_placement = self.job = None
         self.refresh_fixture()
         self.update_preview()
         self.refresh_buttons()
@@ -778,21 +816,27 @@ class MachinePanel(QtWidgets.QWidget):
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.message(f"无法读取此页的纸张限位记录。{error}", error=True)
 
+    def apply_fixture(self):
+        fixture = self.fixture_placement
+        self.use_alignment(fixture.alignment, fixture.position, fixture=fixture)
+
+    def fixture_still_matches(self, previous):
+        self.refresh_fixture()
+        if previous is not None and previous == self.fixture_placement:
+            return True
+        self.invalidate_registration()
+        self.message("保存的摆放已变化，请重新核对纸张限位。", page_specific=True)
+        return False
+
     def reuse_fixture(self):
         if not self.current_page_ready() or not self.datum_located or self.busy is not None:
             return False
         # Re-read the placement in case it was edited since the page became visible.
-        previous = self.setup, self.fixture_placement
-        self.refresh_fixture()
-        if self.fixture_placement is None:
-            return False
-        if previous != (self.setup, self.fixture_placement):
-            self.message("保存的摆放已变化，请重新核对纸张限位。")
-            self.refresh_buttons()
+        if not self.fixture_still_matches(self.inherited_placement or self.fixture_placement):
             return False
         self.waiting_for_paper = False
-        self.use_alignment(*self.fixture_placement)
-        self.message(f"纸已靠齐，当前页已沿用对位 · {self.setup}")
+        self.message("")
+        self.apply_fixture()
         return True
 
     def update_preview(self):
@@ -812,10 +856,13 @@ class MachinePanel(QtWidgets.QWidget):
         if self.preview_enabled:
             self.preview.set_paths(self.job or self.unplaced_preview, coords, self.confirmed_area,
                                    (coords.origin,) if coords else (), self.done if self.uncertain else None)
-        self.alignment_status.setText(
-            f"当前页已对位 · A 点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm"
-            if coords else "当前页未对位"
-        )
+        page = f"第 {self.raw_page.index + 1} 页" if self.raw_page else "当前页"
+        if coords:
+            source = self.inherited_placement
+            state = f"已沿用「{source.setup}」 · {source.source}" if source else f"已对位 · {self.setup}"
+            self.alignment_status.setText(f"{page}{state} · A 点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm")
+        else:
+            self.alignment_status.setText(f"{page}未对位")
 
     def refresh_buttons(self, *_):
         busy, connected = self.busy is not None or self.closing, self.device is not None
@@ -846,7 +893,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.refresh_pen_button(self.pen_button)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
         can_reuse = ready and self.datum_located and self.fixture_placement is not None
-        self.reuse_alignment_button.setToolTip(f"纸张两边靠齐 · {self.setup}")
+        self.reuse_alignment_button.setToolTip(f"纸张两边靠齐 · {self.fixture_placement.setup}" if can_reuse else "")
         self.reuse_alignment_button.setVisible(can_reuse and self.registration is None and not self.waiting_for_paper)
         self.reuse_alignment_button.setEnabled(can_reuse and available)
         self.dry_button.setEnabled(safe and ready and self.job is not None)
@@ -855,8 +902,9 @@ class MachinePanel(QtWidgets.QWidget):
             self.write_button.setText("继续" if paused else "暂停")
             self.write_button.setEnabled(not canceling)
         elif self.waiting_for_paper:
-            self.write_button.setText("纸已靠齐，沿用对位" if can_reuse else "换纸完成")
-            self.write_button.setToolTip(f"纸张两边靠齐 · {self.setup}" if can_reuse else "")
+            self.write_button.setText("纸已靠齐，确认换纸" if self.inherited_placement else
+                                     "纸已靠齐，沿用对位" if can_reuse else "换纸完成")
+            self.write_button.setToolTip(f"纸张两边靠齐 · {self.fixture_placement.setup}" if can_reuse else "")
             self.write_button.setEnabled(available and ready)
         else:
             self.write_button.setText("核对纸面并续写…" if self.done or self.uncertain else "开始书写…")
@@ -967,6 +1015,8 @@ class MachinePanel(QtWidgets.QWidget):
 
     def return_to_origin(self):
         if self.registration is not None and self.range_ready:
+            if self.inherited_placement and not self.fixture_still_matches(self.inherited_placement):
+                return
             self.submit("return", self.registration.origin, self.confirmed_area, self.profile.feed)
 
     def refresh_pen_button(self, button):
@@ -991,10 +1041,11 @@ class MachinePanel(QtWidgets.QWidget):
         if self.is_moving:
             self.toggle_pause()
         elif self.waiting_for_paper:
-            if self.fixture_placement is not None and self.reuse_fixture():
+            if self.fixture_placement is not None:
+                self.reuse_fixture()
                 return
             self.waiting_for_paper = False
-            self.message("请重新确认下一页的书写原点或纸面对位。")
+            self.message("请重新确认下一页的书写原点或纸面对位。", page_specific=True)
             self.refresh_buttons()
         else:
             self.start_writing()
@@ -1074,6 +1125,8 @@ class MachinePanel(QtWidgets.QWidget):
                 not self.current_page_ready()):
             return False
         target = job.registration.origin if kind == "write" and self.auto_return.isChecked() else None
+        if self.inherited_placement and not self.fixture_still_matches(self.inherited_placement):
+            return False
         if area is not None:
             try:
                 if target is not None:
@@ -1256,15 +1309,15 @@ class MachinePanel(QtWidgets.QWidget):
                 message += " 回到 A 点的操作未能开始。"
         if kind in {"write", "page-return"}:
             if self.pending_pages and not self.worker.control.stop_requested.is_set():
+                page = self.page_list.currentRow()
                 self.waiting_for_paper = True
                 self.page_list.setCurrentRow(self.pending_pages.pop(0))
-                action = "纸已靠齐，沿用对位" if self.fixture_placement else "换纸完成"
-                message += f" 换纸后点「{action}」。"
+                message = f"第 {page + 1} 页已完成。请换纸并确认纸已靠齐。"
             else:
                 self.end_batch()
         self.show_position()
         self.refresh_document()
-        self.message(message)
+        self.message(message, page_specific=kind in {"write", "dry", "page-return"})
         self.refresh_buttons()
 
     def failed(self, kind, detail, disconnected):
@@ -1309,7 +1362,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def shutdown(self):
         self.closing = True
-        for work in (self.estimate_work, self.session_work):
+        for work in (self.estimate_work, self.session_work, self.placement_work):
             work.cancel()
         self.page_executor.shutdown(wait=False, cancel_futures=True)
         self.worker.shutdown()

@@ -320,11 +320,13 @@ def test_template_and_local_placement_persist_separately(tmp_path):
     from inkstruct.editor.machine_alignment import page_context
     from inkstruct.plotter.profiles import DeviceProfile, PageAlignment, PlotterProfiles
 
-    first, second = (PageLayout(str(i), f"PDF {i}", source_page=i,
-                               plotter_alignment=PageAlignment((5., i * 5.))) for i in range(1, 3))
-    template = FlowTemplate(kind="custom", layouts=(first, second), loop_pages=("1", "2"))
+    layouts = tuple(PageLayout(str(i), f"PDF {i}", source_page=i,
+                               plotter_alignment=PageAlignment((5., i * 5.))) for i in range(1, 5))
+    template = FlowTemplate(kind="custom", layouts=layouts, loop_pages=("1", "2", "3", "4"))
     saved = parse_template(template_json(version_template(template)))
     key, _, mark, _ = page_context(saved, index=0)
+    for i in (4, 8):
+        assert page_context(saved, index=i) == page_context(saved, index=0)
     other, _, other_mark, _ = page_context(saved, index=1)
     assert mark.a == (5., 5.) and other_mark.a == (5., 10.) and key != other
     store = PlotterProfiles(tmp_path)
