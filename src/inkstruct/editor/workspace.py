@@ -241,6 +241,10 @@ def organize_workspace(w):
         w.tabifyDockWidget(properties, machine)
         w.setTabPosition(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, QtWidgets.QTabWidget.TabPosition.North)
         w.machine_panel.page_selected.connect(lambda index: w.page_picker.setValue(index + 1))
+        w.page_picker.valueChanged.connect(lambda number: w.machine_panel.follow_page(number - 1))
+        w.scroll.verticalScrollBar().valueChanged.connect(
+            lambda: w.machine_panel.follow_page(w.page_picker.value() - 1)
+        )
         machine_status = QtWidgets.QLabel()
         machine_status.setWordWrap(True)
         machine_status.hide()
@@ -251,6 +255,7 @@ def organize_workspace(w):
             machine_status.setVisible(bool(text))
 
         w.machine_panel.status_changed.connect(show_machine_status)
+        view_menu.addAction("写字机设备管理…", lambda: w.machine_panel.open_devices(w))
         view_menu.addAction(machine.toggleViewAction())
     properties.raise_()
     w.resizeDocks([properties], [330], QtCore.Qt.Orientation.Horizontal)

@@ -1027,7 +1027,7 @@ class MixedWindow(ReviewWindow):
             self.export_button.setEnabled(bool(ready and self.snapshot and self.snapshot.pages
                                                and self.export_job is None))
         if hasattr(self, "machine_panel"):
-            self.machine_panel.set_document(self.snapshot, self.page_picker.value() - 1, ready)
+            self.machine_panel.set_document(self.snapshot, self.page_picker.value() - 1, ready, self.flow.template)
         self.update_diagnostic_action()
 
     def current_table(self):

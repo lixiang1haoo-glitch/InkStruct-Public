@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from threading import Event
 from time import monotonic, sleep
 
-from .physical import COORDINATE_DECIMALS, MachinePage, WorkArea, machine_point
+from .physical import COORDINATE_DECIMALS, MachinePage, WorkArea, axis_trial, machine_point
 from .schema import Point
 
 PEN_UP = 0.0
@@ -85,6 +85,7 @@ class XYWindow:
     last_progress: float = field(default_factory=monotonic)
     pin: str = ""
     seen_run: bool = False
+    review_pins: bool = True
 
     def arm(self, targets):
         for point in targets:
@@ -127,7 +128,7 @@ class XYWindow:
 
         axes = set(status.limits) & set("XYZ")
         if axes:
-            if (not qualified or status.limits not in {"X", "Y", "XY", "YX"}
+            if (not qualified or not self.review_pins or status.limits not in {"X", "Y", "XY", "YX"}
                     or status.state not in {"Run", "Idle"} or (len(axes) == 2 and not moving_both)
                     or not self.area.contains(point, inset=PIN_INTERIOR_MM)
                     or not all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points)):
@@ -376,7 +377,7 @@ class GrblLink:
             sleep(.016)
         raise MachineError("设备没有到达已发送行程的终点。")
 
-    def move_path(self, state, points, area, feed, z, control):
+    def move_path(self, state, points, area, feed, z, control, *, review_pins=True):
         start = state.position[:2]
         pending = deque()
         for point in points:
@@ -387,7 +388,7 @@ class GrblLink:
         next_status = monotonic()
         try:
             while pending:
-                window = self.xy_window = XYWindow(area, z, [state.position[:2]])
+                window = self.xy_window = XYWindow(area, z, [state.position[:2]], review_pins=review_pins)
                 no_progress_until = monotonic() + 1.5 + MAX_PENDING_MM * 60 / feed
                 while pending and not window.pin:
                     origin = window.points[-1]
@@ -431,19 +432,23 @@ class GrblLink:
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 
-    def run_page(self, page: MachinePage, area: WorkArea, control: MotionControl, *, dry_run=False, feed=DEFAULT_WRITE_FEED):
+    def run_page(self, page: MachinePage, area: WorkArea, control: MotionControl, *,
+                 dry_run=False, feed=DEFAULT_WRITE_FEED, state=None, review_pins=True):
         if type(feed) is not int or not 60 <= feed <= MAX_WRITE_FEED:
             raise ValueError(f"书写速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
-        state = self.require_idle(control, for_motion=True)
+        if state is None:
+            state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
         state = self.enter_motion(control)
         total = len(page.strokes)
         for number, stroke in enumerate(page.strokes, 1):
-            state = self.move_path(state, stroke.points[:1], area, TRAVEL_FEED, PEN_UP, control)
+            state = self.move_path(state, stroke.points[:1], area, TRAVEL_FEED, PEN_UP, control,
+                                   review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_DOWN, control)
                 state = self.wait_idle(control, z=PEN_DOWN, poll=.02)
-            state = self.move_path(state, stroke.points[1:], area, feed, PEN_UP if dry_run else PEN_DOWN, control)
+            state = self.move_path(state, stroke.points[1:], area, feed, PEN_UP if dry_run else PEN_DOWN, control,
+                                   review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_UP, control)
                 state = self.wait_idle(control, z=PEN_UP, poll=.02)
@@ -451,21 +456,35 @@ class GrblLink:
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 
-    def jog(self, offset: Point, area: WorkArea, control: MotionControl):
+    def trial_axes(self, axes, area, feed, control):
+        state = self.require_idle(control, for_motion=True)
+        page = axis_trial(axes.register((0, 0), state.position[:2]))
+        if area is None:
+            x, y = zip(*(point for stroke in page.strokes for point in stroke.points), strict=True)
+            area = WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
+        return self.run_page(page, area, control, feed=feed, state=state, review_pins=False)
+
+    def jog(self, offset: Point, area: WorkArea | None, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
+        if area is None:
+            # Device-manager diagnostics use only the requested travel envelope.
+            # Hardware limits and every moving-axis pin report still stop motion.
+            x, y = zip(start, end, strict=True)
+            area = WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
+            return self.move_from(start, end, area, control, review_pins=False)
         return self.move_from(start, end, area, control)
 
     def move_to(self, target: Point, area: WorkArea, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
         return self.move_from(state.position[:2], machine_point(target), area, control)
 
-    def move_from(self, start, end, area, control):
+    def move_from(self, start, end, area, control, *, review_pins=True):
         area.require(start, "当前笔尖位置")
         area.require(end, "点动终点")
         state = self.enter_motion(control)
-        return self.move_path(state, (end,), area, TRAVEL_FEED, PEN_UP, control)
+        return self.move_path(state, (end,), area, TRAVEL_FEED, PEN_UP, control, review_pins=review_pins)
 
     def set_pen(self, down: bool, area: WorkArea, control: MotionControl):
         state = self.require_idle(control, for_motion=True)

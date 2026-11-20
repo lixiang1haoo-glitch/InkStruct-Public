@@ -4,7 +4,7 @@ Windows 版提供安装程序、免安装 ZIP 和对应源码。应用源码、�
 
 ## 构建产物和验证
 
-- 基础免安装包 `InkStruct-0.1.109-Windows-x64.zip` 解压后运行 `InkStruct.exe`。基础安装程序 `InkStruct-0.1.109-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
+- 免安装测试包 `InkStruct-0.1.110-Windows-x64.zip` 解压后运行 `InkStruct.exe`。测试版安装程序 `InkStruct-0.1.110-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
 
 体验包从同版本的 Windows 构建派生。免安装体验包名为 `InkStruct-<版本>-Windows-x64-Portable-Experience.zip`。安装体验包名为 `InkStruct-<版本>-Windows-x64-Installer-Experience.zip`，解压后运行其中的 EXE。
 

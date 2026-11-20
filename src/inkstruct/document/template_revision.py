@@ -38,7 +38,11 @@ def _content_record(template, record=None):
     data.pop('revision', None)
     # Omit the new optional property from legacy records to preserve their hashes.
     if data.get('schema_version') == 'inkstruct_page_template_v3':
+        if data.get('plotter_alignment') is None:
+            data.pop('plotter_alignment', None)
         for layout in data.get('layouts', ()):
+            if layout.get('plotter_alignment') is None:
+                layout.pop('plotter_alignment', None)
             for frame in layout['frames']:
                 if frame.get('paper_grid') is None:
                     frame.pop('paper_grid', None)

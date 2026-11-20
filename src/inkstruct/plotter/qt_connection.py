@@ -116,6 +116,8 @@ class N1Worker(QtCore.QThread):
                         result = link.set_pen(*args, control)
                     elif kind == "touch":
                         result = link.touch(*args, control)
+                    elif kind == "axis-trial":
+                        result = link.trial_axes(*args, control)
                     else:
                         page, area, feed = args
                         result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)

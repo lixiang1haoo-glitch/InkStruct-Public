@@ -413,7 +413,8 @@ class _TemplateDraft(QtWidgets.QDialog):
         kind = self.kind.currentData()
         if kind == "custom" and self.template.kind == "simple":
             changes.update(
-                kind=kind, layouts=self.template.effective_layouts, loop_pages=("simple",)
+                kind=kind, layouts=self.template.effective_layouts, loop_pages=("simple",),
+                plotter_alignment=None,
             )
         elif kind == "simple" and self.template.kind == "custom":
             raise ValueError("请通过外层“新建简单模板”另建；不会自动丢弃现有页面版式、字段和规则。")

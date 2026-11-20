@@ -44,6 +44,8 @@ class PaperRegistration:
     cosine: float = 1.0
     sine: float = 0.0
     scale: float = 1.0
+    x_axis: Point = (1.0, 0.0)
+    y_axis: Point = (0.0, 1.0)
 
     @classmethod
     def two_point(cls, paper: tuple[Point, Point], machine: tuple[Point, Point], *, scale=False):
@@ -59,12 +61,16 @@ class PaperRegistration:
         return cls(machine_start, paper_start, px * mx + py * my, px * my - py * mx,
                    machine_distance / paper_distance if scale else 1.0)
 
+    def vector(self, x, y):
+        u = self.scale * (self.cosine * x - self.sine * y)
+        v = self.scale * (self.sine * x + self.cosine * y)
+        return (u * self.x_axis[0] + v * self.y_axis[0],
+                u * self.x_axis[1] + v * self.y_axis[1])
+
     def place(self, point: Point) -> Point:
         x, y = point[0] - self.anchor[0], point[1] - self.anchor[1]
-        return machine_point((
-            self.origin[0] + self.scale * (self.cosine * x - self.sine * y),
-            self.origin[1] + self.scale * (self.sine * x + self.cosine * y),
-        ))
+        u, v = self.vector(x, y)
+        return machine_point((self.origin[0] + u, self.origin[1] + v))
 
 
 @dataclass(frozen=True)
@@ -98,6 +104,16 @@ def position_page(page: PlotPage, registration: PaperRegistration) -> MachinePag
             raise ValueError(f"第 {len(strokes) + 1} 笔在设备坐标精度下没有长度。")
         strokes.append(MachineStroke(stroke.stroke_id, points, stroke.width_mm))
     return MachinePage(page.index, tuple(strokes), registration)
+
+
+def axis_trial(registration):
+    paths = (
+        ((0, 0), (50, 0)), ((0, 0), (0, 50)),
+        ((34, 5), (44, 15)), ((44, 5), (34, 15)),
+        ((5, 34), (10, 39), (15, 34)), ((10, 39), (10, 45)),
+    )
+    return MachinePage(0, tuple(MachineStroke("试画 X/Y", tuple(map(registration.place, points)), .2)
+                                for points in paths), registration)
 
 
 def registration_marks(page: PlotPage, registration: PaperRegistration,

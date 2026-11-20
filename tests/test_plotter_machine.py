@@ -11,6 +11,7 @@ import pytest
 
 from inkstruct.plotter.grbl import GrblLink, MachineError, MotionControl, Stopped, decode_status
 from inkstruct.plotter.physical import PaperRegistration, WorkArea, position_page, registration_marks
+from inkstruct.plotter.profiles import DeviceAxes
 from inkstruct.plotter.schema import PlotPage, PlotStroke
 
 
@@ -112,6 +113,158 @@ def test_rigid_and_similarity_registration_share_frozen_geometry_and_test_marks(
         assert all(math.isclose(math.dist(point, center), .5, abs_tol=.0001) for point in stroke.points)
     with pytest.raises(ValueError, match="独立核验"):
         registration_marks(page, rigid, ((5, 5), (10, 5), (15, 5)))
+
+
+def test_axis_inversion_and_trial_use_the_same_logical_coordinates():
+    axes = DeviceAxes(1.1, .9, mirror_x=True, swap=True)
+    assert axes.map(5, 10) == (9, -5.5)
+    assert axes.unmap(*axes.map(5, 10)) == (5, 10)
+    registration = axes.register((6, 8), (30, 40), angle=math.pi / 2, scale=1.2)
+    p, q = (6, 8), (16, 8)
+    angle, scale = axes.measure((p, q), registration.place(p), registration.place(q))
+    assert (angle, scale) == pytest.approx((math.pi / 2, 1.2))
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    serial.position[:] = [30., 40., 0.]
+    with pytest.raises(ValueError, match="超出"):
+        link.trial_axes(axes, WorkArea(0, 0, 80, 80), 2500, MotionControl())
+    assert not any(command.startswith(b"G1 ") for command in serial.commands)
+    link.trial_axes(axes, WorkArea(0, -20, 85, 100), 2500, MotionControl())
+    assert (link.xy_command((30, -15), 2500) + "\n").encode("ascii") in serial.commands
+    assert (link.xy_command((75, 40), 2500) + "\n").encode("ascii") in serial.commands
+
+
+def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    with pytest.raises(ValueError, match="超出"):
+        link.jog((-1, 0), WorkArea(0, 0, 10, 10), MotionControl())
+    link.jog((-1, 0), None, MotionControl())
+    assert serial.position == [-1, 0, 0]
+    serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
+    with pytest.raises(MachineError, match="限位"):
+        link.jog((-1, 0), None, MotionControl())
+
+
+def test_template_and_local_placement_persist_separately(tmp_path):
+    from inkstruct.document.flow_template import FlowTemplate, PageLayout
+    from inkstruct.document.template_authoring import parse_template, template_json
+    from inkstruct.document.template_revision import version_template
+    from inkstruct.editor.machine_alignment import page_context
+    from inkstruct.plotter.profiles import DeviceProfile, PageAlignment, PlotterProfiles
+
+    first, second = (PageLayout(str(i), f"PDF {i}", source_page=i,
+                               plotter_alignment=PageAlignment((5., i * 5.))) for i in range(1, 3))
+    template = FlowTemplate(kind="custom", layouts=(first, second), loop_pages=("1", "2"))
+    saved = parse_template(template_json(version_template(template)))
+    key, _, mark, _ = page_context(saved, index=0)
+    other, _, other_mark, _ = page_context(saved, index=1)
+    assert mark.a == (5., 5.) and other_mark.a == (5., 10.) and key != other
+    store = PlotterProfiles(tmp_path)
+    a = DeviceProfile.create("N1", "COM3", "first")
+    b = DeviceProfile.create("工作室", "COM4", "second")
+    store.save(a)
+    store.save(b)
+    store.place(a, key, "纸夹左侧", mark, (25., 30.), (0., 0.))
+    reopened = PlotterProfiles(tmp_path)
+    assert reopened.devices() == [a, b]
+    assert reopened.place(a, key, "纸夹左侧", mark)["point"] == [25., 30.]
+    assert reopened.place(a, key, "纸夹右侧", mark) is None
+    assert reopened.place(a, other, "纸夹左侧", other_mark) is None
+    assert reopened.place(b, key, "纸夹左侧", mark) is None
+    assert '"point"' not in template_json(saved)
+
+
+def test_qt_device_profile_and_one_point_alignment(tmp_path):
+    code = r"""
+import sys
+from pathlib import Path
+from time import monotonic, sleep
+from types import SimpleNamespace
+sys.path.insert(0, str(Path.cwd()/'tests'))
+from test_plotter_machine import SimulatedGrbl
+from PySide6 import QtCore, QtWidgets
+from inkstruct.document.flow_template import FlowTemplate
+from inkstruct.editor.machine_alignment import AlignmentDialog, page_context
+from inkstruct.editor.machine_devices import DeviceDialog
+from inkstruct.editor.machine_panel import MachinePanel
+from inkstruct.plotter.profiles import DeviceProfile, PageAlignment
+from inkstruct.plotter.qt_connection import N1Worker
+from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
+
+app = QtWidgets.QApplication([])
+settings = QtCore.QSettings
+settings.setDefaultFormat(settings.Format.IniFormat)
+settings.setPath(settings.Format.IniFormat, settings.Scope.UserScope, sys.argv[1])
+transport = SimulatedGrbl()
+transport.position[:] = [35., 30., 0.]
+port = SimpleNamespace(portName=lambda: "COM3", serialNumber=lambda: "first")
+panel = MachinePanel(None, worker_factory=lambda parent: N1Worker(parent, serial_factory=lambda _: transport),
+                     ports=lambda: [port])
+panel.set_workspace(Path(sys.argv[1]))
+def wait():
+    deadline = monotonic() + 8
+    while panel.busy is not None and monotonic() < deadline:
+        app.processEvents()
+        sleep(.01)
+    assert panel.busy is None, panel.report.text()
+
+try:
+    panel.save_profile(DeviceProfile.create("测试 N1", "COM3", "first"))
+    setup = DeviceDialog(panel)
+    assert setup.devices.count() == 1
+    setup.link.click()
+    wait()
+    assert panel.device is not None and not panel.confirmed_area
+    setup.axes[0].setChecked(True)
+    setup.axes[2].setChecked(True)
+    setup.jog[2].click()
+    wait()
+    assert transport.position == [35., 29., 0.] and not panel.profile.axes.swap
+    assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
+    setup.record_buttons[0].click()
+    wait()
+    assert [spin.value() for spin in setup.bounds[:2]] == [35., 29.]
+    for spin, value in zip(setup.bounds, (0, 0, 100, 100), strict=True):
+        spin.setValue(value)
+    setup.use_range.setChecked(True)
+    setup.save_button.click()
+    profile = panel.store.devices()[0]
+    assert profile.axes.swap and profile.axes.mirror_x and panel.confirmed_area == profile.area
+    setup.close()
+
+    template = FlowTemplate(width_mm=70, height_mm=60, plotter_alignment=PageAlignment((5, 5)))
+    page = Page(0, (), (PaintOp("字", ((6., 7.), (8., 9.)), .3),))
+    snapshot = LayoutSnapshot("snapshot", "key", "doc", 0, template.page, (page,), (), "resource", "test")
+    panel.set_document(snapshot, 0, True, template)
+    panel.show()
+    context = page_context(template, snapshot, 0)
+    align = AlignmentDialog(panel, panel, *context, snapshot=snapshot)
+    align.record_a.click()
+    wait()
+    assert align.measurement == (35., 29.)
+    align.save.click()
+    assert align.result() and align.position == align.measurement
+    panel.use_alignment(align.alignment, align.position)
+    assert panel.job.strokes[0].points == ((37., 28.), (39., 26.))
+    assert panel.write_button.isEnabled() and panel.dry_job is None
+    panel.confirm = lambda *_: True
+    reuse = AlignmentDialog(panel, panel, *context, snapshot=snapshot)
+    reuse.recall.click()
+    assert reuse.result() and reuse.position == align.position
+    panel.write_button.click()
+    wait()
+    assert "书写完成" in panel.report.text()
+finally:
+    panel.shutdown()
+    panel.close()
+"""
+    result = run([sys.executable, "-c", code, str(tmp_path)],
+                 env={**os.environ, "QT_QPA_PLATFORM": os.environ.get("INKSTRUCT_TEST_QT_PLATFORM", "offscreen")},
+                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=35)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("setting", ["$13=0", "$13=0 (report inches, bool)"])
@@ -307,7 +460,7 @@ def test_stop_clears_queued_motion():
     assert serial.commands.count(b"G1 Z-1.6 F5000\n") == 0
 
 
-def test_qt_panel_requires_dry_run_and_disconnect_invalidates_registration():
+def test_qt_panel_writes_without_dry_run_and_disconnect_invalidates_registration(tmp_path):
     code = r"""
 import sys
 from pathlib import Path
@@ -329,6 +482,7 @@ snapshot = LayoutSnapshot("snapshot", "key", "document", 0, PageProfile(70, 60, 
 worker = lambda parent: N1Worker(parent, serial_factory=lambda _port: transport)
 ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
 dialog = MachinePanel(None, worker_factory=worker, ports=ports)
+dialog.set_workspace(Path(sys.argv[1]))
 dialog.set_document(snapshot, 0, True)
 dialog.show()
 try:
@@ -350,17 +504,16 @@ try:
     dialog.origin[1].setValue(15)
     dialog.confirm_alignment.click()
     placed = dialog.job
+    dialog.preview_button.click()
     assert dialog.preview.job is placed and placed.strokes[0].points == ((13.,19.), (15.,21.))
-    assert dialog.dry_button.isEnabled() and not dialog.write_button.isEnabled()
-    dialog.dry_button.click()
-    wait_for(lambda: dialog.dry_job is placed and dialog.busy is None)
-    assert dialog.write_button.isEnabled()
+    assert dialog.dry_button.isEnabled() and dialog.write_button.isEnabled()
+    assert dialog.dry_job is None
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     dialog.confirm = lambda *_: True
     dialog.write_button.click()
     wait_for(lambda: "书写完成" in dialog.report.text() and dialog.busy is None)
     assert b"G1 Z-1.6 F5000\n" in transport.commands
-    assert not dialog.write_button.isEnabled()
+    assert dialog.write_button.isEnabled()
 
     dialog.options.setChecked(True)
     dialog.mode.setCurrentIndex(dialog.mode.findData("preprinted"))
@@ -379,7 +532,7 @@ try:
     dialog.test_button.click()
     wait_for(lambda: "三个测试点已画完" in dialog.report.text() and dialog.busy is None)
     assert transport.commands.count(b"G1 Z-1.6 F5000\n") == before_marks + 3
-    assert dialog.preview.job is dialog.job and not dialog.write_button.isEnabled()
+    assert dialog.preview.job is dialog.job and dialog.write_button.isEnabled()
 
     transport.fail_next_motion = True
     dialog.dry_button.click()
@@ -390,7 +543,7 @@ finally:
     dialog.shutdown()
     dialog.close()
 """
-    result = run([sys.executable, "-c", code],
+    result = run([sys.executable, "-c", code, str(tmp_path)],
                  env={**os.environ, "QT_QPA_PLATFORM": os.environ.get("INKSTRUCT_TEST_QT_PLATFORM", "offscreen"),
                       "PYTHONUTF8": "1"},
                  capture_output=True, text=True, encoding="utf-8", timeout=30)
