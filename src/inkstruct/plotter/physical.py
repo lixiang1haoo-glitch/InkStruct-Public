@@ -86,10 +86,11 @@ class MachinePage:
     strokes: tuple[MachineStroke, ...]
     registration: PaperRegistration
 
-    def clearance_box(self, start: Point, margin: float) -> WorkArea:
+    def clearance_box(self, start: Point, margin: float, *, return_target: Point | None = None) -> WorkArea:
         """Propose an outward-rounded rectangle for the operator to inspect."""
-        left = right = start[0]
-        top = bottom = start[1]
+        end = return_target if return_target is not None else start
+        left, right = sorted((start[0], end[0]))
+        top, bottom = sorted((start[1], end[1]))
         for stroke in self.strokes:
             for x, y in stroke.points:
                 left, right = min(left, x), max(right, x)

@@ -1057,7 +1057,11 @@ try:
     p.dry_button.click()
     wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
 
+    first_a = p.registration.origin
+    assert not p.auto_return.isChecked()
+    p.auto_return.click()
     p.write_button.click()
+    assert not p.auto_return.isEnabled()
     assert p.is_moving and p.close_blocker()
     p.write_button.click()
     wait_for(lambda: b"!" in transport.commands)
@@ -1077,6 +1081,7 @@ try:
     p.set_document(snap, 0, True)
     p.write_button.click()
     wait_for(lambda: p.waiting_for_paper)
+    assert tuple(transport.position) == (*first_a, 0.)
     assert p.page_list.currentRow() == 1 and p.completed_pages == {0}
     assert p.job is None and p.close_blocker() and p.write_button.text() == "换纸完成"
     count = len(transport.commands)
@@ -1124,6 +1129,10 @@ def test_confirmed_page_region_reviews_recorded_writing_signal():
     start = (9.32, 3.93)
     area = page.clearance_box(start, 2.)
     assert all(area.contains(p, inset=2.) for p in (*points, start))
+    target = (-10., 25.)
+    assert not area.contains(target)
+    with_return = page.clearance_box(start, 2., return_target=target)
+    assert all(with_return.contains(p, inset=2.) for p in (*points, start, target))
     reports = ["<Run|WPos:8.580,3.290,-1.590,0.000|Bf:0,1023|FS:3451,0>",
                "<Run|WPos:8.520,4.870,-1.590,0.000|Bf:6,1023|FS:1191,0|Pn:Y|Ov:100,100,100>"]
     for confirmed in (False, True):

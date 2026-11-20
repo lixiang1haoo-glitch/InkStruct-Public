@@ -181,6 +181,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.registration = self.confirmed_area = None
         self.job = None
         self.pending_pages = []
+        self.page_return = None
         self.completed_pages = set()
         self.batch_active = self.waiting_for_paper = False
         self.closing = False
@@ -264,6 +265,9 @@ class MachinePanel(QtWidgets.QWidget):
         self.optimize.setChecked(True)
         self.optimize.toggled.connect(self.change_routing)
         write_layout.addWidget(self.optimize)
+        self.auto_return = QtWidgets.QCheckBox("写完本页后抬笔回到 A 点")
+        self.auto_return.clicked.connect(self.set_auto_return)
+        write_layout.addWidget(self.auto_return)
         write_layout.addWidget(self.route_stats)
         self.route_stats.hide()
         self.details_toggle.toggled.connect(self.route_stats.setVisible)
@@ -536,7 +540,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     @property
     def is_moving(self):
-        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "pen", "calibrate-line", "calibrate-height"}
+        return self.busy in {"dry", "write", "axis-trial", "jog", "device-jog", "return", "page-return", "pen", "calibrate-line", "calibrate-height"}
 
     @property
     def pen_raised(self):
@@ -822,6 +826,8 @@ class MachinePanel(QtWidgets.QWidget):
         safe = positioning and self.range_ready
         ready = self.current_page_ready()
         document_ready = self.candidate is not None and self.candidate[0] is self.snapshot
+        self.auto_return.setChecked(bool(self.profile and self.profile.return_after_page))
+        self.auto_return.setEnabled(self.profile is not None and not busy)
         self.scope.setEnabled(not busy and not self.batch_active and document_ready)
         self.page_list.setEnabled(self.scope.isEnabled() and self.scope.currentData() == "single")
         self.device_picker.setEnabled(not connected and not busy and not self.batch_active)
@@ -877,7 +883,7 @@ class MachinePanel(QtWidgets.QWidget):
                     self.message("点动路径超出已确认的工作范围。", error=True)
                     return False
             args = offset, area, feed, not self.profile.limit_area_enabled
-        elif kind in {"return", "axis-trial", "write", "dry"}:
+        elif kind in {"return", "page-return", "axis-trial", "write", "dry"}:
             if not self.range_ready:
                 self.message("请先确认已启用的工作范围。", error=True)
                 return False
@@ -951,6 +957,13 @@ class MachinePanel(QtWidgets.QWidget):
     def jog(self, x, y):
         if self.profile and self.device is not None:
             self.submit("jog", self.profile.axes.map(x, y), self.confirmed_area, self.profile.feed)
+
+    def set_auto_return(self, enabled):
+        try:
+            self._persist_profile(replace(self.profile, return_after_page=enabled))
+        except (OSError, ValueError) as error:
+            self.message(f"回到 A 点的设置未能保存。{error}", error=True)
+        self.refresh_buttons()
 
     def return_to_origin(self):
         if self.registration is not None and self.range_ready:
@@ -1026,11 +1039,14 @@ class MachinePanel(QtWidgets.QWidget):
                 placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
         title = "原稿已对位，继续书写" if start or self.uncertain else "开始书写"
         text = f"{placement_note}第 {job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。"
+        return_target = job.registration.origin if self.auto_return.isChecked() else None
+        if return_target is not None:
+            text += " 写完后将抬笔回到本页对位 A 点，再取纸。"
         position = self.device.position[:2]
         local_area = None
         checkbox = None
         if not self.profile.limit_area_enabled and self.confirmed_area is None:
-            local_area = job.clearance_box(position, PIN_INTERIOR_MM)
+            local_area = job.clearance_box(position, PIN_INTERIOR_MM, return_target=return_target)
             text += (f"\n\n本页运动范围（含笔间移动及边缘余量），相对当前笔尖："
                      f"\n设备 X 方向 {local_area.left - position[0]:+.1f} 至 {local_area.right - position[0]:+.1f} mm"
                      f"\n设备 Y 方向 {local_area.top - position[1]:+.1f} 至 {local_area.bottom - position[1]:+.1f} mm。"
@@ -1057,8 +1073,11 @@ class MachinePanel(QtWidgets.QWidget):
         if (job is None or not self.range_ready or self.device is None or self.waiting_for_paper or
                 not self.current_page_ready()):
             return False
+        target = job.registration.origin if kind == "write" and self.auto_return.isChecked() else None
         if area is not None:
             try:
+                if target is not None:
+                    area.require(target, "本页对位 A 点")
                 job.check(area, self.device.position[:2], dry_run=kind == "dry")
             except ValueError as error:
                 self.message(str(error), error=True)
@@ -1077,6 +1096,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.toggle_preview()
             self.resume_hint.hide()
             if kind == "write":
+                self.page_return = (target, area, self.profile.feed) if target is not None else None
                 self.elapsed_start = monotonic()
                 self.run_estimate = estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2])
                 self.optimize.setEnabled(False)
@@ -1102,7 +1122,8 @@ class MachinePanel(QtWidgets.QWidget):
 
     def on_phase(self, phase):
         if not self.closing and self.is_moving:
-            self.message({"running": "设备正在执行…", "pausing": "正在等待设备暂停…",
+            running = "本页已写完，正在抬笔回到 A 点…" if self.busy == "page-return" else "设备正在执行…"
+            self.message({"running": running, "pausing": "正在等待设备暂停…",
                           "paused": "设备已暂停。"}[phase])
 
     def on_progress(self, done, total):
@@ -1174,6 +1195,7 @@ class MachinePanel(QtWidgets.QWidget):
                    "jog": "点动完成。",
                    "device-jog": "点动完成。",
                    "return": "笔尖已抬起并到达目标位置。",
+                   "page-return": "本页已写完，笔尖已抬起并回到 A 点，可以取纸。",
                    "pen": "笔尖已抬起。" if self.pen_raised else "笔尖已落下。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
@@ -1221,11 +1243,23 @@ class MachinePanel(QtWidgets.QWidget):
             page = self.page_list.currentRow()
             self.completed_pages.add(page)
             self.update_page_states()
-            if self.pending_pages:
+            move, self.page_return = self.page_return, None
+            control = self.worker.control
+            if control.stop_requested.is_set() or control.finish_stroke.is_set():
+                self.end_batch()
+            elif move is not None:
+                if self.submit("page-return", *move):
+                    self.show_position()
+                    self.message("本页已写完，正在抬笔回到 A 点…")
+                    return
+                self.end_batch()
+                message += " 回到 A 点的操作未能开始。"
+        if kind in {"write", "page-return"}:
+            if self.pending_pages and not self.worker.control.stop_requested.is_set():
                 self.waiting_for_paper = True
                 self.page_list.setCurrentRow(self.pending_pages.pop(0))
                 action = "纸已靠齐，沿用对位" if self.fixture_placement else "换纸完成"
-                message = f"第 {page + 1} 页已完成。换纸后点「{action}」。"
+                message += f" 换纸后点「{action}」。"
             else:
                 self.end_batch()
         self.show_position()
@@ -1240,6 +1274,9 @@ class MachinePanel(QtWidgets.QWidget):
         self.position_callback = None
         self.end_batch()
         self.progress.hide()
+        self.page_return = None
+        if kind == "page-return":
+            detail = f"本页已写完，回到 A 点未完成。{detail}"
         if kind == "write" and self.job:
             if self.journal:
                 try:

@@ -106,9 +106,15 @@ def exercise(folder):
             assert "相对当前笔尖" in box.text()
             check.setChecked(True)
             box.button(QtWidgets.QMessageBox.StandardButton.Yes).click()
+        assert not p.auto_return.isChecked()
+        p.auto_return.click()
+        assert p.profile.return_after_page
+        returns = []
         sent_areas = []
         submit = p.worker.submit
         def capture_area(kind, *args):
+            if kind == "page-return":
+                returns.append(args)
             if kind == "write":
                 sent_areas.append(args[1])
             return submit(kind, *args)
@@ -123,7 +129,7 @@ def exercise(folder):
         p.write_button.click()
         wait(p)
         done, pending = p.journal.read()
-        assert 3 <= done <= 4 and not pending
+        assert 3 <= done <= 4 and not pending and not returns
         assert p.done == done and p.progress.value() == done
         assert not p.preview_enabled and p.preview.isHidden()
         assert f"已确认完成 {done} 笔" in p.resume_hint.text()
@@ -136,15 +142,38 @@ def exercise(folder):
     mock = SimulatedGrbl()
     p = opened()
     try:
+        assert p.auto_return.isChecked()
         assert p.profile.active_pen == "试验笔" and p.profile.writing_height == -.8
         assert p.done == done and "续写" in p.write_button.text()
         assert not p.write_button.isEnabled()
-        p.use_alignment(PageAlignment((5.,5.)),(0.,0.))
+        p.use_alignment(PageAlignment((5.,5.)),(4.,3.))
         p.confirm=lambda *_:True
         p.write_button.click()
         wait(p)
         assert mock.commands.count(b"G1 Z-0.8 F5000\n") == 8-done
         assert not p.journal.path.exists() and p.timing_path.exists()
+        assert mock.position == [4., 3., 0.] and "可以取纸" in p.report.text()
+
+        submit = p.worker.submit
+        p.auto_return.click()
+        p.write_button.click()
+        wait(p)
+        assert tuple(mock.position[:2]) == p.job.strokes[-1].points[-1]
+        assert mock.position[2] == 0 and "可以取纸" not in p.report.text()
+        p.auto_return.click()
+        def fail_return(kind, *args):
+            if kind == "page-return":
+                mock.fail_next_motion = True
+            return submit(kind, *args)
+        p.worker.submit = fail_return
+        p.write_button.click()
+        end = monotonic() + 20
+        while p.busy and monotonic() < end:
+            app.processEvents()
+            sleep(.003)
+        assert p.busy is None and p.device is None
+        assert p.completed_pages == {0} and not p.journal.path.exists()
+        assert "本页已写完，回到 A 点未完成" in p.report.text()
     finally:
         p.shutdown()
         p.close()
