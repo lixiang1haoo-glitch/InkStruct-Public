@@ -282,7 +282,7 @@ from time import monotonic, sleep
 from types import SimpleNamespace
 sys.path.insert(0, str(Path.cwd()/'tests'))
 from test_plotter_machine import SimulatedGrbl, xy_feeds_by_pen
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 from inkstruct.document.flow_template import FlowTemplate
 from inkstruct.editor.machine_alignment import AlignmentDialog, page_context
 from inkstruct.editor.machine_devices import DeviceDialog
@@ -399,6 +399,41 @@ try:
     panel.write_button.click()
     wait()
     assert "书写完成" in panel.report.text()
+
+    preview = AlignmentDialog(panel, panel, *context, configure=True)
+    preview.show()
+    app.processEvents()
+    canvas = preview.canvas
+    qt = QtCore.Qt
+    initial = canvas.drawing_transform()
+    anchor = initial.map(QtCore.QPointF(22, 19)).toPoint()
+    def wheel(modifier):
+        event = QtGui.QWheelEvent(QtCore.QPointF(anchor), QtCore.QPointF(canvas.mapToGlobal(anchor)),
+            QtCore.QPoint(), QtCore.QPoint(0, 240), qt.NoButton, modifier, qt.NoScrollPhase, False)
+        app.sendEvent(canvas, event)
+    wheel(qt.NoModifier)
+    assert canvas.drawing_transform() == initial
+    wheel(qt.ControlModifier)
+    assert preview.zoom_reset.text() == "144%"
+    point = initial.inverted()[0].map(QtCore.QPointF(anchor))
+    assert (canvas.drawing_transform().map(point) - anchor).manhattanLength() < 1e-6
+    QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=anchor)
+    assert abs(preview.a[0].value() - point.x()) < .001 and abs(preview.a[1].value() - point.y()) < .001
+    preview.pick.setCurrentIndex(1)
+    dest = anchor + QtCore.QPoint(30, 20)
+    QtTest.QTest.mousePress(canvas, qt.LeftButton, pos=anchor)
+    QtTest.QTest.mouseMove(canvas, dest)
+    QtTest.QTest.mouseRelease(canvas, qt.LeftButton, pos=dest)
+    assert not preview.use_b.isChecked()
+    assert (canvas.drawing_transform().map(point) - dest).manhattanLength() < 1e-6
+    b_pixel = dest + QtCore.QPoint(12, 18)
+    b_mm = canvas.drawing_transform().inverted()[0].map(QtCore.QPointF(b_pixel))
+    QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=b_pixel)
+    assert preview.use_b.isChecked()
+    assert abs(preview.b[0].value() - b_mm.x()) < .001 and abs(preview.b[1].value() - b_mm.y()) < .001
+    preview.zoom_reset.click()
+    assert canvas.drawing_transform() == initial and preview.zoom_reset.text() == "100%"
+    preview.close()
 
     measure = AlignmentDialog(panel, panel, *context, configure=True)
     transport.position[:] = [35., 29., 0.]
