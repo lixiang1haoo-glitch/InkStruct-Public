@@ -147,6 +147,13 @@ class DeviceProfile:
     active_pen: str = ""
     pen_heights: tuple = ()
     return_after_page: bool = False
+    paper_calibration: tuple[float, float] | None = None
+
+    def calibrated(self, alignment):
+        if self.paper_calibration is None:
+            return alignment
+        angle, scale = self.paper_calibration
+        return replace(alignment, angle=angle, scale=scale)
 
     @property
     def writing_height(self):
@@ -178,8 +185,12 @@ class DeviceProfile:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
             raise ValueError(f"XY 运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
+        if self.paper_calibration is not None:
+            angle, scale = self.paper_calibration
+            PageAlignment((0., 0.), angle=angle, scale=scale)
+            object.__setattr__(self, "paper_calibration", (angle, scale))
         if type(self.return_after_page) is not bool:
-            raise ValueError("写完回到 A 点的设置无效。")
+            raise ValueError("写完回到原点的设置无效。")
         heights = tuple((name, float(value)) for name, value in self.pen_heights)
         if (any(not isinstance(name, str) or not name.strip() or not PEN_DOWN <= value <= -.1
                 for name, value in heights) or len(dict(heights)) != len(heights)

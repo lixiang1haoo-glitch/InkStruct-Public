@@ -1,6 +1,7 @@
 """Device management and commissioning for the shared N1 connection."""
 
 from dataclasses import replace
+from math import degrees
 
 from PySide6 import QtCore, QtWidgets
 
@@ -80,6 +81,10 @@ class DeviceDialog(QtWidgets.QDialog):
         self.axes = [QtWidgets.QCheckBox(text) for text in ("X 轴镜像", "Y 轴镜像", "交换 XY 轴")]
         axes_form.addRow(pair_widget(self.axes))
         axes_form.addRow(label(AXIS_HELP))
+        self.paper_fit = label("")
+        axes_form.addRow("纸面校准", self.paper_fit)
+        self.paper_calibrate = panel.button("初始化纸面校准…", self.calibrate_paper)
+        axes_form.addRow(self.paper_calibrate)
         options.addWidget(axes)
 
         limits = QtWidgets.QGroupBox("安全工作范围")
@@ -188,6 +193,10 @@ class DeviceDialog(QtWidgets.QDialog):
         self.pen_choice.setCurrentIndex(choices.index(profile.active_pen) if profile and profile.active_pen else 0)
         self.pen_choice.setEnabled(bool(profile and idle and not self.panel.batch_active))
         self.calibrate.setEnabled(bool(profile and connected and idle and self.panel.range_ready))
+        fit = profile.paper_calibration if profile else None
+        self.paper_fit.setText(f"方向 {degrees(fit[0]):.3f}° · 比例 {fit[1]:.3%}" if fit else "尚未初始化")
+        self.paper_calibrate.setEnabled(bool(profile and connected and idle and not self.panel.batch_active
+                                            and not self.panel.waiting_for_paper))
         datum = profile.datum if profile else None
         located = self.panel.frame is not None
         waiting = datum is not None and not located
@@ -263,6 +272,29 @@ class DeviceDialog(QtWidgets.QDialog):
         except (OSError, ValueError) as error:
             self.error.setText(str(error))
             self.refresh()
+
+    def calibrate_paper(self):
+        from .machine_alignment import AlignmentDialog, page_context
+
+        panel = self.panel
+        if self.draft_axes() != panel.profile.axes:
+            self.error.setText("请先保存轴向和比例，再初始化纸面校准。")
+            return
+        snapshot = panel.snapshot
+        index = panel.paper_page.index if panel.paper_page else 0
+        if snapshot and not 0 <= index < len(snapshot.pages):
+            index = 0
+        if snapshot and snapshot.pages:
+            page, size, _, title = page_context(panel.template, snapshot, index)
+        else:
+            snapshot = None
+            page, size, title = "", (210., 297.), "A4"
+        dialog = AlignmentDialog(panel, self, page, size, None, title, snapshot=snapshot,
+                                 index=index, calibration=True)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     def calibrate_pen(self):
         from .pen_calibration import PenCalibration

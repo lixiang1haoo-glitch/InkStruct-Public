@@ -361,7 +361,7 @@ class WorkbenchUI:
             b.clicked.connect(lambda checked=False, role=role: self.start_draw(role))
             tools.addWidget(b)
         if sys.platform == "win32" and editor is not None and hasattr(editor, "machine_panel"):
-            alignment = QtWidgets.QPushButton("书写原点与对位…")
+            alignment = QtWidgets.QPushButton("设置模板原点…")
             alignment.clicked.connect(self.edit_plotter_alignment)
             tools.addWidget(alignment)
         center_col.addLayout(tools)
