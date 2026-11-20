@@ -22,6 +22,7 @@ RAISED_SEGMENT_MM = .75
 MAX_PACKET_LINES = 6
 MAX_PENDING_MM = 15.0
 STATUS_INTERVAL = .04
+ENDPOINT_POLL = .008
 LOG = logging.getLogger(__name__)
 
 
@@ -151,7 +152,8 @@ class XYWindow:
                             and self.area.contains(point, inset=PIN_INTERIOR_MM)
                             and all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points))
             if not (qualified and self.review_pins and eligible):
-                raise MachineError(f"设备报告轴限位（Pn:{status.limits}，{status.state}，"
+                detail = "本次落笔没有已核实的工作范围。" if self.z < 0 and self.area is None else ""
+                raise MachineError(f"{detail}设备报告轴限位（Pn:{status.limits}，{status.state}，"
                                    f"X{x:.3f} Y{y:.3f}），运动已停止。")
             if not self.pin:
                 self.pin = status.limits
@@ -413,7 +415,7 @@ class GrblLink:
                 return status
             if status.state.startswith("Hold"):
                 raise MachineError("设备在作业中被外部暂停。")
-            sleep(.016)
+            sleep(ENDPOINT_POLL)
         raise MachineError("设备没有到达已发送行程的终点。")
 
     def bounded_pen_up(self, state, points, feed, control):
@@ -511,12 +513,12 @@ class GrblLink:
                 if journal is not None:
                     journal.save(number - 1, True)
                 self.pen(height, control)
-                state = self.wait_idle(control, z=height, poll=.02)
+                state = self.wait_idle(control, z=height, poll=ENDPOINT_POLL)
             state = self.move_path(state, stroke.points[1:], area, feed,
                                    PEN_UP if dry_run else height, control, review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_UP, control)
-                state = self.wait_idle(control, z=PEN_UP, poll=.02)
+                state = self.wait_idle(control, z=PEN_UP, poll=ENDPOINT_POLL)
                 if journal is not None:
                     journal.save(number, False)
             self.progress(number, total)

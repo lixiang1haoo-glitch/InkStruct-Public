@@ -86,6 +86,19 @@ class MachinePage:
     strokes: tuple[MachineStroke, ...]
     registration: PaperRegistration
 
+    def clearance_box(self, start: Point, margin: float) -> WorkArea:
+        """Propose an outward-rounded rectangle for the operator to inspect."""
+        left = right = start[0]
+        top = bottom = start[1]
+        for stroke in self.strokes:
+            for x, y in stroke.points:
+                left, right = min(left, x), max(right, x)
+                top, bottom = min(top, y), max(bottom, y)
+        # Round relative extents out to whole mm, matching what the operator sees.
+        x, y = start
+        return WorkArea(x + math.floor(left - x - margin), y + math.floor(top - y - margin),
+                        x + math.ceil(right - x + margin), y + math.ceil(bottom - y + margin))
+
     def check(self, area: WorkArea | None, start: Point, *, dry_run=False):
         machine_point(start)
         if area is not None:

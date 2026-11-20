@@ -1112,3 +1112,25 @@ finally:
                       "PYTHONUTF8": "1"},
                  capture_output=True, text=True, encoding="utf-8", timeout=35)
     assert result.returncode == 0, result.stdout + result.stderr
+
+def test_confirmed_page_region_reviews_recorded_writing_signal():
+    from inkstruct.plotter.grbl import XYWindow
+    from inkstruct.plotter.physical import MachinePage, MachineStroke
+
+    points = ((8.35, 2.94), (8.58, 3.29), (8.52, 4.87), (8.56, 5.03))
+    page = MachinePage(3, (MachineStroke("6", points, .25),), PaperRegistration((0, 0)))
+    start = (9.32, 3.93)
+    area = page.clearance_box(start, 2.)
+    assert all(area.contains(p, inset=2.) for p in (*points, start))
+    reports = ["<Run|WPos:8.580,3.290,-1.590,0.000|Bf:0,1023|FS:3451,0>",
+               "<Run|WPos:8.520,4.870,-1.590,0.000|Bf:6,1023|FS:1191,0|Pn:Y|Ov:100,100,100>"]
+    for confirmed in (False, True):
+        window = XYWindow(area if confirmed else None, -1.59, [points[0]])
+        window.arm(points[1:])
+        window.observe(decode_status(reports[0]), True)
+        if confirmed:
+            window.observe(decode_status(reports[1]), True)
+            assert window.pin == "Y"
+        else:
+            with pytest.raises(MachineError, match="Pn:Y"):
+                window.observe(decode_status(reports[1]), True)
