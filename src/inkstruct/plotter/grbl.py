@@ -157,6 +157,7 @@ class GrblLink:
         self.metric = False
         self.motion_active = False
         self.xy_window = None
+        self.referenced_idle_xy = None
         self.pin_review = False
         self.packet_bytes = 120
 
@@ -297,9 +298,23 @@ class GrblLink:
             raise MachineError(f"需要设备处于 Idle 并返回有效的毫米工作坐标，当前状态为 {status.state}。")
         if set(status.limits) & set("XYZ"):
             raise MachineError(f"设备报告了轴限位（Pn:{status.limits}），无法移动。")
+        if (self.referenced_idle_xy is not None
+                and math.dist(status.position[:2], self.referenced_idle_xy) > XY_TOLERANCE_MM):
+            raise MachineError("设备待机期间的笔位读数已变化，请重新连接并对准机身基准。")
         if for_motion and not PEN_DOWN - Z_TOLERANCE_MM <= status.position[2] <= PEN_UP + Z_TOLERANCE_MM:
             raise MachineError("Z 工作坐标超出升降笔范围，请在设备侧核对笔尖位置。")
         return status
+
+    def confirm_datum_position(self, control):
+        first = self.require_idle(control)
+        if abs(first.position[2] - PEN_UP) > Z_TOLERANCE_MM:
+            raise ValueError("请先抬笔，再记录机身基准。")
+        second = self.require_idle(control)
+        if (abs(second.position[2] - PEN_UP) > Z_TOLERANCE_MM
+                or math.dist(first.position[:2], second.position[:2]) > XY_TOLERANCE_MM):
+            raise MachineError("设备读数尚未稳定，请重新连接并对准机身基准。")
+        self.referenced_idle_xy = second.position[:2]
+        return second
 
     def wait_idle(self, control, *, z: float, poll=.08):
         end = monotonic() + 120

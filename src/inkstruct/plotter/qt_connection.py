@@ -106,6 +106,8 @@ class N1Worker(QtCore.QThread):
                     elif kind == "disconnect":
                         link.serial.close()
                         link = result = None
+                    elif kind == "position-datum":
+                        result = link.confirm_datum_position(control)
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
                     elif kind in {"jog", "device-jog"}:
@@ -124,6 +126,8 @@ class N1Worker(QtCore.QThread):
                         result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)
                     if link is not None:
                         link.motion_active = False
+                        if link.referenced_idle_xy is not None and result.state == "Idle":
+                            link.referenced_idle_xy = result.position[:2]
                     self.succeeded.emit(kind, result)
                 except (MachineError, OSError, ValueError) as error:
                     motion = bool(link and link.motion_active)

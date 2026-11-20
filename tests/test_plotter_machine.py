@@ -92,6 +92,22 @@ def page_fixture():
     ))
 
 
+def test_registered_datum_rejects_idle_position_jump_before_sending_motion():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    control = MotionControl()
+    serial.position[:] = [21., 18., -1.6]
+    with pytest.raises(ValueError, match="抬笔"):
+        link.confirm_datum_position(control)
+    serial.position[2] = 0.
+    assert link.confirm_datum_position(control).position == (21., 18., 0.)
+    serial.position[:] = [0., 0., 0.]  # Same WCO and still inside the software bounds.
+    with pytest.raises(MachineError, match="待机期间"):
+        link.move_to((30., 25.), WorkArea(-5, -5, 50, 50), control)
+    assert not any(cmd.startswith(b"G1") for cmd in serial.commands)
+
+
 def test_rigid_and_similarity_registration_share_frozen_geometry_and_test_marks():
     page = page_fixture()
     source = ((0, 0), (10, 0))
