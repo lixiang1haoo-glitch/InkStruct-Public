@@ -106,6 +106,17 @@ def page_fixture():
     ))
 
 
+def xy_feeds_by_pen(commands):
+    feeds = {False: [], True: []}
+    down = False
+    for line in commands:
+        if line.startswith(b"G1 Z"):
+            down = float(line.split()[1][1:]) < 0
+        elif line.startswith(b"G1 X"):
+            feeds[down].append(int(line.split()[-1][1:]))
+    return feeds
+
+
 def test_registered_datum_rejects_idle_position_jump_before_sending_motion():
     serial = SimulatedGrbl()
     link = GrblLink(serial)
@@ -173,24 +184,42 @@ def test_axis_inversion_and_trial_use_the_same_logical_coordinates():
     assert (link.xy_command((75, 40), 2500) + "\n").encode("ascii") in serial.commands
     serial.report = lambda state, xyz: f"<{state}|WPos:{xyz}>"
     previous = len(serial.commands)
-    link.trial_axes(axes, None, 2500, MotionControl())
-    xy = [line for line in serial.commands[previous:] if line.startswith(b"G1 X")]
-    assert xy and all(line.endswith(b" F500\n") for line in xy)
+    link.trial_axes(axes, None, 3150, MotionControl())
+    feeds = xy_feeds_by_pen(serial.commands[previous:])
+    assert set(feeds[False]) == set(feeds[True]) == {3150}
 
 
-def test_unbounded_jog_uses_a_local_envelope_and_stops_on_axis_limit():
+def test_optional_jog_bounds_and_strict_axis_pin_without_a_range():
     serial = SimulatedGrbl()
     link = GrblLink(serial)
     link.connect()
     with pytest.raises(ValueError, match="超出"):
         link.jog((-1, 0), WorkArea(0, 0, 10, 10), MotionControl())
     area = WorkArea(0, 0, 10, 10)
-    link.jog((-1, 0), area, MotionControl(), commissioning=True)
+    with pytest.raises(ValueError, match="超出"):
+        link.jog((-1, 0), area, MotionControl(), commissioning=True)
+    assert not any(line.startswith(b"G1") for line in serial.commands)
+    link.jog((-1, 0), None, MotionControl(), commissioning=True, feed=4250)
     assert serial.position == [-1, 0, 0]
-    assert b"G1 X-1.0000 Y0.0000 F500\n" in serial.commands
+    assert b"G1 X-1.0000 Y0.0000 F4250\n" in serial.commands
     serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
     with pytest.raises(MachineError, match="限位"):
         link.jog((-1, 0), None, MotionControl())
+
+
+def test_page_without_confirmed_area_treats_transient_pin_as_a_stop():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    page = position_page(page_fixture(), PaperRegistration((0., 0.)))
+    def report(state, xyz):
+        pin = "|Pn:Y" if state == "Run" and xyz == "2.0,3.0,0.0" else ""
+        return f"<{state}|WPos:{xyz}{pin}>"
+    serial.report = report
+    with pytest.raises(MachineError, match="限位"):
+        link.run_page(page, None, MotionControl(), feed=5000)
+    assert xy_feeds_by_pen(serial.commands) == {False: [5000], True: []}
+    assert not any(command.startswith(b"G1 Z-") for command in serial.commands)
 
 
 @pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "alarm"])
@@ -213,8 +242,7 @@ def test_device_jog_does_not_resume_after_unsafe_pin(case):
     with pytest.raises(MachineError, match="限位|ALARM|复核"):
         link.jog((0, 3), area, MotionControl(), commissioning=True)
     xy = [line for line in serial.commands if line.startswith(b"G1 X")]
-    expected_feed = 500 if case in {"boundary", "unknown"} else 1500
-    assert xy == [(link.xy_command((10, 13), expected_feed) + "\n").encode("ascii")]
+    assert xy == [(link.xy_command((10, 13), 2500) + "\n").encode("ascii")]
 
 
 def test_template_and_local_placement_persist_separately(tmp_path):
@@ -253,7 +281,7 @@ from pathlib import Path
 from time import monotonic, sleep
 from types import SimpleNamespace
 sys.path.insert(0, str(Path.cwd()/'tests'))
-from test_plotter_machine import SimulatedGrbl
+from test_plotter_machine import SimulatedGrbl, xy_feeds_by_pen
 from PySide6 import QtCore, QtWidgets
 from inkstruct.document.flow_template import FlowTemplate
 from inkstruct.editor.machine_alignment import AlignmentDialog, page_context
@@ -292,24 +320,46 @@ try:
     setup.link.click()
     wait()
     assert panel.device is not None and not panel.confirmed_area
+    assert not setup.use_range.isChecked() and panel.nudge.isEnabled()
+    assert setup.feed.value() == panel.profile.feed == 2500
+    assert setup.feed.minimum() == 60 and setup.feed.maximum() == 5000
+    assert sum(spin.accessibleName() == "运动速度" for spin in setup.findChildren(QtWidgets.QSpinBox)) == 1
+    panel.nudge.step.setValue(42)
+    panel.nudge.buttons[(1, 0)].click()
+    wait()
+    assert transport.position == [77., 30., 0.]
+    panel.nudge.buttons[(-1, 0)].click()
+    wait()
+    assert transport.position == [35., 30., 0.]
+    assert set(xy_feeds_by_pen(transport.commands)[False]) == {2500}
+    setup.feed.setValue(200)
     setup.axes[0].setChecked(True)
     setup.axes[2].setChecked(True)
+    setup.nudge.step.setValue(32)
+    before = len(transport.commands)
     setup.nudge.buttons[(1, 0)].click()
     assert isinstance(setup.stop.parentWidget(), QtWidgets.QDialogButtonBox)
     assert not setup.stop.isHidden()
     wait()
-    assert transport.position == [35., 29., 0.] and not panel.profile.axes.swap
-    assert b"G1 X35.0000 Y29.0000 F500\n" in transport.commands
+    assert transport.position == [35., -2., 0.] and not panel.profile.axes.swap
+    assert b"G1 X35.0000 Y-2.0000 F200\n" in transport.commands
+    assert set(xy_feeds_by_pen(transport.commands[before:])[False]) == {200}
+    assert panel.store.devices()[0].feed == 2500
+    setup.nudge.step.setValue(31)
+    setup.nudge.buttons[(-1, 0)].click()
+    wait()
+    assert transport.position == [35., 29., 0.]
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
+    setup.use_range.setChecked(True)
     setup.record_buttons[0].click()
     wait()
     assert [spin.value() for spin in setup.bounds[:2]] == [35., 29.]
     for spin, value in zip(setup.bounds, (0, 0, 100, 100), strict=True):
         spin.setValue(value)
-    setup.use_range.setChecked(True)
     setup.save_button.click()
     profile = panel.store.devices()[0]
     assert profile.axes.swap and profile.axes.mirror_x and panel.confirmed_area == profile.area
+    assert profile.limit_area_enabled and profile.feed == 200
     normal_report = transport.report
     transport.report = lambda state, xyz: (
         "<Run|WPos:35,27.5,0|Pn:Y>" if state == "Run" and xyz == "35.0,26.0,0.0"
@@ -320,7 +370,7 @@ try:
     wait()
     assert transport.position == [35., 26., 0.] and panel.device is not None
     assert "点动完成" in panel.report.text()
-    assert b"G1 X35.0000 Y26.0000 F1500\n" in transport.commands
+    assert b"G1 X35.0000 Y26.0000 F200\n" in transport.commands
     assert not transport.closed and b"\x18" not in transport.commands
     transport.report = normal_report
     setup.nudge.buttons[(-1, 0)].click()
@@ -374,11 +424,14 @@ try:
     wait()
     assert panel.device.position[:2] == (0., 0.) and panel.offset == old_offset
     assert panel.connection_id != old_connection
-    assert not reopened.use_range.isChecked() and panel.confirmed_area is None
-    reopened.feed.setValue(2400)
+    assert reopened.use_range.isChecked() and panel.confirmed_area is None
+    reopened.feed.setValue(3100)
     reopened.save_button.click()
     assert panel.profile.area == profile.area and panel.confirmed_area is None
-    assert panel.profile.feed == 2400
+    assert panel.profile.feed == 3100 and panel.profile.limit_area_enabled
+    reopened.use_range.setChecked(False)
+    reopened.save_button.click()
+    assert not panel.profile.limit_area_enabled and panel.profile.area == profile.area
     reopened.close()
 
     page_key, size, _, title = context
@@ -391,6 +444,39 @@ try:
     wait()
     restore.save.click()
     assert restore.result() and restore.position == (0., 0.) and restore.alignment.scale == 1.2
+    panel.use_alignment(restore.alignment, restore.position)
+    assert panel.registration and panel.confirmed_area is None and panel.write_button.isEnabled()
+    # This transformed character crosses the old rectangle's y=0 boundary.
+    assert panel.job.strokes[0].points[-1][1] < 0
+    start = len(transport.commands)
+    panel.dry_button.click()
+    wait()
+    assert set(xy_feeds_by_pen(transport.commands[start:])[False]) == {3100}
+    assert not xy_feeds_by_pen(transport.commands[start:])[True]
+    start = len(transport.commands)
+    panel.return_button.click()
+    wait()
+    assert b"G1 X0.0000 Y0.0000 F3100\n" in transport.commands[start:]
+    start = len(transport.commands)
+    panel.write_button.click()
+    wait()
+    feeds = xy_feeds_by_pen(transport.commands[start:])
+    assert set(feeds[False]) == set(feeds[True]) == {3100}
+    trial = DeviceDialog(panel)
+    trial.feed.setValue(420)
+    start = len(transport.commands)
+    trial.trial.click()
+    wait()
+    trial_feeds = xy_feeds_by_pen(transport.commands[start:])
+    assert set(trial_feeds[False]) == set(trial_feeds[True]) == {420}
+    trial.close()
+    panel.link_button.click()
+    wait()
+    panel.set_workspace(Path(sys.argv[1]))
+    saved = DeviceDialog(panel)
+    assert saved.feed.value() == 3100 and not saved.nudge.isEnabled() and not saved.trial.isEnabled()
+    assert not saved.use_range.isChecked()
+    saved.close()
 finally:
     panel.shutdown()
     panel.close()
@@ -434,23 +520,28 @@ def test_grbl_connect_rejects_unknown_or_nonmetric_reporting(setting):
     assert serial.commands == [b"?", b"$$\n"]
 
 
+@pytest.mark.parametrize("area", [None, WorkArea(0, 0, 100, 100)])
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_run):
+def test_ack_is_not_completion_and_dry_run_traverses_the_exact_written_path(dry_run, area):
     placed = position_page(page_fixture(), PaperRegistration((10, 20)))
     progress = []
     serial = SimulatedGrbl()
     serial.position[:] = [10, 20, 0]
     link = GrblLink(serial, progress=lambda n, total: progress.append((n, total)))
     link.connect()
-    state = link.run_page(placed, WorkArea(0, 0, 100, 100), MotionControl(), dry_run=dry_run, feed=900)
+    state = link.run_page(placed, area, MotionControl(), dry_run=dry_run, feed=900)
     xy = [command.decode().split()[1:3] for command in serial.commands if command.startswith(b"G1 X")]
     assert xy == [[f"X{x:.4f}", f"Y{y:.4f}"] for stroke in placed.strokes for x, y in stroke.points]
     assert serial.commands.count(b"G1 Z-1.6 F5000\n") == (0 if dry_run else 2)
+    feeds = xy_feeds_by_pen(serial.commands)
+    assert set(feeds[False]) == {900} and set(feeds[True]) == (set() if dry_run else {900})
     actual_motion = [command for command in serial.commands if command.startswith(b"G1 ")]
     assert actual_motion[0] == actual_motion[-1] == b"G1 Z0 F5000\n"
     assert progress == [(1, 2), (2, 2)]
-    tail = serial.trace[serial.trace.index(actual_motion[-1], serial.trace.index(b"G1 X19.0000 Y29.0000 F900\n")):]
-    assert any(str(value).startswith("<Run") for value in serial.trace[serial.trace.index(b"G1 X19.0000 Y29.0000 F900\n"):])
+    final_xy = (link.xy_command((19, 29), 900) + "\n").encode("ascii")
+    after_xy = serial.trace[serial.trace.index(final_xy):]
+    tail = after_xy[after_xy.index(actual_motion[-1]):]
+    assert any(str(value).startswith("<Run") for value in after_xy)
     assert tail[-1].startswith("<Idle") and any(value == "ok" for value in tail)
     assert state.state == "Idle" and state.position == (19, 29, 0)
 
@@ -622,7 +713,7 @@ ports = lambda: [SimpleNamespace(portName=lambda: "COM-test")]
 dialog = MachinePanel(None, worker_factory=worker, ports=ports)
 dialog.set_workspace(Path(sys.argv[1]))
 profile = DeviceProfile("device", "N1", "COM-test", axes=DeviceAxes(mirror_x=True, swap=True),
-                        area=WorkArea(0, 0, 100, 100))
+                        area=WorkArea(0, 0, 100, 100), limit_area_enabled=True)
 dialog.save_profile(profile)
 dialog.set_document(snapshot, 0, True)
 dialog.show()
@@ -640,12 +731,14 @@ try:
     dialog.link_button.click()
     wait_for(lambda: dialog.device is not None and dialog.busy is None)
     assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?"]
-    assert not dialog.nudge.isEnabled()
+    assert dialog.nudge.isEnabled() and dialog.confirmed_area is None
     assert dialog.confirm_range_button.isVisible()
+    dialog.use_alignment(PageAlignment((2, 3)), (20., 20.))
+    assert dialog.job and not dialog.dry_button.isEnabled() and not dialog.write_button.isEnabled()
+    assert not dialog.return_button.isEnabled()
     settings = DeviceDialog(dialog)
-    assert not settings.use_range.isChecked()
-    settings.use_range.setChecked(True)
-    settings.save_button.click()
+    assert settings.use_range.isChecked()
+    settings.range_confirm.click()
     assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
     settings.close()
     dialog.nudge.step.setValue(2)
@@ -721,7 +814,8 @@ w.resize(1350, 840)
 w.show()
 p = w.machine_panel
 p.set_workspace(Path(sys.argv[1]))
-profile = DeviceProfile("device", "N1", "COM-test", area=WorkArea(0, 0, 100, 100))
+profile = DeviceProfile("device", "N1", "COM-test", area=WorkArea(0, 0, 100, 100),
+                        limit_area_enabled=True)
 p.save_profile(profile)
 try:
     def wait_for(condition):
@@ -767,7 +861,7 @@ try:
     assert p.paper_page.index == 0 and not p.page_list.isEnabled()
     p.link_button.click()
     wait_for(lambda: p.device is not None and p.busy is None)
-    assert not p.nudge.isEnabled()
+    assert p.nudge.isEnabled() and p.confirmed_area is None and not p.write_button.isEnabled()
     p.save_profile(profile, confirm_range=True)
     p.confirm = lambda *_: True
     assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()

@@ -14,9 +14,6 @@ from .schema import Point
 PEN_UP = 0.0
 PEN_DOWN = -1.6
 Z_TOLERANCE_MM = .05
-TRAVEL_FEED = 1500
-# On the N1, the 5 mm Y-axis jog passed eight runs at this feed.
-COMMISSIONING_FEED = 500
 DEFAULT_WRITE_FEED = 2500
 MAX_WRITE_FEED = 5000
 XY_TOLERANCE_MM = .075
@@ -33,6 +30,11 @@ class MachineError(RuntimeError):
 
 class Stopped(MachineError):
     pass
+
+
+def validate_feed(value):
+    if type(value) is not int or not 60 <= value <= MAX_WRITE_FEED:
+        raise ValueError(f"运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,8 @@ def decode_status(line: str, previous_offset=None):
         position = position_vector(data["WPos"])
     elif "MPos" in data and offset is not None:
         position = tuple(a - b for a, b in zip(position_vector(data["MPos"]), offset, strict=True))
+        if not all(math.isfinite(value) for value in position):
+            raise MachineError("设备工作坐标不是有限数值。")
     else:
         position = None
     return Status(state, position, offset, data.get("Pn", ""))
@@ -79,7 +83,7 @@ class MotionControl:
 
 @dataclass
 class XYWindow:
-    area: WorkArea
+    area: WorkArea | None
     z: float
     points: list[Point]
     distance: float = 0.0
@@ -100,7 +104,8 @@ class XYWindow:
         x, y, z = status.position
         self.seen_run |= status.state == "Run"
         point = (x, y)
-        if not self.area.contains(point, inset=-XY_TOLERANCE_MM) or abs(z - self.z) > Z_TOLERANCE_MM:
+        if ((self.area is not None and not self.area.contains(point, inset=-XY_TOLERANCE_MM))
+                or abs(z - self.z) > Z_TOLERANCE_MM):
             raise MachineError("运动坐标偏离已确认的工作范围或笔高。")
 
         # Use the earliest valid projection, so a nearby later segment cannot
@@ -130,7 +135,7 @@ class XYWindow:
 
         axes = set(status.limits) & set("XYZ")
         if axes:
-            if (not qualified or not self.review_pins or status.limits not in {"X", "Y", "XY", "YX"}
+            if (self.area is None or not qualified or not self.review_pins or status.limits not in {"X", "Y", "XY", "YX"}
                     or status.state not in {"Run", "Idle"} or (len(axes) == 2 and not moving_both)
                     or not self.area.contains(point, inset=PIN_INTERIOR_MM)
                     or not all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points)):
@@ -449,29 +454,24 @@ class GrblLink:
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 
-    def run_page(self, page: MachinePage, area: WorkArea, control: MotionControl, *,
+    def run_page(self, page: MachinePage, area: WorkArea | None, control: MotionControl, *,
                  dry_run=False, feed=DEFAULT_WRITE_FEED, state=None,
                  review_pins=True, commissioning=False):
-        if type(feed) is not int or not 60 <= feed <= MAX_WRITE_FEED:
-            raise ValueError(f"书写速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
-        travel_feed = TRAVEL_FEED
-        if commissioning:
-            travel_feed = COMMISSIONING_FEED
-            feed = min(feed, COMMISSIONING_FEED)
-            review_pins = False
+        validate_feed(feed)
+        review_pins = review_pins and not commissioning
         if state is None:
             state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
         state = self.enter_motion(control)
         total = len(page.strokes)
         for number, stroke in enumerate(page.strokes, 1):
-            state = self.move_path(state, stroke.points[:1], area, travel_feed, PEN_UP, control,
+            state = self.move_path(state, stroke.points[:1], area, feed, PEN_UP, control,
                                    review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_DOWN, control)
                 state = self.wait_idle(control, z=PEN_DOWN, poll=.02)
-            state = self.move_path(state, stroke.points[1:], area, feed, PEN_UP if dry_run else PEN_DOWN, control,
-                                   review_pins=review_pins)
+            state = self.move_path(state, stroke.points[1:], area, feed,
+                                   PEN_UP if dry_run else PEN_DOWN, control, review_pins=review_pins)
             if not dry_run:
                 self.pen(PEN_UP, control)
                 state = self.wait_idle(control, z=PEN_UP, poll=.02)
@@ -484,52 +484,40 @@ class GrblLink:
         page = axis_trial(axes.register((0, 0), state.position[:2]))
         points = tuple(point for stroke in page.strokes for point in stroke.points)
         review = self.can_review_path(confirmed_area, (state.position[:2], *points))
-        if review:
-            if area is not None and area != confirmed_area:
-                page.check(area, state.position[:2])
-            return self.run_page(page, confirmed_area, control, feed=feed, state=state)
-        if area is None:
-            area = self.travel_envelope(points)
-        return self.run_page(page, area, control, feed=feed, state=state, commissioning=True)
+        if confirmed_area is not None and area is not None and area != confirmed_area:
+            page.check(area, state.position[:2])
+        return self.run_page(page, confirmed_area or area, control, feed=feed,
+                             state=state, review_pins=review)
 
     def can_review_path(self, area, points):
         return (self.pin_review and area is not None
                 and all(area.contains(point, inset=PIN_INTERIOR_MM) for point in points))
 
-    @staticmethod
-    def travel_envelope(points):
-        # This guards against trajectory deviations. It does not establish hardware clearance.
-        x, y = zip(*points, strict=True)
-        return WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
-
     def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *,
-            commissioning=False, require_bounds=False):
+            feed=DEFAULT_WRITE_FEED, commissioning=False, require_bounds=False):
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
-        if require_bounds:
-            if area is None:
-                raise ValueError("此步长需要已确认的工作范围。")
+        if require_bounds and area is None:
+            raise ValueError("此步长需要已确认的工作范围。")
+        review = not commissioning or self.can_review_path(area, (start, end))
+        return self.move_from(start, end, area, control, feed=feed, review_pins=review)
+
+    def move_to(self, target: Point, area: WorkArea | None, control: MotionControl, *, feed=DEFAULT_WRITE_FEED):
+        state = self.require_idle(control, for_motion=True)
+        return self.move_from(state.position[:2], machine_point(target), area, control, feed=feed)
+
+    def move_from(self, start, end, area, control, *, feed=DEFAULT_WRITE_FEED, review_pins=True):
+        validate_feed(feed)
+        if area is not None:
             area.require(start, "当前笔尖位置")
             area.require(end, "点动终点")
-        if area is None or (commissioning and not self.can_review_path(area, (start, end))):
-            return self.move_from(start, end, self.travel_envelope((start, end)), control,
-                                  feed=COMMISSIONING_FEED, review_pins=False)
-        return self.move_from(start, end, area, control)
-
-    def move_to(self, target: Point, area: WorkArea, control: MotionControl):
-        state = self.require_idle(control, for_motion=True)
-        return self.move_from(state.position[:2], machine_point(target), area, control)
-
-    def move_from(self, start, end, area, control, *, feed=TRAVEL_FEED, review_pins=True):
-        area.require(start, "当前笔尖位置")
-        area.require(end, "点动终点")
         state = self.enter_motion(control)
         return self.move_path(state, (end,), area, feed, PEN_UP, control, review_pins=review_pins)
 
-    def set_pen(self, down: bool, area: WorkArea, control: MotionControl):
+    def set_pen(self, down: bool, area: WorkArea | None, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
-        if down:
+        if down and area is not None:
             area.require(state.position[:2], "落笔位置")
         self.motion_active = True
         self.phase("running")
@@ -538,9 +526,10 @@ class GrblLink:
         self.pen(height, control)
         return self.wait_idle(control, z=height)
 
-    def touch(self, area: WorkArea, control: MotionControl):
+    def touch(self, area: WorkArea | None, control: MotionControl):
         state = self.require_idle(control, for_motion=True)
-        area.require(state.position[:2], "试触纸位置")
+        if area is not None:
+            area.require(state.position[:2], "试触纸位置")
         self.enter_motion(control)
         self.pen(PEN_DOWN, control)
         self.command("G4 P0.3", control)

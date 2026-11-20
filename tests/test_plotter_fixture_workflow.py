@@ -94,9 +94,9 @@ def exercise(workspace):
         record_corner(panel, setup)
         assert panel.frame == (35., 30.)
         assert not any(line.startswith(b"G1 ") for line in serial.commands)
+        setup.use_range.setChecked(True)
         for control, value in zip(setup.bounds, (25, 10, 70, 90), strict=True):
             control.setValue(value)
-        setup.use_range.setChecked(True)
         click(panel, setup.save_button)
         assert panel.confirmed_area == WorkArea(25, 10, 70, 90)
         move(panel, setup, (1, 0), 5)
@@ -188,14 +188,14 @@ def exercise(workspace):
         assert panel.profile.datum.id != first_datum
         assert panel.confirmed_area is None and panel.registration is None
         assert not panel.reuse_alignment_button.isEnabled() and not panel.write_button.isEnabled()
+        assert setup.use_range.isChecked()
         for control, value in zip(setup.bounds, (-5, -5, 10, 10), strict=True):
             control.setValue(value)
-        setup.use_range.setChecked(True)
-        click(panel, setup.save_button)
+        click(panel, setup.range_confirm)
         assert setup.use_range.isChecked() and panel.confirmed_area == WorkArea(-5, -5, 10, 10)
         setup.axes[0].setChecked(True)
         click(panel, setup.save_button)
-        assert panel.frame is None and panel.confirmed_area is None and not setup.use_range.isChecked()
+        assert panel.frame is None and panel.confirmed_area is None and setup.use_range.isChecked()
         assert not panel.reuse_alignment_button.isEnabled() and not panel.write_button.isEnabled()
         setup.close()
     finally:

@@ -5,7 +5,7 @@ from time import monotonic
 
 from PySide6 import QtCore, QtSerialPort
 
-from .grbl import GrblLink, MachineError, MotionControl, Stopped
+from .grbl import DEFAULT_WRITE_FEED, GrblLink, MachineError, MotionControl, Stopped
 
 N1_USB_ID = (0x28e9, 0x018a)
 
@@ -112,10 +112,15 @@ class N1Worker(QtCore.QThread):
                         result = link.require_idle(control)
                     elif kind in {"jog", "device-jog"}:
                         offset, area = args[:2]
+                        option = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
+                        # Older callers used the third argument to require a confirmed rectangle.
+                        feed = DEFAULT_WRITE_FEED if type(option) is bool else option
                         result = link.jog(offset, area, control, commissioning=kind == "device-jog",
-                                          require_bounds=len(args) == 3 and args[2])
+                                          require_bounds=option is True, feed=feed)
                     elif kind == "return":
-                        result = link.move_to(*args, control)
+                        target, area = args[:2]
+                        feed = args[2] if len(args) == 3 else DEFAULT_WRITE_FEED
+                        result = link.move_to(target, area, control, feed=feed)
                     elif kind == "pen":
                         result = link.set_pen(*args, control)
                     elif kind == "touch":
@@ -123,9 +128,11 @@ class N1Worker(QtCore.QThread):
                     elif kind == "axis-trial":
                         axes, area, feed, confirmed_area = args
                         result = link.trial_axes(axes, area, feed, control, confirmed_area=confirmed_area)
-                    else:
+                    elif kind in {"dry", "write"}:
                         page, area, feed = args
                         result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed)
+                    else:
+                        raise ValueError(f"无法识别的设备操作：{kind}")
                     if link is not None:
                         link.motion_active = False
                         if link.referenced_idle_xy is not None and result.state == "Idle":
