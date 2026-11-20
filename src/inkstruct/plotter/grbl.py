@@ -502,10 +502,16 @@ class GrblLink:
         x, y = zip(*points, strict=True)
         return WorkArea(min(x) - .1, min(y) - .1, max(x) + .1, max(y) + .1)
 
-    def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *, commissioning=False):
+    def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *,
+            commissioning=False, require_bounds=False):
         state = self.require_idle(control, for_motion=True)
         start = state.position[:2]
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
+        if require_bounds:
+            if area is None:
+                raise ValueError("此步长需要已确认的工作范围。")
+            area.require(start, "当前笔尖位置")
+            area.require(end, "点动终点")
         if area is None or (commissioning and not self.can_review_path(area, (start, end))):
             return self.move_from(start, end, self.travel_envelope((start, end)), control,
                                   feed=COMMISSIONING_FEED, review_pins=False)

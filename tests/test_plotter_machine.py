@@ -85,6 +85,20 @@ class SimulatedGrbl:
         self.closed = True
 
 
+def test_referenced_long_jog_rechecks_bounds_from_fresh_start():
+    serial = SimulatedGrbl()
+    serial.position[:] = (1., 2., 0.)
+    link, control = GrblLink(serial), MotionControl()
+    link.connect()
+    link.confirm_datum_position(control)
+    # The UI admitted an 8 mm jog to the edge. The next status differs by
+    # 0.04 mm, within the continuity tolerance but now outside the bounds.
+    serial.position[1] += .04
+    with pytest.raises(ValueError, match="点动终点"):
+        link.jog((0., 8.), WorkArea(0, 0, 10, 10), control, commissioning=True, require_bounds=True)
+    assert not any(line.startswith(b"G1 ") for line in serial.commands)
+
+
 def page_fixture():
     return PlotPage(0, 100, 80, (
         PlotStroke("one", ((2, 3), (3, 3), (3, 4))),

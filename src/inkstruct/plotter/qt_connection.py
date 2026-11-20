@@ -111,7 +111,9 @@ class N1Worker(QtCore.QThread):
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
                     elif kind in {"jog", "device-jog"}:
-                        result = link.jog(*args, control, commissioning=kind == "device-jog")
+                        offset, area = args[:2]
+                        result = link.jog(offset, area, control, commissioning=kind == "device-jog",
+                                          require_bounds=len(args) == 3 and args[2])
                     elif kind == "return":
                         result = link.move_to(*args, control)
                     elif kind == "pen":

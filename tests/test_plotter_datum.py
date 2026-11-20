@@ -74,3 +74,26 @@ def test_legacy_device_profile_load_does_not_promote_range(tmp_path):
     loaded, = store.devices()
     assert loaded.area == profile.area and loaded.datum is None
     assert DeviceDatum.create(loaded, "纸角").area is None
+
+
+def test_fixture_setup_is_scoped_and_only_changes_on_explicit_use(tmp_path):
+    store = PlotterProfiles(tmp_path)
+    profile = DeviceProfile.create("N1", "COM3")
+    profile = replace(profile, datum=DeviceDatum.create(profile, "左上角"))
+    alignment = PageAlignment((10, 20))
+    def save(name, select):
+        store.place(profile, "paper", name, alignment, (20, 35), connection="session",
+                    datum_origin=(5, 7), select_fixture=select)
+
+    save("右边", True)
+    save("另一摆放", False)
+    store = PlotterProfiles(tmp_path)
+    assert store.fixture_setup(profile, "paper", alignment) == "右边"
+    assert not store.fixture_setup(profile, "other", alignment)
+    assert not store.fixture_setup(profile, "paper", PageAlignment((12, 15)))
+    new = replace(profile, datum=DeviceDatum.create(profile, "新纸角"))
+    assert not store.fixture_setup(new, "paper", alignment)
+    with pytest.raises(ValueError):
+        store.select_fixture_setup(new, "paper", alignment, "右边")
+    store.select_fixture_setup(profile, "paper", alignment, "另一摆放")
+    assert PlotterProfiles(tmp_path).fixture_setup(profile, "paper", alignment) == "另一摆放"

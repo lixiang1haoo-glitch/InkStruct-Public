@@ -1268,6 +1268,36 @@ def verify_capture_input(window, app):
             "actions_left_of_both_canvases": True}
 
 
+def verify_paper_corner_recovery(panel, out):
+    from dataclasses import replace
+    from tempfile import TemporaryDirectory
+
+    from inkstruct.editor.machine_devices import DeviceDialog
+    from inkstruct.plotter.profiles import DeviceDatum, DeviceProfile, PageAlignment, PlotterProfiles
+
+    dialog = DeviceDialog(panel, panel)
+    try:
+        assert not dialog.datum_register.isEnabled()
+        assert not dialog.datum_recover.isEnabled()
+    finally:
+        dialog.deleteLater()
+    with TemporaryDirectory(dir=out) as directory:
+        store = PlotterProfiles(directory)
+        profile = DeviceProfile.create("Smoke fixture", "SIM")
+        profile = replace(profile, datum=DeviceDatum.create(profile, "A4 左上角"))
+        store.save(profile)
+        alignment = PageAlignment((15, 15))
+        store.place(profile, "sheet", "fixture", alignment, (42., 53.), (0., 0.), alignment,
+                    connection="before", datum_origin=(12., 8.), select_fixture=True)
+        reloaded = PlotterProfiles(directory)
+        profile, = reloaded.devices()
+        assert reloaded.fixture_setup(profile, "sheet", alignment) == "fixture"
+        record = reloaded.place(profile, "sheet", "fixture", alignment)
+        assert reloaded.placed_position(profile, record, connection="after", offset=(0., 0.)) is None
+        assert reloaded.placed_position(profile, record, connection="after", offset=(0., 0.),
+                                        datum_origin=(-4., 2.)) == (26., 47.)
+
+
 def verify_windows_style(window, app, out, font_path=None):
     from types import SimpleNamespace
 
@@ -1295,6 +1325,7 @@ def verify_windows_style(window, app, out, font_path=None):
         window.editor.problems_dock, window.editor.element_properties_dock,
     }
     assert QSerialPort.BaudRate.Baud115200 == 115200
+    verify_paper_corner_recovery(machine.widget(), out)
     export_options = DocumentExportDialog(SimpleNamespace(pages=(None,)), None, None, 0, True, window.editor)
     assert not export_options.advanced_panel.isHidden() and not export_options.advanced_panel.isCheckable()
     export_options.purpose.setCurrentIndex(export_options.purpose.findData('pdf'))
@@ -1517,6 +1548,7 @@ def verify_windows_style(window, app, out, font_path=None):
             "layout_export_controls": True,
             "document_layout_controls": True,
             "machine_control_entry": True,
+            "paper_corner_recovery": True,
             "recommended_recording": recommended_recording,
             "new_task_writers": new_task_writers,
             "capture_input_modes": capture_input,

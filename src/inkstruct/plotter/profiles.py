@@ -186,7 +186,7 @@ class PlotterProfiles:
         atomic_json(self.path, data)
 
     def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *,
-              connection=None, datum_origin=None):
+              connection=None, datum_origin=None, select_fixture=False):
         scope = digest([profile.id, page])
         legacy_key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
         datum = profile.datum
@@ -198,7 +198,8 @@ class PlotterProfiles:
                 if datum is None or datum_origin is None or not connection:
                     raise ValueError("请先在本次连接中找回机身基准。")
                 record.update(datum_id=datum.id, body_point=datum.to_body(position, datum_origin))
-            self.record(key, record)
+            selection = self._fixture_scope(profile, page, alignment) if select_fixture else None
+            self.record(key, record, selection)
         placements = self.read()["placements"]
         return placements.get(key) or placements.get(legacy_key)
 
@@ -218,10 +219,37 @@ class PlotterProfiles:
         return None
 
     @catalog_write
-    def record(self, key, value):
+    def record(self, key, value, selection=None):
         data = self.read()
         data["placements"][key] = value
+        if selection is not None:
+            data.setdefault("fixture_setups", {})[selection] = value["setup"]
         atomic_json(self.path, data)
+
+    @staticmethod
+    def _fixture_scope(profile, page, alignment):
+        if not profile.datum:
+            raise ValueError("请先登记纸张限位的机身基准。")
+        return digest([profile.id, profile.datum.id, asdict(profile.axes), page,
+                       asdict(alignment) if alignment else None])
+
+    def fixture_setup(self, profile, page, alignment):
+        if not profile.datum:
+            return ""
+        key = self._fixture_scope(profile, page, alignment)
+        return self.read().get("fixture_setups", {}).get(key, "")
+
+    @catalog_write
+    def select_fixture_setup(self, profile, page, alignment, setup):
+        key = self._fixture_scope(profile, page, alignment)
+        record = self.place(profile, page, setup, alignment)
+        if not record or record.get("datum_id") != profile.datum.id:
+            raise ValueError("此纸张限位尚未保存该摆放。")
+        data = self.read()
+        selections = data.setdefault("fixture_setups", {})
+        if selections.get(key) != setup:
+            selections[key] = setup
+            atomic_json(self.path, data)
 
     def setups(self, profile, page):
         scope = digest([profile.id, page])
