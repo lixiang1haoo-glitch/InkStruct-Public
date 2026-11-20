@@ -1752,6 +1752,28 @@ def verify_v631(window, out, wait):
                                    'wide_recording_framing': True, 'rounded_preview_paths': True}}
 
 
+def verify_score_replay(batch, output):
+    from inkstruct.generation_scores import evaluate
+    from inkstruct.generation_workflow import read, write
+
+    run = batch.resolve()
+    protocol = read(run / "protocol.json")
+    requested = read(run / "target-manifest.json")["requested"]
+    expected = read(run / "generation-scores.json")
+    if output.resolve().is_relative_to(run):
+        raise ValueError("请在批次目录外保存复测结果")
+    for preset in (1, "auto"):
+        start = time.perf_counter()
+        result = evaluate(run, protocol["writers"][0], requested, source="source_score" in expected,
+                          diversity="diversity_score" in expected, completed=len(protocol["characters"]),
+                          workers=preset)
+        write(output / f"score-{preset}.json", result)
+        elapsed = time.perf_counter() - start
+        if result != expected:
+            raise ValueError("复测评分与原批次不符")
+        write(output / f"timing-{preset}.json", {"seconds": elapsed, "exact": True, "scores": result})
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
@@ -1770,27 +1792,8 @@ def main():
     parser.add_argument('--score-replay', type=Path, help="验证既有协议批次的评分和耗时")
     args = parser.parse_args()
     if args.score_replay is not None:
-        import time
-        from inkstruct.generation_scores import evaluate
-        from inkstruct.generation_workflow import read, write
-
-        run = args.score_replay.resolve()
-        protocol = read(run / "protocol.json")
-        requested = read(run / "target-manifest.json")["requested"]
-        expected = read(run / "generation-scores.json")
-        if args.output.resolve().is_relative_to(run):
-            parser.error("请在批次目录外保存复测结果")
-        for preset in (1, "auto"):
-            start = time.perf_counter()
-            result = evaluate(run, protocol["writers"][0], requested, source="source_score" in expected,
-                              diversity="diversity_score" in expected, completed=len(protocol["characters"]),
-                              workers=preset)
-            write(args.output / f"score-{preset}.json", result)
-            elapsed = time.perf_counter() - start
-            if result != expected:
-                raise ValueError("复测评分与原批次不符")
-            write(args.output / f"timing-{preset}.json", {"seconds": elapsed, "exact": True, "scores": result})
-        return 0
+        verify_score_replay(args.score_replay, args.output)
+        return
     if args.math_settings_check and any((args.samples, args.generation_profile, args.candidate_check,
                                          args.large_font_check, args.large_font, args.export_only)):
         parser.error('--math-settings-check is separate from the other checks')
