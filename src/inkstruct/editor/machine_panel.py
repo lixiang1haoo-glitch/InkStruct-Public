@@ -12,12 +12,13 @@ from uuid import uuid4
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
+from ..plotter.export import ROUTING_VERSION
 from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, PIN_INTERIOR_MM, Z_TOLERANCE_MM
 from ..plotter.physical import PaperRegistration, WorkArea, machine_point, position_page
 from ..plotter.profiles import DeviceDatum, PlotterProfiles
 from ..plotter.qt_connection import N1Worker, n1_ports
 from ..plotter.schema import PlotPage
-from ..plotter.write_session import estimate_seconds, motion_seconds, record_time, timing_factor
+from ..plotter.write_session import LEGACY_ROUTE, estimate_seconds, motion_seconds, record_time, timing_factor
 from ..renderers.pages import page_draw
 from ..resource_catalog import workspace_for
 from ..settings_pages import label, scroll_page
@@ -251,7 +252,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.nudge = self.motion_controls(self.jog)
         write_layout.addWidget(self.nudge)
         self.return_button = self.button("抬笔回到 A 点", self.return_to_origin)
-        self.pen_button = self.button("抬笔", self.raise_pen)
+        self.pen_button = self.button("落笔", self.toggle_pen)
         write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
         self.alignment_status = label("当前页未对位")
         write_layout.addWidget(self.alignment_status)
@@ -271,13 +272,13 @@ class MachinePanel(QtWidgets.QWidget):
         self.details_toggle = QtWidgets.QCheckBox("查看抬笔与空走详情")
         write_layout.addWidget(self.details_toggle)
         self.route_stats = label("")
-        self.optimize = QtWidgets.QCheckBox("减少独立表线和图形之间的空走")
+        self.optimize = QtWidgets.QCheckBox("优化书写路径（同 SVG 导出）")
         self.optimize.setChecked(True)
         self.optimize.toggled.connect(self.change_routing)
-        for control in (self.route_stats, self.optimize):
-            write_layout.addWidget(control)
-            control.hide()
-            self.details_toggle.toggled.connect(control.setVisible)
+        write_layout.addWidget(self.optimize)
+        write_layout.addWidget(self.route_stats)
+        self.route_stats.hide()
+        self.details_toggle.toggled.connect(self.route_stats.setVisible)
         self.resume_hint = label("")
         write_layout.addWidget(self.resume_hint)
         write_layout.addWidget(self.write_button)
@@ -682,13 +683,17 @@ class MachinePanel(QtWidgets.QWidget):
         self.progress_error = ""
         self.saved_placement = None
         self.done, self.uncertain = 0, False
-        self.journal, routed = self.prepared
+        self.journal, routed, legacy = self.prepared
+        version = ROUTING_VERSION
         if self.journal:
             try:
                 self.done, self.uncertain = self.journal.read()
                 if self.journal.path.exists():
                     data = json.loads(self.journal.path.read_bytes())
                     optimized = data["optimized"]
+                    version = data.get("route_version", LEGACY_ROUTE)
+                    if version not in (LEGACY_ROUTE, ROUTING_VERSION):
+                        raise ValueError("续写记录使用了未知的路径优化版本。")
                     self.saved_placement = data.get("placement")
                     if type(optimized) is not bool:
                         raise ValueError("笔序记录损坏")
@@ -696,7 +701,9 @@ class MachinePanel(QtWidgets.QWidget):
                         self.optimize.setChecked(optimized)
             except (KeyError, TypeError, ValueError, OSError) as error:
                 self.progress_error = f"无法读取续写记录：{error}"
-            self.journal = replace(self.journal, optimized=self.optimize.isChecked())
+            self.journal = replace(self.journal, optimized=self.optimize.isChecked(), route_version=version)
+        if version == LEGACY_ROUTE:
+            routed = legacy
         selected = routed if self.optimize.isChecked() else page
         if selected is not self.paper_page:
             self.unplaced_preview = None
@@ -729,6 +736,7 @@ class MachinePanel(QtWidgets.QWidget):
             return
         start = tuple(self.device.position[:2]) if self.job and self.device else None
         key = (self.raw_page.index, self.paper_page is self.raw_page,
+               self.journal.route_version if self.journal else ROUTING_VERSION,
                self.job.registration if self.job else None, self.done, start)
         profile_key = sha256(f"{self.profile.id}|{self.profile.active_pen}|{self.profile.feed}".encode()).hexdigest()
         self.timing_path = self.store.path.parent / "plotter-times" / (profile_key + ".json")
@@ -851,8 +859,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
         self.refresh_motion_controls(self.nudge, positioning)
-        self.pen_button.setVisible(connected and not self.pen_raised)
-        self.pen_button.setEnabled(positioning)
+        self.refresh_pen_button(self.pen_button)
         self.return_button.setEnabled(safe and ready and self.registration is not None)
         can_reuse = ready and self.datum_located and self.fixture_placement is not None
         self.reuse_alignment_button.setToolTip(f"纸张两边靠齐 · {self.setup}")
@@ -970,6 +977,20 @@ class MachinePanel(QtWidgets.QWidget):
     def return_to_origin(self):
         if self.registration is not None and self.range_ready:
             self.submit("return", self.registration.origin, self.confirmed_area, self.profile.feed)
+
+    def refresh_pen_button(self, button):
+        down = self.device is not None and not self.pen_raised
+        button.setText("抬笔" if down else "落笔")
+        button.setEnabled(self.device is not None and self.device.state == "Idle" and self.busy is None
+                          and not self.closing and (down or (self.range_ready and not self.waiting_for_paper)))
+
+    def toggle_pen(self):
+        if self.device is None or self.busy or self.closing or self.device.state != "Idle":
+            return
+        if not self.pen_raised:
+            self.raise_pen()
+        elif self.range_ready and not self.waiting_for_paper:
+            self.submit("pen", True, self.confirmed_area, self.profile.writing_height)
 
     def raise_pen(self):
         if self.device is not None and not self.pen_raised:
@@ -1174,7 +1195,7 @@ class MachinePanel(QtWidgets.QWidget):
                    "jog": "点动完成。",
                    "device-jog": "点动完成。",
                    "return": "笔尖已抬起并到达目标位置。",
-                   "pen": "笔尖已抬起。",
+                   "pen": "笔尖已抬起。" if self.pen_raised else "笔尖已落下。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
             self.connection_id = uuid4().hex if kind == "connect" else None
@@ -1214,7 +1235,10 @@ class MachinePanel(QtWidgets.QWidget):
                 message += f" 本机进度或耗时记录未能更新：{error}"
             self.done, self.uncertain = 0, False
             self.optimize.setEnabled(True)
-            self.update_preview()
+            if self.journal and self.journal.route_version == LEGACY_ROUTE and not self.progress_error:
+                self.change_routing()
+            else:
+                self.update_preview()
             page = self.page_list.currentRow()
             self.completed_pages.add(page)
             self.update_page_states()

@@ -53,6 +53,15 @@ def exercise(folder):
     try:
         align = AlignmentDialog(p, p, "pdf", (70.,60.), PageAlignment((5.,5.)), "PDF 第 1 页")
         align.show()
+        assert align.pen_button.text() == p.pen_button.text() == "落笔"
+        align.pen_button.click()
+        assert not p.pen_button.isEnabled() and not align.pen_button.isEnabled()
+        wait(p)
+        assert mock.position[2] == p.profile.writing_height
+        assert align.pen_button.text() == p.pen_button.text() == "抬笔"
+        p.pen_button.click()
+        wait(p)
+        assert mock.position[2] == 0 and align.pen_button.text() == p.pen_button.text() == "落笔"
         align.record_a.click()
         wait(p)
         align.check_c.click()
@@ -83,6 +92,12 @@ def exercise(folder):
         assert mock.position[2] == 0 and wizard.save.isEnabled()
         wizard.save.click()
         assert p.profile.writing_height == -.8
+        p.pen_button.click()
+        wait(p)
+        assert mock.position[2] == -.8
+        p.pen_button.click()
+        wait(p)
+        assert mock.position[2] == 0
         def accept_checked_region():
             box = app.activeModalWidget()
             assert isinstance(box, QtWidgets.QMessageBox)

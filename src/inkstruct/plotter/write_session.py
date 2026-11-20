@@ -7,6 +7,9 @@ from math import dist, isfinite
 from pathlib import Path
 
 from ..resource_catalog import atomic_json
+from .export import ROUTING_VERSION
+
+LEGACY_ROUTE = "independent-runs-v1"
 
 
 def lengths(strokes, start=None):
@@ -67,6 +70,7 @@ class ProgressFile:
     total: int
     optimized: bool = True
     placement: dict | None = None
+    route_version: str = ROUTING_VERSION
 
     @classmethod
     def for_page(cls, folder, document, page, background, device):
@@ -94,7 +98,7 @@ class ProgressFile:
 
     def save(self, done, pending):
         atomic_json(self.path, {"total": self.total, "completed": done, "check_stroke": pending,
-                                "optimized": self.optimized, "placement": self.placement})
+                                "optimized": self.optimized, "route_version": self.route_version, "placement": self.placement})
 
 
 def timing_factor(path):

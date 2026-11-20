@@ -203,6 +203,8 @@ class AlignmentDialog(QtWidgets.QDialog):
         form.addRow("纸面 B 点 X / Y", pair_widget(self.b))
         self.nudge = panel.motion_controls(panel.jog)
         form.addRow(self.nudge)
+        self.pen_button = panel.button("落笔", panel.toggle_pen)
+        form.addRow(self.pen_button)
         self.pen_position = label("")
         form.addRow("当前笔位", self.pen_position)
         self.record_a = panel.button("记录实地 A 点", self.capture_a)
@@ -397,7 +399,8 @@ class AlignmentDialog(QtWidgets.QDialog):
                                            and not self.panel.waiting_for_paper)
         self.pen_position.setText("正在抬笔点动…" if self.panel.busy == "jog" else
                                   self.panel.position_label.text() if connected else "请在设备管理中连接写字机。")
-        self.stop.setVisible(self.panel.busy in {"jog", "return"})
+        self.panel.refresh_pen_button(self.pen_button)
+        self.stop.setVisible(self.panel.busy in {"jog", "return", "pen"})
         self.stop.setEnabled(self.panel.stop_button.isEnabled())
         error = self.panel.report.text() if self.panel.report.property("inkTone") == "danger" else ""
         self.motion_error.setText(error)
@@ -539,6 +542,6 @@ class AlignmentDialog(QtWidgets.QDialog):
             self.status.setText(str(error))
 
     def reject(self):
-        if self.panel.busy in {"position-read", "jog", "return"}:
+        if self.panel.busy in {"position-read", "jog", "return", "pen"}:
             return
         super().reject()
