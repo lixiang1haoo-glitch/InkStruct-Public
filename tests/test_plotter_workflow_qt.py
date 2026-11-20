@@ -60,7 +60,7 @@ def exercise(folder):
         align.c_move.click()
         wait(p)
         assert mock.position[:2] == [25.,20.]
-        align.nudge.step.setValue(.5)
+        align.nudge.step.setCurrentIndex(align.nudge.step.findData(.5))
         align.canvas.setFocus()
         QtTest.QTest.keyClick(align.canvas, QtCore.Qt.Key.Key_Right)
         wait(p)

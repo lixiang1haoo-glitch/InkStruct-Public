@@ -389,9 +389,25 @@ try:
     wait()
     assert panel.device is not None and not panel.confirmed_area
     assert not setup.use_range.isChecked() and panel.nudge.isEnabled()
-    assert setup.feed.value() == panel.profile.feed == 2500
-    assert setup.feed.minimum() == 60 and setup.feed.maximum() == 5000
-    assert sum(spin.accessibleName() == "运动速度" for spin in setup.findChildren(QtWidgets.QSpinBox)) == 1
+    def values(combo):
+        return [combo.itemData(i) for i in range(combo.count())]
+    def choose(combo, value):
+        index = combo.findData(value)
+        assert index >= 0
+        combo.setCurrentIndex(index)
+    assert values(setup.nudge.feed) == [200,500,1000,2000,2500,3500,5000]
+    assert values(panel.nudge.step) == [.1,.5,1,2,5,10,20,50,100]
+    assert setup.nudge.feed.currentData() == panel.profile.feed == 2500
+    assert panel.nudge.step.currentData() == 1
+    assert [c for c in setup.findChildren(QtWidgets.QComboBox) if c.accessibleName()=="运动速度"] == [setup.nudge.feed]
+    from dataclasses import replace
+    before = list(transport.commands)
+    panel.save_profile(replace(panel.profile, feed=1800))
+    assert panel.nudge.feed.currentText() == setup.nudge.feed.currentText() == "1800 mm/min（当前值）"
+    assert panel.store.devices()[0].feed == 1800
+    choose(panel.nudge.feed, 2500)
+    assert setup.nudge.feed.currentData() == 2500 and setup.nudge.feed.findData(1800) == -1
+    assert transport.commands == before
     ordinary_report = transport.report
     pulses = []
     def one_pulse(state, xyz):
@@ -400,7 +416,7 @@ try:
             return f"<Run|WPos:{xyz}|WCO:0,0,0|Pn:Y>"
         return ordinary_report(state, xyz)
     transport.report = one_pulse
-    panel.nudge.step.setValue(10)
+    choose(panel.nudge.step, 10)
     panel.nudge.buttons[(0, 1)].click()
     wait()
     assert pulses and panel.device is not None and panel.nudge.isEnabled()
@@ -409,29 +425,32 @@ try:
     panel.nudge.buttons[(0, -1)].click()
     wait()
     assert transport.position == [35., 30., 0.]
-    panel.nudge.step.setValue(42)
+    choose(panel.nudge.step, 50)
     panel.nudge.buttons[(1, 0)].click()
     wait()
-    assert transport.position == [77., 30., 0.]
+    assert transport.position == [85., 30., 0.]
     panel.nudge.buttons[(-1, 0)].click()
     wait()
     assert transport.position == [35., 30., 0.]
     assert set(xy_feeds_by_pen(transport.commands)[False]) == {2500}
-    setup.feed.setValue(200)
+    choose(setup.nudge.feed, 200)
     setup.axes[0].setChecked(True)
     setup.axes[2].setChecked(True)
-    setup.nudge.step.setValue(32)
+    choose(setup.nudge.step, 50)
     before = len(transport.commands)
     setup.nudge.buttons[(1, 0)].click()
     assert isinstance(setup.stop.parentWidget(), QtWidgets.QDialogButtonBox)
     assert not setup.stop.isHidden()
     wait()
-    assert transport.position == [35., -2., 0.] and not panel.profile.axes.swap
-    assert b"G1 X35.0000 Y-2.0000 F200\n" in transport.commands
+    assert transport.position == [35., -20., 0.] and not panel.profile.axes.swap
+    assert b"G1 X35.0000 Y-20.0000 F200\n" in transport.commands
     assert set(xy_feeds_by_pen(transport.commands[before:])[False]) == {200}
-    assert panel.store.devices()[0].feed == 2500
-    setup.nudge.step.setValue(31)
+    assert panel.store.devices()[0].feed == panel.nudge.feed.currentData() == 200
+    choose(setup.nudge.step, 50)
     setup.nudge.buttons[(-1, 0)].click()
+    wait()
+    choose(setup.nudge.step, 1)
+    setup.nudge.buttons[(1, 0)].click()
     wait()
     assert transport.position == [35., 29., 0.]
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
@@ -447,15 +466,15 @@ try:
     assert profile.limit_area_enabled and profile.feed == 200
     normal_report = transport.report
     transport.report = lambda state, xyz: (
-        "<Run|WPos:35,27.5,0|Pn:Y>" if state == "Run" and xyz == "35.0,26.0,0.0"
+        "<Run|WPos:35,28.0,0|Pn:Y>" if state == "Run" and xyz == "35.0,27.0,0.0"
         else normal_report(state, xyz)
     )
-    setup.nudge.step.setValue(3)
+    choose(setup.nudge.step, 2)
     setup.nudge.buttons[(1, 0)].click()
     wait()
-    assert transport.position == [35., 26., 0.] and panel.device is not None
+    assert transport.position == [35., 27., 0.] and panel.device is not None
     assert "点动完成" in panel.report.text()
-    assert b"G1 X35.0000 Y26.0000 F200\n" in transport.commands
+    assert b"G1 X35.0000 Y27.0000 F200\n" in transport.commands
     assert not transport.closed and b"\x18" not in transport.commands
     transport.report = normal_report
     setup.nudge.buttons[(-1, 0)].click()
@@ -530,10 +549,18 @@ try:
     app.processEvents()
     assert measure.nudge.isVisible() and measure.nudge.isEnabled()
     before = len(transport.commands)
-    measure.nudge.step.setValue(100)
+    choose(measure.nudge.step, 100)
     measure.nudge.buttons[(1, 0)].click()
     assert "超出" in measure.motion_error.text() and len(transport.commands) == before
-    measure.nudge.step.setValue(12)
+    before_speed = list(transport.commands)
+    choose(measure.nudge.feed, 500)
+    assert panel.nudge.feed.currentData() == 500 and measure.measurement == (35.,29.)
+    assert transport.commands == before_speed
+    choose(measure.nudge.feed, 200)
+    choose(measure.nudge.step, 10)
+    measure.nudge.buttons[(1, 0)].click()
+    wait()
+    choose(measure.nudge.step, 2)
     measure.nudge.buttons[(1, 0)].click()
     assert panel.busy == "jog" and not measure.nudge.isEnabled() and not measure.record_b.isEnabled()
     assert measure.stop.isVisible() and measure.stop.isEnabled()
@@ -562,10 +589,10 @@ try:
     assert panel.device.position[:2] == (0., 0.) and panel.offset == old_offset
     assert panel.connection_id != old_connection
     assert reopened.use_range.isChecked() and panel.confirmed_area is None
-    reopened.feed.setValue(3100)
+    choose(reopened.nudge.feed, 3500)
     reopened.save_button.click()
     assert panel.profile.area == profile.area and panel.confirmed_area is None
-    assert panel.profile.feed == 3100 and panel.profile.limit_area_enabled
+    assert panel.profile.feed == 3500 and panel.profile.limit_area_enabled
     reopened.use_range.setChecked(False)
     reopened.save_button.click()
     assert not panel.profile.limit_area_enabled and panel.profile.area == profile.area
@@ -588,30 +615,30 @@ try:
     start = len(transport.commands)
     panel.dry_button.click()
     wait()
-    assert set(xy_feeds_by_pen(transport.commands[start:])[False]) == {3100}
+    assert set(xy_feeds_by_pen(transport.commands[start:])[False]) == {3500}
     assert not xy_feeds_by_pen(transport.commands[start:])[True]
     start = len(transport.commands)
     panel.return_button.click()
     wait()
-    assert b"G1 X0.0000 Y0.0000 F3100\n" in transport.commands[start:]
+    assert b"G1 X0.0000 Y0.0000 F3500\n" in transport.commands[start:]
     start = len(transport.commands)
     panel.write_button.click()
     wait()
     feeds = xy_feeds_by_pen(transport.commands[start:])
-    assert set(feeds[False]) == set(feeds[True]) == {3100}
+    assert set(feeds[False]) == set(feeds[True]) == {3500}
     trial = DeviceDialog(panel)
-    trial.feed.setValue(420)
+    choose(trial.nudge.feed, 500)
     start = len(transport.commands)
     trial.trial.click()
     wait()
     trial_feeds = xy_feeds_by_pen(transport.commands[start:])
-    assert set(trial_feeds[False]) == set(trial_feeds[True]) == {420}
+    assert set(trial_feeds[False]) == set(trial_feeds[True]) == {500}
     trial.close()
     panel.link_button.click()
     wait()
     panel.set_workspace(Path(sys.argv[1]))
     saved = DeviceDialog(panel)
-    assert saved.feed.value() == 3100 and not saved.nudge.isEnabled() and not saved.trial.isEnabled()
+    assert saved.nudge.feed.currentData() == 500 and saved.nudge.feed.isEnabled() and not saved.nudge.step.isEnabled() and not saved.trial.isEnabled()
     assert not saved.use_range.isChecked()
     saved.close()
     panel.link_button.click()
@@ -899,7 +926,7 @@ try:
     settings.range_confirm.click()
     assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
     settings.close()
-    dialog.nudge.step.setValue(2)
+    dialog.nudge.step.setCurrentIndex(dialog.nudge.step.findData(2))
     dialog.nudge.buttons[(1, 0)].click()
     assert not dialog.nudge.isEnabled() and dialog.stop_button.isVisible()
     wait_for(lambda: dialog.busy is None)

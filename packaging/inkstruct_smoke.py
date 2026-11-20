@@ -1281,10 +1281,10 @@ def verify_plotter_controls(panel, out):
     try:
         assert not dialog.datum_register.isEnabled()
         assert not dialog.datum_recover.isEnabled()
-        assert dialog.nudge.step.maximum() == panel.nudge.step.maximum() == 100
-        speed_fields = [spin for spin in dialog.findChildren(QtWidgets.QSpinBox) if "mm/min" in spin.suffix()]
-        assert speed_fields == [dialog.feed]
-        assert (dialog.feed.minimum(), dialog.feed.maximum()) == (60, 5000)
+        for pad in (dialog.nudge, panel.nudge):
+            assert [pad.step.itemData(i) for i in range(pad.step.count())] == [.1,.5,1,2,5,10,20,50,100]
+            assert [pad.feed.itemData(i) for i in range(7)] == [200,500,1000,2000,2500,3500,5000]
+            assert not pad.step.isEditable() and not pad.feed.isEditable()
         assert not dialog.use_range.isChecked()
     finally:
         dialog.deleteLater()
