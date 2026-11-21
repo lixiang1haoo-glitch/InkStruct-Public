@@ -131,6 +131,8 @@ class InkStructWindow(QtWidgets.QMainWindow):
         self.editor.settings_host = self
         from .editor.template_library import TemplateLibrary
         self.template_library = TemplateLibrary(self.editor)
+        if hasattr(self.editor, 'machine_panel'):
+            self.editor.machine_panel.template_origin_saved.connect(self.template_library.catalog_changed)
         self.sample_library = SampleLibraryPage(self.collector.single_widget._capture_catalog)
         self.sample_library_writer = None
         self.collector.open_sample_library = self.open_sample_library

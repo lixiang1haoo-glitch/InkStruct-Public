@@ -85,6 +85,8 @@ class TemplateLibrary(QtWidgets.QWidget):
         right.addWidget(self.summary)
         self.layouts = QtWidgets.QComboBox()
         right.addWidget(self.layouts)
+        self.origin_info = QtWidgets.QLabel()
+        right.addWidget(self.origin_info)
         self.preview = FitSvgPreview()
         self.preview.setProperty('inkRole', 'previewSurface')
         self.preview_stack = QtWidgets.QStackedWidget()
@@ -151,9 +153,31 @@ class TemplateLibrary(QtWidgets.QWidget):
         item = self.list.currentItem()
         return item.data(QtCore.Qt.UserRole) if item and not item.isHidden() else None
 
+    @staticmethod
+    def file_stamp(path):
+        try:
+            stat = path.stat()
+            return stat.st_mtime_ns, stat.st_size, stat.st_ino
+        except FileNotFoundError:
+            return None
+
+    def catalog_stamp(self):
+        return self.file_stamp(self.store.index), self.file_stamp(self.store.origins_dir)
+
+    def catalog_changed(self, *_):
+        self.loaded_stamp = None
+        if self.isVisible():
+            self.refresh()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.catalog_stamp() != self.loaded_stamp:
+            self.refresh()
+
     def refresh(self, *_):
         self.metadata_epoch += 1
         previous = self.selected()
+        self.loaded_stamp = self.catalog_stamp()
         try:
             entries = self.store.entries()
         except (OSError, ValueError, TypeError, KeyError) as error:
@@ -186,6 +210,14 @@ class TemplateLibrary(QtWidgets.QWidget):
             for i in range(self.list.count()):
                 if previous and self.list.item(i).data(QtCore.Qt.UserRole)['path'] == previous['path']:
                     self.list.setCurrentRow(i)
+            if previous and self.list.currentRow() == -1 and previous.get('managed'):
+                family = previous['managed'].get('revision', {}).get('template_id')
+                if family:
+                    for i in range(self.list.count()):
+                        entry = self.list.item(i).data(QtCore.Qt.UserRole).get('managed') or {}
+                        if entry.get('revision', {}).get('template_id') == family:
+                            self.list.setCurrentRow(i)
+                            break
             self.filter()
         self.describe()
         self.load_thumbnails()
@@ -204,7 +236,9 @@ class TemplateLibrary(QtWidgets.QWidget):
                 try:
                     builtin = data.get('builtin')
                     template = GlobalDefaultsStore().ordinary_template() if builtin else None
-                    stamp = template_json(template) if builtin else fingerprint(data['path'])
+                    stamp = template_json(template) if builtin else (
+                        fingerprint(data['path']), self.file_stamp(self.store.origins_dir / (data['managed']['id'] + '.json'))
+                        if data.get('managed') else None)
                     if data['path'] in cache and cache[data['path']][1] == stamp:
                         output.append(cache[data['path']])
                         continue
@@ -337,6 +371,8 @@ class TemplateLibrary(QtWidgets.QWidget):
             self.error.setText(str(error))
             self.show_preview_status('模板读取失败\n' + str(error) if data else
                                      '没有匹配的模板' if self.list.count() else '没有可预览的页面版式')
+        if self.template is None:
+            self.origin_info.hide()
         self.layouts.setVisible(self.template is not None)
         self.info.setVisible(bool(data))
         allowed = self.template is not None and not (data and data['managed'] and data['managed']['archived'])
@@ -354,6 +390,10 @@ class TemplateLibrary(QtWidgets.QWidget):
         self.preview_epoch += 1
         epoch = self.preview_epoch
         template, key = self.template, self.layouts.currentData()
+        layout = next((p for p in template.effective_layouts if p.layout_id == key), None) if isinstance(template, FlowTemplate) else None
+        mark = template.paper_origin(layout) if layout else None
+        self.origin_info.setVisible(layout is not None)
+        self.origin_info.setText(f"纸面原点 X {mark.a[0]:.3f} · Y {mark.a[1]:.3f} mm" if mark else "此版式尚未设置纸面原点")
         if not template or key is None:
             self.show_preview_status('没有可预览的页面版式')
             return
@@ -461,7 +501,7 @@ class TemplateLibrary(QtWidgets.QWidget):
                     builtin_saved = True
                     return None
                 if parent:
-                    return self.store.save_revision(parent['id'], candidate)
+                    return self.store.save_revision(parent['id'], candidate, original=template)
                 from .template_manager import save_external_template
                 save_external_template(data['path'], template, candidate)
                 external_saved = True

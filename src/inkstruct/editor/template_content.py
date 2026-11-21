@@ -337,9 +337,22 @@ class TemplateContentPanel(QtWidgets.QWidget):
             )
         )
         self.template_redo.clear()
+        self.install_flow(flow)
+
+    def install_flow(self, flow):
+        from ..document.flow_template import same_layout_revision
+
+        w = self.editor
+        old = w.flow
         w.flow = flow
         w.mark_dirty()
-        w.schedule_layout()
+        if same_layout_revision(old.template, flow.template) and replace(old, template=flow.template) == flow:
+            machine = getattr(w, "machine_panel", None)
+            if machine is not None:
+                machine.candidate_template = flow.template
+                machine.refresh_document()
+        else:
+            w.schedule_layout()
         self.refresh_key = None
         self.refresh()
 
@@ -379,9 +392,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         target.append(
             (w.flow.template, w.flow.template_bindings, w.flow.schema_version, template, checkpoint)
         )
-        w.flow = flow
-        w.mark_dirty()
-        w.schedule_layout()
+        self.install_flow(flow)
 
     def edit(self, *, field_id=None):
         w = self.editor

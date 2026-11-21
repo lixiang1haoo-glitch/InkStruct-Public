@@ -6,6 +6,7 @@ import os
 import tempfile
 import time
 from functools import wraps
+from dataclasses import asdict, replace
 from pathlib import Path
 
 
@@ -68,6 +69,7 @@ class TemplateStore:
     def __init__(self, root):
         self.root = Path(root)
         self.index = self.root / 'catalog.json'
+        self.origins_dir = self.root / 'paper-origins'
         self.lock_path = self.root / '.catalog.lock'
 
     def entries(self):
@@ -130,6 +132,13 @@ class TemplateStore:
             from dataclasses import asdict
             if template.revision is None or asdict(template.revision) != item['revision']:
                 raise ValueError('模板库修订与文件身份不一致')
+        origins_path = self.origins_dir / (item['id'] + '.json')
+        if origins_path.exists():
+            with origins_path.open('rb') as stream:
+                raw = stream.read(65537)
+            if len(raw) > 65536:
+                raise ValueError('模板原点文件过大')
+            template = replace(template, paper_origins=json.loads(raw))
         return template
 
     def newer(self, template):
@@ -194,33 +203,67 @@ class TemplateStore:
         return self._add(raw, template, source, self.entries())
 
     @catalog_write
-    def save_revision(self, parent_id, candidate):
+    def save_revision(self, parent_id, candidate, *, original=None):
         entries = self.entries()
         parent = next((entry for entry in entries if entry['id'] == parent_id), None)
         if parent is None or parent['archived']:
             raise ValueError('原修订已移出模板库，请恢复后重试。')
-        return self._save_revision(candidate, self.read(parent), self.path(parent_id), entries)
+        original = original if original is not None else self.read(parent)
+        if (hasattr(original, 'paper_origins') and hasattr(candidate, 'paper_origins')
+                and replace(candidate, paper_origins=original.paper_origins) == original):
+            self._update_paper_origins(parent, original, candidate)
+            return parent
+        return self._save_revision(candidate, original, self.path(parent_id), entries)
+
+    def _update_paper_origins(self, entry, original, candidate):
+        current = self.read(entry)
+        before, after = dict(original.paper_origins), dict(candidate.paper_origins)
+        merged = dict(current.paper_origins)
+        for key in before.keys() | after.keys():
+            if before.get(key) == after.get(key):
+                continue
+            if merged.get(key) not in (before.get(key), after.get(key)):
+                raise ValueError('此版式的纸面原点已在另一窗口更新，请重新载入模板。')
+            if key in after:
+                merged[key] = after[key]
+            else:
+                merged.pop(key, None)
+        result = replace(current, paper_origins=tuple(merged.items()))
+        if result != current:
+            self._write_origins(entry, result.paper_origins)
+        return result
+
+    def _write_origins(self, entry, origins):
+        path = self.origins_dir / (entry["id"] + ".json")
+        atomic_json(path, [[key, asdict(mark)] for key, mark in origins])
 
     @catalog_write
-    def save_document_revision(self, original, candidate):
-        """Branch from the document's embedded template, including templates outside the library."""
-        from .document.template_authoring import parse_template, template_json
-        from .document.template_revision import template_revision, version_template
+    def save_paper_origins(self, original, candidate):
+        """Update calibration for this exact layout revision without replacing its content."""
+        from .document.template_authoring import template_json
+        from .document.template_revision import template_revision
 
+        if replace(candidate, paper_origins=original.paper_origins) != original:
+            raise ValueError('纸面原点保存不能改变模板版式。')
         entries = self.entries()
-        prior = template_revision(original)
-        revised = version_template(candidate, parent=original)
+        base = replace(original, paper_origins=())
+        identity = template_revision(base)
+        if base.revision is not None and base.revision != identity:
+            base = replace(base, revision=None)
+            candidate = replace(candidate, revision=None)
         for entry in entries:
-            revision = entry.get('revision', {})
-            if (not entry['archived'] and revision.get('template_id') == prior.template_id
-                    and revision.get('parent_id') == prior.revision_id
-                    and revision.get('content_hash') == revised.revision.content_hash):
-                return self.read(entry)
-        original_id = hashlib.sha256(template_json(original).encode('utf-8')).hexdigest()
-        source = self.path(original_id) if any(e['id'] == original_id for e in entries) else '排版文档'
-        raw = template_json(revised)
-        self._add(raw.encode('utf-8'), parse_template(raw), source, entries)
-        return revised
+            rev = entry.get('revision')
+            if (rev is None) != (base.revision is None) or (rev and rev['revision_id'] != identity.revision_id):
+                continue
+            stored = self.read(entry)
+            if not hasattr(stored, 'paper_origins') or replace(stored, paper_origins=()) != base:
+                continue
+            if entry['archived']:
+                raise ValueError('此模板已移出模板库，请先恢复。')
+            return self._update_paper_origins(entry, original, candidate)
+        raw = template_json(candidate).encode('utf-8')
+        self._add(raw, candidate, '排版文档', entries)
+        return candidate
 
     def _save_revision(self, candidate, parent, source, entries):
         from .document.template_authoring import parse_template, template_json
@@ -240,7 +283,11 @@ class TemplateStore:
             if related:
                 if related['revision'] != revision:
                     raise ValueError('同一修订标识对应不同内容或关系')
-                self.read(related)
+                stored = self.read(related)
+                if getattr(template, 'paper_origins', ()):
+                    marks = dict(stored.paper_origins)
+                    marks.update(template.paper_origins)
+                    self._write_origins(related, sorted(marks.items()))
                 related['archived'] = False
                 self._write(entries)
                 return related

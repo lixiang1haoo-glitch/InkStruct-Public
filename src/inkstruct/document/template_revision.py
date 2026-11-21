@@ -36,6 +36,7 @@ class TemplateRevision:
 def _content_record(template, record=None):
     data = asdict(template) if record is None else record
     data.pop('revision', None)
+    data.pop('paper_origins', None)
     # Omit the new optional property from legacy records to preserve their hashes.
     if data.get('schema_version') == 'inkstruct_page_template_v3':
         if data.get('plotter_alignment') is None:
@@ -55,7 +56,9 @@ def template_record(template, record=None):
     data = _content_record(template, record)
     revision = template.revision
     if revision is not None and revision.content_hash == digest(data):
-        return {'schema_version': SCHEMA, 'revision': asdict(revision), 'template': data}
+        data = {'schema_version': SCHEMA, 'revision': asdict(revision), 'template': data}
+    if getattr(template, 'paper_origins', ()):
+        data['paper_origins'] = [[key, asdict(mark)] for key, mark in template.paper_origins]
     return data
 
 
@@ -64,7 +67,7 @@ def template_revision(template):
     record = template_record(template)
     if record['schema_version'] == SCHEMA:
         return template.revision
-    key = digest(record)
+    key = digest(_content_record(template))
     return TemplateRevision(str(uuid5(NAMESPACE_URL, 'inkstruct:template:' + key)),
                             str(uuid5(NAMESPACE_URL, 'inkstruct:revision:' + key)),
                             None, 1, key)
@@ -78,6 +81,8 @@ def version_template(template, *, parent=None):
     else:
         prior = template_revision(parent)
         if prior.content_hash == content_hash:
+            if getattr(template, 'paper_origins', ()) != getattr(parent, 'paper_origins', ()):
+                return replace(template, revision=parent.revision)
             raise ValueError("模板内容没有变化，未创建新修订")
         revision = TemplateRevision(prior.template_id, str(uuid4()), prior.revision_id,
                                     prior.number + 1, content_hash)

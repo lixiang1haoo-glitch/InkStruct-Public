@@ -28,7 +28,7 @@ def page_context(template, snapshot=None, index=0, *, layout=None):
                        source.background.sha256 if source.background else None,
                        template.offset_x_mm, template.offset_y_mm])
         title = f"PDF 第 {source.source_page} 页" if source.source_page is not None else source.label
-        return page, size, source.plotter_alignment, title
+        return page, size, template.paper_origin(source), title
     paper = snapshot.page_profile
     size = paper.width_mm, paper.height_mm
     return digest([snapshot.document_id, index, size]), size, None, f"第 {index + 1} 页"
@@ -63,8 +63,8 @@ class SessionPageGroup:
         self.layouts = tuple(dict.fromkeys((*template.start_pages, *template.effective_loop)))
         self.entries = {}
         self.reference_layout = None
-        self.paper_marks = {layout.layout_id: layout.plotter_alignment for layout in template.effective_layouts
-                            if layout.layout_id in self.layouts and layout.plotter_alignment is not None}
+        self.paper_marks = {layout.layout_id: template.paper_origin(layout) for layout in template.effective_layouts
+                            if layout.layout_id in self.layouts and template.paper_origin(layout) is not None}
         self.translated = False
 
     @property
@@ -197,7 +197,7 @@ class TemplateOriginDialog(QtWidgets.QDialog):
         column.addWidget(self.canvas, 1)
         self.coordinates = label("请选择纸面原点。")
         column.addWidget(self.coordinates)
-        column.addWidget(label("保存将创建模板库修订并应用到当前文档。使用此版式的所有循环页会一起更新。"))
+        column.addWidget(label("纸面原点将同步保存到模板库和当前文档。使用此版式的所有循环页会一起更新。"))
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
         self.save = buttons.addButton("保存并应用", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
         self.save.setEnabled(False)
