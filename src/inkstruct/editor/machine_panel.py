@@ -938,31 +938,37 @@ class MachinePanel(QtWidgets.QWidget):
             self.group = group
         return self.group
 
-    def refresh_fixture(self):
+    def direct_placement(self, group, index):
         from .machine_alignment import fixture_placement
 
+        layout = self.template.layout(index).layout_id if group else None
+        entry = group.entries.get(layout) if group else None
+        if entry and entry.session_only:
+            return entry
+        if self.datum_located:
+            return fixture_placement(self, self.template, self.snapshot, index)
+        return None
+
+    def refresh_fixture(self):
         self.fixture_placement = None
         try:
             group = self.session_group()
             if self.paper_page is None:
                 return
             index = self.paper_page.index
-            layout = self.template.layout(index).layout_id if group else None
-            entry = group.entries.get(layout) if group else None
-            if group and group.reference_layout and layout in group.paper_marks:
-                reference = group.entries[group.reference_layout]
-                if not reference.session_only:
-                    sequence = (*self.template.start_pages, *self.template.effective_loop)
-                    reference = fixture_placement(self, self.template, self.snapshot,
-                                                  sequence.index(group.reference_layout))
-                    if reference and reference.setup != group.setup:
-                        reference = None
-                self.fixture_placement = group.place_from_reference(layout, reference)
+            direct = self.direct_placement(group, index)
+            if not group or group.reference_layout is None:
+                self.fixture_placement = direct
                 return
-            if entry and (group.translated or entry.session_only):
-                self.fixture_placement = entry
-            elif self.datum_located:
-                self.fixture_placement = fixture_placement(self, self.template, self.snapshot, index)
+            if direct and direct.setup == group.setup:
+                self.fixture_placement = direct
+                return
+            layout = self.template.layout(index).layout_id
+            if layout in group.paper_marks and layout != group.reference_layout:
+                sequence = (*self.template.start_pages, *self.template.effective_loop)
+                reference = self.direct_placement(group, sequence.index(group.reference_layout))
+                if reference and reference.setup == group.setup:
+                    self.fixture_placement = group.place_from_reference(layout, reference)
         except (OSError, ValueError, KeyError, TypeError) as error:
             self.message(f"无法读取此页的摆放记录。{error}", error=True)
 
