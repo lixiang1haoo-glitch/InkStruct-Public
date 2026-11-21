@@ -243,7 +243,7 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(self.progress)
         self.report = label("连接设备后可定位。")
         write_layout.addWidget(self.report)
-        self.align_button = self.button("设置当前页原点…", self.open_alignment)
+        self.align_button = self.button("对准纸张…", self.open_alignment)
         self.nudge = self.motion_controls(self.jog)
         write_layout.addWidget(self.nudge)
         self.return_button = self.button("抬笔回到原点", self.return_to_origin)
@@ -629,7 +629,9 @@ class MachinePanel(QtWidgets.QWidget):
             self.page_list.clear()
             self.page_list.addItems([f"第 {page + 1} 页" for page in range(len(snapshot.pages))])
             self.page_list.setCurrentRow(index)
-            self.scope.setItemText(1, f"全部 {len(snapshot.pages)} 页")
+            eligible = self.batch_pages()
+            self.scope.setItemText(1, f"全部 {len(snapshot.pages)} 页" if len(eligible) == len(snapshot.pages)
+                                   else f"可批量书写的 {len(eligible)} 页")
             self.scope.setCurrentIndex(0)
         self.update_page_states()
         self.change_page()
@@ -641,9 +643,19 @@ class MachinePanel(QtWidgets.QWidget):
             self.change_page()
             self.page_selected.emit(index)
 
+    def missing_template_origin(self, index):
+        return isinstance(self.template, FlowTemplate) and self.template.layout(index).plotter_alignment is None
+
+    def batch_pages(self):
+        if self.plan is None:
+            return []
+        return [page.index for page in self.plan.pages if page.strokes and not self.missing_template_origin(page.index)]
+
     def change_scope(self):
         if self.scope.currentData() == "all" and self.page_list.count():
-            self.page_list.setCurrentRow(0)
+            eligible = self.batch_pages()
+            if eligible:
+                self.page_list.setCurrentRow(eligible[0])
         self.refresh_buttons()
 
     def update_page_states(self):
@@ -654,6 +666,8 @@ class MachinePanel(QtWidgets.QWidget):
                 status = "待写"
             else:
                 status = "无可书写笔迹"
+            if self.missing_template_origin(index):
+                status += " · 模板缺纸面原点"
             self.page_list.item(index).setText(f"第 {index + 1} 页 · {status}")
 
     def change_page(self, *_):
@@ -842,14 +856,14 @@ class MachinePanel(QtWidgets.QWidget):
 
         template = self.template
         if not (self.device and self.connection_id and self.profile and isinstance(template, FlowTemplate)
-                and template.kind == "custom" and self.snapshot):
+                and self.snapshot):
             self.group = None
             return None
         setup = self.setup if setup is None else setup
         datum = self.profile.datum
         context = (self.snapshot.document_id, self.connection_id, self.profile.id, self.profile.axes, self.offset,
                    datum.id if datum else None, self.frame, setup, self.profile.paper_calibration)
-        if self.group is None or self.group.template is not template or self.group.context != context:
+        if self.group is None or self.group.template != template or self.group.context != context:
             group = SessionPageGroup(template, context, setup, self.profile.axes)
             if self.datum_located:
                 for index, layout in enumerate((*template.start_pages, *template.effective_loop)):
@@ -865,18 +879,29 @@ class MachinePanel(QtWidgets.QWidget):
         return self.group
 
     def refresh_fixture(self):
+        from .machine_alignment import fixture_placement
+
         self.fixture_placement = None
         try:
             group = self.session_group()
             if self.paper_page is None:
                 return
             index = self.paper_page.index
-            entry = group.entries.get(self.template.layout(index).layout_id) if group else None
+            layout = self.template.layout(index).layout_id if group else None
+            entry = group.entries.get(layout) if group else None
+            if group and group.reference_layout and layout in group.paper_marks:
+                reference = group.entries[group.reference_layout]
+                if not reference.session_only:
+                    sequence = (*self.template.start_pages, *self.template.effective_loop)
+                    reference = fixture_placement(self, self.template, self.snapshot,
+                                                  sequence.index(group.reference_layout))
+                    if reference and reference.setup != group.setup:
+                        reference = None
+                self.fixture_placement = group.place_from_reference(layout, reference)
+                return
             if entry and (group.translated or entry.session_only):
                 self.fixture_placement = entry
             elif self.datum_located:
-                from .machine_alignment import fixture_placement
-
                 self.fixture_placement = fixture_placement(self, self.template, self.snapshot, index)
         except (OSError, ValueError, KeyError, TypeError) as error:
             self.message(f"无法读取此页的摆放记录。{error}", error=True)
@@ -926,6 +951,12 @@ class MachinePanel(QtWidgets.QWidget):
             source = self.inherited_placement
             state = f"已沿用「{source.setup}」 · {source.source}" if source else f"已对位 · {self.setup}"
             self.alignment_status.setText(f"{page}{state} · 原点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm")
+        elif self.raw_page and self.missing_template_origin(self.raw_page.index):
+            layout = self.template.layout(self.raw_page.index)
+            source = f"PDF 第 {layout.source_page} 页" if layout.source_page is not None else layout.label
+            self.alignment_status.setText(f"{page}（{source}）缺少纸面原点。请在模板工作台设置并保存，再应用到当前文档。")
+        elif self.raw_page and isinstance(self.template, FlowTemplate):
+            self.alignment_status.setText(f"{page}的模板原点已设置，等待对准纸张。")
         else:
             self.alignment_status.setText(f"{page}未对位")
 
@@ -974,7 +1005,9 @@ class MachinePanel(QtWidgets.QWidget):
         else:
             self.write_button.setText("核对纸面并续写…" if self.done or self.uncertain else "开始书写…")
             self.write_button.setToolTip("")
-            self.write_button.setEnabled(safe and ready and self.pen_raised and self.job is not None and not self.progress_error)
+            eligible = self.scope.currentData() != "all" or (self.raw_page and not self.missing_template_origin(self.raw_page.index))
+            self.write_button.setEnabled(bool(eligible and safe and ready and self.pen_raised and self.job is not None
+                                              and not self.progress_error))
         self.finish_stroke.setVisible(self.busy == "write")
         self.finish_stroke.setEnabled(self.busy == "write" and not canceling)
         self.stop_button.setVisible(moving or self.batch_active)
@@ -1129,10 +1162,10 @@ class MachinePanel(QtWidgets.QWidget):
         pending = []
         multi = not self.batch_active and self.scope.currentData() == "all"
         if multi:
-            if any(not page.strokes for page in self.plan.pages):
-                self.message("有页面无可书写笔迹。请选择有笔迹的单页。", error=True)
+            pages = self.batch_pages()
+            if not pages or self.job.index != pages[0]:
                 return
-            pending = list(range(1, len(self.plan.pages)))
+            pending = pages[1:]
         job, connection = self.job, self.connection_id
         start = self.done
         if self.uncertain:
@@ -1155,6 +1188,13 @@ class MachinePanel(QtWidgets.QWidget):
                 placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
         title = "原稿已对位，继续书写" if start or self.uncertain else "开始书写"
         text = f"{placement_note}第 {job.index + 1} 页 · 已有 {start} 笔可跳过。请确认当前纸张、页面和对位正确。"
+        if multi and len(pages) < len(self.plan.pages):
+            skipped = "、".join(str(i + 1) for i in range(len(self.plan.pages)) if self.missing_template_origin(i))
+            text += f" 本次共写 {len(pages)} 页。"
+            if skipped:
+                text += f"跳过缺少纸面原点的第 {skipped} 页。"
+            if any(not page.strokes for page in self.plan.pages):
+                text += "无笔迹页自动跳过。"
         return_target = job.registration.origin if self.auto_return.isChecked() else None
         if return_target is not None:
             text += " 写完后将抬笔回到本页原点，再取纸。"

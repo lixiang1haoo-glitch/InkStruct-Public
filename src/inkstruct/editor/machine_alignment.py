@@ -62,11 +62,25 @@ class SessionPageGroup:
         self.template, self.context, self.setup, self.axes = template, context, setup, axes
         self.layouts = tuple(dict.fromkeys((*template.start_pages, *template.effective_loop)))
         self.entries = {}
+        self.reference_layout = None
+        self.paper_marks = {layout.layout_id: layout.plotter_alignment for layout in template.effective_layouts
+                            if layout.layout_id in self.layouts and layout.plotter_alignment is not None}
         self.translated = False
 
     @property
     def complete(self):
         return len(self.entries) == len(self.layouts) and len(self.layouts) > 1
+
+    def place_from_reference(self, layout, reference):
+        mark = self.paper_marks.get(layout)
+        if not mark or reference is None:
+            return None
+        if layout == self.reference_layout:
+            return reference
+        measured = reference.alignment
+        transform = self.axes.register(measured.a, reference.position, angle=measured.angle, scale=measured.scale)
+        alignment = replace(mark, angle=measured.angle, scale=measured.scale)
+        return replace(reference, alignment=alignment, position=transform.place(mark.a))
 
     def measure(self, layout, alignment, position, source, *, translate=False, fixed=False, recalled=False):
         if layout not in self.layouts:
@@ -92,6 +106,7 @@ class SessionPageGroup:
         self.entries[layout] = FixturePlacement(alignment, position, self.setup, f"本次连接 · {source}{action}",
                                                 session_only=not fixed)
         self.translated = translate
+        self.reference_layout = layout if layout in self.paper_marks else None
 
 
 def fixture_placement(panel, template, snapshot, index):
@@ -191,7 +206,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.accepted_connection = None
         self.measurement = self.measurement_b = None
         self.offset = None
-        self.setWindowTitle(("初始化纸面校准" if calibration else "模板原点" if configure else "当前页原点") + f" · {title}")
+        self.setWindowTitle(("初始化纸面校准" if calibration else "模板原点" if configure else "对准纸张") + f" · {title}")
         self.resize(730, 530)
         col = QtWidgets.QVBoxLayout(self)
         row = QtWidgets.QHBoxLayout()
@@ -254,10 +269,8 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.shift_group = QtWidgets.QCheckBox("纸张方向未变，用本次实测原点平移其余版式")
         self.shift_group.setToolTip("只在本次连接中生效。移动纸张后保持相同朝向和比例，各版式保留原有角度、比例和相对位置。")
         form.addRow(self.shift_group)
-        self.group_hint = label("")
-        form.addRow(self.group_hint)
         old = self.group.entries.get(self.layout_id) if self.group else None
-        current = old.alignment if old else alignment
+        current = alignment or (old.alignment if old else None)
         if configure and current is None and panel.profile:
             try:
                 record = panel.store.place(panel.profile, self.page, panel.setup, None)
@@ -312,7 +325,10 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.details = label("")
         form.addRow(self.details)
         if not configure and not calibration:
-            form.addRow(label("本页对位保存在本机。要将纸面原点写入模板，请在模板工作台打开「设置模板原点」并保存修改。"))
+            if alignment:
+                form.addRow(label("模板已设置纸面原点。将笔尖对准图中的纸面原点并确认。同一摆放下，其他已设原点的版式会自动换算。"))
+            else:
+                form.addRow(label("本页可临时对位。要随模板保存纸面原点，请在模板工作台设置并保存，再应用到当前文档。"))
         self.status = label("")
         form.addRow(self.status)
         self.motion_error = label("")
@@ -476,11 +492,8 @@ class AlignmentDialog(QtWidgets.QDialog):
         group = self.group
         matched = (group is not None and group is self.panel.session_group()
                    and group.setup == self.setup.text().strip())
-        self.group_hint.setVisible(matched)
-        if matched:
-            self.group_hint.setText(f"同一摆放已登记 {len(group.entries)} / {len(group.layouts)} 个版式。")
-        self.shift_group.setVisible(matched and group.complete)
-        self.shift_group.setEnabled(bool(matched and group.complete
+        self.shift_group.setVisible(matched and not group.paper_marks and group.complete)
+        self.shift_group.setEnabled(bool(matched and not group.paper_marks and group.complete
                                         and self.live_measurement and self.measurement is not None and idle))
         self.fixture.setEnabled(idle and bool(profile and profile.datum))
         fixed = self.fixture.isChecked()
@@ -592,11 +605,11 @@ class AlignmentDialog(QtWidgets.QDialog):
                 setup = self.setup.text().strip()
                 if fixed:
                     self.panel.store.select_fixture_setup(self.panel.profile, page, key, setup)
-                if not fixed and self.source_page and not self.configure:
+                if self.source_page and not self.configure:
                     group = self.panel.session_group(setup)
                     if group:
                         source = f"第 {self.source_page['number']} 页"
-                        group.measure(self.layout_id, self.panel.profile.calibrated(saved), position, source, recalled=True)
+                        group.measure(self.layout_id, self.panel.profile.calibrated(saved), position, source, recalled=True, fixed=fixed)
                 self.alignment = saved
                 self.position = position
                 self.accepted_connection = self.panel.connection_id
