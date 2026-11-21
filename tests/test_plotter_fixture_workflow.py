@@ -19,6 +19,28 @@ def test_recover_paper_corner_and_write_against_same_stops(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_template_origins_share_the_calibrated_paper_transform():
+    from dataclasses import replace
+    from math import pi
+    from inkstruct.document.flow_template import FlowTemplate, PageLayout
+    from inkstruct.editor.machine_alignment import SessionPageGroup
+    from inkstruct.plotter.profiles import DeviceAxes, PageAlignment
+
+    first, second = PageAlignment((8, 17)), PageAlignment((18, 37))
+    template = FlowTemplate(kind="custom", layouts=(PageLayout("a", "甲", plotter_alignment=first),
+                                                    PageLayout("b", "乙", plotter_alignment=second)),
+                            loop_pages=("a", "b"))
+    axes = DeviceAxes(x_scale=2, swap=True)
+    group = SessionPageGroup(template, (), "默认摆放", axes)
+    measured = replace(first, angle=pi / 2, scale=1.2)
+    group.measure("a", measured, (100, 80), "第 1 页")
+    placement = group.place_from_reference("b", group.entries["a"])
+    assert placement.position == (112, 32)
+    assert placement.alignment.angle == measured.angle and placement.alignment.scale == measured.scale
+    group.measure("b", placement.alignment, (113, 35), "第 2 页")
+    assert group.place_from_reference("a", group.entries["b"]).position == (101, 83)
+
+
 def exercise(workspace):
     from dataclasses import replace
 
@@ -184,7 +206,8 @@ def exercise(workspace):
         assert panel.job.strokes[0].points == ((41., 40.), (43., 42.))
         assert panel.write_button.isEnabled()
         from inkstruct.document.flow_template import PageLayout
-        layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i, plotter_alignment=PageAlignment((5,5)))
+        layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i,
+                                   plotter_alignment=PageAlignment((4+i, 3+2*i)) if i != 3 else None)
                         for i in range(1,5))
         cycle = FlowTemplate(kind="custom", layouts=layouts, loop_pages=("1","2","3","4"))
         nine = replace(snapshot, snapshot_id="nine", pages=tuple(replace(pages[0], index=i) for i in range(9)))
@@ -192,20 +215,20 @@ def exercise(workspace):
         with patch.object(AlignmentDialog, "exec", capture_page):
             click(panel, panel.align_button)
         count = len(serial.commands)
-        for i in (4,3,8):
-            if i == 4:
-                panel.page_list.setCurrentRow(i)
-            else:
-                panel.follow_page(i)
+        for i in (4, 3, 2, 8):
+            panel.follow_page(i)
             assert panel.progress.isHidden()
-            if i == 3:
+            if i == 2:
                 assert panel.registration is None and not panel.write_button.isEnabled()
-                assert "第 4 页未对位" == panel.alignment_status.text()
-                assert "已对位" not in panel.report.text()
+                assert "PDF 第 3 页" in panel.alignment_status.text() and "缺少纸面原点" in panel.alignment_status.text()
+                assert "模板缺纸面原点" in panel.page_list.item(i).text()
             else:
-                assert panel.job.index == i and panel.registration.origin == (40.,38.)
+                shift = i % 4
+                assert panel.job.index == i and panel.registration.origin == (40.+shift, 38.+2*shift)
+                assert panel.job.strokes[0].points == ((41., 40.), (43., 42.))
                 assert all(text in panel.alignment_status.text() for text in
                            (f"第 {i+1} 页已沿用", "PDF 第 1 页", "本稿第 1 页登记"))
+        assert panel.batch_pages() == [0, 1, 3, 4, 5, 7, 8]
         assert len(serial.commands) == count
         def ordinary_alignment(dialog):
             dialog.fixture.setChecked(False)
@@ -217,6 +240,20 @@ def exercise(workspace):
         assert panel.job is not None and panel.inherited_placement is None
         panel.follow_page(4)
         assert panel.job.index == 4 and "本次连接" in panel.alignment_status.text()
+        # A partial loop starting at a missing layout must begin on the first configured sheet.
+        partial = replace(cycle, loop_pages=("3", "2", "1", "4"))
+        panel.set_document(nine, 1, True, partial)
+        with patch.object(AlignmentDialog, "exec", ordinary_alignment):
+            click(panel, panel.align_button)
+        panel.scope.setCurrentIndex(1)
+        assert panel.page_list.currentRow() == 1
+        confirmations = []
+        panel.confirm = lambda title, text, *args: confirmations.append(text) or True
+        click(panel, panel.write_button)
+        assert "跳过缺少纸面原点的第 1、5、9 页" in confirmations[-1]
+        assert panel.completed_pages == {1} and panel.job.index == 2
+        assert panel.pending_pages == [3, 5, 6, 7]
+        panel.stop()
         panel.set_document(snapshot, 0, True, template)
         first_datum = panel.profile.datum.id
     finally:
