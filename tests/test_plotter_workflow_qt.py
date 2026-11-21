@@ -160,8 +160,21 @@ def exercise(folder):
         assert not p.write_button.isEnabled()
         p.use_alignment(PageAlignment((5.,5.)),(4.,3.))
         p.confirm=lambda *_:True
+        def estimated():
+            return p.estimate_label.text().startswith("本页预计剩余")
+        end = monotonic() + 5
+        while not estimated() and monotonic() < end:
+            app.processEvents()
+            sleep(.003)
+        assert estimated() and f"剩余抬笔 {8-done} 次" in p.route_stats.text()
+        seen = []
+        p.worker.progress.connect(lambda current, total: seen.append((current, p.base_estimate)))
         p.write_button.click()
         wait(p)
+        assert [current for current, _ in seen] == list(range(done+1, 9))
+        values = [seconds for _, seconds in seen]
+        assert all(a > b for a,b in zip(values, values[1:])) and values[-1] == 0
+        assert p.estimate_label.text() == "本页预计剩余 0 分 0 秒"
         assert mock.commands.count(b"G1 Z-0.8 F5000\n") == 8-done
         assert not p.journal.path.exists() and p.timing_path.exists()
         assert mock.position == [4., 3., 0.] and "可以取纸" in p.report.text()

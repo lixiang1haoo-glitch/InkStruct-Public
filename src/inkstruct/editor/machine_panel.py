@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from time import monotonic
 from dataclasses import asdict, replace
-from math import hypot
+from math import dist, hypot
 from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -198,6 +198,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.placement_work = PageWork(self, self.page_executor)
         self.session_work = PageWork(self, self.page_executor)
         self.estimate_work = PageWork(self, self.page_executor)
+        self.page_timing = None
+        self.run_start = 0
         self.prepared = None
         self.preview_source = None
 
@@ -673,6 +675,7 @@ class MachinePanel(QtWidgets.QWidget):
         device_id = self.profile.id if self.profile else None
         key = self.store.path.parent, page.index, device_id
         self.estimate_work.cancel()
+        self.page_timing = None
         if key not in self.session_work.cache:
             self.prepared = self.paper_page = self.journal = None
             self.done, self.uncertain = 0, False
@@ -765,27 +768,50 @@ class MachinePanel(QtWidgets.QWidget):
     def update_estimate(self):
         if not self.paper_page or not self.paper_page.strokes or not self.profile:
             self.estimate_work.cancel()
+            self.page_timing = None
             self.estimate_label.clear()
             self.route_stats.clear()
             return
-        start = tuple(self.device.position[:2]) if self.job and self.device else None
         key = (self.raw_page.index, self.paper_page is self.raw_page,
                self.journal.route_version if self.journal else ROUTING_VERSION,
-               self.job.registration if self.job else None, self.done, start)
+               self.job.registration if self.job else None)
         profile_key = sha256(f"{self.profile.id}|{self.profile.active_pen}|{self.profile.feed}".encode()).hexdigest()
         self.timing_path = self.store.path.parent / "plotter-times" / (profile_key + ".json")
         if key not in self.estimate_work.cache:
+            self.page_timing = None
             self.estimate_label.setText("正在计算本页预计用时…")
             self.route_stats.clear()
-        args = self.raw_page, self.paper_page, self.job, self.done, start
+        args = self.raw_page, self.paper_page, self.job
         self.estimate_work.request(key, measure_page, args, self.show_estimate,
                                    lambda error: self.estimate_label.setText(f"无法估算本页用时：{error}"))
 
     def show_estimate(self, measured):
-        distance, count, before, after = measured
+        self.page_timing = measured
+        self.time_factor = timing_factor(self.timing_path)
+        self.display_remaining()
+
+    def display_remaining(self):
+        timing = self.page_timing
+        if timing is None:
+            return
+        total = len(timing.remaining) - 1
+        done = total if self.raw_page.index in self.completed_pages else self.done
+        count = total - done
+        distance = timing.remaining[done]
+        start = self.device.position[:2] if self.device and self.job else None
+        if count and self.job:
+            approach = start
+            if self.busy == "write" and done > self.run_start:
+                approach = self.job.strokes[done - 1].points[-1]
+            if approach is not None:
+                distance += dist(approach, self.job.strokes[done].points[0])
         self.base_estimate = motion_seconds(distance, count, self.profile.feed)
-        seconds = round(self.base_estimate * timing_factor(self.timing_path))
+        seconds = round(self.base_estimate * self.time_factor)
         self.estimate_label.setText(f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒")
+        before, after = timing.before, timing.after
+        if start is not None:
+            before += dist(start, timing.original_start)
+            after += dist(start, timing.routed_start)
         self.route_stats.setText(f"剩余抬笔 {count} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
 
     def update_resume_hint(self):
@@ -1190,7 +1216,11 @@ class MachinePanel(QtWidgets.QWidget):
             if kind == "write":
                 self.page_return = (target, area, self.profile.feed) if target is not None else None
                 self.elapsed_start = monotonic()
-                self.run_estimate = estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2])
+                self.completed_pages.discard(job.index)
+                self.run_start = self.done = start
+                self.display_remaining()
+                self.run_estimate = (self.base_estimate if self.page_timing else
+                                     estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2]))
                 self.optimize.setEnabled(False)
             self.progress.setRange(0, len(job.strokes))
             self.progress.setFormat("%v / %m 笔 · %p%")
@@ -1224,6 +1254,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.progress.setValue(done)
         if self.busy == "write":
             self.done, self.uncertain = done, False
+            self.display_remaining()
         if done == total:
             self.message("指令已发送，正在等待设备抬笔和 Idle…")
 
@@ -1326,14 +1357,14 @@ class MachinePanel(QtWidgets.QWidget):
                     record_time(self.timing_path, monotonic() - self.elapsed_start, self.run_estimate)
             except OSError as error:
                 message += f" 本机进度或耗时记录未能更新：{error}"
+            page = self.page_list.currentRow()
+            self.completed_pages.add(page)
             self.done, self.uncertain = 0, False
             self.optimize.setEnabled(True)
             if self.journal and self.journal.route_version == LEGACY_ROUTE and not self.progress_error:
                 self.change_routing()
             else:
                 self.update_preview()
-            page = self.page_list.currentRow()
-            self.completed_pages.add(page)
             self.update_page_states()
             move, self.page_return = self.page_return, None
             control = self.worker.control
