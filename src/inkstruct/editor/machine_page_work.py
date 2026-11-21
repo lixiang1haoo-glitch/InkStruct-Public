@@ -94,6 +94,7 @@ def travel_distance(endpoints, start):
 class PageTiming:
     # From each stroke's first point to the final endpoint, excluding its approach.
     remaining: tuple[float, ...]
+    remaining_travel: tuple[float, ...]
     before: float
     after: float
     original_start: tuple[float, float]
@@ -103,17 +104,18 @@ class PageTiming:
 def measure_page(raw, routed, job):
     page = job or position_page(routed, PaperRegistration((0, 0)))
     remaining = [0.] * (len(page.strokes) + 1)
-    after = 0.
+    travel = [0.] * len(remaining)
     for i in reversed(range(len(page.strokes))):
         points = page.strokes[i].points
         gap = dist(points[-1], page.strokes[i + 1].points[0]) if i + 1 < len(page.strokes) else 0.
         ink = sum(dist(a, b) for a, b in zip(points, points[1:]))
         remaining[i] = ink + gap + remaining[i + 1]
-        after += gap
+        travel[i] = gap + travel[i + 1]
+    after = travel[0]
     before = after
     original_start = routed_start = page.strokes[0].points[0]
     if routed is not raw:
         place = page.registration.place
         original_start = place(raw.strokes[0].points[0])
         before = travel_distance(((place(s.points[0]), place(s.points[-1])) for s in raw.strokes), None)
-    return PageTiming(tuple(remaining), before, after, original_start, routed_start)
+    return PageTiming(tuple(remaining), tuple(travel), before, after, original_start, routed_start)

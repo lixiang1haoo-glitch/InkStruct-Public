@@ -56,10 +56,10 @@ def test_width_mode_and_natural_spacing_are_independent():
 
 @pytest.mark.parametrize("paper", [None, template()])
 def test_save_reopen_both_modes_and_legacy_documents(tmp_path, paper):
-    session = SourceSession("人" * 30)
-    page, style = PageProfile(width_mm=54, margin_mm=8), StyleProfile()
+    session = SourceSession("人" * 240)
+    page, style = PageProfile(width_mm=54, height_mm=54, margin_mm=8), StyleProfile()
     resolver = AssetResolver(generated=narrow_provider())
-    legacy = FlowStyle(template=paper, paragraph_align="justify", punctuation_spacing="handwriting",
+    legacy = FlowStyle(template=paper, han_spacing="full", digits_follow_latin=False, paragraph_align="justify", punctuation_spacing="handwriting",
                        latin_spacing="handwriting")
     document = parse_markdown(session, field_blocks=legacy.named_fields)
 
@@ -68,11 +68,12 @@ def test_save_reopen_both_modes_and_legacy_documents(tmp_path, paper):
         return layout_markdown(parsed, assets, page=page, style=style, flow=flow)
 
     full, compact = (render(flow) for flow in (legacy, replace(legacy, han_spacing="handwriting")))
-    assert len({f.baseline_mm for f in full.fragments}) > len({f.baseline_mm for f in compact.fragments})
+    assert sum(len({f.baseline_mm for f in p.fragments}) for p in full.pages) > sum(
+        len({f.baseline_mm for f in p.fragments}) for p in compact.pages)
     assert all(f.status == "ready" and f.ink_bounds for f in compact.fragments)
     assert [f.occurrence_id for f in full.fragments] == [o.occurrence_id for o in document.occurrences]
-    for key, flow, snapshot in (("legacy", legacy, full), ("compact", replace(legacy, han_spacing="handwriting"), compact),
-                                 ("full", replace(legacy, schema_version="inkstruct_flow_style_v6"), None)):
+    for key, flow in (("legacy", legacy), ("compact", replace(legacy, han_spacing="handwriting")),
+                      ("full", replace(legacy, schema_version="inkstruct_flow_style_v6"))):
         path = tmp_path / f"{key}.inkdoc"
         save_package(path, session, resolver, page, style, flow=flow)
         with ZipFile(path) as archive:
@@ -82,5 +83,12 @@ def test_save_reopen_both_modes_and_legacy_documents(tmp_path, paper):
         else:
             assert record["han_spacing"] == flow.han_spacing
         restored = load_package(path)
-        assert restored.flow == flow
-        assert render(restored.flow, restored.session, restored.resolver) == (snapshot or render(flow))
+        expected = render(flow.compact_body())
+        assert restored.flow == flow.compact_body()
+        assert render(restored.flow, restored.session, restored.resolver) == expected
+        if key == "legacy" and paper is None:
+            assert len(full.pages) > len(expected.pages)
+        save_package(path, restored.session, restored.resolver, page, style, flow=restored.flow,
+                     expected_hash=restored.file_hash)
+        reopened = load_package(path)
+        assert render(reopened.flow, reopened.session, reopened.resolver) == expected

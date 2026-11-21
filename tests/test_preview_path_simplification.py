@@ -180,6 +180,7 @@ def test_acceleration_settings_redraw_live_and_preserve_export(tmp_path):
         assert canvas.preview_cache.get(canvas._key(0, FULL)) is None
         wait(lambda: canvas.preview_cache.get(canvas._key(0, FULL)) is not None)
         assert canvas.preview_cache.get(canvas._key(0, FULL)).width() > 1
+        dialog.confirm_discard = lambda: True
         dialog.reject()
         assert not canvas.render_acceleration and w.snapshot is canvas.snapshot is snapshot
 

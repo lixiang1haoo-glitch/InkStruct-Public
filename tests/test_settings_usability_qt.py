@@ -21,9 +21,7 @@ QtCore.QSettings.setPath(QtCore.QSettings.Format.IniFormat,QtCore.QSettings.Scop
 w=MixedWindow();w.timer.stop();w.show()
 d=SettingsDialog(w,category='body');d.resize(d.minimumWidth(),650);d.show();app.processEvents()
 body=d.pages['body'];scroll=body.parentWidget().parentWidget()
-details = next(b for b in body.findChildren(QtWidgets.QToolButton) if b.text() == '更多正文设置')
-assert not details.isChecked()
-details.click()
+assert not any(b.text() == '更多正文设置' for b in body.findChildren(QtWidgets.QToolButton))
 for control in [*body.flow.controls.values(),*body.headings]:
     assert not control.isHidden()
     ancestor=control.parentWidget()
@@ -68,6 +66,7 @@ math.guides.setChecked(False);assert not math.preview.show_guides
 math.guides.setChecked(True);assert math.preview.show_guides
 before=math.controls['em_mm'].value();wheel(math.controls['em_mm'])
 assert math.controls['em_mm'].value()==before
+d.confirm_discard=lambda:True
 math.controls['em_mm'].setFocus();QtTest.QTest.keyClick(math.controls['em_mm'],QtCore.Qt.Key_Escape)
 app.processEvents();assert not d.isVisible() and not math.isHidden()
 d.show();app.processEvents();assert math.isVisible()

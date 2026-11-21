@@ -20,7 +20,6 @@ from .settings_pages import (
     embed,
     label,
     scroll_page,
-    section,
 )
 from .theme import set_tone
 
@@ -49,7 +48,7 @@ CATEGORIES = (
 
 
 class BodyPage(QtWidgets.QWidget):
-    def __init__(self, owner, *, for_document=False):
+    def __init__(self, owner):
         super().__init__()
         self.owner = owner
         column = QtWidgets.QVBoxLayout(self)
@@ -64,34 +63,6 @@ class BodyPage(QtWidgets.QWidget):
         self.dialect.setCurrentIndex(self.dialect.findData(owner.flow.markdown_dialect))
         form.addRow("内容模式", self.mode)
         form.addRow("Markdown 格式", self.dialect)
-        self.han_spacing = QtWidgets.QComboBox()
-        self.han_spacing.setObjectName("han_spacing")
-        self.han_spacing.setAccessibleName("汉字间距")
-        self.han_spacing.addItem("整字宽", "full")
-        self.han_spacing.addItem("按笔迹紧凑排列", "handwriting")
-        self.han_spacing.setCurrentIndex(self.han_spacing.findData(owner.flow.han_spacing))
-        self.han_spacing.setToolTip("按笔迹宽度安排汉字，保留字形大小和基线。自然书写可独立调节字距变化。")
-        form.addRow("汉字间距", self.han_spacing)
-        self.latin_spacing = QtWidgets.QComboBox()
-        self.latin_spacing.addItem("按笔迹宽度（推荐）", "handwriting")
-        self.latin_spacing.addItem("保留采集位置留白（旧版）", "capture")
-        self.latin_spacing.setCurrentIndex(self.latin_spacing.findData(owner.flow.latin_spacing))
-        self.latin_spacing.setAccessibleName("字母与数字间距")
-        self.latin_spacing.setToolTip("按笔迹宽度排列英文字母和正文数字，保留字形大小和基线。公式、表格数字和代码各自排版。")
-        self.digit_spacing_edited = False
-        self.latin_spacing.currentIndexChanged.connect(self.record_digit_spacing_edit)
-        form.addRow("字母与数字间距", self.latin_spacing)
-        if for_document:
-            self.digits_follow = QtWidgets.QCheckBox("正文数字采用字母间距")
-            self.digits_follow.setChecked(owner.flow.digits_follow_latin)
-            form.addRow(self.digits_follow)
-        self.punctuation_spacing = QtWidgets.QComboBox()
-        self.punctuation_spacing.addItem("按笔迹紧凑排列（推荐）", "handwriting")
-        self.punctuation_spacing.addItem("保留采集位置留白（旧版）", "capture")
-        self.punctuation_spacing.setCurrentIndex(self.punctuation_spacing.findData(owner.flow.punctuation_spacing))
-        self.punctuation_spacing.setAccessibleName("标点间距")
-        self.punctuation_spacing.setToolTip("中英文标点按实际笔迹宽度排列，不预留半字或整字空位；保留最小笔迹间距。公式和代码不受影响；旧文档不自动切换。")
-        form.addRow("标点间距", self.punctuation_spacing)
         self.paragraph_align = QtWidgets.QComboBox()
         self.paragraph_align.setObjectName("paragraph_align")
         self.paragraph_align.setAccessibleName("正文对齐")
@@ -99,8 +70,6 @@ class BodyPage(QtWidgets.QWidget):
         self.paragraph_align.addItem("左对齐（保留行尾空白）", "left")
         self.paragraph_align.setCurrentIndex(self.paragraph_align.findData(owner.flow.paragraph_align))
         self.paragraph_align.setToolTip("自动折行时，将余量分摊到汉字间隙、词间空格及公式边界；段尾与手动换行不拉伸，英文单词及公式内部不拆开。")
-        if not for_document:
-            form.addRow("正文对齐", self.paragraph_align)
         variation = owner.flow.han_variation
         self.original_variation = variation
         self.upgrade_variation = False
@@ -141,8 +110,7 @@ class BodyPage(QtWidgets.QWidget):
             self.upgrade_natural = QtWidgets.QPushButton("使用新版自然书写")
             self.upgrade_natural.clicked.connect(self.choose_natural_version)
             natural_form.addRow(self.upgrade_natural)
-        if not for_document:
-            column.addLayout(form)
+        column.addLayout(form)
         self.style = ProfileForm(
             owner.style,
             [
@@ -154,6 +122,7 @@ class BodyPage(QtWidgets.QWidget):
                 ]
             ],
         )
+        column.addWidget(label("正文"))
         column.addWidget(self.style)
         self.flow = ProfileForm(
             owner.flow,
@@ -168,19 +137,16 @@ class BodyPage(QtWidgets.QWidget):
                 for k, title in [
                     ("paragraph_gap_mm", "段距"),
                     ("first_line_indent_mm", "首行缩进"),
-                    ("heading_gap_mm", "标题段距"),
                     ("list_indent_mm", "列表缩进"),
                     ("quote_indent_mm", "引用缩进"),
                 ]
             ],
         )
-        if for_document:
-            self.flow.layout().insertRow(1, "正文对齐", self.paragraph_align)
+        self.flow.layout().insertRow(1, "正文对齐", self.paragraph_align)
+        column.addWidget(label("段落"))
         column.addWidget(self.flow)
-        if not for_document:
-            column.addWidget(natural)
-        headings = QtWidgets.QWidget()
-        heading_form = QtWidgets.QFormLayout(headings)
+        self.heading_group = ProfileForm(owner.flow, [("heading_gap_mm", "标题段距", 0, 100, " mm")])
+        heading_form = self.heading_group.layout()
         self.headings, self.initial_headings = [], []
         for i, value in enumerate(owner.flow.heading_scales, 1):
             control = CompactSpinBox()
@@ -192,18 +158,9 @@ class BodyPage(QtWidgets.QWidget):
             heading_form.addRow(f"H{i} 标题字号", control)
             self.headings.append(control)
             self.initial_headings.append(control.value())
-        if for_document:
-            extra = QtWidgets.QWidget()
-            details = QtWidgets.QVBoxLayout(extra)
-            details.setContentsMargins(0, 0, 0, 0)
-            details.addLayout(form)
-            details.addWidget(natural)
-            details.addWidget(label("标题字号"))
-            details.addWidget(headings)
-            section(column, "更多正文设置", extra)
-        else:
-            column.addWidget(label("标题字号"))
-            column.addWidget(headings)
+        column.addWidget(label("标题"))
+        column.addWidget(self.heading_group)
+        column.addWidget(natural)
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
         column.addStretch()
         compact_form_parameters(self)
@@ -221,9 +178,7 @@ class BodyPage(QtWidgets.QWidget):
         return self.style.configuration(), {k: getattr(flow, k) for k in self.flow.controls} | {
             "heading_scales": headings,
             "markdown_dialect": self.dialect.currentData(),
-            "han_spacing": self.han_spacing.currentData(),
-            "latin_spacing": self.latin_spacing.currentData(),
-            "punctuation_spacing": self.punctuation_spacing.currentData(),
+            "heading_gap_mm": self.heading_group.configuration().heading_gap_mm,
             "paragraph_align": self.paragraph_align.currentData(),
             "han_variation": self.variation_configuration(),
         }
@@ -232,9 +187,6 @@ class BodyPage(QtWidgets.QWidget):
         self.upgrade_variation = True
         self.upgrade_natural.setText("已选择新版算法")
         self.upgrade_natural.setEnabled(False)
-
-    def record_digit_spacing_edit(self, *_):
-        self.digit_spacing_edited = True
 
     def variation_configuration(self):
         original = self.original_variation
@@ -250,10 +202,7 @@ class BodyPage(QtWidgets.QWidget):
         self.flow.reset_defaults()
         self.mode.setCurrentIndex(0)
         self.dialect.setCurrentIndex(0)
-        self.han_spacing.setCurrentIndex(0)
-        self.latin_spacing.setCurrentIndex(0)
-        self.record_digit_spacing_edit()
-        self.punctuation_spacing.setCurrentIndex(0)
+        self.heading_group.reset_defaults()
         self.paragraph_align.setCurrentIndex(0)
         self.han_enabled.setChecked(False)
         self.han_seed.setValue(0)
@@ -535,7 +484,8 @@ class SettingsDialog(QtWidgets.QDialog):
         self.save_button.setVisible(not about)
         self.save_button.setEnabled(bool(section.pending))
         self.save_button.setText(self.ACTIONS[self.scope])
-        self.close_button.setText("取消" if any(section.pending for section in self.sections.values()) else "关闭")
+        for index, (key, title) in enumerate(self.SCOPES):
+            self.scope_picker.setTabText(index, title + (" ●" if self.sections[key].pending else ""))
 
     def report(self, message, *, error=False):
         self.error.setText(message)
@@ -558,14 +508,37 @@ class SettingsDialog(QtWidgets.QDialog):
             return False
 
     def accept(self):
-        if not self.sections[self.scope].pending or self.apply():
+        if self.sections[self.scope].pending and not self.apply():
+            return
+        if not any(section.pending for section in self.sections.values()):
             super().accept()
+
+    def confirm_discard(self):
+        names = [title for key, title in self.SCOPES if self.sections[key].pending]
+        if not names:
+            return True
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("设置尚未保存")
+        box.setText("以下范围有未保存的修改：" + "、".join(names))
+        back = box.addButton("返回编辑", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+        discard = box.addButton("放弃修改并关闭", QtWidgets.QMessageBox.ButtonRole.DestructiveRole)
+        box.setDefaultButton(back)
+        box.setEscapeButton(back)
+        box.exec()
+        return box.clickedButton() == discard
 
     def reject(self):
         if self.confirmation is not None:
             self.cancel_copy()
-        else:
+        elif self.confirm_discard():
             super().reject()
+
+    def closeEvent(self, event):
+        if self.confirm_discard():
+            super().reject()
+            event.accept()
+        else:
+            event.ignore()
 
     def reset_current(self):
         page = self.pages[self.current]
@@ -616,7 +589,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
 def layout_settings_page(owner, key, *, for_document=False, defaults=False):
     if key == "body":
-        return BodyPage(owner, for_document=for_document)
+        return BodyPage(owner)
     if key in {"table", "image"}:
         page = ElementPage(key, owner.document, owner.flow, scrollable=False)
         page.scope.hide()

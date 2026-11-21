@@ -17,8 +17,7 @@ class LayoutDefaults:
     page: PageProfile = field(default_factory=PageProfile)
     style: StyleProfile = field(default_factory=StyleProfile)
     flow: FlowStyle = field(default_factory=lambda: FlowStyle(
-        paragraph_align="justify", latin_spacing="handwriting", digits_follow_latin=True,
-        punctuation_spacing="handwriting", math=MathStyle.handwriting()))
+        paragraph_align="justify", math=MathStyle.handwriting()))
     mode: str = "markdown"
     run: str = ""
     symbols: str = ""
@@ -44,10 +43,8 @@ class GlobalDefaultsStore:
     KEY = "layout_defaults_v1"
     ORDINARY_KEY = "ordinary_template_v1"
     FRACTION_DEFAULT_KEY = "fraction_sample_default_v1"
-    PUNCTUATION_DEFAULT_KEY = "punctuation_handwriting_default_v1"
     MATH_DEFAULT_KEY = "compact_math_default_v1"
     JUSTIFY_DEFAULT_KEY = "justify_wrapped_default_v1"
-    DIGIT_DEFAULT_KEY = "body_digit_spacing_default_v1"
     PREVIEW_ACCELERATION_KEY = "preview_render_acceleration_v1"
 
     @staticmethod
@@ -127,7 +124,7 @@ class GlobalDefaultsStore:
             result=LayoutDefaults(
                 PageProfile(**data["page"]),
                 StyleProfile(**data["style"]),
-                FlowStyle(**data["flow"]),
+                FlowStyle(**data["flow"]).compact_body(),
                 data["mode"],
                 data["run"],
                 data["symbols"],
@@ -146,9 +143,6 @@ class GlobalDefaultsStore:
             if (not self.settings.value(self.FRACTION_DEFAULT_KEY, False, type=bool)
                     and result.flow.math.fraction_source == "geometric"):
                 result = replace(result, flow=replace(result.flow, math=replace(result.flow.math, fraction_source="sample")))
-            if (not self.settings.value(self.PUNCTUATION_DEFAULT_KEY, False, type=bool)
-                    and result.flow.punctuation_spacing == "capture"):
-                result = replace(result, flow=replace(result.flow, punctuation_spacing="handwriting"))
             if (not self.settings.value(self.MATH_DEFAULT_KEY, False, type=bool)
                     and result.flow.math.schema_version == "inkstruct_math_style_v1"):
                 old_math = result.flow.math
@@ -161,9 +155,6 @@ class GlobalDefaultsStore:
             if ("paragraph_align" not in data["flow"]
                     and not self.settings.value(self.JUSTIFY_DEFAULT_KEY, False, type=bool)):
                 result = replace(result, flow=replace(result.flow, paragraph_align="justify"))
-            if ("digits_follow_latin" not in data["flow"]
-                    and not self.settings.value(self.DIGIT_DEFAULT_KEY, False, type=bool)):
-                result = replace(result, flow=replace(result.flow, digits_follow_latin=True))
             return result,None
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             # Preserve the original record. Only an explicit Apply can replace it.
@@ -200,10 +191,8 @@ class GlobalDefaultsStore:
             current.setValue(self.ORDINARY_KEY, template_json(template))
         current.setValue(self.KEY, raw)
         current.setValue(self.FRACTION_DEFAULT_KEY, True)
-        current.setValue(self.PUNCTUATION_DEFAULT_KEY, True)
         current.setValue(self.MATH_DEFAULT_KEY, True)
         current.setValue(self.JUSTIFY_DEFAULT_KEY, True)
-        current.setValue(self.DIGIT_DEFAULT_KEY, True)
         current.sync()
         if current.status() != QtCore.QSettings.Status.NoError:
             raise OSError("全局默认保存失败，请检查配置目录的写入权限")
@@ -224,12 +213,9 @@ def document_flow(defaults, current, *, apply_template=False):
     )
 
 
-def apply_to_document(editor, defaults, *, resources=None, apply_template=False, apply_page=False,
-                      apply_digit_spacing=False):
+def apply_to_document(editor, defaults, *, resources=None, apply_template=False, apply_page=False):
     """Explicitly copy default parameters, retaining per-element state and assets."""
     flow = document_flow(defaults, editor.flow, apply_template=apply_template)
-    if not apply_digit_spacing and not editor.flow.digits_follow_latin:
-        flow = replace(flow, digits_follow_latin=False, schema_version=editor.flow.schema_version)
     page = defaults.page if apply_page else editor.page
     changed = (flow, defaults.style, page, defaults.mode) != (
         editor.flow,

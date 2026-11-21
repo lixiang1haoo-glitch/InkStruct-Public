@@ -1,3 +1,3 @@
 """Immutable, portable handwriting resources for InkStruct 0.1."""
 
-APP_VERSION = "0.1.136"
+APP_VERSION = "0.1.137"
