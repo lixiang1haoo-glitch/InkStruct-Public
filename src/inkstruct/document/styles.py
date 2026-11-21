@@ -1,7 +1,7 @@
 """Versioned flow settings; independent from the legacy plain-text style profile."""
 
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from ..math.style import MathStyle
 from .code_style import CodeStyle
@@ -49,12 +49,18 @@ class FlowStyle:
     footnote: FootnoteStyle = field(default_factory=FootnoteStyle)
     markdown_dialect: str = "markdown"
     glyph_corrections: tuple[GlyphCorrection, ...] = ()
-    latin_spacing: str = "capture"
-    punctuation_spacing: str = "capture"
+    latin_spacing: str = "handwriting"
+    punctuation_spacing: str = "handwriting"
     paragraph_align: str = "left"
     han_variation: HanVariation = field(default_factory=HanVariation)
-    han_spacing: str = "full"
-    digits_follow_latin: bool = False
+    han_spacing: str = "handwriting"
+    digits_follow_latin: bool = True
+
+    def compact_body(self):
+        if self.han_spacing == self.latin_spacing == self.punctuation_spacing == "handwriting" and self.digits_follow_latin:
+            return self
+        return replace(self, han_spacing="handwriting", latin_spacing="handwriting",
+                       punctuation_spacing="handwriting", digits_follow_latin=True)
 
     def layout_record(self):
         record = asdict(self)

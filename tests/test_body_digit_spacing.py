@@ -51,7 +51,7 @@ def test_package_round_trip_and_layout_exclusions(tmp_path):
     source = SourceSession(TEXT + '\n\n# 2024\n\n|2024|\n|---|\n|12|\n\n`2024` $2024$\n')
     parsed = parse_markdown(source)
     page, style, assets = PageProfile(), StyleProfile(), resolver()
-    legacy = FlowStyle(latin_spacing='handwriting')
+    legacy = FlowStyle(latin_spacing='handwriting', digits_follow_latin=False)
     compact = replace(legacy, digits_follow_latin=True)
     capture = replace(compact, latin_spacing='capture')
 
@@ -66,7 +66,7 @@ def test_package_round_trip_and_layout_exclusions(tmp_path):
         if a.span.start >= len(TEXT):
             assert a == b
     assert full.fragments[1].x_mm > tight.fragments[1].x_mm
-    assert render(parsed, assets, capture).fragments == render(parsed, assets, FlowStyle()).fragments
+    assert render(parsed, assets, compact).fragments == render(parsed, assets, FlowStyle()).fragments
 
     for flow in (legacy, compact, capture):
         path = tmp_path / f'{flow.schema_version}-{flow.latin_spacing}.inkdoc'
@@ -75,5 +75,5 @@ def test_package_round_trip_and_layout_exclusions(tmp_path):
             stored = json.loads(archive.read('styles.json'))['flow']
         assert ('digits_follow_latin' in stored) == flow.digits_follow_latin
         loaded = load_package(path)
-        assert loaded.flow == flow
-        assert render(parse_markdown(loaded.session), loaded.resolver, loaded.flow) == render(parsed, assets, flow)
+        assert loaded.flow == flow.compact_body()
+        assert render(parse_markdown(loaded.session), loaded.resolver, loaded.flow) == render(parsed, assets, flow.compact_body())

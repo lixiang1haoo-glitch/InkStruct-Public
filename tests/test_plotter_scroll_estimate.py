@@ -137,6 +137,7 @@ def exercise(folder):
             seconds = round(expected_seconds)
             assert panel.estimate_label.text() == f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒"
             assert "剩余抬笔 53 次" in panel.route_stats.text()
+            assert "剩余空走" in panel.route_stats.text() and not panel.route_stats.isHidden()
             calls_before = len(calls)
             with patch.object(machine_panel, "timing_factor", side_effect=AssertionError("progress read disk")):
                 held = panel.estimate_label.text()

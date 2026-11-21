@@ -114,8 +114,8 @@ def test_export_dialog_ranges_and_confirmations(snapshot, monkeypatch):
     assert all(control.isVisible() for control in (dialog.optimize, dialog.tables,
                                                    dialog.registration, *dialog.scales))
     dialog.range.setCurrentIndex(dialog.range.findData('current'))
-    dialog.run_check()
-    assert dialog.checked.pages == (1,) and '第 2 页 · image.png' in dialog.report.toPlainText()
+    dialog.save.click()
+    assert dialog.isVisible() and dialog.checked.pages == (1,) and '第 2 页 · image.png' in dialog.report.toPlainText()
     assert not dialog.save.isEnabled()
     dialog.confirm_images.setChecked(True)
     assert dialog.save.isEnabled()
@@ -127,15 +127,14 @@ def test_export_dialog_ranges_and_confirmations(snapshot, monkeypatch):
     assert dialog.checked.pages == (0, 2) and dialog.save.isEnabled() and dialog.format.currentData() == 'png'
     dialog.purpose.setCurrentIndex(dialog.purpose.findData('pdf'))
     assert dialog.advanced_panel.isHidden()
-    dialog.run_check()
-    assert dialog.checked.pages == (0, 1, 2) and dialog.range.isHidden()
-    dialog.accept()
+    dialog.save.click()
+    assert dialog.checked.pages == (0, 1, 2) and not dialog.isVisible()
     assert dialog.selection[0] == 'pdf'
 
     damaged = replace(snapshot, diagnostics=(Diagnostic('asset-missing', '缺字示例', SourceSpan(0, 0)),))
     partial = DocumentExportDialog(damaged, None, None, 1, False)
     partial.show()
-    partial.run_check()
+    partial.save.click()
     assert not partial.save.isEnabled() and partial.problems.isVisible() and partial.partial.isVisible()
     answers = iter([QtWidgets.QMessageBox.StandardButton.Cancel, QtWidgets.QMessageBox.StandardButton.Yes])
     texts = []

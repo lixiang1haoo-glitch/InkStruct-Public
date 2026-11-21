@@ -1476,7 +1476,10 @@ def verify_windows_style(window, app, out, wait, font_path=None):
     dialog.select("body", scope="defaults")
     assert dialog.save_button.text() == "保存新建默认" and dialog.copy_button.isHidden()
     dialog.select("body", scope="document")
-    spin = dialog.pages["body"].style.controls["em_mm"]
+    body = dialog.pages["body"]
+    assert body.heading_group.isVisible() and body.han_spacing_strength.isVisible()
+    assert not any(hasattr(body, name) for name in ("han_spacing", "latin_spacing", "digits_follow", "punctuation_spacing"))
+    spin = body.style.controls["em_mm"]
     editor = window.editor
     dialog.select("math")
     math = dialog.pages["math"]
@@ -1536,7 +1539,9 @@ def verify_windows_style(window, app, out, wait, font_path=None):
             before = spin.value()
             QtTest.QTest.mouseClick(spin, QtCore.Qt.MouseButton.LeftButton, pos=step.center())
             assert not step.isEmpty() and spin.value() == before + spin.singleStep()
+            assert "●" in dialog.scope_picker.tabText(0)
             spin.setValue(before)
+            assert "●" not in dialog.scope_picker.tabText(0)
             about = verify_about_page(dialog, app)
             assert (QtGui.QColor(about["background"]).lightness() < 128) == dark
             assert (QtGui.QColor(about["ink"]).lightness() > 128) == dark
@@ -1564,7 +1569,7 @@ def verify_windows_style(window, app, out, wait, font_path=None):
             "sample_library_variant_wrap": True,
             "inkfont_v1": exchange,
             "layout_export_controls": True,
-            "document_layout_controls": True,
+            "document_layout_controls": True, "expanded_body_and_draft_tabs": True,
             "machine_control_entry": True,
             "paper_corner_recovery": True,
             "plotter_motion_settings": True,
@@ -1574,7 +1579,7 @@ def verify_windows_style(window, app, out, wait, font_path=None):
         }
         (out / "verification.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
     finally:
-        dialog.reject()
+        dialog.done(QtWidgets.QDialog.DialogCode.Rejected)
         window.editor.timer.stop()
         if window.editor.cancelled:
             window.editor.cancelled.set()

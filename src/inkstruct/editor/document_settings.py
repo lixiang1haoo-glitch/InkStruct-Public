@@ -9,7 +9,7 @@ from ..document.flow_template import FlowTemplate
 from ..document.markdown import parse_markdown
 from ..global_defaults import GlobalDefaultsStore
 from ..settings_dialog import CATEGORIES, layout_settings_page
-from ..settings_pages import CompactSpinBox, acceptable, compact_form_parameters, label, scroll_page, section
+from ..settings_pages import CompactSpinBox, acceptable, compact_form_parameters, label, scroll_page
 
 
 LAYOUT_TITLES = {"body": "正文与段落", "page": "页面设置"}
@@ -23,8 +23,7 @@ NAMES = {
     "paragraph_gap_mm": "段距", "paragraph_align": "正文对齐", "first_line_indent_mm": "首行缩进",
     "heading_gap_mm": "标题段距", "list_indent_mm": "列表缩进", "quote_indent_mm": "引用缩进",
     "heading_scales": "标题字号倍率", "markdown_dialect": "Markdown 格式",
-    "han_spacing": "汉字间距", "latin_spacing": "字母与数字间距", "digits_follow_latin": "数字间距跟随字母",
-    "punctuation_spacing": "标点间距", "enabled": "启用自然书写",
+    "enabled": "启用自然书写",
     "strength": "笔画与倾斜变化", "size_strength": "字形大小变化",
     "spacing_strength": "字距变化", "baseline_strength": "基线上下变化", "seed": "随机种子",
     "mode": "内容模式", "advance_mm": "固定字格宽度", "tab_columns": "制表位列数", "wrap_lines": "宽行换行",
@@ -87,8 +86,9 @@ class PageSetup(QtWidgets.QWidget):
         self.direction.addItems(["纵向", "横向"])
         form.addRow("纸张", self.paper)
         form.addRow("方向", self.direction)
-        dimensions = QtWidgets.QWidget()
-        dimension_form = QtWidgets.QFormLayout(dimensions)
+        self.size_label = label("")
+        form.addRow("尺寸", self.size_label)
+        self.form = form
         for i, key in enumerate(PAGE_FIELDS):
             if self.uniform and i > 2:
                 break
@@ -102,31 +102,41 @@ class PageSetup(QtWidgets.QWidget):
             control.setSuffix(" mm")
             control.setValue(self.original[key])
             self.controls[key] = control
-            (dimension_form if i < 2 else form).addRow(title, control)
+            form.addRow(title, control)
         self.initial = {key: control.value() for key, control in self.controls.items()}
+        width, height = (self.controls[key].value() for key in PAGE_FIELDS[:2])
+        size = tuple(sorted((width, height)))
+        self.paper.setCurrentText(next((name for name, dims in PAPER_SIZES.items() if dims == size), "自定义"))
         self.paper.currentTextChanged.connect(self.choose_paper)
         self.direction.currentIndexChanged.connect(self.choose_direction)
         for key in PAGE_FIELDS[:2]:
-            self.controls[key].valueChanged.connect(self.sync_paper)
-        self.sync_paper()
+            self.controls[key].valueChanged.connect(self.show_dimensions)
+        self.show_dimensions()
         column.addLayout(form)
-        section(column, "纸张尺寸", dimensions)
         compact_form_parameters(self)
         column.addStretch()
 
-    def sync_paper(self):
+    def show_dimensions(self):
         width, height = (self.controls[key].value() for key in PAGE_FIELDS[:2])
-        with QtCore.QSignalBlocker(self.paper), QtCore.QSignalBlocker(self.direction):
-            size = tuple(sorted((width, height)))
-            self.paper.setCurrentText(next((key for key, value in PAPER_SIZES.items() if value == size), "自定义"))
+        custom = self.paper.currentText() == "自定义"
+        self.size_label.setText(f"{width:g} × {height:g} mm")
+        self.form.setRowVisible(self.size_label, not custom)
+        for key in PAGE_FIELDS[:2]:
+            self.form.setRowVisible(self.controls[key], custom)
+        with QtCore.QSignalBlocker(self.direction):
             self.direction.setCurrentIndex(int(width > height))
 
     def choose_paper(self, name):
-        if name in PAPER_SIZES:
-            width, height = PAPER_SIZES[name]
-            if self.direction.currentIndex():
-                width, height = height, width
-            self.set_dimensions(width, height)
+        if name == "自定义":
+            self.show_dimensions()
+            width = self.controls["width_mm"]
+            width.setFocus()
+            width.selectAll()
+            return
+        width, height = PAPER_SIZES[name]
+        if self.direction.currentIndex():
+            width, height = height, width
+        self.set_dimensions(width, height)
 
     def choose_direction(self, index):
         width, height = (self.controls[key].value() for key in PAGE_FIELDS[:2])
@@ -137,7 +147,7 @@ class PageSetup(QtWidgets.QWidget):
         with QtCore.QSignalBlocker(self.controls["width_mm"]):
             self.controls["width_mm"].setValue(width)
         self.controls["height_mm"].setValue(height)
-        self.sync_paper()
+        self.show_dimensions()
 
     def configuration(self):
         if not self.editable:
@@ -239,7 +249,6 @@ class LayoutSettings(QtWidgets.QStackedWidget):
     def values(self, key, page):
         if key == "body":
             style, flow = page.configuration()
-            flow["digits_follow_latin"] = page.digits_follow.isChecked()
             return asdict(style) | flow | {"mode": page.mode.currentData()}
         if key == "page":
             return page.configuration()

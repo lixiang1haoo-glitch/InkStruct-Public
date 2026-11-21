@@ -308,7 +308,7 @@ def load_package(path: Path) -> LoadedDocument:
                 raise ValueError("Selected glyph is missing from the embedded resource set")
         flow_record = dict(styles.get("flow", {}))
         flow_record.setdefault("math", {"fraction_source": "geometric"})
-        flow = FlowStyle(**flow_record)
+        flow = FlowStyle(**flow_record).compact_body()
         if flow.named_fields != (manifest["schema_version"] == TEMPLATE_VERSION):
             raise ValueError("Template and project protocol versions disagree")
         if flow.named_fields and (manifest.get("template_content_protocol") != "inkstruct_named_fields_v1"

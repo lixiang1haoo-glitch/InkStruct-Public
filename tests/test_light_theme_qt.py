@@ -329,6 +329,7 @@ page = dialog.pages["appearance"]
 assert page.theme.currentData() == "system"
 assert dialog.scope == 'app' and dialog.copy_button.isHidden()
 page.theme.setCurrentIndex(page.theme.findData("dark"))
+dialog.confirm_discard=lambda:True
 dialog.reject()
 assert theme_preference(settings) == "system"
 assert app.palette().color(QtGui.QPalette.Base).lightness() > 128

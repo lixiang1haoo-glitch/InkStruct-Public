@@ -106,7 +106,7 @@ for mode in ("source", "split", "preview"):
         assert body.paragraph_align.currentData() == "left"
         assert not dialog.save_button.isEnabled()
         body.style.controls["em_mm"].setValue(7)
-        assert dialog.close_button.text() == "取消"
+        assert "●" in dialog.scope_picker.tabText(0)
         assert window.style.em_mm == 5.123456789 and workspace_state() == original
     open_settings(cancel_drafts)
     assert workspace_state() == original
@@ -123,6 +123,12 @@ def apply_scopes(dialog):
     assert paper.paper.currentText() == "自定义" and paper.direction.currentText() == "纵向"
     assert [paper.controls[key].value() for key in ("top_mm", "right_mm", "bottom_mm", "left_mm")] == [11, 16, 19, 13]
     paper.paper.setCurrentText("A5")
+    assert paper.size_label.isVisible() and "148 × 210 mm" == paper.size_label.text()
+    paper.paper.setCurrentText("自定义")
+    app.processEvents()
+    width = paper.controls["width_mm"]
+    assert width.isVisible() and dialog.focusWidget() in (width, width.lineEdit()), dialog.focusWidget()
+    paper.paper.setCurrentText("A5")
     paper.direction.setCurrentIndex(1)
     paper.controls["top_mm"].setValue(12)
     dialog.select("table")
@@ -135,7 +141,17 @@ def apply_scopes(dialog):
     dialog.select("body", scope="document")
     assert window.canvas.render_acceleration
     assert dialog.save_button.text() == "应用到当前文档"
+    def marked():
+        return [dialog.scope_picker.tabText(i) for i in range(3) if "●" in dialog.scope_picker.tabText(i)]
+    assert marked() == ["当前文档 ●", "新建文档默认 ●", "应用偏好 ●"]
     dialog.save_button.click()
+    assert marked() == ["新建文档默认 ●", "应用偏好 ●"]
+    def answer_back():
+        box=app.activeModalWidget()
+        assert isinstance(box,QtWidgets.QMessageBox) and "新建文档默认、应用偏好" in box.text()
+        next(button for button in box.buttons() if button.text()=="返回编辑").click()
+    QtCore.QTimer.singleShot(0,answer_back)
+    assert not dialog.close() and dialog.isVisible() and len(marked())==2
     assert not dialog.save_button.isEnabled()
     wait_layout(before)
     assert window.style.em_mm == 7 and window.dirty
@@ -185,6 +201,13 @@ def apply_scopes(dialog):
     dialog.save_button.click()
     assert GlobalDefaultsStore().for_new_document()[0].flow.template.width_mm == 250
     assert window.flow.template.height_mm == 148
+    def discard():
+        box=app.activeModalWidget()
+        assert "当前文档" in box.text()
+        next(button for button in box.buttons() if button.text()=="放弃修改并关闭").click()
+    QtCore.QTimer.singleShot(0,discard)
+    assert dialog.close() and not dialog.isVisible()
+    assert window.style.em_mm == 7
 
 open_settings(apply_scopes)
 assert window.style.em_mm == 7 and window.save_project()

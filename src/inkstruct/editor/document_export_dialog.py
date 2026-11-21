@@ -73,11 +73,9 @@ class DocumentExportDialog(QtWidgets.QDialog):
         self.confirm_images = QtWidgets.QCheckBox('我确认跳过位图，保留图题和留白')
         column.addWidget(self.confirm_images)
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
-        self.check_button = buttons.addButton('检查导出', QtWidgets.QDialogButtonBox.ButtonRole.ActionRole)
         self.problems = buttons.addButton('查看问题', QtWidgets.QDialogButtonBox.ButtonRole.ActionRole)
         self.partial = buttons.addButton('仅导出可用笔迹…', QtWidgets.QDialogButtonBox.ButtonRole.ActionRole)
-        self.save = buttons.addButton('选择保存位置…', QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
-        self.check_button.clicked.connect(self.run_check)
+        self.save = buttons.addButton('导出…', QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
         self.problems.clicked.connect(self.open_problems)
         self.partial.clicked.connect(self.accept_partial)
         self.save.clicked.connect(self.accept)
@@ -92,7 +90,7 @@ class DocumentExportDialog(QtWidgets.QDialog):
             control.valueChanged.connect(self.reset_check)
         self.confirm_images.toggled.connect(self.update_save)
         self.reset_check()
-        self.check_button.setDefault(True)
+        self.save.setDefault(True)
 
     def reset_check(self, *_):
         kind = self.purpose.currentData()
@@ -106,7 +104,8 @@ class DocumentExportDialog(QtWidgets.QDialog):
         self.form.setRowVisible(self.pages, kind != 'pdf' and self.range.currentData() == 'selection')
         self.advanced_panel.setVisible(kind == 'machine')
         self.checked = None
-        self.report.setPlainText('选择用途和范围后检查导出。')
+        self.report.clear()
+        self.report.hide()
         self.confirm_images.setChecked(False)
         self.confirm_images.hide()
         self.problems.hide()
@@ -115,6 +114,7 @@ class DocumentExportDialog(QtWidgets.QDialog):
 
     def run_check(self):
         kind = self.purpose.currentData()
+        self.report.show()
         try:
             range_kind = 'all' if kind == 'pdf' else self.range.currentData()
             count = len(self.snapshot.pages)
@@ -154,7 +154,7 @@ class DocumentExportDialog(QtWidgets.QDialog):
 
     def update_save(self, *_):
         checked = self.checked
-        self.save.setEnabled(bool(checked and not checked.errors and (
+        self.save.setEnabled(checked is None or bool(not checked.errors and (
             not (checked.machine and checked.images) or self.confirm_images.isChecked())))
 
     def open_problems(self):
@@ -177,7 +177,9 @@ class DocumentExportDialog(QtWidgets.QDialog):
             super().accept()
 
     def accept(self):
-        if self.save.isEnabled():
+        if self.checked is None:
+            self.run_check()
+        if self.checked is not None and self.save.isEnabled():
             kind = self.purpose.currentData()
             format = self.format.currentData() if kind == 'page' else kind
             self.selection = (format, self.checked, self.checked.machine, self.optimize.isChecked())

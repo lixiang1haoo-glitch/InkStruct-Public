@@ -270,9 +270,9 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(pair_widget((self.preview_button, self.dry_button)))
         self.estimate_label = label("")
         write_layout.addWidget(self.estimate_label)
-        self.details_toggle = QtWidgets.QCheckBox("查看抬笔与空走详情")
-        write_layout.addWidget(self.details_toggle)
         self.route_stats = label("")
+        write_layout.addWidget(self.route_stats)
+        self.route_stats.hide()
         self.optimize = QtWidgets.QCheckBox("优化书写路径（同 SVG 导出）")
         self.optimize.setChecked(True)
         self.optimize.toggled.connect(self.change_routing)
@@ -280,9 +280,6 @@ class MachinePanel(QtWidgets.QWidget):
         self.auto_return = QtWidgets.QCheckBox("写完本页后抬笔回到原点")
         self.auto_return.clicked.connect(self.set_auto_return)
         write_layout.addWidget(self.auto_return)
-        write_layout.addWidget(self.route_stats)
-        self.route_stats.hide()
-        self.details_toggle.toggled.connect(self.route_stats.setVisible)
         self.resume_hint = label("")
         write_layout.addWidget(self.resume_hint)
         write_layout.addWidget(self.write_button)
@@ -753,6 +750,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.update_resume_hint()
             self.alignment_status.setText("正在准备当前页…")
             self.estimate_label.setText("正在计算本页预计用时…")
+            self.route_stats.hide()
             self.route_stats.clear()
             self.optimize.setEnabled(False)
             self.refresh_buttons()
@@ -838,6 +836,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.estimate_work.cancel()
             self.page_timing = None
             self.estimate_label.clear()
+            self.route_stats.hide()
             self.route_stats.clear()
             return
         key = (self.raw_page.index, self.paper_page is self.raw_page,
@@ -848,6 +847,7 @@ class MachinePanel(QtWidgets.QWidget):
         if key not in self.estimate_work.cache:
             self.page_timing = None
             self.estimate_label.setText("正在计算本页预计用时…")
+            self.route_stats.hide()
             self.route_stats.clear()
         args = self.raw_page, self.paper_page, self.job
         self.estimate_work.request(key, measure_page, args, self.show_estimate,
@@ -866,13 +866,16 @@ class MachinePanel(QtWidgets.QWidget):
         done = total if self.raw_page.index in self.completed_pages else self.done
         count = total - done
         distance = timing.remaining[done]
+        travel = timing.remaining_travel[done]
         start = self.device.position[:2] if self.device and self.job else None
         if count and self.job:
             approach = start
             if self.busy == "write" and done > self.run_start:
                 approach = self.job.strokes[done - 1].points[-1]
             if approach is not None:
-                distance += dist(approach, self.job.strokes[done].points[0])
+                gap = dist(approach, self.job.strokes[done].points[0])
+                distance += gap
+                travel += gap
         self.base_estimate = motion_seconds(distance, count, self.profile.feed)
         seconds = round(self.base_estimate * self.time_factor)
         self.estimate_label.setText(f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒")
@@ -880,7 +883,9 @@ class MachinePanel(QtWidgets.QWidget):
         if start is not None:
             before += dist(start, timing.original_start)
             after += dist(start, timing.routed_start)
-        self.route_stats.setText(f"剩余抬笔 {count} 次 · 整页空走 {before:.1f} → {after:.1f} mm")
+        self.route_stats.setText(f"剩余抬笔 {count} 次 · 剩余空走 {travel:.1f} mm")
+        self.route_stats.setToolTip(f"整页空走 {before:.1f} → {after:.1f} mm")
+        self.route_stats.show()
 
     def update_resume_hint(self):
         text = self.progress_error

@@ -58,51 +58,20 @@ if scenario=='no_op':
     assert before==(w.style,w.page,w.flow,w.source_session.atom_ids,w.resolver.selection_records())
     assert not w.dirty
     d.reject()
-elif scenario=='han_spacing':
-    from inkstruct.global_defaults import GlobalDefaultsStore
+elif scenario=='compact_body':
     from inkstruct.document.han_variation import HanVariation
-    from inkstruct.settings_dialog import BodyPage
-    w.flow=replace(w.flow, han_variation=HanVariation(enabled=True, spacing_strength=.6))
-    original=w.flow
-    store=GlobalDefaultsStore()
-    defaults,_=store.load()
-    store.save(replace(defaults,flow=replace(defaults.flow,han_variation=original.han_variation)))
-    d=SettingsDialog(w,category='body');p=d.pages['body']
-    assert isinstance(p,BodyPage) and p.han_spacing.currentData()=='full'
-    p.han_spacing.setCurrentIndex(p.han_spacing.findData('handwriting'))
-    d.copy_button.click(); d.confirm_button.click()
-    assert w.flow==original and GlobalDefaultsStore().load()[0].flow.han_spacing=='handwriting'
-    assert d.apply(),d.error.text();d.reject();ready()
-    assert w.flow.han_spacing=='handwriting' and w.flow.han_variation==original.han_variation
-    path=root/'spacing.inkdoc'
-    save_package(path,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
+    original=replace(w.flow, han_spacing='full', latin_spacing='capture', punctuation_spacing='capture',
+                     digits_follow_latin=False, han_variation=HanVariation(enabled=True, spacing_strength=.6))
+    path=root/'legacy.inkdoc'
+    save_package(path,w.source_session,w.resolver,w.page,w.style,flow=original)
     w.load_project_path(path);ready()
-    d=SettingsDialog(w,category='body');p=d.pages['body']
-    assert p.han_spacing.currentData()=='handwriting'
-    p.han_spacing.setCurrentIndex(p.han_spacing.findData('full'))
-    assert d.apply(),d.error.text();d.reject();ready()
-    assert w.flow.han_spacing=='full' and w.flow.han_variation==original.han_variation
-elif scenario=='digit_spacing':
-    from inkstruct.global_defaults import GlobalDefaultsStore
-    assert w.flow.digits_follow_latin and w.flow.latin_spacing=='handwriting'
-    old = root/'old.inkdoc'
-    flow = replace(w.flow, digits_follow_latin=False, schema_version='inkstruct_flow_style_v5')
-    save_package(old,w.source_session,w.resolver,w.page,w.style,flow=flow)
-    w.load_project_path(old);ready()
-    assert w.flow.latin_spacing=='handwriting' and not w.flow.digits_follow_latin
-    d=SettingsDialog(w,category='table')
-    assert d.apply(),d.error.text()
-    assert not w.flow.digits_follow_latin
-    d.select('body'); p=d.pages['body']
-    assert p.latin_spacing.accessibleName()=='字母与数字间距'
-    assert not p.digits_follow.isChecked()
-    p.digits_follow.setChecked(True)
-    assert d.apply(),d.error.text(); d.reject(); ready()
-    assert w.flow.digits_follow_latin
-    new=root/'new.inkdoc'
-    save_package(new,w.source_session,w.resolver,w.page,w.style,flow=w.flow)
-    w.load_project_path(new);ready()
-    assert w.flow.digits_follow_latin and w.flow.latin_spacing=='handwriting'
+    assert w.flow == original.compact_body()
+    d=SettingsDialog(w,category='body')
+    for scope in ('document','defaults'):
+        d.select('body',scope=scope);p=d.pages['body']
+        assert not any(hasattr(p, name) for name in ('han_spacing','latin_spacing','punctuation_spacing','digits_follow'))
+        assert p.mode.count()==2 and p.han_spacing_strength is not None
+    d.reject()
 elif scenario=='scopes':
     from inkstruct.global_defaults import GlobalDefaultsStore
     d=SettingsDialog(w,category='table',scope='defaults');p=d.pages['table']
@@ -171,12 +140,12 @@ elif scenario=='validation':
     assert GlobalDefaultsStore().load()[0].style.em_mm==6
     panel.sizes.setText('80,80');assert d.apply(),d.error.text()
     assert GlobalDefaultsStore().load()[0].style.em_mm==7 and w.style.em_mm==6
-    d.select('body');d.pages['body'].style.controls['em_mm'].setValue(8);d.reject()
+    d.select('body');d.pages['body'].style.controls['em_mm'].setValue(8);d.confirm_discard=lambda:True;d.reject()
     assert GlobalDefaultsStore().load()[0].style.em_mm==7
 elif scenario in {'navigation','navigation_largefont'}:
     d=SettingsDialog(w,category='body'); d.resize(980,650);d.show(); app.processEvents()
     body = d.pages['body']
-    next(b for b in body.findChildren(QtWidgets.QToolButton) if b.text() == '更多正文设置').click()
+    assert not any(b.text() == "更多正文设置" for b in body.findChildren(QtWidgets.QToolButton))
     app.processEvents()
     short_fields = (body.han_seed, body.style.controls['em_mm'], body.mode)
     widths = [field.width() for field in short_fields]
@@ -213,7 +182,7 @@ QtCore.QCoreApplication.sendPostedEvents(None,QtCore.QEvent.DeferredDelete)
 
 
 @pytest.mark.parametrize("dpi", ["1", "1.5", "2"])
-@pytest.mark.parametrize("scenario", ["no_op", "han_spacing", "digit_spacing", "scopes", "validation", "navigation", "navigation_largefont"])
+@pytest.mark.parametrize("scenario", ["no_op", "compact_body", "scopes", "validation", "navigation", "navigation_largefont"])
 def test_settings_transactions_and_navigation(tmp_path, dpi, scenario):
     result = subprocess.run(
         [sys.executable, "-c", PROGRAM, str(tmp_path), scenario],
@@ -316,7 +285,7 @@ assert collector.ui_settings_store.load()[0]==collector.ui_settings
 assert collector.single_widget.canvas.stroke_width_scale==2.5 and canvas.stroke_width_scale==3
 assert canvas.grid_scale==.8
 assert repr(canvas.trajectory.strokes)==points
-p.grid.setValue(85);d.reject()
+p.grid.setValue(85);d.confirm_discard=lambda:True;d.reject()
 assert collector.ui_settings.stroke_width_scale==2.5
 canvas.clear()
 w.editor.timer.stop()
