@@ -848,6 +848,30 @@ def test_preflight_rejects_out_of_bounds_before_any_motion():
     assert all(command in {b"?", b"$$\n", b"$I\n"} for command in serial.commands)
 
 
+def test_connect_reads_intermittent_work_offset_before_alignment():
+    serial = SimulatedGrbl()
+    reports = 0
+    def report(state, coords):
+        nonlocal reports
+        reports += 1
+        offset = "|WCO:0,0,0" if reports == 5 else ""
+        return f"<{state}|WPos:{coords}{offset}>"
+    serial.report = report
+    assert GrblLink(serial).connect().offset == (0., 0., 0.)
+    assert not any(line.startswith(b"G1") for line in serial.commands)
+
+
+def test_unrequested_hold_still_interrupts_writing():
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    serial.on_write = lambda line: setattr(serial, "held", True) if line.startswith(b"G1 X") else None
+    with pytest.raises(MachineError, match="外部暂停"):
+        link.run_page(position_page(page_fixture(), PaperRegistration((10, 20))),
+                      WorkArea(0, 0, 100, 100), MotionControl())
+    assert b"~" not in serial.commands
+
+
 def test_pause_consumes_the_hold_report_without_losing_the_pending_ack():
     serial, control, phases = SimulatedGrbl(), MotionControl(), []
     def phase(state):
@@ -857,7 +881,13 @@ def test_pause_consumes_the_hold_report_without_losing_the_pending_ack():
     link = GrblLink(serial, phase=phase)
     link.connect()
     at = b"G1 X13.0000 Y23.0000 F2500\n"
-    serial.on_write = lambda data: control.pause_requested.set() if data == at else None
+    def delay_resume(data):
+        if data == at:
+            control.pause_requested.set()
+        elif data == b"~":
+            for _ in range(3):
+                serial.responses.append(serial.report("Hold:0", ",".join(map(str, serial.position))))
+    serial.on_write = delay_resume
     placed = position_page(page_fixture(), PaperRegistration((10, 20)))
     link.run_page(placed, WorkArea(0, 0, 100, 100), control)
     first_xy = serial.commands.index(at)

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..document.schema import digest
 from ..document.flow_template import FlowTemplate, same_layout_revision
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
 from ..plotter.export import ROUTING_VERSION
@@ -24,6 +25,7 @@ from ..renderers.pages import page_draw
 from ..resource_catalog import workspace_for
 from ..settings_pages import label, scroll_page
 from ..theme import set_tone
+from .machine_alignment import DEFAULT_SETUP
 from .machine_page_work import PageWork, measure_page, prepare_page
 from .position_nudge import PositionNudge
 
@@ -194,7 +196,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.position_callback = None
         self.template = None
         self.setup_connection = None
-        self.setup = "默认摆放"
+        self.setup = DEFAULT_SETUP
         self.preview_enabled = False
         self.page_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plotter-page")
         self.placement_work = PageWork(self, self.page_executor)
@@ -939,7 +941,8 @@ class MachinePanel(QtWidgets.QWidget):
         return self.group
 
     def refresh_fixture(self):
-        from .machine_alignment import fixture_placement
+        from .machine_alignment import FixturePlacement, fixture_page, fixture_placement, page_context, session_binding
+        from ..plotter.profiles import PageAlignment
 
         self.fixture_placement = None
         try:
@@ -954,6 +957,21 @@ class MachinePanel(QtWidgets.QWidget):
                 direct = fixture_placement(self, self.template, self.snapshot, index)
                 if direct and (self.setup_connection != self.connection_id or direct.setup == self.setup):
                     self.fixture_placement = direct
+            if group and not self.fixture_placement and entry is None:
+                layout = self.template.layout(index)
+                key, size, mark, _ = page_context(self.template, layout=layout)
+                binding = session_binding(self, fixture_page(key, layout, self.snapshot, index), self.setup, mark)
+                record = self.store.session_placement(self.profile, binding, self.connection_id)
+                if record:
+                    position = self.store.placed_position(self.profile, record, connection=self.connection_id,
+                                                         offset=self.offset, datum_origin=self.frame)
+                    if position is not None:
+                        alignment = self.profile.calibrated(PageAlignment(**record["correction"]))
+                        alignment.validate_size(*size)
+                        number = record["source_page"]["number"]
+                        self.fixture_placement = FixturePlacement(alignment, position, self.setup, f"第 {number} 页实测",
+                                                                  session_only=True, measured_page=number)
+                        group.entries[layout.layout_id] = self.fixture_placement
         except (OSError, ValueError, KeyError, TypeError) as error:
             self.message(f"无法读取此页的摆放记录。{error}", error=True)
 
@@ -1000,7 +1018,12 @@ class MachinePanel(QtWidgets.QWidget):
         page = f"第 {self.raw_page.index + 1} 页" if self.raw_page else "当前页"
         if coords:
             source = self.inherited_placement
-            state = f"已沿用「{source.setup}」 · {source.source}" if source else f"已对位 · {self.setup}"
+            own = source is None or source.measured_page == self.raw_page.index + 1
+            state = "已对位" if own else "已沿用"
+            if self.setup != DEFAULT_SETUP:
+                state += f"「{self.setup}」"
+            if source:
+                state += (" · 本次连接" if source.session_only else "") + f" · {source.source}"
             self.alignment_status.setText(f"{page}{state} · 原点 X {coords.origin[0]:.3f} · Y {coords.origin[1]:.3f} mm")
         elif self.raw_page and self.missing_template_origin(self.raw_page.index):
             layout = self.template.layout(self.raw_page.index)
@@ -1122,6 +1145,36 @@ class MachinePanel(QtWidgets.QWidget):
             return self.profile.port
         return matches[0] if len(matches) == 1 else None
 
+    def reconnect_identity(self):
+        profile = self.profile
+        return digest([profile.id, profile.serial, asdict(profile.axes), profile.paper_calibration,
+                       profile.datum.id if profile.datum else None])
+
+    def remember_stopped_position(self, status):
+        if not self.connection_id or not self.profile or not self.profile.serial:
+            return
+        checkpoint = None
+        if (status and status.state in {"Idle", "Hold:0"} and not status.limits and status.position
+                and status.offset is not None and max(map(abs, status.position[:2])) > .01):
+            checkpoint = dict(identity=self.reconnect_identity(), xy=status.position[:2], offset=status.offset[:2],
+                              connection=self.connection_id, frame=self.frame, setup=self.setup)
+        self.store.exchange_checkpoint(self.profile, checkpoint)
+
+    def recover_connection(self, status):
+        saved = self.store.exchange_checkpoint(self.profile)
+        if (not saved or not self.profile.serial or saved["identity"] != self.reconnect_identity()
+                or status.state != "Idle" or status.limits or not status.position or status.offset is None
+                or max(map(abs, status.position[:2])) <= .01 or list(status.offset[:2]) != saved["offset"]
+                or dist(status.position[:2], saved["xy"]) > .01):
+            return False
+        frame = machine_point(saved["frame"]) if saved["frame"] is not None else None
+        self.connection_id = self.setup_connection = saved["connection"]
+        self.setup = saved["setup"]
+        self.frame = frame
+        if frame is not None:
+            self.worker.restore_idle_reference(status.position[:2])
+        return True
+
     def toggle_connection(self):
         if self.device is None:
             self.refresh_ports()
@@ -1237,7 +1290,8 @@ class MachinePanel(QtWidgets.QWidget):
         placement_note = ""
         if (self.done or self.uncertain) and self.saved_placement:
             old = self.saved_placement
-            placement_note = f"上次使用「{old['setup']}」，纸面原点为 {old['anchor']} mm。"
+            setup_note = f"（{old['setup']}）" if old['setup'] != DEFAULT_SETUP else ""
+            placement_note = f"上次对位{setup_note}的纸面原点为 {old['anchor']} mm。"
             if old != self.placement_details():
                 placement_note += "本次连接或对位已变化，请确认笔尖仍对准原稿的同一标记。"
         title = "原稿已对位，继续书写" if start or self.uncertain else "开始书写"
@@ -1269,7 +1323,7 @@ class MachinePanel(QtWidgets.QWidget):
                 and connection == self.connection_id):
             area = local_area if checkbox is not None and checkbox.isChecked() else None
             if self.run_job("write", start=start, local_area=area) and not self.batch_active:
-                self.completed_pages.clear()
+                self.completed_pages.difference_update([job.index, *pending])
                 self.update_page_states()
                 if multi:
                     self.batch_active = True
@@ -1416,9 +1470,21 @@ class MachinePanel(QtWidgets.QWidget):
                    "pen": "笔尖已抬起。" if self.pen_raised else "笔尖已落下。",
                    "axis-trial": "X/Y 试画完成。设备已抬笔。"}.get(kind, "已记录位置。")
         if kind in {"connect", "disconnect"}:
+            checkpoint_error = ""
+            if kind == "disconnect":
+                try:
+                    self.remember_stopped_position(getattr(self.worker, "stopped_at", None))
+                except (OSError, ValueError) as error:
+                    checkpoint_error = f" 停机位置未保存：{error}"
             self.connection_id = uuid4().hex if kind == "connect" else None
             self.frame = None
             self.position_callback = None
+            recovered = False
+            if kind == "connect":
+                try:
+                    recovered = self.recover_connection(status)
+                except (OSError, ValueError, TypeError, KeyError) as error:
+                    checkpoint_error = f" 无法核对上次停机位置：{error}"
             self.apply_profile()
             if kind == "connect":
                 message = "已连接，可以抬笔点动。书写前请确认纸面对位。"
@@ -1428,6 +1494,11 @@ class MachinePanel(QtWidgets.QWidget):
                         message = "已连接。设备工作零点已变化，请重新核对已启用的工作范围与纸面对位。"
                 if self.profile and self.profile.datum:
                     message = f"已连接，可以抬笔点动。对准「{self.profile.datum.label}」可找回机身定位。"
+                if recovered:
+                    message = "已重连，停机位置和工作坐标偏置一致，已沿用上次对位。"
+                    if not self.range_ready:
+                        message += " 自动运动前请确认工作范围。"
+            message += checkpoint_error
         elif kind in {"position-read", "position-datum"}:
             pending, self.position_callback = self.position_callback, None
             if pending is not None:
@@ -1505,6 +1576,10 @@ class MachinePanel(QtWidgets.QWidget):
             if self.uncertain and done < len(self.job.strokes):
                 detail += f"请检查第 {done + 1} 笔的纸面笔迹。"
         if disconnected:
+            try:
+                self.remember_stopped_position(getattr(self.worker, "stopped_at", None))
+            except (OSError, ValueError) as error:
+                detail += f" 停机位置未保存：{error}"
             self.device = None
             self.connection_id = None
             self.frame = None
@@ -1525,6 +1600,11 @@ class MachinePanel(QtWidgets.QWidget):
         return ""
 
     def shutdown(self):
+        if self.device and self.busy is None and not self.closing:
+            try:
+                self.remember_stopped_position(self.device)
+            except (OSError, ValueError) as error:
+                self.message(f"停机位置未保存：{error}", error=True)
         self.closing = True
         for work in (self.estimate_work, self.session_work, self.placement_work):
             work.cancel()
