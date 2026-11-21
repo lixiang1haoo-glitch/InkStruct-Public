@@ -1,7 +1,7 @@
 """Template v3: one body stream, named fields and explicitly ordered page groups."""
 
 import re
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from typing import ClassVar
 
 from ..plotter.profiles import PageAlignment
@@ -176,6 +176,7 @@ class FlowTemplate:
     schema_version: str = SCHEMA
     revision: TemplateRevision | None = None
     plotter_alignment: PageAlignment | None = None
+    paper_origins: tuple[tuple[str, PageAlignment], ...] = ()
 
     def __post_init__(self):
         if isinstance(self.plotter_alignment, dict):
@@ -239,6 +240,19 @@ class FlowTemplate:
                 or any(v not in ids for v in (*self.start_pages, *self.loop_pages))
             ):
                 raise ValueError("Custom templates require a valid ordered loop page group")
+        layouts = {p.layout_id for p in self.effective_layouts}
+        if not isinstance(self.paper_origins, (tuple, list)) or len(self.paper_origins) > 64:
+            raise ValueError("无效的纸面原点列表。")
+        origins = {}
+        for key, mark in self.paper_origins:
+            if key not in layouts or key in origins:
+                raise ValueError("模板原点引用了未知或重复的版式。")
+            mark = PageAlignment(**mark) if isinstance(mark, dict) else mark
+            if not isinstance(mark, PageAlignment):
+                raise ValueError("纸面原点无效。")
+            mark.validate_size(self.width_mm, self.height_mm)
+            origins[key] = mark
+        object.__setattr__(self, "paper_origins", tuple(sorted(origins.items())))
         declared = {f.field_id for f in self.fields}
         for p in self.effective_layouts:
             if p.plotter_alignment is not None:
@@ -276,13 +290,23 @@ class FlowTemplate:
     def effective_loop(self):
         return self.loop_pages if self.kind == "custom" else ("simple",)
 
+    def with_paper_origin(self, layout_id, mark):
+        marks = dict(self.paper_origins)
+        marks[layout_id] = mark
+        return replace(self, paper_origins=tuple(marks.items()))
+
+    def paper_origin(self, layout):
+        return dict(self.paper_origins).get(layout.layout_id, layout.plotter_alignment)
+
     def layout(self, index):
         key = (
             self.start_pages[index]
             if index < len(self.start_pages)
             else self.effective_loop[(index - len(self.start_pages)) % len(self.effective_loop)]
         )
-        return next(p for p in self.effective_layouts if p.layout_id == key)
+        layout = next(p for p in self.effective_layouts if p.layout_id == key)
+        mark = self.paper_origin(layout)
+        return layout if mark == layout.plotter_alignment else replace(layout, plotter_alignment=mark)
 
     @property
     def page(self):
@@ -290,6 +314,12 @@ class FlowTemplate:
 
     def skeleton(self):
         return "".join(f":::field {f.field_id}\n\n:::\n\n" for f in self.fields) + "# 正文\n\n"
+
+
+def same_layout_revision(first, second):
+    return (isinstance(first, FlowTemplate) and isinstance(second, FlowTemplate)
+            and all(getattr(first, item.name) == getattr(second, item.name)
+                    for item in fields(FlowTemplate) if item.name != "paper_origins"))
 
 
 def migrate_layout(template):

@@ -316,7 +316,12 @@ def perform_template_action(editor, action, template, *, target=None, save_revis
     try:
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             if action == "document":
-                editor.template_content_panel.apply_template(dialog.configuration())
+                candidate = dialog.configuration()
+                from ..document.flow_template import same_layout_revision
+                if candidate != template and same_layout_revision(template, candidate):
+                    from ..resource_catalog import TemplateStore, workspace_for
+                    candidate = TemplateStore(workspace_for(editor) / 'templates').save_paper_origins(template, candidate)
+                editor.template_content_panel.apply_template(candidate)
             return dialog.saved_revision
     except (ValueError, TypeError, OSError) as error:
         QtWidgets.QMessageBox.warning(editor, "模板未应用", str(error))

@@ -58,6 +58,8 @@ class FlowStyle:
 
     def layout_record(self):
         record = asdict(self)
+        if record['template'] is not None:
+            record['template'].pop('paper_origins', None)
         if self.han_spacing == "full":
             record.pop("han_spacing")
         if not self.digits_follow_latin:

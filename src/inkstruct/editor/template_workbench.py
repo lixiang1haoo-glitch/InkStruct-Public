@@ -883,7 +883,7 @@ class WorkbenchUI:
             self.selected_frame_id = None
             self.commit(replace(self.template, layouts=tuple(
                 p for p in self.template.layouts if p.layout_id != identity
-            )))
+            ), paper_origins=tuple(pair for pair in self.template.paper_origins if pair[0] != identity)))
         else:
             values = list(getattr(self.template, key))
             values.pop(index)
@@ -974,10 +974,7 @@ class WorkbenchUI:
                                  source=layout, configure=True)
         try:
             if dialog.exec():
-                if self.template.kind == "simple":
-                    self.commit(replace(self.template, plotter_alignment=dialog.alignment))
-                else:
-                    self.update_layout(plotter_alignment=dialog.alignment)
+                self.commit(self.template.with_paper_origin(layout.layout_id, dialog.alignment))
         finally:
             dialog.deleteLater()
 

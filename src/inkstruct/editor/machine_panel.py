@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ..document.flow_template import FlowTemplate
+from ..document.flow_template import FlowTemplate, same_layout_revision
 from ..plotter.adapters import plan_from_snapshot, reference_image_export_scope
 from ..plotter.export import ROUTING_VERSION
 from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, PIN_INTERIOR_MM, Z_TOLERANCE_MM
@@ -181,7 +181,6 @@ class MachinePanel(QtWidgets.QWidget):
         self.frame = None  # WPos of the physical datum in this connection only.
         self.fixture_placement = self.inherited_placement = None
         self.group = None
-        self.origin_revision = None
         self.page_report = False
         self.registration = self.confirmed_area = None
         self.job = None
@@ -556,14 +555,8 @@ class MachinePanel(QtWidgets.QWidget):
             if (not self.current_page_ready() or self.template is not original or self.snapshot is not snapshot
                     or self.paper_page.index != index or self.busy is not None or self.batch_active):
                 raise ValueError("当前页面已变化，请重新选择纸面原点。")
-            if original.kind == "simple":
-                candidate = replace(original, plotter_alignment=dialog.alignment)
-            else:
-                candidate = replace(original, layouts=tuple(
-                    replace(item, plotter_alignment=dialog.alignment) if item.layout_id == layout.layout_id else item
-                    for item in original.layouts))
-            revised = TemplateStore(self.store.path.parent / "templates").save_document_revision(original, candidate)
-            self.origin_revision = (self.group, revised, layout.layout_id)
+            candidate = original.with_paper_origin(layout.layout_id, dialog.alignment)
+            revised = TemplateStore(self.store.path.parent / "templates").save_paper_origins(original, candidate)
             self.template_origin_saved.emit(revised)
             self.message("模板原点已保存到模板库并应用到本文。保存文档后，重开也会使用此修订。")
         except (OSError, TypeError, ValueError) as error:
@@ -647,6 +640,24 @@ class MachinePanel(QtWidgets.QWidget):
         if snapshot is self.snapshot and self.template is self.candidate_template:
             self.refresh_buttons()
             return
+        if snapshot is self.snapshot and same_layout_revision(self.template, self.candidate_template):
+            self.template = self.candidate_template
+            self.update_batch_scope()
+            self.update_page_states()
+            if self.scope.currentData() == "all":
+                pages = self.batch_pages()
+                if pages and pages[0] != self.page_list.currentRow():
+                    self.page_list.setCurrentRow(pages[0])
+                    return
+            self.placement_work.cancel()
+            self.registration = self.inherited_placement = self.job = None
+            self.refresh_fixture()
+            if self.fixture_placement:
+                self.apply_fixture()
+            else:
+                self.update_preview()
+                self.refresh_buttons()
+            return
         for work in (self.session_work, self.estimate_work):
             work.cancel()
             work.cache.clear()
@@ -665,9 +676,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.page_list.clear()
             self.page_list.addItems([f"第 {page + 1} 页" for page in range(len(snapshot.pages))])
             self.page_list.setCurrentRow(index)
-            eligible = self.batch_pages()
-            self.scope.setItemText(1, f"全部 {len(snapshot.pages)} 页" if len(eligible) == len(snapshot.pages)
-                                   else f"可批量书写的 {len(eligible)} 页")
+            self.update_batch_scope()
             self.scope.setCurrentIndex(0)
         self.update_page_states()
         self.change_page()
@@ -686,6 +695,11 @@ class MachinePanel(QtWidgets.QWidget):
         if self.plan is None:
             return []
         return [page.index for page in self.plan.pages if page.strokes and not self.missing_template_origin(page.index)]
+
+    def update_batch_scope(self):
+        eligible = self.batch_pages()
+        count = len(self.snapshot.pages)
+        self.scope.setItemText(1, f"全部 {count} 页" if len(eligible) == count else f"可批量书写的 {len(eligible)} 页")
 
     def change_scope(self):
         if self.scope.currentData() == "all" and self.page_list.count():
@@ -899,14 +913,16 @@ class MachinePanel(QtWidgets.QWidget):
         datum = self.profile.datum
         context = (self.snapshot.document_id, self.connection_id, self.profile.id, self.profile.axes, self.offset,
                    datum.id if datum else None, self.frame, setup, self.profile.paper_calibration)
-        if self.origin_revision is not None and self.origin_revision[1] == template:
-            previous, _, added_layout = self.origin_revision
-            self.origin_revision = None
-            if previous is self.group and previous is not None and previous.context == context:
-                previous.template = template
-                previous.paper_marks[added_layout] = next(p.plotter_alignment for p in template.effective_layouts
-                                                         if p.layout_id == added_layout)
-                previous.entries.pop(added_layout, None)
+        if (self.group and self.group.context == context and self.group.template is not template
+                and same_layout_revision(self.group.template, template)):
+            marks = {p.layout_id: template.paper_origin(p) for p in template.effective_layouts
+                     if p.layout_id in self.group.layouts and template.paper_origin(p) is not None}
+            for key in self.group.paper_marks.keys() | marks.keys():
+                if self.group.paper_marks.get(key) != marks.get(key):
+                    self.group.entries.pop(key, None)
+                    if key == self.group.reference_layout:
+                        self.group.reference_layout = None
+            self.group.template, self.group.paper_marks = template, marks
         if self.group is None or self.group.template != template or self.group.context != context:
             group = SessionPageGroup(template, context, setup, self.profile.axes)
             if self.datum_located:

@@ -264,14 +264,19 @@ def template_from_record(value):
     from .schema import digest
 
     if value.get("schema_version") == REVISION_SCHEMA:
-        if (set(value) != {'schema_version', 'revision', 'template'}
+        if (set(value) - {'paper_origins'} != {'schema_version', 'revision', 'template'}
                 or not isinstance(value['template'], dict) or not isinstance(value['revision'], dict)):
             raise ValueError("无效模板修订封装")
         metadata = TemplateRevision(**value['revision'])
         inner = value['template']
-        if inner.get('schema_version') == REVISION_SCHEMA or digest(inner) != metadata.content_hash:
+        if 'paper_origins' in inner or inner.get('schema_version') == REVISION_SCHEMA or digest(inner) != metadata.content_hash:
             raise ValueError("模板修订与内容身份不一致")
-        return replace(template_from_record(inner), revision=metadata)
+        base = template_from_record(inner)
+        if 'paper_origins' in value:
+            if not hasattr(base, 'paper_origins'):
+                raise ValueError("无效的模板标定数据")
+            base = replace(base, paper_origins=value['paper_origins'])
+        return replace(base, revision=metadata)
     if 'revision' in value:
         if value['revision'] is not None:
             raise ValueError("模板修订必须使用独立封装")

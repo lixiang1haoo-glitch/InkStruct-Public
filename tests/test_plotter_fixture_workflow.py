@@ -246,7 +246,7 @@ def exercise(workspace):
         revisions = []
         def apply_revision(revision):
             revisions.append(revision)
-            panel.set_document(replace(nine, snapshot_id="edited"), 2, True, revision)
+            panel.set_document(nine, 2, True, revision)
         panel.template_origin_saved.connect(apply_revision)
         panel.follow_page(2)
         assert panel.add_origin_button.isVisible() and not panel.write_button.isEnabled()
@@ -265,7 +265,7 @@ def exercise(workspace):
         assert len(store.entries()) == 1
         revised = store.read(store.entries()[0])
         assert revised == revisions[-1] and revised.layout(6).plotter_alignment.a == (8., 12.)
-        assert store.save_document_revision(cycle, revised) == revised and len(store.entries()) == 1
+        assert store.save_paper_origins(cycle, revised) == revised and len(store.entries()) == 1
         for index in (2, 6, 0):
             panel.follow_page(index)
             assert panel.job is not None and panel.write_button.isEnabled()
