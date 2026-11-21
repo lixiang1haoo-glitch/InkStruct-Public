@@ -24,7 +24,7 @@ def exercise(workspace):
 
     from PySide6 import QtCore, QtWidgets
     from inkstruct.document.flow_template import FlowTemplate
-    from inkstruct.editor.machine_alignment import AlignmentDialog
+    from inkstruct.editor.machine_alignment import AlignmentDialog, page_context
     from inkstruct.editor.machine_devices import DeviceDialog
     from inkstruct.editor.machine_panel import MachinePanel
     from inkstruct.plotter.physical import WorkArea
@@ -87,7 +87,7 @@ def exercise(workspace):
     serial = SimulatedGrbl()
     # Four distinct layouts in a nine-sheet document, using only a continuous USB session.
     from inkstruct.document.flow_template import PageLayout
-    layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i, plotter_alignment=PageAlignment((5,5)))
+    layouts = tuple(PageLayout(str(i), f"版式 {i}", source_page=i)
                     for i in range(1,5))
     cycle = FlowTemplate(kind="custom", layouts=layouts, loop_pages=("1","2","3","4"))
     nine = replace(snapshot, snapshot_id="group", pages=tuple(replace(pages[0], index=i) for i in range(9)))
@@ -101,6 +101,9 @@ def exercise(workspace):
             serial.position[:] = [*xy,0.]
             def record(dialog):
                 assert not dialog.fixture.isChecked()
+                if index == 0:
+                    dialog.a[0].setValue(12.639)
+                    dialog.a[1].setValue(61.605)
                 click(session, dialog.record_a)
                 assert dialog.shift_group.isEnabled() == complete
                 if shift:
@@ -110,7 +113,27 @@ def exercise(workspace):
                 return dialog.result()
             with patch.object(AlignmentDialog, "exec", record):
                 click(session, session.align_button)
-        for i in range(4):
+        record_one(0, (10., 20.))
+        from inkstruct.document.template_authoring import parse_template, template_json
+        source = cycle.layout(0)
+        page_key, size, origin, title = page_context(cycle, layout=source)
+        assert origin is None
+        editor = AlignmentDialog(session, session, page_key, size, origin, title, source=source, configure=True)
+        editor.save.click()
+        assert editor.result() and editor.position is None and editor.alignment.a == (12.639, 61.605)
+        updated = replace(cycle, layouts=(replace(source, plotter_alignment=editor.alignment), *cycle.layouts[1:]))
+        assert parse_template(template_json(updated)).layout(4).plotter_alignment == editor.alignment
+        count = len(serial.commands)
+        for i in (4, 1, 8, 0):
+            session.page_list.setCurrentRow(i)
+            if i == 1:
+                assert session.registration is None and not session.write_button.isEnabled()
+            else:
+                assert session.registration and session.registration.origin == (10., 20.), i
+                assert session.job.index == i and session.write_button.isEnabled()
+                assert "第 1 页实测" in session.alignment_status.text()
+        assert len(serial.commands) == count
+        for i in range(1, 4):
             record_one(i, (10.+i, 20.+2*i))
         before = session.store.path.read_bytes()
         record_one(4, (16.,17.), shift=True, complete=True)
@@ -193,7 +216,7 @@ def exercise(workspace):
             click(panel, panel.align_button)
         assert panel.job is not None and panel.inherited_placement is None
         panel.follow_page(4)
-        assert panel.job is None and "未对位" in panel.alignment_status.text()
+        assert panel.job.index == 4 and "本次连接" in panel.alignment_status.text()
         panel.set_document(snapshot, 0, True, template)
         first_datum = panel.profile.datum.id
     finally:

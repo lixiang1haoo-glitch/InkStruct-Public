@@ -821,7 +821,7 @@ class MachinePanel(QtWidgets.QWidget):
             return None
         setup = self.setup if setup is None else setup
         datum = self.profile.datum
-        context = (self.connection_id, self.profile.id, self.profile.axes, self.offset,
+        context = (self.snapshot.document_id, self.connection_id, self.profile.id, self.profile.axes, self.offset,
                    datum.id if datum else None, self.frame, setup, self.profile.paper_calibration)
         if self.group is None or self.group.template is not template or self.group.context != context:
             group = SessionPageGroup(template, context, setup, self.profile.axes)
@@ -836,7 +836,7 @@ class MachinePanel(QtWidgets.QWidget):
                         if placement and placement.setup == setup:
                             group.entries[layout] = placement
             self.group = group
-        return self.group if len(self.group.layouts) > 1 else None
+        return self.group
 
     def refresh_fixture(self):
         self.fixture_placement = None
@@ -845,8 +845,9 @@ class MachinePanel(QtWidgets.QWidget):
             if self.paper_page is None:
                 return
             index = self.paper_page.index
-            if group and group.translated:
-                self.fixture_placement = group.entries[self.template.layout(index).layout_id]
+            entry = group.entries.get(self.template.layout(index).layout_id) if group else None
+            if entry and (group.translated or entry.session_only):
+                self.fixture_placement = entry
             elif self.datum_located:
                 from .machine_alignment import fixture_placement
 
