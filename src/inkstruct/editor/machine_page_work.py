@@ -1,13 +1,14 @@
 """Bounded, latest-request-only calculations for the plotter sidebar."""
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from math import dist
 
 from PySide6 import QtCore
 
 from ..plotter.export import route_page as svg_route_page
 from ..plotter.physical import PaperRegistration, position_page
-from ..plotter.write_session import ProgressFile, lengths, route_page as legacy_route_page
+from ..plotter.write_session import ProgressFile, route_page as legacy_route_page
 
 
 class PageWork:
@@ -89,13 +90,30 @@ def travel_distance(endpoints, start):
     return distance
 
 
-def measure_page(raw, routed, job, done, start):
+@dataclass(frozen=True)
+class PageTiming:
+    # From each stroke's first point to the final endpoint, excluding its approach.
+    remaining: tuple[float, ...]
+    before: float
+    after: float
+    original_start: tuple[float, float]
+    routed_start: tuple[float, float]
+
+
+def measure_page(raw, routed, job):
     page = job or position_page(routed, PaperRegistration((0, 0)))
-    remaining = page.strokes[done:]
-    travel, ink = lengths(remaining, start)
-    after = travel_distance(((s.points[0], s.points[-1]) for s in page.strokes), start)
+    remaining = [0.] * (len(page.strokes) + 1)
+    after = 0.
+    for i in reversed(range(len(page.strokes))):
+        points = page.strokes[i].points
+        gap = dist(points[-1], page.strokes[i + 1].points[0]) if i + 1 < len(page.strokes) else 0.
+        ink = sum(dist(a, b) for a, b in zip(points, points[1:]))
+        remaining[i] = ink + gap + remaining[i + 1]
+        after += gap
     before = after
+    original_start = routed_start = page.strokes[0].points[0]
     if routed is not raw:
         place = page.registration.place
-        before = travel_distance(((place(s.points[0]), place(s.points[-1])) for s in raw.strokes), start)
-    return travel + ink, len(remaining), before, after
+        original_start = place(raw.strokes[0].points[0])
+        before = travel_distance(((place(s.points[0]), place(s.points[-1])) for s in raw.strokes), None)
+    return PageTiming(tuple(remaining), before, after, original_start, routed_start)

@@ -114,6 +114,41 @@ def exercise(folder):
         journal.path.unlink()
         panel.change_page()
         assert panel.paper_page.strokes == expected.strokes and panel.optimize.isEnabled()
+
+        # A progress signal can arrive before the worker finishes measuring a dense page.
+        from inkstruct.plotter.profiles import PageAlignment
+        many = tuple(PaintOp(f"ink-{i}", ((2., 2.), (3. + i % 12, 4.)), .25) for i in range(1539))
+        dense = replace(snapshot, pages=(replace(pages[0], paint_ops=many),))
+        release.clear()
+        started.clear()
+        with patch.object(machine_panel, "measure_page", measure):
+            panel.set_document(dense, 0, True)
+            wait(lambda: panel.paper_page is not None)
+            panel.use_alignment(PageAlignment((0., 0.)), (4., 3.))
+            wait(started.is_set)
+            panel.busy = "write"
+            panel.run_start = 0
+            panel.worker.progress.emit(1486, 1539)
+            release.set()
+            wait(displayed)
+            expected_seconds = estimate_seconds(panel.job.strokes[1486:], panel.profile.feed,
+                                                panel.job.strokes[1485].points[-1])
+            assert abs(panel.base_estimate - expected_seconds) < 1e-8
+            seconds = round(expected_seconds)
+            assert panel.estimate_label.text() == f"本页预计剩余 {seconds // 60} 分 {seconds % 60} 秒"
+            assert "剩余抬笔 53 次" in panel.route_stats.text()
+            calls_before = len(calls)
+            with patch.object(machine_panel, "timing_factor", side_effect=AssertionError("progress read disk")):
+                held = panel.estimate_label.text()
+                panel.on_phase("paused")
+                app.processEvents()
+                assert panel.estimate_label.text() == held
+                panel.on_phase("running")
+                for done in range(1487, 1540):
+                    panel.worker.progress.emit(done, 1539)
+                assert panel.estimate_label.text() == "本页预计剩余 0 分 0 秒"
+                assert len(calls) == calls_before
+            panel.busy = None
     finally:
         release.set()
         panel.shutdown()
