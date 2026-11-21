@@ -37,8 +37,6 @@ def test_template_origins_share_the_calibrated_paper_transform():
     placement = group.place_from_reference("b", group.entries["a"])
     assert placement.position == (112, 32)
     assert placement.alignment.angle == measured.angle and placement.alignment.scale == measured.scale
-    group.measure("b", placement.alignment, (113, 35), "第 2 页")
-    assert group.place_from_reference("a", group.entries["b"]).position == (101, 83)
 
 
 def exercise(workspace):
@@ -118,7 +116,7 @@ def exercise(workspace):
         session.save_profile(DeviceProfile("group-test","测试机","COM-test"))
         click(session, session.link_button)
         session.set_document(nine, 0, True, cycle)
-        def record_one(index, xy, *, shift=False, complete=False):
+        def record_one(index, xy):
             session.follow_page(index)
             serial.position[:] = [*xy,0.]
             def record(dialog):
@@ -127,9 +125,6 @@ def exercise(workspace):
                     dialog.a[0].setValue(12.639)
                     dialog.a[1].setValue(61.605)
                 click(session, dialog.record_a)
-                assert dialog.shift_group.isEnabled() == complete
-                if shift:
-                    dialog.shift_group.setChecked(True)
                 dialog.save.click()
                 assert dialog.result(), dialog.status.text()
                 return dialog.result()
@@ -157,27 +152,59 @@ def exercise(workspace):
         assert len(serial.commands) == count
         for i in range(1, 4):
             record_one(i, (10.+i, 20.+2*i))
-        before = session.store.path.read_bytes()
-        record_one(4, (16.,17.), shift=True, complete=True)
-        assert session.store.path.read_bytes() == before
+        record_one(4, (16.,17.))
         count = len(serial.commands)
         for i in (5,6,7,8):
             session.follow_page(i)
-            expected = (16.+i%4,17.+2*(i%4))
+            expected = (10.+i%4,20.+2*(i%4)) if i%4 else (16.,17.)
             assert session.registration.origin == expected
             assert session.job.index == i and session.write_button.isEnabled()
             if i%4:
-                assert "按第 5 页平移" in session.alignment_status.text()
+                assert f"第 {i%4+1} 页实测" in session.alignment_status.text()
         assert len(serial.commands) == count
-        record_one(6, (15.,25.), shift=True, complete=True)
+        record_one(6, (15.,25.))
         session.follow_page(0)
-        assert session.registration.origin == (13.,21.)
+        assert session.registration.origin == (16.,17.)
         session.follow_page(3)
-        assert session.registration.origin == (16.,27.)
+        assert session.registration.origin == (13.,26.)
         click(session, session.link_button)
         click(session, session.link_button)
         session.follow_page(5)
         assert session.registration is None and not session.write_button.isEnabled()
+
+        marks = ((4., 16.), (4.330, 16.588), (4.316, 16.524), (5.316, 17.524))
+        marked = replace(cycle, layouts=tuple(replace(layout, plotter_alignment=PageAlignment(mark))
+                                              for layout, mark in zip(layouts, marks, strict=True)))
+        session.set_document(nine, 5, True, marked)
+        record_one(5, (3.650, .970))
+        record_one(6, (11.640, .910))
+        session.page_list.setCurrentRow(5)
+        assert session.registration.origin == (3.650, .970), session.alignment_status.text()
+        assert "第 6 页实测" in session.alignment_status.text()
+        click(session, session.return_button)
+        assert serial.position[:2] == [3.650, .970]
+        assert session.job.strokes[0].points == ((5.320, -8.618), (7.320, -6.618))
+        click(session, session.write_button)
+        assert session.completed_pages == {5}
+        assert any(b"X7.3200 Y-6.6180" in line for line in serial.commands)
+        session.page_list.setCurrentRow(7)
+        assert session.registration.origin == (12.640, 1.910)
+        assert "第 7 页实测" in session.alignment_status.text() and "推算" in session.alignment_status.text()
+        record_one(6, (13.640, 3.910))
+        session.page_list.setCurrentRow(5)
+        assert session.registration.origin == (3.650, .970)
+        assert "第 6 页实测" in session.alignment_status.text()
+        click(session, session.return_button)
+        assert serial.position[:2] == [3.650, .970]
+        session.page_list.setCurrentRow(7)
+        assert session.registration.origin == (14.640, 4.910)
+        record_one(5, (5.750, 4.070))
+        session.page_list.setCurrentRow(6)
+        assert session.registration.origin == (13.640, 3.910)
+        click(session, session.link_button)
+        click(session, session.link_button)
+        assert session.registration is None and not session.return_button.isEnabled()
+        assert not session.write_button.isEnabled()
     finally:
         session.shutdown()
         session.close()
