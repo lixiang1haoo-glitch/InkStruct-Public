@@ -57,25 +57,12 @@ class FixturePlacement:
 
 class SessionPageGroup:
     """Measurements for one template, device coordinate frame and sheet setup."""
-    def __init__(self, template, context, setup, axes):
-        self.template, self.context, self.setup, self.axes = template, context, setup, axes
+    def __init__(self, template, context, setup):
+        self.template, self.context, self.setup = template, context, setup
         self.layouts = tuple(dict.fromkeys((*template.start_pages, *template.effective_loop)))
         self.entries = {}
-        self.reference_layout = None
         self.paper_marks = {layout.layout_id: template.paper_origin(layout) for layout in template.effective_layouts
                             if layout.layout_id in self.layouts and template.paper_origin(layout) is not None}
-
-    def place_from_reference(self, layout, reference):
-        mark = self.paper_marks.get(layout)
-        if not mark or reference is None:
-            return None
-        if layout == self.reference_layout:
-            return reference
-        measured = reference.alignment
-        transform = self.axes.register(measured.a, reference.position, angle=measured.angle, scale=measured.scale)
-        alignment = replace(mark, angle=measured.angle, scale=measured.scale)
-        return replace(reference, alignment=alignment, position=transform.place(mark.a),
-                       source=f"由{reference.source}推算")
 
     def measure(self, layout, alignment, position, source, *, fixed=False, recalled=False):
         if layout not in self.layouts:
@@ -83,7 +70,6 @@ class SessionPageGroup:
         action = "确认" if recalled else "实测"
         self.entries[layout] = FixturePlacement(alignment, position, self.setup, f"本次连接 · {source}{action}",
                                                 session_only=not fixed)
-        self.reference_layout = layout if layout in self.paper_marks else None
 
 
 def fixture_placement(panel, template, snapshot, index):
@@ -333,7 +319,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         form.addRow(self.details)
         if not configure and not calibration:
             if alignment:
-                form.addRow(label("模板已设置纸面原点。将笔尖对准图中的纸面原点并确认。同一摆放下，其他已设原点的版式会自动换算。"))
+                form.addRow(label("模板已设置纸面原点。将笔尖对准图中的纸面原点并确认。同一摆放下，使用本版式的循环页会沿用这次实测位置。"))
             else:
                 form.addRow(label("本页可临时对位。要随模板保存纸面原点，请在模板工作台设置并保存，再应用到当前文档。"))
         self.status = label("")

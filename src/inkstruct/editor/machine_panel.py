@@ -193,6 +193,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.profile = None
         self.position_callback = None
         self.template = None
+        self.setup_connection = None
         self.setup = "默认摆放"
         self.preview_enabled = False
         self.page_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plotter-page")
@@ -250,7 +251,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.return_button = self.button("抬笔回到原点", self.return_to_origin)
         self.pen_button = self.button("落笔", self.toggle_pen)
         write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
-        self.alignment_status = label("当前页未对位")
+        self.alignment_status = label("当前页待对位")
         write_layout.addWidget(self.alignment_status)
         self.add_origin_button = self.button("补设模板原点…", self.add_template_origin)
         write_layout.addWidget(self.add_origin_button)
@@ -510,6 +511,7 @@ class MachinePanel(QtWidgets.QWidget):
         alignment = self.profile.calibrated(alignment)
         registration = self.profile.axes.register(alignment.a, position, angle=alignment.angle, scale=alignment.scale)
         self.registration, self.inherited_placement, self.job = registration, fixture, None
+        self.setup_connection = self.connection_id
         if fixture is not None:
             self.setup = fixture.setup
         page = self.paper_page
@@ -920,11 +922,9 @@ class MachinePanel(QtWidgets.QWidget):
             for key in self.group.paper_marks.keys() | marks.keys():
                 if self.group.paper_marks.get(key) != marks.get(key):
                     self.group.entries.pop(key, None)
-                    if key == self.group.reference_layout:
-                        self.group.reference_layout = None
             self.group.template, self.group.paper_marks = template, marks
         if self.group is None or self.group.template != template or self.group.context != context:
-            group = SessionPageGroup(template, context, setup, self.profile.axes)
+            group = SessionPageGroup(template, context, setup)
             if self.datum_located:
                 for index, layout in enumerate((*template.start_pages, *template.effective_loop)):
                     if layout not in group.entries:
@@ -938,37 +938,22 @@ class MachinePanel(QtWidgets.QWidget):
             self.group = group
         return self.group
 
-    def direct_placement(self, group, index):
+    def refresh_fixture(self):
         from .machine_alignment import fixture_placement
 
-        layout = self.template.layout(index).layout_id if group else None
-        entry = group.entries.get(layout) if group else None
-        if entry and entry.session_only:
-            return entry
-        if self.datum_located:
-            return fixture_placement(self, self.template, self.snapshot, index)
-        return None
-
-    def refresh_fixture(self):
         self.fixture_placement = None
         try:
             group = self.session_group()
             if self.paper_page is None:
                 return
             index = self.paper_page.index
-            direct = self.direct_placement(group, index)
-            if not group or group.reference_layout is None:
-                self.fixture_placement = direct
-                return
-            if direct and direct.setup == group.setup:
-                self.fixture_placement = direct
-                return
-            layout = self.template.layout(index).layout_id
-            if layout in group.paper_marks and layout != group.reference_layout:
-                sequence = (*self.template.start_pages, *self.template.effective_loop)
-                reference = self.direct_placement(group, sequence.index(group.reference_layout))
-                if reference and reference.setup == group.setup:
-                    self.fixture_placement = group.place_from_reference(layout, reference)
+            entry = group.entries.get(self.template.layout(index).layout_id) if group else None
+            if entry and entry.session_only:
+                self.fixture_placement = entry
+            elif self.datum_located:
+                direct = fixture_placement(self, self.template, self.snapshot, index)
+                if direct and (self.setup_connection != self.connection_id or direct.setup == self.setup):
+                    self.fixture_placement = direct
         except (OSError, ValueError, KeyError, TypeError) as error:
             self.message(f"无法读取此页的摆放记录。{error}", error=True)
 
@@ -1020,11 +1005,11 @@ class MachinePanel(QtWidgets.QWidget):
         elif self.raw_page and self.missing_template_origin(self.raw_page.index):
             layout = self.template.layout(self.raw_page.index)
             source = f"PDF 第 {layout.source_page} 页" if layout.source_page is not None else layout.label
-            self.alignment_status.setText(f"{page}（{source}）缺少纸面原点。点击「补设模板原点」选择纸面标记。")
+            self.alignment_status.setText(f"{page}待对位（{source}）。模板缺少纸面原点。点击「补设模板原点」选择纸面标记。")
         elif self.raw_page and isinstance(self.template, FlowTemplate):
-            self.alignment_status.setText(f"{page}的模板原点已设置，等待对准纸张。")
+            self.alignment_status.setText(f"{page}待对位。请将笔尖对准本版式的纸面原点。")
         else:
-            self.alignment_status.setText(f"{page}未对位")
+            self.alignment_status.setText(f"{page}待对位")
 
     def refresh_buttons(self, *_):
         busy, connected = self.busy is not None or self.closing, self.device is not None
