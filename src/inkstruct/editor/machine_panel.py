@@ -159,6 +159,7 @@ class MachinePreview(QtWidgets.QWidget):
 
 class MachinePanel(QtWidgets.QWidget):
     page_selected = QtCore.Signal(int)
+    template_origin_saved = QtCore.Signal(object)
     status_changed = QtCore.Signal(str)
     machine_state = QtCore.Signal()
 
@@ -180,6 +181,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.frame = None  # WPos of the physical datum in this connection only.
         self.fixture_placement = self.inherited_placement = None
         self.group = None
+        self.origin_revision = None
         self.page_report = False
         self.registration = self.confirmed_area = None
         self.job = None
@@ -251,6 +253,8 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
         self.alignment_status = label("当前页未对位")
         write_layout.addWidget(self.alignment_status)
+        self.add_origin_button = self.button("补设模板原点…", self.add_template_origin)
+        write_layout.addWidget(self.add_origin_button)
         self.reuse_alignment_button = self.button("纸已靠齐，沿用对位", self.reuse_fixture)
         write_layout.addWidget(self.reuse_alignment_button)
         write_layout.addWidget(self.align_button)
@@ -534,6 +538,38 @@ class MachinePanel(QtWidgets.QWidget):
         self.update_preview()
         self.message(str(error), error=True, page_specific=True)
         self.refresh_buttons()
+
+    def add_template_origin(self):
+        from ..resource_catalog import TemplateStore
+        from .machine_alignment import TemplateOriginDialog
+
+        if not self.current_page_ready() or self.busy is not None or self.batch_active:
+            return
+        index, original, snapshot = self.paper_page.index, self.template, self.snapshot
+        if not self.missing_template_origin(index):
+            return
+        layout = original.layout(index)
+        dialog = TemplateOriginDialog(original, layout, self)
+        try:
+            if not dialog.exec() or dialog.alignment is None:
+                return
+            if (not self.current_page_ready() or self.template is not original or self.snapshot is not snapshot
+                    or self.paper_page.index != index or self.busy is not None or self.batch_active):
+                raise ValueError("当前页面已变化，请重新选择纸面原点。")
+            if original.kind == "simple":
+                candidate = replace(original, plotter_alignment=dialog.alignment)
+            else:
+                candidate = replace(original, layouts=tuple(
+                    replace(item, plotter_alignment=dialog.alignment) if item.layout_id == layout.layout_id else item
+                    for item in original.layouts))
+            revised = TemplateStore(self.store.path.parent / "templates").save_document_revision(original, candidate)
+            self.origin_revision = (self.group, revised, layout.layout_id)
+            self.template_origin_saved.emit(revised)
+            self.message("模板原点已保存到模板库并应用到本文。保存文档后，重开也会使用此修订。")
+        except (OSError, TypeError, ValueError) as error:
+            self.message(str(error), error=True)
+        finally:
+            dialog.deleteLater()
 
     def open_alignment(self):
         from .machine_alignment import AlignmentDialog, page_context
@@ -863,6 +899,14 @@ class MachinePanel(QtWidgets.QWidget):
         datum = self.profile.datum
         context = (self.snapshot.document_id, self.connection_id, self.profile.id, self.profile.axes, self.offset,
                    datum.id if datum else None, self.frame, setup, self.profile.paper_calibration)
+        if self.origin_revision is not None and self.origin_revision[1] == template:
+            previous, _, added_layout = self.origin_revision
+            self.origin_revision = None
+            if previous is self.group and previous is not None and previous.context == context:
+                previous.template = template
+                previous.paper_marks[added_layout] = next(p.plotter_alignment for p in template.effective_layouts
+                                                         if p.layout_id == added_layout)
+                previous.entries.pop(added_layout, None)
         if self.group is None or self.group.template != template or self.group.context != context:
             group = SessionPageGroup(template, context, setup, self.profile.axes)
             if self.datum_located:
@@ -954,7 +998,7 @@ class MachinePanel(QtWidgets.QWidget):
         elif self.raw_page and self.missing_template_origin(self.raw_page.index):
             layout = self.template.layout(self.raw_page.index)
             source = f"PDF 第 {layout.source_page} 页" if layout.source_page is not None else layout.label
-            self.alignment_status.setText(f"{page}（{source}）缺少纸面原点。请在模板工作台设置并保存，再应用到当前文档。")
+            self.alignment_status.setText(f"{page}（{source}）缺少纸面原点。点击「补设模板原点」选择纸面标记。")
         elif self.raw_page and isinstance(self.template, FlowTemplate):
             self.alignment_status.setText(f"{page}的模板原点已设置，等待对准纸张。")
         else:
@@ -983,6 +1027,9 @@ class MachinePanel(QtWidgets.QWidget):
         self.confirm_range_button.setText("找回机身基准…" if self.profile and self.profile.datum
                                          and not self.datum_located else "确认工作范围…")
         self.confirm_range_button.setEnabled(positioning)
+        missing = self.raw_page is not None and self.missing_template_origin(self.raw_page.index)
+        self.add_origin_button.setVisible(missing)
+        self.add_origin_button.setEnabled(bool(ready and missing and not busy and not self.batch_active))
         self.align_button.setEnabled(not busy and ready and not self.waiting_for_paper)
         self.preview_button.setEnabled(ready and not busy)
         self.refresh_motion_controls(self.nudge, positioning)
