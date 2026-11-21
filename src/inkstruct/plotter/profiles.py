@@ -222,7 +222,7 @@ class PlotterProfiles:
         atomic_json(self.path, data)
 
     def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *,
-              connection=None, datum_origin=None, select_fixture=False, source_page=None):
+              connection=None, datum_origin=None, select_fixture=False, source_page=None, session_binding=None):
         scope = digest([profile.id, page])
         legacy_key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
         datum = profile.datum
@@ -234,10 +234,10 @@ class PlotterProfiles:
                 if datum is None or datum_origin is None or not connection:
                     raise ValueError("请先在本次连接中找回机身基准。")
                 record.update(datum_id=datum.id, body_point=datum.to_body(position, datum_origin))
-            if select_fixture and source_page is not None:
+            if source_page is not None:
                 record["source_page"] = source_page
             selection = self._fixture_scope(profile, page, alignment) if select_fixture else None
-            self.record(key, record, selection)
+            self.record(key, record, selection, session_binding=session_binding, device_id=profile.id)
         placements = self.read()["placements"]
         return placements.get(key) or placements.get(legacy_key)
 
@@ -257,12 +257,38 @@ class PlotterProfiles:
         return None
 
     @catalog_write
-    def record(self, key, value, selection=None):
+    def record(self, key, value, selection=None, *, session_binding=None, device_id=None):
         data = self.read()
         data["placements"][key] = value
+        if session_binding:
+            sessions = data.setdefault("session_placements", {})
+            session = sessions.get(device_id, {})
+            if session.get("connection") != value["connection"]:
+                session = sessions[device_id] = {"connection": value["connection"], "pages": {}}
+            if selection is None:
+                session["pages"][session_binding] = value
+            else:
+                session["pages"].pop(session_binding, None)
         if selection is not None:
             data.setdefault("fixture_setups", {})[selection] = value["setup"]
         atomic_json(self.path, data)
+
+    def session_placement(self, profile, binding, connection):
+        session = self.read().get("session_placements", {}).get(profile.id, {})
+        if connection and session.get("connection") == connection:
+            return session["pages"].get(binding)
+        return None
+
+    @catalog_write
+    def exchange_checkpoint(self, profile, checkpoint=None):
+        data = self.read()
+        checkpoints = data.setdefault("reconnect_positions", {})
+        previous = checkpoints.pop(profile.id, None)
+        if checkpoint:
+            checkpoints[profile.id] = checkpoint
+        if previous or checkpoint:
+            atomic_json(self.path, data)
+        return previous
 
     @staticmethod
     def _fixture_scope(profile, page, alignment):

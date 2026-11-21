@@ -6,7 +6,7 @@ from time import monotonic
 
 from PySide6 import QtCore, QtSerialPort
 
-from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, GrblLink, MachineError, MotionControl, Stopped
+from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, ExternalHold, GrblLink, MachineError, MotionControl, Stopped
 
 N1_USB_ID = (0x28e9, 0x018a)
 
@@ -73,6 +73,7 @@ class N1Worker(QtCore.QThread):
         self.serial_factory = serial_factory
         self.requests = Queue()
         self.jog_fault_path = None
+        self.stopped_at = None
         self.control = None
         self.closing = False
 
@@ -82,6 +83,10 @@ class N1Worker(QtCore.QThread):
         self.control = MotionControl()
         self.requests.put((kind, arguments, self.control))
         return True
+
+    def restore_idle_reference(self, xy):
+        # Ordered ahead of any subsequent motion submitted by the GUI.
+        self.requests.put(("restore-idle-reference", (xy,), None))
 
     def shutdown(self):
         if not self.closing:
@@ -95,6 +100,11 @@ class N1Worker(QtCore.QThread):
         try:
             while (request := self.requests.get()) is not None:
                 kind, args, control = request
+                if kind == "restore-idle-reference":
+                    if link is not None:
+                        link.referenced_idle_xy = args[0]
+                    continue
+                self.stopped_at = None
                 try:
                     if kind == "connect":
                         if link is not None:
@@ -106,12 +116,15 @@ class N1Worker(QtCore.QThread):
                     elif link is None:
                         raise MachineError("设备尚未连接。")
                     elif kind == "disconnect":
+                        self.stopped_at = link.require_idle()
                         link.serial.close()
                         link = result = None
                     elif kind == "position-datum":
                         result = link.confirm_datum_position(control)
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
+                        if result.offset is None and kind == "position-read":
+                            raise ValueError("设备尚未报告工作坐标偏置，请稍后再记录原点。")
                     elif kind in {"jog", "device-jog"}:
                         offset, area = args[:2]
                         option = args[2] if len(args) >= 3 else DEFAULT_WRITE_FEED
@@ -168,7 +181,9 @@ class N1Worker(QtCore.QThread):
                     if link is not None and disconnected:
                         if motion:
                             try:
-                                link.abort()
+                                stopped = link.abort()
+                                if isinstance(error, (Stopped, ExternalHold)):
+                                    self.stopped_at = stopped
                                 if fault is not None:
                                     fault["reports_at_stop"] = list(link.recent_reports)
                             except (MachineError, OSError):

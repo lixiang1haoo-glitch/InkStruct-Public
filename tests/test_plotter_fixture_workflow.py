@@ -182,7 +182,7 @@ def exercise(workspace):
         assert serial.position[:2] == [3.650, .970]
         assert session.job.strokes[0].points == ((5.320, -8.618), (7.320, -6.618))
         click(session, session.write_button)
-        assert session.completed_pages == {5}
+        assert session.completed_pages == {5, 6}
         assert any(b"X7.3200 Y-6.6180" in line for line in serial.commands)
         session.page_list.setCurrentRow(7)
         assert session.registration is None and "待对位" in session.alignment_status.text()
@@ -200,6 +200,15 @@ def exercise(workspace):
         record_one(5, (5.750, 4.070))
         session.page_list.setCurrentRow(6)
         assert session.registration.origin == (13.640, 3.910)
+        other = replace(nine, document_id="second-document", snapshot_id="second")
+        session.set_document(other, 6, True, marked)
+        assert session.registration is None
+        session.set_document(nine, 6, True, marked)
+        assert session.registration.origin == (13.640, 3.910)
+        assert "默认摆放" not in session.alignment_status.text()
+        session.follow_page(2)
+        assert "第 7 页实测" in session.alignment_status.text()
+        assert session.registration.origin == (13.640, 3.910)
         click(session, session.link_button)
         click(session, session.link_button)
         assert session.registration is None and not session.return_button.isEnabled()
@@ -207,6 +216,37 @@ def exercise(workspace):
     finally:
         session.shutdown()
         session.close()
+    # Same physical USB device and coordinate frame after a serial reconnect.
+    port.serialNumber = lambda: "N1-regression"
+    serial = SimulatedGrbl()
+    session = open_panel(serial)
+    try:
+        session.save_profile(DeviceProfile.create("重连机", "COM-test", port.serialNumber()))
+        click(session, session.link_button)
+        session.set_document(nine, 6, True, marked)
+        record_one(6, (11.650, .970))
+        record_one(7, (3.650, .970))
+        serial.position[:] = [97.500, 59.460, 0.]
+        click(session, session.link_button)
+        before = len(serial.commands)
+        click(session, session.link_button)
+        assert "已沿用上次对位" in session.report.text()
+        for index, expected in ((7, (3.650, .970)), (6, (11.650, .970)), (2, (11.650, .970))):
+            session.page_list.setCurrentRow(index)
+            assert session.registration.origin == expected
+        session.page_list.setCurrentRow(5)
+        assert session.registration is None
+        assert all(line in {b"?", b"$$\n", b"$I\n"} for line in serial.commands[before:])
+        for xy in ([98., 60.], [0., 0.]):
+            record_one(6, (11.650, .970))
+            click(session, session.link_button)
+            serial.position[:2] = xy
+            click(session, session.link_button)
+            assert session.registration is None and not session.write_button.isEnabled()
+    finally:
+        session.shutdown()
+        session.close()
+    port.serialNumber = lambda: ""
     serial = SimulatedGrbl()
     serial.position[:] = [35., 30., 0.]
     panel = open_panel(serial)
@@ -314,7 +354,8 @@ def exercise(workspace):
         panel.confirm = lambda title, text, *args: confirmations.append(text) or True
         click(panel, panel.write_button)
         assert "跳过缺少纸面原点的第 1、5、9 页" in confirmations[-1]
-        assert panel.completed_pages == {1} and panel.raw_page.index == 2 and panel.job is None
+        assert panel.completed_pages == {1} and panel.raw_page.index == 2
+        assert panel.waiting_for_paper and panel.registration.origin == (40., 38.)
         assert panel.pending_pages == [3, 5, 6, 7]
         panel.stop()
         panel.set_document(snapshot, 0, True, template)

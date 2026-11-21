@@ -30,6 +30,10 @@ class MachineError(RuntimeError):
     pass
 
 
+class ExternalHold(MachineError):
+    pass
+
+
 class Stopped(MachineError):
     pass
 
@@ -167,6 +171,7 @@ class XYWindow:
 
 class GrblLink:
     def __init__(self, serial, *, phase=lambda _phase: None, progress=lambda _done, _total: None):
+        self.paused_seconds = 0.0
         self.serial = serial
         self.phase = phase
         self.progress = progress
@@ -186,7 +191,10 @@ class GrblLink:
     def send(self, text: str):
         self.serial.write(text.encode("ascii"))
 
-    def pump(self, timeout=.05):
+    def motion_time(self):
+        return monotonic() - self.paused_seconds
+
+    def pump(self, timeout=.05, *, local_hold=False):
         line = self.serial.readline(timeout)
         if not line:
             return
@@ -202,6 +210,8 @@ class GrblLink:
                 raise MachineError("设备工作坐标偏置已变化。")
             if self.motion_active:
                 state = self.last_status.state
+                if state.startswith("Hold") and not local_hold:
+                    raise ExternalHold("设备在作业中被外部暂停。")
                 if state.split(":")[0] not in {"Idle", "Run", "Hold"}:
                     raise MachineError(f"作业中设备进入 {state} 状态。")
                 if self.xy_window is not None:
@@ -220,11 +230,11 @@ class GrblLink:
 
     def checkpoint(self, control: MotionControl | None):
         if control is None:
-            return 0.0
+            return False
         if control.stop_requested.is_set():
             raise Stopped("已停止作业。")
         if not control.pause_requested.is_set():
-            return 0.0
+            return False
         began = monotonic()
         self.send("!")
         self.phase("pausing")
@@ -241,22 +251,39 @@ class GrblLink:
             if now >= next_query:
                 self.send("?")
                 next_query = now + .2
-            self.pump()
+            self.pump(local_hold=True)
+            if held and monotonic() - self.status_at > 3:
+                raise MachineError("暂停期间未收到设备状态。")
             if not held and self.status_count > generation and self.last_status.state in {"Idle", "Hold:0"}:
                 held = True
                 self.phase("paused")
+        if control.stop_requested.is_set():
+            raise Stopped("已停止作业。")
         self.send("~")
-        self.phase("running")
-        return monotonic() - began
+        # The N1 can still report Hold:0 after cycle-start. Keep acknowledgements
+        # queued and wait for Run/Idle before sending another motion segment.
+        generation = self.status_count
+        deadline = monotonic() + 5
+        next_query = 0.0
+        while monotonic() < deadline:
+            if control.stop_requested.is_set():
+                raise Stopped("已停止作业。")
+            if monotonic() >= next_query:
+                self.send("?")
+                next_query = monotonic() + .1
+            self.pump(local_hold=True)
+            if self.status_count > generation and self.last_status.state in {"Idle", "Run"}:
+                self.paused_seconds += monotonic() - began
+                self.phase("running")
+                return True
+        raise MachineError("继续指令发出后，设备未确认恢复运动。")
 
     def status(self, control=None, *, timeout=2.5):
-        end = monotonic() + timeout
+        end = self.motion_time() + timeout
         generation = self.status_count
         next_query = 0.0
-        while monotonic() < end:
-            paused_for = self.checkpoint(control)
-            if paused_for:
-                end += paused_for
+        while self.motion_time() < end:
+            if self.checkpoint(control):
                 generation = self.status_count
                 next_query = 0.0
             if self.status_count > generation:
@@ -270,10 +297,10 @@ class GrblLink:
     def command(self, command: str, control=None):
         self.checkpoint(control)
         self.send(command + "\n")
-        end = monotonic() + 15
+        end = self.motion_time() + 15
         lines = []
-        while monotonic() < end:
-            end += self.checkpoint(control)
+        while self.motion_time() < end:
+            self.checkpoint(control)
             if self.responses:
                 line = self.responses.popleft()
                 if line == "ok":
@@ -314,7 +341,14 @@ class GrblLink:
             capacity = re.fullmatch(r"\[OPT:[^,]*,\d+,(\d+)\]", line)
             if capacity and int(capacity[1]) >= 64:
                 self.packet_bytes = min(240, int(capacity[1]) - 1)
-        return self.require_idle()
+        status = self.require_idle()
+        if "[VER:1.1f / CX-Elite V2.1.003:]" in identity and status.offset is None:
+            # WCO only appears periodically among the N1's WPos reports.
+            deadline = monotonic() + 3
+            while status.offset is None and monotonic() < deadline:
+                sleep(.05)
+                status = self.require_idle()
+        return status
 
     def require_idle(self, control=None, *, for_motion=False):
         status = self.status(control)
@@ -341,18 +375,14 @@ class GrblLink:
         return second
 
     def wait_idle(self, control, *, z: float, poll=.08):
-        end = monotonic() + 120
-        while monotonic() < end:
-            end += self.checkpoint(control)
-            began = monotonic()
+        end = self.motion_time() + 120
+        while self.motion_time() < end:
+            self.checkpoint(control)
             status = self.status(control)
-            end += max(0.0, monotonic() - began - 2.5)
             if status.state == "Idle":
                 if status.position is None or abs(status.position[2] - z) > Z_TOLERANCE_MM:
                     raise MachineError("设备已空闲，但 Z 工作坐标未到达预期位置。")
                 return status
-            if status.state.startswith("Hold") and not control.pause_requested.is_set():
-                raise MachineError("设备在作业中被外部暂停。")
             sleep(poll)
         raise MachineError("等待设备 Idle 超时。")
 
@@ -373,9 +403,9 @@ class GrblLink:
         self.send("\n".join(lines) + "\n")
         remaining = len(lines)
         awaiting_status = 0
-        end = monotonic() + 15
-        while (remaining or awaiting_status > self.status_count) and monotonic() < end:
-            end += self.checkpoint(control)
+        end = self.motion_time() + 15
+        while (remaining or awaiting_status > self.status_count) and self.motion_time() < end:
+            self.checkpoint(control)
             now = monotonic()
             if now - self.status_at > .8:
                 raise MachineError("运动期间未收到设备状态。")
@@ -393,9 +423,9 @@ class GrblLink:
         return next_status
 
     def finish_xy(self, window, feed, control):
-        end = monotonic() + (window.distance - window.progress) * 60 / feed + 1.5
-        while monotonic() < end:
-            end += self.checkpoint(control)
+        end = self.motion_time() + (window.distance - window.progress) * 60 / feed + 1.5
+        while self.motion_time() < end:
+            self.checkpoint(control)
             status = self.status(control, timeout=.5)
             if status.state == "Idle" and math.dist(status.position[:2], window.points[-1]) <= XY_TOLERANCE_MM:
                 # A closed path may end at its initial coordinate before the
@@ -413,8 +443,6 @@ class GrblLink:
                     if window.pin:
                         LOG.info("N1 Pn:%s cleared at the verified endpoint %s", window.pin, window.points[-1])
                 return status
-            if status.state.startswith("Hold"):
-                raise MachineError("设备在作业中被外部暂停。")
             sleep(ENDPOINT_POLL)
         raise MachineError("设备没有到达已发送行程的终点。")
 
@@ -451,7 +479,7 @@ class GrblLink:
         try:
             while pending:
                 window = self.xy_window = XYWindow(area, z, [state.position[:2]], review_pins=review_pins)
-                no_progress_until = monotonic() + 1.5 + MAX_PENDING_MM * 60 / feed
+                no_progress_until = self.motion_time() + 1.5 + MAX_PENDING_MM * 60 / feed
                 while pending and not window.pin:
                     origin = window.points[-1]
                     distance = window.distance - window.progress
@@ -470,7 +498,7 @@ class GrblLink:
                         size += len(line) + 1
                     if lines:
                         next_status = self.send_xy_packet(targets, lines, control, next_status)
-                        no_progress_until = monotonic() + 1.5 + MAX_PENDING_MM * 60 / feed
+                        no_progress_until = self.motion_time() + 1.5 + MAX_PENDING_MM * 60 / feed
                     else:
                         end = self.status(control, timeout=.5)
                         if end.state == "Idle":
@@ -479,7 +507,7 @@ class GrblLink:
                             if not window.seen_run and math.dist(window.points[0], origin) <= XY_TOLERANCE_MM:
                                 self.finish_xy(window, feed, control)
                             window.progress = window.distance
-                        if monotonic() >= no_progress_until:
+                        if self.motion_time() >= no_progress_until:
                             raise MachineError("设备未继续沿已发送的轨迹移动。")
                         sleep(.016)
                 state = self.finish_xy(window, feed, control)
@@ -602,7 +630,7 @@ class GrblLink:
                 try:
                     status = self.status(timeout=.25)
                     if status.state in {"Idle", "Hold:0", "Alarm"}:
-                        break
+                        return status
                 except MachineError:
                     pass
         finally:

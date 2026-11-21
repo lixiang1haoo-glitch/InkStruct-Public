@@ -46,6 +46,17 @@ def fixture_page(page_key, source, snapshot, index):
     return digest(["paper-stops", page_key])
 
 
+DEFAULT_SETUP = "默认摆放"
+
+
+def session_binding(panel, fixture_key, setup, mark):
+    template = panel.template
+    family = template.revision.template_id if isinstance(template, FlowTemplate) and template.revision else None
+    return digest([panel.snapshot.document_id, family, fixture_key, setup, asdict(mark) if mark else None,
+                   asdict(panel.profile.axes), panel.profile.paper_calibration, panel.frame, panel.offset,
+                   panel.profile.datum.id if panel.profile.datum else None])
+
+
 @dataclass(frozen=True)
 class FixturePlacement:
     alignment: PageAlignment
@@ -53,6 +64,7 @@ class FixturePlacement:
     setup: str
     source: str
     session_only: bool = False
+    measured_page: int | None = None
 
 
 class SessionPageGroup:
@@ -64,12 +76,12 @@ class SessionPageGroup:
         self.paper_marks = {layout.layout_id: template.paper_origin(layout) for layout in template.effective_layouts
                             if layout.layout_id in self.layouts and template.paper_origin(layout) is not None}
 
-    def measure(self, layout, alignment, position, source, *, fixed=False, recalled=False):
+    def measure(self, layout, alignment, position, number, *, fixed=False, recalled=False):
         if layout not in self.layouts:
             raise ValueError("当前页面不属于这组模板版式。")
         action = "确认" if recalled else "实测"
-        self.entries[layout] = FixturePlacement(alignment, position, self.setup, f"本次连接 · {source}{action}",
-                                                session_only=not fixed)
+        self.entries[layout] = FixturePlacement(alignment, position, self.setup, f"第 {number} 页{action}",
+                                                session_only=not fixed, measured_page=number)
 
 
 def fixture_placement(panel, template, snapshot, index):
@@ -246,13 +258,14 @@ class AlignmentDialog(QtWidgets.QDialog):
             form.addRow(label("在纸上选两个已知位置，分别对准并记录 A、B。保存的方向和比例用于这台设备的所有摆放。"))
         else:
             form.addRow(self.device_name, manage)
-        self.setup = QtWidgets.QLineEdit(panel.setup)
+        self.setup = QtWidgets.QLineEdit("" if panel.setup == DEFAULT_SETUP else panel.setup)
+        self.setup.setPlaceholderText("可选")
         self.setup.setMaxLength(64)
         self.setup_names = QtCore.QStringListModel(self)
         self.setup.setCompleter(QtWidgets.QCompleter(self.setup_names, self.setup))
         self.setup_profile = None
         if not calibration:
-            form.addRow("摆放基准", self.setup)
+            form.addRow("摆放名称", self.setup)
         self.setup.textChanged.connect(self.change_setup)
         self.fixture = QtWidgets.QCheckBox("使用固定纸张限位")
         self.fixture.setToolTip("在设备管理中登记并找回纸角后，可保存同一挡边、纸型、朝向和本页版式的摆放。")
@@ -420,6 +433,9 @@ class AlignmentDialog(QtWidgets.QDialog):
             return
         super().keyPressEvent(event)
 
+    def setup_name(self):
+        return self.setup.text().strip() or DEFAULT_SETUP
+
     def change_setup(self):
         self.recalled_alignment = None
         self.status.clear()
@@ -442,7 +458,7 @@ class AlignmentDialog(QtWidgets.QDialog):
     def markings(self):
         a, b = self.points()
         prior = None
-        if self.group and self.group.setup == self.setup.text().strip():
+        if self.group and self.group.setup == self.setup_name():
             prior = self.group.entries.get(self.layout_id)
         initial = self.recalled_alignment or (prior.alignment if prior else self.original)
         legacy_b = initial.b if initial and initial.a == a else None
@@ -473,8 +489,8 @@ class AlignmentDialog(QtWidgets.QDialog):
                     setup = self.panel.store.fixture_setup(profile, self.fixture_page, self.original)
                     if setup:
                         with QtCore.QSignalBlocker(self.setup):
-                            self.setup.setText(setup)
-                self.setup_names.setStringList(sorted(setups))
+                            self.setup.setText("" if setup == DEFAULT_SETUP else setup)
+                self.setup_names.setStringList(sorted(setups - {DEFAULT_SETUP}))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.status.setText(str(error))
         if self.measurement is not None and (not same_alignment_profile(self.measured_device, profile) or not connected
@@ -505,7 +521,7 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.motion_error.setVisible(bool(error))
         self.manage.setEnabled(idle and not self.panel.batch_active)
         self.recall.setText("纸已靠齐，沿用对位" if fixed else "使用已保存的摆放…")
-        self.recall.setEnabled(idle and connected and bool(self.setup.text().strip()))
+        self.recall.setEnabled(idle and connected)
         self.record_a.setEnabled(connected and idle and (located or self.calibration))
         self.record_b.setEnabled(connected and idle and self.measurement is not None and self.calibration)
         for spin in self.b:
@@ -565,7 +581,7 @@ class AlignmentDialog(QtWidgets.QDialog):
             key = self.markings() if self.configure else self.original
             fixed = self.fixture.isChecked()
             page = self.fixture_page if fixed else self.page
-            record = self.panel.store.place(self.panel.profile, page, self.setup.text().strip(), key)
+            record = self.panel.store.place(self.panel.profile, page, self.setup_name(), key)
             if not record:
                 raise ValueError("此设备、本页和摆放基准下没有保存的实测对位。")
             saved = PageAlignment(**record["correction"])
@@ -589,14 +605,14 @@ class AlignmentDialog(QtWidgets.QDialog):
             if fixed or self.panel.confirm("确认纸张摆放", "请确认纸张和设备坐标仍与记录时一致。"):
                 if context != (self.panel.connection_id, self.panel.profile, self.panel.frame, self.panel.offset):
                     raise ValueError("设备定位已变化，请重新核对摆放。")
-                setup = self.setup.text().strip()
+                setup = self.setup_name()
                 if fixed:
                     self.panel.store.select_fixture_setup(self.panel.profile, page, key, setup)
                 if self.source_page and not self.configure:
                     group = self.panel.session_group(setup)
                     if group:
-                        source = f"第 {self.source_page['number']} 页"
-                        group.measure(self.layout_id, self.panel.profile.calibrated(saved), position, source, recalled=True, fixed=fixed)
+                        number = self.source_page["number"]
+                        group.measure(self.layout_id, self.panel.profile.calibrated(saved), position, number, recalled=True, fixed=fixed)
                 self.alignment = saved
                 self.position = position
                 self.accepted_connection = self.panel.connection_id
@@ -624,9 +640,7 @@ class AlignmentDialog(QtWidgets.QDialog):
                 super().accept()
                 return
             if self.measurement is not None:
-                setup = self.setup.text().strip()
-                if not setup:
-                    raise ValueError("请填写摆放基准名称。")
+                setup = self.setup_name()
                 key = result if self.configure else self.original
                 page = self.fixture_page if self.fixture.isChecked() else self.page
                 if self.document_snapshot is not None and self.panel.snapshot is not self.document_snapshot:
@@ -635,12 +649,13 @@ class AlignmentDialog(QtWidgets.QDialog):
                 self.panel.store.place(self.panel.profile, page, setup, key, self.measurement,
                                        self.offset, result, connection=self.measured_connection,
                                        datum_origin=self.measured_frame, select_fixture=self.fixture.isChecked(),
-                                       source_page=self.source_page)
+                                       source_page=self.source_page,
+                                       session_binding=session_binding(self.panel, self.fixture_page, setup, key) if group else None)
                 if not self.fixture.isChecked() and self.panel.datum_located:
                     self.panel.store.select_fixture_setup(self.panel.profile, self.fixture_page, key, "")
                 if group is not None and self.live_measurement:
-                    source = f"第 {self.source_page['number']} 页"
-                    group.measure(self.layout_id, self.panel.profile.calibrated(result), self.measurement, source,
+                    number = self.source_page["number"]
+                    group.measure(self.layout_id, self.panel.profile.calibrated(result), self.measurement, number,
                                   fixed=self.fixture.isChecked())
                 self.accepted_connection = self.measured_connection
                 self.panel.setup = setup
