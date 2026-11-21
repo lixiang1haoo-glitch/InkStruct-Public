@@ -201,6 +201,27 @@ class TemplateStore:
             raise ValueError('原修订已移出模板库，请恢复后重试。')
         return self._save_revision(candidate, self.read(parent), self.path(parent_id), entries)
 
+    @catalog_write
+    def save_document_revision(self, original, candidate):
+        """Branch from the document's embedded template, including templates outside the library."""
+        from .document.template_authoring import parse_template, template_json
+        from .document.template_revision import template_revision, version_template
+
+        entries = self.entries()
+        prior = template_revision(original)
+        revised = version_template(candidate, parent=original)
+        for entry in entries:
+            revision = entry.get('revision', {})
+            if (not entry['archived'] and revision.get('template_id') == prior.template_id
+                    and revision.get('parent_id') == prior.revision_id
+                    and revision.get('content_hash') == revised.revision.content_hash):
+                return self.read(entry)
+        original_id = hashlib.sha256(template_json(original).encode('utf-8')).hexdigest()
+        source = self.path(original_id) if any(e['id'] == original_id for e in entries) else '排版文档'
+        raw = template_json(revised)
+        self._add(raw.encode('utf-8'), parse_template(raw), source, entries)
+        return revised
+
     def _save_revision(self, candidate, parent, source, entries):
         from .document.template_authoring import parse_template, template_json
         from .document.template_revision import version_template

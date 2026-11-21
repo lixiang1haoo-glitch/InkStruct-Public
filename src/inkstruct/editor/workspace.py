@@ -235,6 +235,7 @@ def organize_workspace(w):
         machine.setObjectName("document_machine_dock")
         machine.setAllowedAreas(QtCore.Qt.DockWidgetArea.RightDockWidgetArea)
         w.machine_panel = MachinePanel(machine)
+        w.machine_panel.template_origin_saved.connect(w.template_content_panel.apply_template)
         w.machine_dock = machine
         machine.setWidget(w.machine_panel)
         w.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, machine)

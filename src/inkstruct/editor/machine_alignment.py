@@ -182,6 +182,39 @@ class AlignmentCanvas(InkViewport):
         painter.restore()
 
 
+class TemplateOriginDialog(QtWidgets.QDialog):
+    """Pick a paper coordinate on the reusable source layout, independently of the plotter."""
+    def __init__(self, template, layout, parent):
+        super().__init__(parent)
+        _, size, _, title = page_context(template, layout=layout)
+        self.setWindowTitle(f"补设模板原点 · {title}")
+        self.resize(600, 650)
+        column = QtWidgets.QVBoxLayout(self)
+        column.addWidget(label("点击每次换纸时容易找到的标记。Ctrl + 滚轮缩放，放大后可拖动。"))
+        image = QtGui.QImage.fromData(layout.background.png_bytes(), "PNG") if layout.background else QtGui.QImage()
+        self.canvas = AlignmentCanvas(size, image)
+        self.canvas.editable = True
+        column.addWidget(self.canvas, 1)
+        self.coordinates = label("请选择纸面原点。")
+        column.addWidget(self.coordinates)
+        column.addWidget(label("保存将创建模板库修订并应用到当前文档。使用此版式的所有循环页会一起更新。"))
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        self.save = buttons.addButton("保存并应用", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
+        self.save.setEnabled(False)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        column.addWidget(buttons)
+        self.alignment = None
+        self.canvas.picked.connect(self.pick)
+
+    def pick(self, x, y):
+        self.alignment = PageAlignment((round(x, 3), round(y, 3)))
+        self.canvas.points = [("原点", self.alignment.a)]
+        self.canvas.update()
+        self.coordinates.setText(f"纸面原点 X {x:.3f} · Y {y:.3f} mm")
+        self.save.setEnabled(True)
+
+
 class AlignmentDialog(QtWidgets.QDialog):
     def __init__(self, panel, parent, page, size, alignment, title, *,
                  source=None, snapshot=None, index=0, configure=False, calibration=False):

@@ -240,6 +240,38 @@ def exercise(workspace):
         assert panel.job is not None and panel.inherited_placement is None
         panel.follow_page(4)
         assert panel.job.index == 4 and "本次连接" in panel.alignment_status.text()
+        # Save the third source layout from the writing panel and re-layout the document.
+        from inkstruct.editor.machine_alignment import TemplateOriginDialog
+        from inkstruct.resource_catalog import TemplateStore
+        revisions = []
+        def apply_revision(revision):
+            revisions.append(revision)
+            panel.set_document(replace(nine, snapshot_id="edited"), 2, True, revision)
+        panel.template_origin_saved.connect(apply_revision)
+        panel.follow_page(2)
+        assert panel.add_origin_button.isVisible() and not panel.write_button.isEnabled()
+        with patch.object(TemplateOriginDialog, "exec", lambda _dialog: 0):
+            click(panel, panel.add_origin_button)
+        assert not revisions
+        def choose_mark(dialog):
+            assert not dialog.save.isEnabled()
+            dialog.canvas.picked.emit(8., 12.)
+            dialog.save.click()
+            return dialog.result()
+        count = len(serial.commands)
+        with patch.object(TemplateOriginDialog, "exec", choose_mark):
+            click(panel, panel.add_origin_button)
+        store = TemplateStore(workspace / "templates")
+        assert len(store.entries()) == 1
+        revised = store.read(store.entries()[0])
+        assert revised == revisions[-1] and revised.layout(6).plotter_alignment.a == (8., 12.)
+        assert store.save_document_revision(cycle, revised) == revised and len(store.entries()) == 1
+        for index in (2, 6, 0):
+            panel.follow_page(index)
+            assert panel.job is not None and panel.write_button.isEnabled()
+            assert not panel.add_origin_button.isVisible()
+            assert panel.registration.origin == ((40., 38.) if index == 0 else (43., 45.))
+        assert len(serial.commands) == count
         # A partial loop starting at a missing layout must begin on the first configured sheet.
         partial = replace(cycle, loop_pages=("3", "2", "1", "4"))
         panel.set_document(nine, 1, True, partial)
