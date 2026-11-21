@@ -19,26 +19,6 @@ def test_recover_paper_corner_and_write_against_same_stops(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_template_origins_share_the_calibrated_paper_transform():
-    from dataclasses import replace
-    from math import pi
-    from inkstruct.document.flow_template import FlowTemplate, PageLayout
-    from inkstruct.editor.machine_alignment import SessionPageGroup
-    from inkstruct.plotter.profiles import DeviceAxes, PageAlignment
-
-    first, second = PageAlignment((8, 17)), PageAlignment((18, 37))
-    template = FlowTemplate(kind="custom", layouts=(PageLayout("a", "甲", plotter_alignment=first),
-                                                    PageLayout("b", "乙", plotter_alignment=second)),
-                            loop_pages=("a", "b"))
-    axes = DeviceAxes(x_scale=2, swap=True)
-    group = SessionPageGroup(template, (), "默认摆放", axes)
-    measured = replace(first, angle=pi / 2, scale=1.2)
-    group.measure("a", measured, (100, 80), "第 1 页")
-    placement = group.place_from_reference("b", group.entries["a"])
-    assert placement.position == (112, 32)
-    assert placement.alignment.angle == measured.angle and placement.alignment.scale == measured.scale
-
-
 def exercise(workspace):
     from dataclasses import replace
 
@@ -176,8 +156,25 @@ def exercise(workspace):
         marked = replace(cycle, layouts=tuple(replace(layout, plotter_alignment=PageAlignment(mark))
                                               for layout, mark in zip(layouts, marks, strict=True)))
         session.set_document(nine, 5, True, marked)
-        record_one(5, (3.650, .970))
         record_one(6, (11.640, .910))
+        session.page_list.setCurrentRow(5)
+        assert "待对位" in session.alignment_status.text()
+        assert session.job is None and session.registration is None
+        assert not session.return_button.isEnabled() and not session.write_button.isEnabled()
+        before = len(serial.commands)
+        session.return_to_origin()
+        session.start_writing()
+        assert len(serial.commands) == before
+        record_one(5, (3.650, .970))
+        session.page_list.setCurrentRow(6)
+        assert session.registration.origin == (11.640, .910)
+        assert "第 7 页实测" in session.alignment_status.text()
+        click(session, session.return_button)
+        assert serial.position[:2] == [11.640, .910]
+        assert session.job.strokes[0].points == ((13.324, -8.614), (15.324, -6.614))
+        click(session, session.write_button)
+        assert session.completed_pages == {6}
+        assert any(b"X15.3240 Y-6.6140" in line for line in serial.commands)
         session.page_list.setCurrentRow(5)
         assert session.registration.origin == (3.650, .970), session.alignment_status.text()
         assert "第 6 页实测" in session.alignment_status.text()
@@ -188,8 +185,7 @@ def exercise(workspace):
         assert session.completed_pages == {5}
         assert any(b"X7.3200 Y-6.6180" in line for line in serial.commands)
         session.page_list.setCurrentRow(7)
-        assert session.registration.origin == (12.640, 1.910)
-        assert "第 7 页实测" in session.alignment_status.text() and "推算" in session.alignment_status.text()
+        assert session.registration is None and "待对位" in session.alignment_status.text()
         record_one(6, (13.640, 3.910))
         session.page_list.setCurrentRow(5)
         assert session.registration.origin == (3.650, .970)
@@ -197,7 +193,10 @@ def exercise(workspace):
         click(session, session.return_button)
         assert serial.position[:2] == [3.650, .970]
         session.page_list.setCurrentRow(7)
-        assert session.registration.origin == (14.640, 4.910)
+        assert session.registration is None
+        session.page_list.setCurrentRow(1)
+        assert session.registration.origin == (3.650, .970)
+        assert "第 6 页实测" in session.alignment_status.text()
         record_one(5, (5.750, 4.070))
         session.page_list.setCurrentRow(6)
         assert session.registration.origin == (13.640, 3.910)
@@ -249,9 +248,11 @@ def exercise(workspace):
                 assert panel.registration is None and not panel.write_button.isEnabled()
                 assert "PDF 第 3 页" in panel.alignment_status.text() and "缺少纸面原点" in panel.alignment_status.text()
                 assert "模板缺纸面原点" in panel.page_list.item(i).text()
+            elif i == 3:
+                assert panel.job is None and not panel.write_button.isEnabled()
+                assert "待对位" in panel.alignment_status.text()
             else:
-                shift = i % 4
-                assert panel.job.index == i and panel.registration.origin == (40.+shift, 38.+2*shift)
+                assert panel.job.index == i and panel.registration.origin == (40., 38.)
                 assert panel.job.strokes[0].points == ((41., 40.), (43., 42.))
                 assert all(text in panel.alignment_status.text() for text in
                            (f"第 {i+1} 页已沿用", "PDF 第 1 页", "本稿第 1 页登记"))
@@ -295,9 +296,12 @@ def exercise(workspace):
         assert store.save_paper_origins(cycle, revised) == revised and len(store.entries()) == 1
         for index in (2, 6, 0):
             panel.follow_page(index)
-            assert panel.job is not None and panel.write_button.isEnabled()
             assert not panel.add_origin_button.isVisible()
-            assert panel.registration.origin == ((40., 38.) if index == 0 else (43., 45.))
+            if index == 0:
+                assert panel.write_button.isEnabled() and panel.registration.origin == (40., 38.)
+            else:
+                assert panel.job is None and not panel.write_button.isEnabled()
+                assert "待对位" in panel.alignment_status.text()
         assert len(serial.commands) == count
         # A partial loop starting at a missing layout must begin on the first configured sheet.
         partial = replace(cycle, loop_pages=("3", "2", "1", "4"))
@@ -310,7 +314,7 @@ def exercise(workspace):
         panel.confirm = lambda title, text, *args: confirmations.append(text) or True
         click(panel, panel.write_button)
         assert "跳过缺少纸面原点的第 1、5、9 页" in confirmations[-1]
-        assert panel.completed_pages == {1} and panel.job.index == 2
+        assert panel.completed_pages == {1} and panel.raw_page.index == 2 and panel.job is None
         assert panel.pending_pages == [3, 5, 6, 7]
         panel.stop()
         panel.set_document(snapshot, 0, True, template)
