@@ -203,8 +203,7 @@ def test_optional_jog_bounds_and_repeated_pin_without_a_range():
     assert serial.position == [-1, 0, 0]
     assert b"G1 X-1.0000 Y0.0000 F4250\n" in serial.commands
     serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:0,0,0>" if state != "Run" or coords.startswith("-1") else f"<{state}|WPos:{coords}|WCO:0,0,0|Pn:X>"
-    with pytest.raises(MachineError, match="限位"):
-        link.jog((-1, 0), None, MotionControl())
+    assert link.jog((-1, 0), None, MotionControl()).position == (-2, 0, 0)
 
 
 @pytest.mark.parametrize("commissioning", [True, False])
@@ -226,12 +225,12 @@ def test_range_off_manual_jog_checks_single_pulse_before_sending_more(commission
     assert all(line.endswith(b"F2000\n") for line in commands)
     pulse = next(i for i, event in enumerate(serial.trace) if isinstance(event, str) and "Pn:Y" in event)
     next_move = serial.trace.index(commands[1], pulse)
-    assert sum(isinstance(event, str) and event.startswith("<Idle|") for event in serial.trace[pulse:next_move]) == 2
+    assert any(isinstance(event, str) and event.startswith("<Idle|") for event in serial.trace[pulse:next_move])
     assert all(len(packet.splitlines()) == 1 for packet in serial.packets if packet.startswith(b"G1 X"))
 
 
 @pytest.mark.parametrize("signal", ["persistent", "idle", "alarm", "combined", "stalled", "adjacent"])
-def test_range_off_manual_jog_stops_on_unverified_signal(signal):
+def test_range_off_jog_checks_motion_independently_of_pin_state(signal):
     serial = SimulatedGrbl()
     link = GrblLink(serial)
     link.connect()
@@ -251,9 +250,12 @@ def test_range_off_manual_jog_stops_on_unverified_signal(signal):
                 return f"<Run|WPos:{xyz}|Pn:Y>"
         return f"<{state}|WPos:{xyz}>"
     serial.report = report
-    with pytest.raises(MachineError):
-        link.jog((0, 10), None, MotionControl(), feed=2000, range_disabled=True)
-    assert sum(cmd.startswith(b"G1 X") for cmd in serial.commands) == (2 if signal == "adjacent" else 1)
+    if signal in {"stalled", "alarm"}:
+        with pytest.raises(MachineError, match="终点|ALARM"):
+            link.jog((0, 10), None, MotionControl(), feed=2000, range_disabled=True)
+        assert sum(cmd.startswith(b"G1 X") for cmd in serial.commands) == 1
+    else:
+        assert link.jog((0, 10), None, MotionControl(), feed=2000, range_disabled=True).position == (0, 10, 0)
 
 
 @pytest.mark.parametrize("entry", ["return", "page", "dry"])
@@ -276,22 +278,23 @@ def test_range_off_automatic_raised_motion_reviews_only_a_verified_short_segment
     assert seen
     pulse = next(i for i, s in enumerate(serial.trace) if isinstance(s,str) and "Pn:X" in s)
     following = next(i for i,s in enumerate(serial.trace[pulse+1:],pulse+1) if isinstance(s,bytes) and s.startswith(b"G1"))
-    assert sum(isinstance(s,str) and s.startswith("<Idle|") for s in serial.trace[pulse:following]) >= 2
+    assert sum(isinstance(s,str) and s.startswith("<Idle|") for s in serial.trace[pulse:following]) >= 1
 
 
-def test_range_off_ink_contact_remains_strict():
+@pytest.mark.parametrize("pins", ["Y", "XY", "XYZPDHRS"])
+def test_persistent_pins_through_connect_write_and_idle(pins):
     serial = SimulatedGrbl()
+    serial.report = lambda state, xyz: f"<{state}|WPos:{xyz}|WCO:0,0,0|Pn:{pins}>"
     link = GrblLink(serial)
-    link.connect()
+    assert link.connect().limits == pins
     page = position_page(page_fixture(), PaperRegistration((0., 0.)))
-    serial.report = lambda state, xyz: (f"<{state}|WPos:{xyz}|Pn:Y>" if state=="Run" and xyz.endswith(",-1.6")
-                                        else f"<{state}|WPos:{xyz}>")
-    with pytest.raises(MachineError, match="限位"):
-        link.run_page(page, None, MotionControl())
+    end = link.run_page(page, None, MotionControl())
+    assert end.limits == pins and end.state == "Idle" and end.position[2] == 0
+    assert b"!" not in serial.commands and b"\x18" not in serial.commands
 
 
 @pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "alarm"])
-def test_device_jog_does_not_resume_after_unsafe_pin(case):
+def test_device_jog_respects_controller_fault_and_firmware_identity(case):
     serial = SimulatedGrbl()
     if case == "unknown":
         serial.firmware = "[VER:1.1f.20170801:]"
@@ -307,8 +310,11 @@ def test_device_jog_does_not_resume_after_unsafe_pin(case):
 
     serial.report = report
     area = WorkArea(0, 0, 30, 14 if case == "boundary" else 30)
-    with pytest.raises(MachineError, match="限位|ALARM|复核"):
-        link.jog((0, 3), area, MotionControl(), commissioning=True)
+    if case in {"unknown", "alarm"}:
+        with pytest.raises(MachineError, match="限位|ALARM"):
+            link.jog((0, 3), area, MotionControl(), commissioning=True)
+    else:
+        assert link.jog((0, 3), area, MotionControl(), commissioning=True).position == (10, 13, 0)
     xy = [line for line in serial.commands if line.startswith(b"G1 X")]
     assert xy == [(link.xy_command((10, 13), 2500) + "\n").encode("ascii")]
 
@@ -656,10 +662,15 @@ try:
     transport.report = lambda state, xyz: f"<{state}|WPos:{xyz}|Pn:Y>"
     panel.nudge.buttons[(0, 1)].click()
     wait()
+    assert panel.device is not None and panel.device.limits == "Y"
+    assert not (Path(sys.argv[1]) / "plotter-last-jog-fault.json").exists()
+    transport.report = lambda state, xyz: "ALARM:1" if state == "Run" else f"<{state}|WPos:{xyz}|Pn:Y>"
+    panel.nudge.buttons[(0, 1)].click()
+    wait()
     assert panel.device is None and "plotter-last-jog-fault.json" in panel.report.text()
     import json
     fault = json.loads((Path(sys.argv[1]) / "plotter-last-jog-fault.json").read_bytes())
-    assert fault["operation"] == "jog" and "|Pn:Y>" in fault["reports_before_stop"][-1]
+    assert fault["operation"] == "jog" and fault["reports_before_stop"][-1] == "ALARM:1"
 finally:
     panel.shutdown()
     panel.close()
@@ -757,7 +768,7 @@ def test_short_points_are_batched_to_six_and_preserve_pen_order():
 
 
 @pytest.mark.parametrize("pin", ["X", "Y"])
-def test_qualified_interior_single_axis_report_is_verified_at_clear_endpoint(pin, caplog):
+def test_single_axis_report_is_kept_in_motion_diagnostics(pin):
     serial = SimulatedGrbl()
     serial.position[:] = [10, 10, 0]
     link = GrblLink(serial)
@@ -769,12 +780,12 @@ def test_qualified_interior_single_axis_report_is_verified_at_clear_endpoint(pin
     serial.report = report
     status = link.move_to((12, 10), WorkArea(0, 0, 30, 30), MotionControl())
     assert status.position == (12, 10, 0) and status.limits == ""
-    assert f"Pn:{pin}" in caplog.text
+    assert any(f"Pn:{pin}" in line for line in link.recent_reports)
     assert b"!" not in serial.commands and b"\x18" not in serial.commands
 
 
 @pytest.mark.parametrize("case", ["persist", "boundary", "unknown", "hard_limits", "Z", "XY", "deviation"])
-def test_limit_review_fails_closed(case):
+def test_pin_telemetry_and_independent_motion_checks(case):
     serial = SimulatedGrbl()
     serial.position[:] = [10, 10, 0]
     if case == "unknown":
@@ -792,11 +803,14 @@ def test_limit_review_fails_closed(case):
         return f"<{state}|WPos:{xyz}" + (f"|Pn:{limits}>" if triggered else ">")
     serial.report = report
     area = WorkArea(0, 0, 13 if case == "boundary" else 30, 30)
-    with pytest.raises(MachineError):
-        link.move_to((target, 10), area, MotionControl())
+    if case in {"deviation", "unknown"}:
+        with pytest.raises(MachineError, match="轨迹|限位"):
+            link.move_to((target, 10), area, MotionControl())
+    else:
+        assert link.move_to((target, 10), area, MotionControl()).position == (target, 10, 0)
 
 
-def test_pin_review_stops_sending_next_packet_until_verified_idle():
+def test_pin_telemetry_does_not_insert_an_extra_planner_barrier():
     serial = SimulatedGrbl()
     serial.position[:] = [10, 10, 0]
     link = GrblLink(serial)
@@ -811,7 +825,7 @@ def test_pin_review_stops_sending_next_packet_until_verified_idle():
     second = serial.trace.index(b"G1 X17.0000 Y10.0000 F2500\n")
     interval = serial.trace[first:second]
     assert any(isinstance(x, str) and x.endswith("|Pn:X>") for x in interval)
-    assert sum(isinstance(x, str) and x.startswith("<Idle|WPos:16") for x in interval) == 2
+    assert not any(isinstance(x, str) and x.startswith("<Idle|WPos:16") for x in interval)
 
 
 def test_joint_xy_report_on_diagonal_can_clear_but_alarm_still_aborts():
@@ -1178,13 +1192,27 @@ def test_confirmed_page_region_reviews_recorded_writing_signal():
     for confirmed in (False, True):
         window = XYWindow(area if confirmed else None, -1.59, [points[0]])
         window.arm(points[1:])
-        window.observe(decode_status(reports[0]), True)
-        if confirmed:
-            window.observe(decode_status(reports[1]), True)
-            assert window.pin == "Y"
-        else:
-            with pytest.raises(MachineError, match="Pn:Y"):
-                window.observe(decode_status(reports[1]), True)
+        for report in reports:
+            window.observe(decode_status(report))
+        assert window.progress > 0
+
+
+def test_page_four_pin_frame_with_unregistered_work_area():
+    from inkstruct.plotter.grbl import XYWindow
+    serial = SimulatedGrbl()
+    link = GrblLink(serial)
+    link.connect()
+    link.motion_active = True
+    link.xy_window = XYWindow(None, -1.590, [(7.860, 3.650)])
+    link.xy_window.arm([(7.800, 5.230)])
+    frame = "<Run|WPos:7.800,5.230,-1.590,0.000|Bf:7,1023|FS:1279,0|Pn:Y>"
+    serial.responses.append(frame)
+    link.pump()
+    assert link.last_status.limits == "Y" and link.last_status.state == "Run"
+    assert link.xy_window.progress == pytest.approx(link.xy_window.distance)
+    serial.responses.append("ALARM:1")
+    with pytest.raises(MachineError, match="ALARM:1"):
+        link.pump()
 
 
 def test_device_calibration_overrides_legacy_page_fit_without_changing_origin(tmp_path):

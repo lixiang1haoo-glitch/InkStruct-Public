@@ -4,7 +4,7 @@
 
 [项目特色](#项目特色) · [下载](#下载) · [文档站](https://lixiang1haoo-glitch.github.io/InkStruct-Public/) · [开发者文档](https://lixiang1haoo-glitch.github.io/InkStruct-Public/developers/) · [源码构建](#源码构建) · [使用速查](docs/USER_GUIDE.md) · [反馈问题](CONTRIBUTING.md)
 
-Windows x64 · 0.1.137 本机测试版 · Python / Qt
+Windows x64 · 0.1.138 本机测试版 · Python / Qt
 
 正文统一按笔迹宽度紧凑排版。设置标签用 ● 标记各范围的草稿。点击「导出…」会按当前选项检查文档，检查通过后即可选择保存位置。
 
@@ -12,7 +12,7 @@ Windows x64 · 0.1.137 本机测试版 · Python / Qt
 
 左下角「设置」集中提供当前文档、新建文档默认与应用偏好。Windows 排版页右侧的「写字机」标签可控制炽写 N1。
 
-模板为每个源版式保存纸面原点。循环页沿用同一源版式的有效实测原点，并显示实测来源。其他版式各自对位，尚无有效实测时显示「待对位」。侧栏标出缺少纸面原点的页，可直接补设并保存到模板库和当前文档。补设原点时保留修订号、页码和排版预览。设备初始化保存的方向和比例用于各页。也可在找回基准后自动沿用同一模板版式的固定摆放，并显示来源。写字机可按设备记住「写完本页后抬笔回到原点」，多页任务返回后提醒换纸。书写时显示笔数和百分比，暂停后可直接继续或停止。开始或恢复书写时可核实本页运动范围。炽写 N1 可在该范围内连续空走，并复核运动中的 X/Y 限位信号。写字机可沿用 SVG 导出的路径优化；排版侧栏和对位窗口都能按当前笔高切换落笔和抬笔。
+模板为每个源版式保存纸面原点。循环页沿用同一源版式的有效实测原点，并显示实测来源。其他版式各自对位，尚无有效实测时显示「待对位」。侧栏标出缺少纸面原点的页，可直接补设并保存到模板库和当前文档。补设原点时保留修订号、页码和排版预览。设备初始化保存的方向和比例用于各页。也可在找回基准后自动沿用同一模板版式的固定摆放，并显示来源。写字机可按设备记住「写完本页后抬笔回到原点」，多页任务返回后提醒换纸。书写时显示笔数和百分比，暂停后可直接继续或停止。开始或恢复书写时可核实本页运动范围。炽写 N1 可在该范围内连续空走，原始 Pn 引脚报告保留在诊断记录中。写字机可沿用 SVG 导出的路径优化；排版侧栏和对位窗口都能按当前笔高切换落笔和抬笔。
 
 0.1.121 将无软件范围时的短段抬笔到位复核用于回到 A、前往 C、笔间空走及抬笔试走。
 
@@ -102,15 +102,15 @@ $python = ".\.venv\Scripts\python.exe"
 $env:PYTHONPATH = "$PWD/src;$PWD/artifacts/external/data_collection"
 & $python -B packaging/prepare_public_resources.py
 & $python -B -m pytest -p no:cacheprovider
-& $python -B packaging/build_inkstruct_app.py --output build/0.1.137
-& $python -B packaging/verify_public_windows.py --bundle build/0.1.137/dist/InkStruct --output build/verification
+& $python -B packaging/build_inkstruct_app.py --output build/0.1.138
+& $python -B packaging/verify_public_windows.py --bundle build/0.1.138/dist/InkStruct --output build/verification
 ```
 
 从源码启动可运行 `python -m inkstruct.application --workspace workspace`。构建安装程序时，从 [NSIS 锁](packaging/nsis-win.lock.json) 下载编译器 ZIP，保持原样，并执行：
 
 ```powershell
 & $python -B packaging/build_windows_installer.py --verification build/verification/verification.json --nsis-zip nsis-3.13.zip --output build/installer
-& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.137-Windows-x64.zip --output build/installer-check
+& $python -B packaging/verify_windows_installer.py --installer-build build/installer/installer-build.json --zip build/verification/InkStruct-0.1.138-Windows-x64.zip --output build/installer-check
 ```
 
 ## 许可与贡献
