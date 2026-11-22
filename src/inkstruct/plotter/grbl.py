@@ -1,6 +1,5 @@
 """Blocking Grbl transactions for the N1. The owning worker holds the serial port."""
 
-import logging
 import math
 import re
 from collections import deque
@@ -23,7 +22,6 @@ MAX_PACKET_LINES = 6
 MAX_PENDING_MM = 15.0
 STATUS_INTERVAL = .04
 ENDPOINT_POLL = .008
-LOG = logging.getLogger(__name__)
 
 
 class MachineError(RuntimeError):
@@ -49,6 +47,13 @@ class Status:
     position: tuple[float, float, float] | None
     offset: tuple[float, float, float] | None
     limits: str
+    n1_pin_report: bool = False
+
+    @property
+    def blocking_pins(self):
+        # CX-Elite reports the inputs during ordinary motion. Controller faults
+        # arrive separately as Alarm, Hold, Door, or an error response.
+        return "" if self.n1_pin_report else self.limits
 
 
 def position_vector(value: str):
@@ -64,7 +69,7 @@ def position_vector(value: str):
     return values[:3]
 
 
-def decode_status(line: str, previous_offset=None):
+def decode_status(line: str, previous_offset=None, *, n1_pin_report=False):
     if not line.startswith("<") or not line.endswith(">"):
         raise MachineError("设备状态响应不完整。")
     state, *fields = line[1:-1].split("|")
@@ -78,7 +83,7 @@ def decode_status(line: str, previous_offset=None):
             raise MachineError("设备工作坐标不是有限数值。")
     else:
         position = None
-    return Status(state, position, offset, data.get("Pn", ""))
+    return Status(state, position, offset, data.get("Pn", ""), n1_pin_report)
 
 
 @dataclass
@@ -95,18 +100,14 @@ class XYWindow:
     points: list[Point]
     distance: float = 0.0
     progress: float = 0.0
-    last_progress: float = field(default_factory=monotonic)
-    pin: str = ""
     seen_run: bool = False
-    review_pins: bool = True
-    short_raised_segment: bool = False
 
     def arm(self, targets):
         for point in targets:
             self.distance += math.dist(self.points[-1], point)
             self.points.append(point)
 
-    def observe(self, status: Status, qualified: bool):
+    def observe(self, status: Status):
         if status.position is None:
             raise MachineError("运动期间未收到有效坐标。")
         x, y, z = status.position
@@ -130,43 +131,12 @@ class XYWindow:
             if along >= self.progress - XY_TOLERANCE_MM:
                 deviation = math.dist(point, (a[0] + fraction * dx, a[1] + fraction * dy))
                 if deviation <= XY_TOLERANCE_MM:
-                    moving_both = min(abs(dx), abs(dy)) > .001
-                    candidates.append((along, moving_both))
+                    candidates.append(along)
             length += segment
-        along, moving_both = min(candidates, default=(self.progress, False))
         if candidates:
-            if along > self.progress + .015:
-                self.progress = along
-                self.last_progress = monotonic()
+            self.progress = max(self.progress, min(candidates))
         elif math.dist(point, self.points[-1]) > XY_TOLERANCE_MM:
             raise MachineError("运动坐标偏离已发送的轨迹。")
-
-        axes = set(status.limits) & set("XYZ")
-        if axes:
-            if self.short_raised_segment:
-                # Only a single outstanding pen-up segment can take this path.
-                # A second asserted sample, even at Idle, is a stop.
-                eligible = (self.area is None and self.z == PEN_UP and len(self.points) == 2
-                            and self.distance <= RAISED_SEGMENT_MM + .001
-                            and status.state == "Run" and status.limits in {"X", "Y"}
-                            and self.progress > .015 and not self.pin)
-            else:
-                eligible = (self.area is not None and status.limits in {"X", "Y", "XY", "YX"}
-                            and status.state in {"Run", "Idle"} and (len(axes) == 1 or moving_both)
-                            and self.area.contains(point, inset=PIN_INTERIOR_MM)
-                            and all(self.area.contains(p, inset=PIN_INTERIOR_MM) for p in self.points))
-            if not (qualified and self.review_pins and eligible):
-                detail = "本次落笔没有已核实的工作范围。" if self.z < 0 and self.area is None else ""
-                raise MachineError(f"{detail}设备报告轴限位（Pn:{status.limits}，{status.state}，"
-                                   f"X{x:.3f} Y{y:.3f}），运动已停止。")
-            if not self.pin:
-                self.pin = status.limits
-                self.last_progress = monotonic()
-                LOG.warning("N1 reported Pn:%s at %s; verifying the queued path", self.pin, point)
-            else:
-                self.pin = "".join(sorted(set(self.pin) | axes))
-        if self.pin and status.state == "Run" and monotonic() - self.last_progress > .45:
-            raise MachineError(f"限位复核期间未检测到运动进展（Pn:{self.pin}）。")
 
 
 class GrblLink:
@@ -184,8 +154,8 @@ class GrblLink:
         self.motion_active = False
         self.xy_window = None
         self.referenced_idle_xy = None
-        self.pin_review = False
-        self.previous_raised_pulse = False
+        self.n1_firmware = False
+        self.segment_unbounded_travel = False
         self.packet_bytes = 120
 
     def send(self, text: str):
@@ -203,7 +173,7 @@ class GrblLink:
             self.recent_reports.append(line[:512])
         if line.startswith("<"):
             previous = self.last_status.offset if self.last_status else None
-            self.last_status = decode_status(line, previous)
+            self.last_status = decode_status(line, previous, n1_pin_report=self.n1_firmware)
             self.status_count += 1
             self.status_at = monotonic()
             if self.metric and previous is not None and self.last_status.offset != previous:
@@ -214,10 +184,10 @@ class GrblLink:
                     raise ExternalHold("设备在作业中被外部暂停。")
                 if state.split(":")[0] not in {"Idle", "Run", "Hold"}:
                     raise MachineError(f"作业中设备进入 {state} 状态。")
-                if self.xy_window is not None:
-                    self.xy_window.observe(self.last_status, self.pin_review)
-                elif set(self.last_status.limits) & set("XYZ"):
+                if set(self.last_status.blocking_pins) & set("XYZ"):
                     raise MachineError(f"作业中设备报告了轴限位（Pn:{self.last_status.limits}）。")
+                if self.xy_window is not None:
+                    self.xy_window.observe(self.last_status)
         elif line.lower().startswith(("error:", "alarm:")):
             raise MachineError(f"设备返回 {line}。")
         elif line.startswith("Grbl"):
@@ -334,15 +304,17 @@ class GrblLink:
             raise MachineError("无法确认设备状态使用毫米。请在设备侧核对 Grbl 的 $13 设置。")
         self.metric = True
         identity = self.command("$I")
-        self.pin_review = ("[VER:1.1f / CX-Elite V2.1.003:]" in identity and
-                           any(re.fullmatch(r"\$21\s*=\s*0(?:\.0+)?\s*(?:\([^()]*\))?", line)
-                               for line in settings))
+        self.n1_firmware = "[VER:1.1f / CX-Elite V2.1.003:]" in identity
+        self.segment_unbounded_travel = self.n1_firmware and any(
+            re.fullmatch(r"\$21\s*=\s*0(?:\.0+)?\s*(?:\([^()]*\))?", line)
+            for line in settings
+        )
         for line in identity:
             capacity = re.fullmatch(r"\[OPT:[^,]*,\d+,(\d+)\]", line)
             if capacity and int(capacity[1]) >= 64:
                 self.packet_bytes = min(240, int(capacity[1]) - 1)
         status = self.require_idle()
-        if "[VER:1.1f / CX-Elite V2.1.003:]" in identity and status.offset is None:
+        if self.n1_firmware and status.offset is None:
             # WCO only appears periodically among the N1's WPos reports.
             deadline = monotonic() + 3
             while status.offset is None and monotonic() < deadline:
@@ -354,7 +326,7 @@ class GrblLink:
         status = self.status(control)
         if not self.metric or status.state != "Idle" or status.position is None:
             raise MachineError(f"需要设备处于 Idle 并返回有效的毫米工作坐标，当前状态为 {status.state}。")
-        if set(status.limits) & set("XYZ"):
+        if set(status.blocking_pins) & set("XYZ"):
             raise MachineError(f"设备报告了轴限位（Pn:{status.limits}），无法移动。")
         if (self.referenced_idle_xy is not None
                 and math.dist(status.position[:2], self.referenced_idle_xy) > XY_TOLERANCE_MM):
@@ -434,14 +406,11 @@ class GrblLink:
                                       math.dist(window.points[0], window.points[-1]) <= XY_TOLERANCE_MM)
                 if ambiguous_endpoint:
                     self.command("G4 P0", control)
-                if window.pin or ambiguous_endpoint:
                     sleep(.025)
                     status = self.status(control, timeout=.5)
-                    if (status.state != "Idle" or status.limits or
+                    if (status.state != "Idle" or status.blocking_pins or
                             math.dist(status.position[:2], window.points[-1]) > XY_TOLERANCE_MM):
-                        raise MachineError("设备到位复核未通过" + (f"（Pn:{window.pin}）。" if window.pin else "。"))
-                    if window.pin:
-                        LOG.info("N1 Pn:%s cleared at the verified endpoint %s", window.pin, window.points[-1])
+                        raise MachineError("设备到位复核未通过。")
                 return status
             sleep(ENDPOINT_POLL)
         raise MachineError("设备没有到达已发送行程的终点。")
@@ -455,18 +424,16 @@ class GrblLink:
                 for index in range(1, steps + 1):
                     target = machine_point(tuple(a + (b - a) * index / steps
                                                  for a, b in zip(start, end, strict=True)))
-                    window = XYWindow(None, PEN_UP, [state.position[:2]],
-                                      review_pins=not self.previous_raised_pulse, short_raised_segment=True)
+                    window = XYWindow(None, PEN_UP, [state.position[:2]])
                     self.xy_window = window
                     self.send_xy_packet([target], [self.xy_command(target, feed)], control, monotonic())
                     state = self.finish_xy(window, feed, control)
-                    self.previous_raised_pulse = bool(window.pin)
             return state
         finally:
             self.xy_window = None
 
-    def move_path(self, state, points, area, feed, z, control, *, review_pins=True):
-        if self.pin_review and review_pins and area is None and z == PEN_UP:
+    def move_path(self, state, points, area, feed, z, control, *, segment_travel=True):
+        if self.segment_unbounded_travel and segment_travel and area is None and z == PEN_UP:
             return self.bounded_pen_up(state, points, feed, control)
         start = state.position[:2]
         pending = deque()
@@ -478,9 +445,9 @@ class GrblLink:
         next_status = monotonic()
         try:
             while pending:
-                window = self.xy_window = XYWindow(area, z, [state.position[:2]], review_pins=review_pins)
+                window = self.xy_window = XYWindow(area, z, [state.position[:2]])
                 no_progress_until = self.motion_time() + 1.5 + MAX_PENDING_MM * 60 / feed
-                while pending and not window.pin:
+                while pending:
                     origin = window.points[-1]
                     distance = window.distance - window.progress
                     targets, lines = [], []
@@ -524,11 +491,11 @@ class GrblLink:
 
     def run_page(self, page: MachinePage, area: WorkArea | None, control: MotionControl, *,
                  dry_run=False, feed=DEFAULT_WRITE_FEED, state=None,
-                 review_pins=True, commissioning=False, height=PEN_DOWN, start=0, journal=None):
+                 segment_travel=True, commissioning=False, height=PEN_DOWN, start=0, journal=None):
         validate_feed(feed)
         if not PEN_DOWN <= height <= -.1 or not 0 <= start <= len(page.strokes):
             raise ValueError('笔高或续写笔序无效。')
-        review_pins = review_pins and not commissioning
+        segment_travel = segment_travel and not commissioning
         if state is None:
             state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
@@ -536,14 +503,14 @@ class GrblLink:
         total = len(page.strokes)
         for number, stroke in enumerate(page.strokes[start:], start + 1):
             state = self.move_path(state, stroke.points[:1], area, feed, PEN_UP, control,
-                                   review_pins=review_pins)
+                                   segment_travel=segment_travel)
             if not dry_run:
                 if journal is not None:
                     journal.save(number - 1, True)
                 self.pen(height, control)
                 state = self.wait_idle(control, z=height, poll=ENDPOINT_POLL)
             state = self.move_path(state, stroke.points[1:], area, feed,
-                                   PEN_UP if dry_run else height, control, review_pins=review_pins)
+                                   PEN_UP if dry_run else height, control, segment_travel=segment_travel)
             if not dry_run:
                 self.pen(PEN_UP, control)
                 state = self.wait_idle(control, z=PEN_UP, poll=ENDPOINT_POLL)
@@ -559,16 +526,10 @@ class GrblLink:
     def trial_axes(self, axes, area, feed, control, *, confirmed_area=None):
         state = self.require_idle(control, for_motion=True)
         page = axis_trial(axes.register((0, 0), state.position[:2]))
-        points = tuple(point for stroke in page.strokes for point in stroke.points)
-        review = self.can_review_path(confirmed_area, (state.position[:2], *points))
         if confirmed_area is not None and area is not None and area != confirmed_area:
             page.check(area, state.position[:2])
         return self.run_page(page, confirmed_area or area, control, feed=feed,
-                             state=state, review_pins=review)
-
-    def can_review_path(self, area, points):
-        return (self.pin_review and area is not None
-                and all(area.contains(point, inset=PIN_INTERIOR_MM) for point in points))
+                             state=state, segment_travel=False)
 
     def jog(self, offset: Point, area: WorkArea | None, control: MotionControl, *,
             feed=DEFAULT_WRITE_FEED, commissioning=False, require_bounds=False, range_disabled=False):
@@ -577,16 +538,14 @@ class GrblLink:
         end = machine_point(tuple(a + b for a, b in zip(start, offset, strict=True)))
         if require_bounds and area is None:
             raise ValueError("此步长需要已确认的工作范围。")
-        if range_disabled and area is None and self.pin_review:
-            return self.move_from(start, end, area, control, feed=feed)
-        review = not commissioning or self.can_review_path(area, (start, end))
-        return self.move_from(start, end, area, control, feed=feed, review_pins=review)
+        return self.move_from(start, end, area, control, feed=feed,
+                              segment_travel=range_disabled or not commissioning)
 
     def move_to(self, target: Point, area: WorkArea | None, control: MotionControl, *, feed=DEFAULT_WRITE_FEED):
         state = self.require_idle(control, for_motion=True)
         return self.move_from(state.position[:2], machine_point(target), area, control, feed=feed)
 
-    def move_from(self, start, end, area, control, *, feed=DEFAULT_WRITE_FEED, review_pins=True):
+    def move_from(self, start, end, area, control, *, feed=DEFAULT_WRITE_FEED, segment_travel=True):
         validate_feed(feed)
         if area is not None:
             area.require(start, "当前笔尖位置")
@@ -594,7 +553,7 @@ class GrblLink:
         state = self.enter_motion(control)
         if math.dist(start, state.position[:2]) > XY_TOLERANCE_MM:
             raise MachineError("抬笔后起点坐标变化，运动已停止。")
-        return self.move_path(state, (end,), area, feed, PEN_UP, control, review_pins=review_pins)
+        return self.move_path(state, (end,), area, feed, PEN_UP, control, segment_travel=segment_travel)
 
     def set_pen(self, down: bool, area: WorkArea | None, control: MotionControl, *, height=PEN_DOWN):
         if not PEN_DOWN <= height <= 0:

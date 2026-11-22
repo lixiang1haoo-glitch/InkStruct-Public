@@ -425,7 +425,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def _require_datum_reading(self, status):
         if (status is not self.device or self.connection_id is None or self.profile is None
-                or status.state != "Idle" or not self.pen_raised or status.limits):
+                or status.state != "Idle" or not self.pen_raised or status.blocking_pins):
             raise ValueError("请确认已连接对应的设备，抬笔停稳并重新读取基准点。")
         return status.position[:2]
 
@@ -1159,7 +1159,7 @@ class MachinePanel(QtWidgets.QWidget):
         if not self.connection_id or not self.profile or not self.profile.serial:
             return
         checkpoint = None
-        if (status and status.state in {"Idle", "Hold:0"} and not status.limits and status.position
+        if (status and status.state in {"Idle", "Hold:0"} and not status.blocking_pins and status.position
                 and status.offset is not None and max(map(abs, status.position[:2])) > .01):
             checkpoint = dict(identity=self.reconnect_identity(), xy=status.position[:2], offset=status.offset[:2],
                               connection=self.connection_id, frame=self.frame, setup=self.setup)
@@ -1168,7 +1168,7 @@ class MachinePanel(QtWidgets.QWidget):
     def recover_connection(self, status):
         saved = self.store.exchange_checkpoint(self.profile)
         if (not saved or not self.profile.serial or saved["identity"] != self.reconnect_identity()
-                or status.state != "Idle" or status.limits or not status.position or status.offset is None
+                or status.state != "Idle" or status.blocking_pins or not status.position or status.offset is None
                 or max(map(abs, status.position[:2])) <= .01 or list(status.offset[:2]) != saved["offset"]
                 or dist(status.position[:2], saved["xy"]) > .01):
             return False
@@ -1319,7 +1319,7 @@ class MachinePanel(QtWidgets.QWidget):
             text += (f"\n\n本页运动范围（含笔间移动及边缘余量），相对当前笔尖："
                      f"\n设备 X 方向 {local_area.left - position[0]:+.1f} 至 {local_area.right - position[0]:+.1f} mm"
                      f"\n设备 Y 方向 {local_area.top - position[1]:+.1f} 至 {local_area.bottom - position[1]:+.1f} mm。"
-                     "\n核实整块区域均可到达并避开夹具后，可勾选下项，启用连续空走和区域内限位复核。")
+                     "\n核实整块区域均可到达并避开夹具后，可勾选下项，启用本次作业范围内的连续空走。")
             checkbox = QtWidgets.QCheckBox("我已核实上述区域，仅本次书写使用")
             accepted = self.confirm(title, text, checkbox)
         else:

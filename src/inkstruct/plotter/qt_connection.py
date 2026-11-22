@@ -172,7 +172,7 @@ class N1Worker(QtCore.QThread):
                     if (link and (manual or motion) and disconnected
                             and fault_path and not isinstance(error, Stopped)):
                         fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
-                                 "pin_review_firmware": link.pin_review, "error": str(error),
+                                 "n1_firmware": link.n1_firmware, "error": str(error),
                                  "reports_before_stop": list(link.recent_reports)}
                         if manual:
                             fault.update(delta_mm=args[0], range_confirmed=args[1] is not None)
