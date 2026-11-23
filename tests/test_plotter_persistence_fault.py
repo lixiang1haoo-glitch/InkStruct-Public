@@ -18,7 +18,7 @@ from test_plotter_machine import SimulatedGrbl
 
 @pytest.mark.parametrize(("before_pen", "failure"), [
     (before, mode) for before in (True, False)
-    for mode in ("once", "persistent", "stop", "unsafe", "disk-full", "reset")
+    for mode in ("once", "persistent", "stop", "no-area", "outside", "disk-full", "reset")
 ])
 def test_progress_replace_failure(tmp_path, monkeypatch, before_pen, failure):
     start = 3849
@@ -64,8 +64,9 @@ def test_progress_replace_failure(tmp_path, monkeypatch, before_pen, failure):
     try:
         worker.submit("connect", "test")
         assert results.get(timeout=5)[0] == "connect"
-        area = None if failure == "unsafe" else WorkArea(0, 0, 200, 270)
-        worker.submit("write", machine, area, 2500, dict(journal=journal, start=start, failure_dock=origin))
+        area = None if failure == "no-area" else WorkArea(0, 0, 200, 270)
+        dock = (-1., 210.) if failure == "outside" else origin
+        worker.submit("write", machine, area, 2500, dict(journal=journal, start=start, failure_dock=dock))
         kind, result, lost = results.get(timeout=10)
         assert kind == "write" and refused
         if failure in {"stop", "reset"}:
@@ -75,17 +76,19 @@ def test_progress_replace_failure(tmp_path, monkeypatch, before_pen, failure):
         assert not lost and not transport.closed and b"\x18" not in transport.commands
         downs = transport.commands.count(b"G1 Z-1.6 F5000\n")
         if failure == "once":
-            assert len(refused) == downs == 1 and worker.progress_failure is None
+            assert len(refused) == downs == 1 and worker.page_failure is None
             assert journal.read() == (start + 1, False)
             return
         assert len(refused) == (1 if failure == "disk-full" else 4)
         assert len(set(refused)) == 1
-        assert str(start + 1) in worker.progress_failure
+        assert str(start + 1) in worker.page_failure
         assert downs == int(not before_pen) and journal.read() == (start, not before_pen)
-        if failure == "unsafe":
-            assert not any(c.startswith(b"G1 ") for c in transport.commands[refused[-1]:])
+        moves = [c for c in transport.commands[refused[-1]:] if c.startswith(b"G1 ")]
+        assert moves[0] == b"G1 Z0 F5000\n"
+        if failure == "outside":
+            assert moves == [b"G1 Z0 F5000\n"] and "原地抬笔" in worker.page_failure
         else:
-            assert result.position == (*origin, 0.) and "已确认" in worker.progress_failure
+            assert result.position == (*origin, 0.) and "确认抬笔回停靠点" in worker.page_failure
             worker.submit("disconnect")
             assert results.get(timeout=5)[0] == "disconnect"
             p = device()
@@ -94,6 +97,53 @@ def test_progress_replace_failure(tmp_path, monkeypatch, before_pen, failure):
             worker.submit("connect", "test")
             _, fresh, _ = results.get(timeout=5)
             assert worker.stable_on_connect and restored_frame(p, proof, fresh) == origin
+    finally:
+        worker.shutdown()
+        assert worker.wait(5000)
+
+
+@pytest.mark.parametrize("recovery", ["works", "pen-stuck", "stop", "xy-changed", "disconnect"])
+def test_pen_still_down_after_stroke(recovery, tmp_path):
+    page = PlotPage(0, 50, 50, (PlotStroke("first", ((2., 3.), (4., 5.))),
+                                PlotStroke("next", ((8., 8.), (9., 9.)))))
+    job = position_page(page, PaperRegistration((0, 0)))
+    journal = ProgressFile.for_page(tmp_path, "doc", page, "layout", "device")
+    serial = SimulatedGrbl()
+    worker = N1Worker(serial_factory=lambda _: serial)
+    results = Queue()
+    direct = QtCore.Qt.ConnectionType.DirectConnection
+    worker.succeeded.connect(lambda kind, state: results.put((state, False)), direct)
+    worker.failed.connect(lambda kind, detail, lost: results.put((detail, lost)), direct)
+    failed_at = []
+
+    def simulate(command):
+        serial.run_reports = 0
+        if serial.position[:2] == [4., 5.] and command.startswith(b"G1 Z0"):
+            if not failed_at or recovery == "pen-stuck":
+                serial.position[2] = -1.6
+                failed_at.append(len(serial.commands))
+        if failed_at and len(serial.commands) == failed_at[0] + 1 and command == b"?":
+            if recovery == "stop":
+                worker.control.stop_requested.set()
+            elif recovery == "xy-changed":
+                serial.position[0] += 1.
+            elif recovery == "disconnect":
+                raise OSError("USB disconnected")
+
+    serial.on_write = simulate
+    worker.start()
+    try:
+        worker.submit("connect", "test")
+        assert results.get(timeout=5)[1] is False
+        worker.submit("write", job, None, 2500, dict(journal=journal, failure_dock=(0., 0.)))
+        result, lost = results.get(timeout=10)
+        assert failed_at and journal.read() == (0, True)
+        moves = [c for c in serial.commands[failed_at[0]:] if c.startswith(b"G1 ")]
+        if recovery == "works":
+            assert not lost and result.position == (0., 0., 0.) and "确认抬笔回停靠点" in worker.page_failure
+            assert moves[0] == b"G1 Z0 F5000\n" and all(c.startswith(b"G1 X") for c in moves[1:])
+        else:
+            assert lost and not any(c.startswith(b"G1 X") for c in moves)
     finally:
         worker.shutdown()
         assert worker.wait(5000)

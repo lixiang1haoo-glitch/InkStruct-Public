@@ -7,7 +7,7 @@ from time import monotonic
 
 from PySide6 import QtCore, QtSerialPort
 
-from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, ProgressSaveError, STATIONARY_TOLERANCE_MM, ExternalHold, GrblLink, MachineError, MotionControl, Stopped
+from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, STATIONARY_TOLERANCE_MM, ExternalHold, GrblLink, MachineError, MotionControl, PageInterrupted, Stopped
 
 N1_USB_ID = (0x28e9, 0x018a)
 
@@ -107,7 +107,7 @@ class N1Worker(QtCore.QThread):
                     if link is not None:
                         link.referenced_idle_xy = args[0]
                     continue
-                self.progress_failure = None
+                self.page_failure = None
                 self.stopped_at = None
                 try:
                     if kind == "connect":
@@ -173,11 +173,11 @@ class N1Worker(QtCore.QThread):
                         dock = options.pop("failure_dock", None)
                         try:
                             result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed, **options)
-                        except ProgressSaveError as error:
-                            self.progress_failure = str(error)
-                            result, parked = link.settle_progress_failure(error, control, area, dock, feed)
-                            self.progress_failure += (" 已确认抬笔回停靠点。" if parked else
-                                                      " 笔尖已抬起停稳，请核对返回路径。")
+                        except PageInterrupted as error:
+                            self.page_failure = str(error)
+                            result, parked = link.park_interrupted_page(error.anchor, control, area, dock, feed)
+                            self.page_failure += (" 已确认抬笔回停靠点。" if parked else
+                                                  " 已原地抬笔。请核对停靠点和工作范围。")
                     else:
                         raise ValueError(f"无法识别的设备操作：{kind}")
                     if link is not None:
@@ -212,7 +212,7 @@ class N1Worker(QtCore.QThread):
                                 pass
                         link.serial.close()
                         link = None
-                    detail = (self.progress_failure + " " if self.progress_failure else "") + str(error)
+                    detail = (self.page_failure + " " if self.page_failure else "") + str(error)
                     if motion or isinstance(error, Stopped):
                         detail += " 请检查笔尖、当前位置和纸面对位，再重新连接。"
                     if fault is not None:

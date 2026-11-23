@@ -1412,7 +1412,7 @@ class MachinePanel(QtWidgets.QWidget):
             except ValueError as error:
                 self.message(str(error), error=True)
                 return False
-        options = []
+        options = dict(failure_dock=self.frame)
         if kind == "write":
             if self.progress_error:
                 return False
@@ -1420,8 +1420,8 @@ class MachinePanel(QtWidgets.QWidget):
                 self.prepare_session()
             if self.journal:
                 self.journal = replace(self.journal, placement=self.placement_details())
-            options.append(dict(height=self.profile.writing_height, start=start, journal=self.journal, failure_dock=target))
-        if self.submit(kind, job, area, self.profile.feed, *options):
+            options.update(height=self.profile.writing_height, start=start, journal=self.journal)
+        if self.submit(kind, job, area, self.profile.feed, options):
             self.preview_button.setChecked(False)
             self.toggle_preview()
             self.resume_hint.hide()
@@ -1511,9 +1511,9 @@ class MachinePanel(QtWidgets.QWidget):
     def succeeded(self, kind, status):
         if self.closing or self.busy != kind:
             return
-        if kind == "write" and getattr(self.worker, "progress_failure", None):
+        if kind in {"write", "dry"} and getattr(self.worker, "page_failure", None):
             self.device = status
-            self.failed(kind, self.worker.progress_failure, False)
+            self.failed(kind, self.worker.page_failure, False)
             return
         self.busy = None
         self.device = status

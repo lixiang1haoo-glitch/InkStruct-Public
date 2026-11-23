@@ -30,10 +30,11 @@ class MachineError(RuntimeError):
     pass
 
 
-class ProgressSaveError(Exception):
-    def __init__(self, number, state, cause):
-        self.state = state
-        super().__init__(f"书写进度保存失败，请核对第 {number} 笔。{cause}")
+class PageInterrupted(MachineError):
+    """A page operation failed at a known XY, with no queued XY movement."""
+    def __init__(self, message, anchor):
+        super().__init__(message)
+        self.anchor = anchor
 
 
 def save_stroke_progress(journal, number, before_pen, state, control):
@@ -48,7 +49,7 @@ def save_stroke_progress(journal, number, before_pen, state, control):
             code = getattr(error, "winerror", None)
             transient = code in (5, 32, 33) if code else error.errno in (errno.EACCES, errno.EBUSY, errno.EAGAIN)
             if not transient or attempt == len(backoff):
-                raise ProgressSaveError(number, state, error) from error
+                raise PageInterrupted(f"书写进度保存失败，请核对第 {number} 笔。{error}", state) from error
 
 
 class ExternalHold(MachineError):
@@ -405,13 +406,17 @@ class GrblLink:
         self.referenced_idle_xy = second.position[:2]
         return second
 
-    def wait_idle(self, control, *, z: float, poll=.08):
+    def wait_idle(self, control, *, z: float, poll=.08, anchor=None):
         end = self.motion_time() + 120
         while self.motion_time() < end:
             self.checkpoint(control)
             status = self.status(control)
             if status.state == "Idle":
-                if status.position is None or abs(status.position[2] - z) > Z_TOLERANCE_MM:
+                if status.position is None:
+                    raise MachineError("设备已空闲，但没有返回笔位。")
+                if abs(status.position[2] - z) > Z_TOLERANCE_MM:
+                    if anchor is not None and math.dist(anchor.position[:2], status.position[:2]) <= XY_TOLERANCE_MM:
+                        raise PageInterrupted("设备已停稳，但笔尖未到达指定高度。", anchor)
                     raise MachineError("设备已空闲，但 Z 工作坐标未到达预期位置。")
                 return status
             sleep(poll)
@@ -594,28 +599,24 @@ class GrblLink:
         self.phase("running")
         return state
 
-    def settle_progress_failure(self, error, control, area, dock, feed):
-        state = self.verify_rest(control, error.state)
-        if abs(state.position[2] - PEN_UP) > Z_TOLERANCE_MM:
-            raise MachineError("进度保存失败后未确认笔尖已抬起。")
-        # Both journal boundaries are after a verified pen-up Idle. Only the
-        # current session's admitted rectangle authorizes an automatic return.
-        if dock is None or state.offset is None or area is None or not (
-                area.contains(state.position[:2]) and area.contains(dock)):
+    def park_interrupted_page(self, anchor, control, area, dock, feed):
+        self.referenced_idle_xy = anchor.position[:2]
+        state = self.set_pen(False, area, control)
+        if dock is None or state.offset is None or (area is not None and not (
+                area.contains(state.position[:2]) and area.contains(dock))):
             return state, False
-        self.referenced_idle_xy = state.position[:2]
-        state = self.move_to(dock, area, control, feed=feed)
+        state = self.move_path(state, (machine_point(dock),), area, feed, PEN_UP, control)
         state = self.verify_rest(control, state)
         if math.dist(state.position[:2], dock) > XY_TOLERANCE_MM:
-            raise MachineError("进度保存失败后未确认到达停靠点。")
+            raise MachineError("未确认到达停靠点。")
         return state, True
 
-    def enter_motion(self, control):
+    def enter_motion(self, control, *, anchor=None):
         self.motion_active = True
         self.phase("running")
         self.command("G21 G90 G94", control)
         self.pen(PEN_UP, control)
-        return self.wait_idle(control, z=PEN_UP)
+        return self.wait_idle(control, z=PEN_UP, anchor=anchor)
 
     def run_page(self, page: MachinePage, area: WorkArea | None, control: MotionControl, *,
                  dry_run=False, feed=DEFAULT_WRITE_FEED, state=None,
@@ -627,7 +628,7 @@ class GrblLink:
         if state is None:
             state = self.require_idle(control, for_motion=True)
         page.check(area, state.position[:2], dry_run=dry_run)
-        state = self.enter_motion(control)
+        state = self.enter_motion(control, anchor=state)
         total = len(page.strokes)
         for number, stroke in enumerate(page.strokes[start:], start + 1):
             state = self.move_path(state, stroke.points[:1], area, feed, PEN_UP, control,
@@ -636,12 +637,12 @@ class GrblLink:
                 if journal is not None:
                     save_stroke_progress(journal, number, True, state, control)
                 self.pen(height, control)
-                state = self.wait_idle(control, z=height, poll=ENDPOINT_POLL)
+                state = self.wait_idle(control, z=height, poll=ENDPOINT_POLL, anchor=state)
             state = self.move_path(state, stroke.points[1:], area, feed,
                                    PEN_UP if dry_run else height, control, segment_travel=segment_travel)
             if not dry_run:
                 self.pen(PEN_UP, control)
-                state = self.wait_idle(control, z=PEN_UP, poll=ENDPOINT_POLL)
+                state = self.wait_idle(control, z=PEN_UP, poll=ENDPOINT_POLL, anchor=state)
                 if journal is not None:
                     save_stroke_progress(journal, number, False, state, control)
             self.progress(number, total)
@@ -650,7 +651,7 @@ class GrblLink:
                 control.interrupted_cleanly = True
                 return state
         self.pen(PEN_UP, control)
-        return self.wait_idle(control, z=PEN_UP)
+        return self.wait_idle(control, z=PEN_UP, anchor=state)
 
     def trial_axes(self, axes, area, feed, control, *, confirmed_area=None):
         state = self.require_idle(control, for_motion=True)
