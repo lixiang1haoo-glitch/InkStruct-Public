@@ -570,7 +570,8 @@ class GrblLink:
     def manual_at_rest(self, state, control):
         if not control.pause_at_idle.is_set():
             return state
-        original_z = state.position[2]
+        anchor = state.position[:2]
+        original_z = min(PEN_UP, max(PEN_DOWN, state.position[2]))
         state = self.verify_rest(control, state)
         self.phase("paused")
         self.pen_state(state)
@@ -583,6 +584,8 @@ class GrblLink:
             if control.stop_requested.wait(.05):
                 raise Stopped("已停止作业。")
             state = self.verify_rest(control, state)
+            if math.dist(state.position[:2], anchor) > STATIONARY_TOLERANCE_MM:
+                raise MachineError("暂停期间 XY 已变化，请重新核对位置。")
         self.checkpoint(control)
         # The user explicitly resumed. Restore the interrupted path's pen height
         # at the verified stationary XY before admitting further segments.

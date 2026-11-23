@@ -185,3 +185,19 @@ def test_unaligned_sidebar_and_recovery_pen_during_jog(tmp_path):
         panel.close()
 
 
+
+def test_small_increments_of_xy_drift_do_not_rebase_the_paused_position():
+    from inkstruct.plotter.grbl import GrblLink, MachineError, MotionControl
+
+    serial = SimulatedGrbl()
+    controller = GrblLink(serial)
+    state = controller.connect()
+    control = MotionControl()
+    control.request_idle_pause()
+    def drifting(state_name, _coords):
+        serial.position[0] += .004
+        return f"<{state_name}|WPos:{serial.position[0]},0,0|WCO:0,0,0>"
+    serial.report = drifting
+    with pytest.raises(MachineError, match="暂停期间 XY"):
+        controller.manual_at_rest(state, control)
+    assert not any(command.startswith(b"G1 ") for command in serial.commands)
