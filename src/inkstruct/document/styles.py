@@ -66,6 +66,7 @@ class FlowStyle:
         record = asdict(self)
         if record['template'] is not None:
             record['template'].pop('paper_origins', None)
+            record['template'].pop('family_id', None)
         if self.han_spacing == "full":
             record.pop("han_spacing")
         if not self.digits_follow_latin:

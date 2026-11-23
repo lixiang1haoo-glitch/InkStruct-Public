@@ -63,39 +63,34 @@ def plan_from_snapshot(snapshot: LayoutSnapshot, *, omit_reference_images: bool 
         raise ValueError("Unresolved document errors block plotter export")
     if not snapshot.plotter_exportable and not omission_ready:
         raise ValueError("Raster image references cannot be exported to the plotter")
-    pages = []
-    for page in snapshot.pages:
-        strokes = []
-        counters = Counter()
-        assets = {f.occurrence_id: f.asset_id or f.source_resource_id for f in page.fragments}
-        drawings = {f.occurrence_id for f in page.fragments if f.status == "image-vector"}
-        for op in page.paint_ops:
-            if type(op) is not PaintOp:
-                raise ValueError(f"Unsupported plotter operation: {type(op).__name__}")
-            # The current renderer's default dark ink is a single black pen.
-            if op.color.lower() not in {"#111827", "#000000", "#000", "black"}:
-                raise ValueError(f"{op.occurrence_id}: multi-pen colour is not configured")
-            ordinal = counters[op.occurrence_id]
-            counters[op.occurrence_id] += 1
-            asset = assets.get(op.occurrence_id)
-            strokes.append(
-                PlotStroke(
-                    stroke_id=f"page:{page.index}:{op.occurrence_id}:stroke:{ordinal}",
-                    points=op.points,
-                    width_mm=op.width_mm,
-                    occurrence_id=op.occurrence_id,
-                    source_stroke_id=f"{asset}:stroke:{ordinal}" if asset else None,
-                    execution_domain=op.execution_domain,
-                    independent=(op.occurrence_id in drawings or op.execution_domain == "template-frame"
-                                 or op.occurrence_id.rpartition(":")[0].endswith((":border", ":note-border"))),
-                )
-            )
-        pages.append(
-            PlotPage(
-                page.index,
-                snapshot.page_profile.width_mm,
-                snapshot.page_profile.height_mm,
-                tuple(strokes),
+    pages = tuple(adapt_page(page, snapshot.page_profile) for page in snapshot.pages)
+    return PlotPlan(snapshot.document_id, snapshot.snapshot_id, pages)
+
+
+def adapt_page(page, paper):
+    strokes = []
+    counters = Counter()
+    assets = {f.occurrence_id: f.asset_id or f.source_resource_id for f in page.fragments}
+    drawings = {f.occurrence_id for f in page.fragments if f.status == "image-vector"}
+    for op in page.paint_ops:
+        if type(op) is not PaintOp:
+            raise ValueError(f"Unsupported plotter operation: {type(op).__name__}")
+        # The current renderer's default dark ink is a single black pen.
+        if op.color.lower() not in {"#111827", "#000000", "#000", "black"}:
+            raise ValueError(f"{op.occurrence_id}: multi-pen colour is not configured")
+        ordinal = counters[op.occurrence_id]
+        counters[op.occurrence_id] += 1
+        asset = assets.get(op.occurrence_id)
+        strokes.append(
+            PlotStroke(
+                stroke_id=f"page:{page.index}:{op.occurrence_id}:stroke:{ordinal}",
+                points=op.points,
+                width_mm=op.width_mm,
+                occurrence_id=op.occurrence_id,
+                source_stroke_id=f"{asset}:stroke:{ordinal}" if asset else None,
+                execution_domain=op.execution_domain,
+                independent=(op.occurrence_id in drawings or op.execution_domain == "template-frame"
+                             or op.occurrence_id.rpartition(":")[0].endswith((":border", ":note-border"))),
             )
         )
-    return PlotPlan(snapshot.document_id, snapshot.snapshot_id, tuple(pages))
+    return PlotPage(page.index, paper.width_mm, paper.height_mm, tuple(strokes))

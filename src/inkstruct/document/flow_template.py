@@ -1,8 +1,9 @@
 """Template v3: one body stream, named fields and explicitly ordered page groups."""
 
 import re
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import ClassVar
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from ..plotter.profiles import PageAlignment
 from .schema import PageProfile, digest
@@ -176,9 +177,12 @@ class FlowTemplate:
     schema_version: str = SCHEMA
     revision: TemplateRevision | None = None
     plotter_alignment: PageAlignment | None = None
+    family_id: str = field(default_factory=lambda: uuid4().hex, compare=False)
     paper_origins: tuple[tuple[str, PageAlignment], ...] = ()
 
     def __post_init__(self):
+        if not isinstance(self.family_id, str) or (self.family_id and not re.fullmatch(r"[0-9a-f]{32}", self.family_id)):
+            raise ValueError("模板身份无效")
         if isinstance(self.plotter_alignment, dict):
             object.__setattr__(self, "plotter_alignment", PageAlignment(**self.plotter_alignment))
         if self.plotter_alignment is not None and (
@@ -269,6 +273,11 @@ class FlowTemplate:
         if sum(len(p.background.png_base64) for p in self.layouts if p.background) > 12_000_000:
             raise ValueError("Template backgrounds exceed 12 MB encoded budget")
 
+    @classmethod
+    def ordinary(cls, **geometry):
+        family = uuid5(NAMESPACE_URL, "inkstruct:builtin:ordinary").hex
+        return cls(name="普通页面", mode="blank", family_id=family, **geometry)
+
     def inside(self, x, y, radius=0):
         x, y = x + self.offset_x_mm, y + self.offset_y_mm
         if not radius <= x <= self.width_mm - radius or not radius <= y <= self.height_mm - radius:
@@ -314,6 +323,13 @@ class FlowTemplate:
 
     def skeleton(self):
         return "".join(f":::field {f.field_id}\n\n:::\n\n" for f in self.fields) + "# 正文\n\n"
+
+
+def bind_legacy_family(template, source):
+    """Give an unversioned template a stable identity within its original source."""
+    if isinstance(template, FlowTemplate) and not template.revision and not template.family_id:
+        return replace(template, family_id=uuid5(NAMESPACE_URL, "inkstruct:legacy:" + source).hex)
+    return template
 
 
 def same_layout_revision(first, second):

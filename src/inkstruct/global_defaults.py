@@ -75,10 +75,12 @@ class GlobalDefaultsStore:
             template = parse_template(raw)
             if not isinstance(template, FlowTemplate) or template.kind != "simple" or template.name != "普通页面":
                 raise ValueError("内置普通页面配置无效")
+            if not template.revision and not template.family_id:
+                template = replace(template, family_id=FlowTemplate.ordinary().family_id)
             return template
         page = page or self.load()[0].page
-        return FlowTemplate(name="普通页面", width_mm=page.width_mm, height_mm=page.height_mm,
-                            margins_mm=(page.margin_mm,) * 4, mode="blank")
+        return FlowTemplate.ordinary(width_mm=page.width_mm, height_mm=page.height_mm,
+                            margins_mm=(page.margin_mm,) * 4)
 
     def save_ordinary(self, previous, template):
         from .document.template_authoring import template_json
@@ -103,7 +105,7 @@ class GlobalDefaultsStore:
                 template = self.ordinary_template(defaults.page)
             except (ValueError, TypeError, OSError) as error:
                 from .document.flow_template import FlowTemplate
-                template = FlowTemplate(name="普通页面", mode="blank")
+                template = FlowTemplate.ordinary()
                 warning = warning or f"普通页面暂用初始尺寸，原配置保留：{error}"
             defaults = replace(defaults, flow=replace(defaults.flow, template=template))
         return defaults, warning

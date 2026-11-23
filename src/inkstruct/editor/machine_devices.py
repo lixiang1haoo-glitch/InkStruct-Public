@@ -1,7 +1,7 @@
 """Device management and commissioning for the shared N1 connection."""
 
 from dataclasses import replace
-from math import degrees
+
 
 from PySide6 import QtCore, QtWidgets
 
@@ -9,7 +9,7 @@ from ..plotter.physical import WorkArea
 from ..plotter.profiles import DeviceAxes, DeviceProfile
 from ..settings_pages import label, scroll_page
 
-AXIS_HELP = "点左右按钮时笔尖却上下移动，请勾选「交换 XY 轴」。笔尖沿正确的轴走反了方向，请勾选对应轴的镜像。已有纸角时，更改轴向或比例须先保存并重新登记纸角。"
+AXIS_HELP = "点左右按钮时笔尖却上下移动，请勾选「交换 XY 轴」。笔尖沿正确的轴走反了方向，请勾选对应轴的镜像。"
 TRIAL_HELP = "请确保笔尖四周 100 mm 内可绘制。正常书写视角下，X 轴正向指正右方，Y 轴正向指正下方。"
 
 
@@ -45,26 +45,25 @@ class DeviceDialog(QtWidgets.QDialog):
         options.setContentsMargins(0, 0, 0, 0)
         form.addWidget(self.editor)
 
-        locating = QtWidgets.QGroupBox("机身定位")
+        locating = QtWidgets.QGroupBox("停靠点")
         locate = QtWidgets.QVBoxLayout(locating)
         self.datum_status = label("")
         locate.addWidget(self.datum_status)
-        locate.addWidget(label("纸张两边靠齐同一组挡边，保持登记时的朝向。抬笔点动，目视对准纸角。"))
+        locate.addWidget(label("点动到方便取纸的位置，建议机器左上角，留出限位余量。正常写完和可安全返回时，笔尖会抬起停在这里。"))
         self.position = label("")
         locate.addWidget(self.position)
         self.nudge = panel.motion_controls(self.move)
         locate.addWidget(self.nudge)
         self.raise_button = panel.button("抬笔", panel.raise_pen)
         locate.addWidget(self.raise_button)
-        self.datum_register = panel.button("登记纸角…", self.register_datum)
-        self.datum_recover = panel.button("笔尖已对准纸角", self.recover_datum)
-        locate.addWidget(pair_widget((self.datum_recover, self.datum_register)))
-        self.datum_alternate = panel.button("登记备用点…", self.register_alternate)
-        self.datum_use_alternate = panel.button("笔尖已对准备用点", lambda: self.recover_datum(alternate=True))
-        locate.addWidget(pair_widget((self.datum_use_alternate, self.datum_alternate)))
-        self.datum_park = panel.button("抬笔停到纸角", panel.park_at_datum)
-        self.datum_reset = panel.button("笔位有偏差，重新定位", panel.invalidate_datum)
+        self.datum_register = panel.button("开始初始化", self.register_datum)
+        self.cancel_trial = panel.button("取消初始化", panel.cancel_dock_trial)
+        locate.addWidget(pair_widget((self.datum_register, self.cancel_trial)))
+        self.datum_park = panel.button("回停靠点", panel.park_at_datum)
+        self.datum_reset = panel.button("重新恢复位置", panel.invalidate_datum)
         locate.addWidget(pair_widget((self.datum_park, self.datum_reset)))
+        self.change_stops = panel.button("纸张挡边已更换…", panel.change_paper_stops)
+        locate.addWidget(self.change_stops)
         options.addWidget(locating)
         self.pen_choice = QtWidgets.QComboBox()
         self.pen_choice.setAccessibleName("当前笔具")
@@ -81,10 +80,6 @@ class DeviceDialog(QtWidgets.QDialog):
         self.axes = [QtWidgets.QCheckBox(text) for text in ("X 轴镜像", "Y 轴镜像", "交换 XY 轴")]
         axes_form.addRow(pair_widget(self.axes))
         axes_form.addRow(label(AXIS_HELP))
-        self.paper_fit = label("")
-        axes_form.addRow("纸面校准", self.paper_fit)
-        self.paper_calibrate = panel.button("初始化纸面校准…", self.calibrate_paper)
-        axes_form.addRow(self.paper_calibrate)
         options.addWidget(axes)
 
         limits = QtWidgets.QGroupBox("安全工作范围")
@@ -191,15 +186,12 @@ class DeviceDialog(QtWidgets.QDialog):
             self.pen_choice.clear()
             self.pen_choice.addItems(choices)
         self.pen_choice.setCurrentIndex(choices.index(profile.active_pen) if profile and profile.active_pen else 0)
-        self.pen_choice.setEnabled(bool(profile and idle and not self.panel.batch_active))
-        self.calibrate.setEnabled(bool(profile and connected and idle and self.panel.range_ready))
-        fit = profile.paper_calibration if profile else None
-        self.paper_fit.setText(f"方向 {degrees(fit[0]):.3f}° · 比例 {fit[1]:.3%}" if fit else "尚未初始化")
-        self.paper_calibrate.setEnabled(bool(profile and connected and idle and not self.panel.batch_active
-                                            and not self.panel.waiting_for_paper))
-        datum = profile.datum if profile else None
-        located = self.panel.frame is not None
-        waiting = datum is not None and not located
+        self.pen_choice.setEnabled(bool(profile and idle))
+        self.calibrate.setEnabled(bool(profile and connected and idle and self.panel.datum_located and self.panel.range_ready))
+        trial = self.panel.dock_trial
+        datum = profile.datum if profile and profile.datum and profile.datum.boot_mode else None
+        located = self.panel.datum_located
+        waiting = datum is not None and not located and not (trial and trial.mode)
         area = self.panel.confirmed_area
         context = (self.panel.connection_id, profile.id if profile else None,
                    profile.limit_area_enabled if profile else False, datum.id if datum else None,
@@ -225,7 +217,7 @@ class DeviceDialog(QtWidgets.QDialog):
         if not enabled:
             self.range_help.setText("关闭后按作业路径移动。范围设置保存后生效。")
         elif waiting:
-            self.range_help.setText("请先对准已登记的纸角，找回本次连接的工作坐标。")
+            self.range_help.setText("请先恢复停靠点。")
         elif area is None:
             self.range_help.setText("核对本次连接的两个角点后确认范围。坐标单位为 mm。")
         else:
@@ -237,23 +229,30 @@ class DeviceDialog(QtWidgets.QDialog):
         self.range_confirm.setEnabled(ready)
         readable = ready and self.panel.pen_raised
         self.raise_button.setVisible(ready and not self.panel.pen_raised)
-        self.datum_status.setText((("机身已定位" if located else "机身待定位") + f" · {datum.label}")
-                                  if datum else "尚未登记纸角")
-        self.datum_register.setText("更换纸角…" if datum else "登记纸角…")
-        self.datum_register.setEnabled(readable)
-        self.datum_recover.setVisible(waiting)
-        self.datum_recover.setEnabled(readable)
-        self.datum_alternate.setVisible(located)
-        self.datum_alternate.setEnabled(readable)
-        self.datum_use_alternate.setVisible(waiting and datum.checkpoint is not None)
-        self.datum_use_alternate.setEnabled(readable)
+        if trial and not trial.mode:
+            self.datum_status.setText(f"保持笔尖不动。用开关重启（无开关请断电再通电），手动重连后记录。已记录 {len(trial.readings)} / 3 轮。")
+        elif trial:
+            self.datum_status.setText("已确认停靠点。固定测试纸，点动到四周有余量的位置，试画 X/Y，核对方向及比例后保存。")
+        elif located:
+            self.datum_status.setText("停靠点已定位。移动纸张挡边后，请登记挡边变更。")
+        elif datum:
+            self.datum_status.setText("请在书写侧栏选择已实测的版式，用原纸面标记恢复；没有可用记录时请重新初始化。")
+        else:
+            self.datum_status.setText("请抬笔点动到方便取纸的位置。建议选机器左上方，避开限位，再点「开始初始化」。")
+        self.datum_register.setText("记录本轮重启读数" if trial else "重新初始化" if datum else "开始初始化")
+        self.datum_register.setEnabled(bool(readable and (not trial or
+                                           (not trial.mode and trial.connection != self.panel.connection_id))))
+        self.cancel_trial.setVisible(trial is not None)
+        self.cancel_trial.setEnabled(idle)
         self.datum_park.setVisible(located)
-        self.datum_park.setEnabled(ready and located and (not profile.limit_area_enabled or
+        self.datum_park.setEnabled(readable and located and (not profile.limit_area_enabled or
                                    (area is not None and area.contains(self.panel.frame)
                                     and area.contains(self.panel.device.position[:2]))))
         self.datum_reset.setVisible(located)
-        self.devices.setEnabled(idle and not connected)
-        self.add_button.setEnabled(idle and not connected)
+        self.change_stops.setVisible(bool(datum and not trial))
+        self.change_stops.setEnabled(ready)
+        self.devices.setEnabled(idle and not connected and not trial)
+        self.add_button.setEnabled(idle and not connected and not trial)
         self.editor.setEnabled(idle and bool(profile))
         self.link.setEnabled(idle and bool(profile) and (not connected or self.panel.pen_raised))
         self.link.setText("断开" if connected else "连接")
@@ -264,7 +263,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.panel.refresh_motion_controls(self.nudge, ready)
         for button in self.record_buttons:
             button.setEnabled(ready and not waiting)
-        self.trial.setEnabled(ready and self.panel.range_ready and (not datum or located))
+        self.trial.setEnabled(bool(ready and ((trial and trial.mode) or (located and self.panel.range_ready))))
+        self.save_button.setEnabled(idle and (not trial or bool(trial.mode)))
 
     def select_pen(self, index):
         try:
@@ -272,29 +272,6 @@ class DeviceDialog(QtWidgets.QDialog):
         except (OSError, ValueError) as error:
             self.error.setText(str(error))
             self.refresh()
-
-    def calibrate_paper(self):
-        from .machine_alignment import AlignmentDialog, page_context
-
-        panel = self.panel
-        if self.draft_axes() != panel.profile.axes:
-            self.error.setText("请先保存轴向和比例，再初始化纸面校准。")
-            return
-        snapshot = panel.snapshot
-        index = panel.paper_page.index if panel.paper_page else 0
-        if snapshot and not 0 <= index < len(snapshot.pages):
-            index = 0
-        if snapshot and snapshot.pages:
-            page, size, _, title = page_context(panel.template, snapshot, index)
-        else:
-            snapshot = None
-            page, size, title = "", (210., 297.), "A4"
-        dialog = AlignmentDialog(panel, self, page, size, None, title, snapshot=snapshot,
-                                 index=index, calibration=True)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
 
     def calibrate_pen(self):
         from .pen_calibration import PenCalibration
@@ -305,49 +282,12 @@ class DeviceDialog(QtWidgets.QDialog):
             dialog.deleteLater()
 
     def register_datum(self):
-        profile = self.panel.profile
-        if profile is None:
-            return
-        name, accepted = QtWidgets.QInputDialog.getText(
-            self, "登记纸角", "限位、纸型、朝向和纸角", text=profile.datum.label if profile.datum else "A4 纵向 · 左上角")
-        if not accepted:
-            return
-        name = name.strip()
-        if not name:
-            self.error.setText("请填写纸张限位和角的位置，以便下次找正。")
-            return
-        replace_notice = "更换后请重新核对纸面摆放和已启用的安全范围。" if profile.datum else ""
-        self.read_reference("登记纸角", f"确认抬起的笔尖正对「{name}」？{replace_notice}",
-                            lambda status: self.panel.register_datum(name, status))
-
-    def recover_datum(self, *, alternate=False):
-        datum = self.panel.profile.datum if self.panel.profile else None
-        if datum is None:
-            return
-        point = "登记过的备用点" if alternate else "登记过的纸角"
-        self.read_reference("找回机身基准", f"请确认两边靠齐「{datum.label}」的挡边，抬起的笔尖已对准{point}。",
-                            lambda status: self.panel.recover_datum(status, alternate=alternate),
-                            confirm=not self.panel.profile.serial)
-
-    def register_alternate(self):
-        self.read_reference("登记备用点", "请先将笔尖对准装纸后仍可见的固定标记。以后可用此点恢复机身定位。"
-                            "确认将当前笔位登记为备用点？",
-                            self.panel.register_alternate)
-
-    def read_reference(self, title, instruction, callback, *, confirm=True):
         panel = self.panel
-        profile, connection = panel.profile, panel.connection_id
-        if not profile or not connection or not panel.pen_raised or panel.busy:
-            return
-        if self.draft_axes() != profile.axes:
-            self.error.setText("请先保存修改后的轴向和比例，再记录基准。")
-            return
-        if not profile.serial:
-            instruction = f"设备没有 USB 序列号。请核对实际连接的是「{profile.name}」（{profile.port}）。\n" + instruction
-        if confirm and not panel.confirm(title, instruction):
-            return
-        if panel.profile == profile and panel.connection_id == connection:
-            panel.capture_position(callback, datum=True)
+        if panel.dock_trial:
+            if panel.confirm("确认设备重启", "本轮已保持笔尖不动，切断并恢复设备电源，且已手动重连？"):
+                panel.capture_position(panel.record_restart, datum=True)
+        elif panel.confirm("初始化停靠点", "确认笔尖目前已抬起并停在方便取纸的停靠点？"):
+            panel.capture_position(panel.begin_dock_trial, datum=True)
 
     def toggle_connection(self):
         self.panel.toggle_connection()
@@ -373,12 +313,16 @@ class DeviceDialog(QtWidgets.QDialog):
             axes = self.draft_axes()
             enabled = self.use_range.isChecked()
             profile = replace(old, limit_area_enabled=enabled)
-            new_calibration = old.datum is not None and axes != old.axes
-            if new_calibration:
-                profile = replace(profile, axes=axes, datum=None, area=None, offset=None)
-                self.panel.save_profile(profile)
-                self.error.setText("轴向或比例已变更。请重新登记用于找正的纸角。")
+            if self.panel.dock_trial:
+                area = self.draft_area()
+                def commit(status):
+                    self.panel._require_datum_reading(status)
+                    self.panel.initialize_axes(axes, area)
+                    self.error.setText("停靠点与轴线校正已保存。")
+                self.panel.capture_position(commit, datum=True)
                 return
+            if axes != old.axes:
+                raise ValueError("请在停靠点初始化中校正轴向与比例。")
             connected_frame = self.panel.connection_id is not None and (not old.datum or self.panel.datum_located)
             edited = tuple(spin.value() for spin in self.bounds) != self.original_bounds
             entering = enabled and not old.limit_area_enabled
@@ -398,16 +342,16 @@ class DeviceDialog(QtWidgets.QDialog):
 
     def move(self, x, y):
         axes = self.draft_axes()
-        if self.panel.profile.datum and self.panel.profile.axes != axes:
+        if not self.panel.dock_trial and self.panel.profile.datum and self.panel.profile.axes != axes:
             self.error.setText("请先保存修改后的轴向和比例，再按新方向点动。")
             return
         self.panel.submit("device-jog", axes.map(x, y), self.panel.confirmed_area, self.panel.profile.feed)
 
     def draw(self):
         try:
-            if self.panel.profile.datum and self.panel.profile.axes != self.draft_axes():
+            if not self.panel.dock_trial and self.panel.profile.datum and self.panel.profile.axes != self.draft_axes():
                 raise ValueError("请先保存修改后的轴向和比例，再按新设置试画。")
-            area = self.draft_area() if self.panel.profile.limit_area_enabled else None
+            area = self.draft_area() if self.panel.dock_trial or self.panel.profile.limit_area_enabled else None
             if self.panel.confirm("试画 X/Y", TRIAL_HELP + "\n确认测试纸、笔尖和设备已就位？"):
                 self.panel.submit("axis-trial", self.draft_axes(), area, self.panel.profile.feed,
                                   self.panel.confirmed_area)
@@ -420,4 +364,6 @@ class DeviceDialog(QtWidgets.QDialog):
             return
         if self.panel.busy in {"position-read", "position-datum"}:
             return
+        if self.panel.dock_trial:
+            self.panel.cancel_dock_trial()
         super().reject()

@@ -1,7 +1,6 @@
 """Three-pane template GUI over the existing immutable template draft operations."""
 
 from dataclasses import replace
-import sys
 from uuid import uuid4
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -360,10 +359,6 @@ class WorkbenchUI:
             b = QtWidgets.QPushButton(title)
             b.clicked.connect(lambda checked=False, role=role: self.start_draw(role))
             tools.addWidget(b)
-        if sys.platform == "win32" and editor is not None and hasattr(editor, "machine_panel"):
-            alignment = QtWidgets.QPushButton("设置模板原点…")
-            alignment.clicked.connect(self.edit_plotter_alignment)
-            tools.addWidget(alignment)
         center_col.addLayout(tools)
         self.interactive = interactive_canvas(self)
         center_col.addWidget(self.interactive, 1)
@@ -962,21 +957,6 @@ class WorkbenchUI:
                 if role
                 else "点击选框，拖动移动或调整右下角尺寸。"
             )
-
-    def edit_plotter_alignment(self):
-        from .machine_alignment import AlignmentDialog, page_context
-
-        if not self.flush() or self.current_layout() is None:
-            return
-        layout = self.current_layout()
-        page, size, alignment, title = page_context(self.template, layout=layout)
-        dialog = AlignmentDialog(self.editor_context.machine_panel, self, page, size, alignment, title,
-                                 source=layout, configure=True)
-        try:
-            if dialog.exec():
-                self.commit(self.template.with_paper_origin(layout.layout_id, dialog.alignment))
-        finally:
-            dialog.deleteLater()
 
     def create_frame(self, role, values):
         fid = ""

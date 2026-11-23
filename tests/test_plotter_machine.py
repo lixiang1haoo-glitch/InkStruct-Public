@@ -334,19 +334,19 @@ def test_template_and_local_placement_persist_separately(tmp_path):
     for i in (4, 8):
         assert page_context(saved, index=i) == page_context(saved, index=0)
     other, _, other_mark, _ = page_context(saved, index=1)
-    assert mark.a == (5., 5.) and other_mark.a == (5., 10.) and key != other
+    assert mark is other_mark is None and key != other
+    mark, other_mark = (page_context(template, index=i)[2] for i in (0, 1))
+    assert mark.a == (5., 5.) and other_mark.a == (5., 10.)
     store = PlotterProfiles(tmp_path)
     a = DeviceProfile.create("N1", "COM3", "first")
     b = DeviceProfile.create("工作室", "COM4", "second")
     store.save(a)
     store.save(b)
-    store.place(a, key, "纸夹左侧", mark, (25., 30.), (0., 0.))
+    store.import_marks(a, {key: mark.a})
     reopened = PlotterProfiles(tmp_path)
     assert reopened.devices() == [a, b]
-    assert reopened.place(a, key, "纸夹左侧", mark)["point"] == [25., 30.]
-    assert reopened.place(a, key, "纸夹右侧", mark) is None
-    assert reopened.place(a, other, "纸夹左侧", other_mark) is None
-    assert reopened.place(b, key, "纸夹左侧", mark) is None
+    assert reopened.sheet(a, key) == {"mark": [5., 5.]}
+    assert reopened.sheet(a, other) is None and reopened.sheet(b, key) is None
     assert '"point"' not in template_json(saved)
 
 
@@ -424,20 +424,20 @@ try:
             return f"<Run|WPos:{xyz}|WCO:0,0,0|Pn:Y>"
         return ordinary_report(state, xyz)
     transport.report = one_pulse
-    choose(panel.nudge.step, 10)
-    panel.nudge.buttons[(0, 1)].click()
+    choose(setup.nudge.step, 10)
+    setup.nudge.buttons[(0, 1)].click()
     wait()
     assert pulses and panel.device is not None and panel.nudge.isEnabled()
     assert transport.position == [35., 40., 0.] and "点动完成" in panel.report.text()
     transport.report = ordinary_report
-    panel.nudge.buttons[(0, -1)].click()
+    setup.nudge.buttons[(0, -1)].click()
     wait()
     assert transport.position == [35., 30., 0.]
-    choose(panel.nudge.step, 50)
-    panel.nudge.buttons[(1, 0)].click()
+    choose(setup.nudge.step, 50)
+    setup.nudge.buttons[(1, 0)].click()
     wait()
     assert transport.position == [85., 30., 0.]
-    panel.nudge.buttons[(-1, 0)].click()
+    setup.nudge.buttons[(-1, 0)].click()
     wait()
     assert transport.position == [35., 30., 0.]
     assert set(xy_feeds_by_pen(transport.commands)[False]) == {2500}
@@ -468,209 +468,21 @@ try:
     assert [spin.value() for spin in setup.bounds[:2]] == [35., 29.]
     for spin, value in zip(setup.bounds, (0, 0, 100, 100), strict=True):
         spin.setValue(value)
+    # Existing coordinates cannot be promoted into a calibrated dock by saving settings.
     setup.save_button.click()
-    profile = panel.store.devices()[0]
-    assert profile.axes.swap and profile.axes.mirror_x and panel.confirmed_area == profile.area
-    assert profile.limit_area_enabled and profile.feed == 200
-    normal_report = transport.report
-    transport.report = lambda state, xyz: (
-        "<Run|WPos:35,28.0,0|Pn:Y>" if state == "Run" and xyz == "35.0,27.0,0.0"
-        else normal_report(state, xyz)
-    )
-    choose(setup.nudge.step, 2)
-    setup.nudge.buttons[(1, 0)].click()
-    wait()
-    assert transport.position == [35., 27., 0.] and panel.device is not None
-    assert "点动完成" in panel.report.text()
-    assert b"G1 X35.0000 Y27.0000 F200\n" in transport.commands
-    assert not transport.closed and b"\x18" not in transport.commands
-    transport.report = normal_report
+    assert not panel.datum_located and not panel.profile.axes.swap
+    assert "初始化" in setup.error.text()
+    setup.axes[0].setChecked(False)
+    setup.axes[2].setChecked(False)
+    setup.save_button.click()
+    assert panel.profile.limit_area_enabled and panel.confirmed_area == panel.profile.area
+    # Commissioning jogs are bounded and do not establish a paper measurement.
+    choose(setup.nudge.step, 100)
+    before = list(transport.commands)
     setup.nudge.buttons[(-1, 0)].click()
-    wait()
+    assert before == transport.commands and "超出" in panel.report.text()
+    assert not panel.datum_located and not panel.return_button.isEnabled()
     setup.close()
-
-    template = FlowTemplate(width_mm=70, height_mm=60, plotter_alignment=PageAlignment((5, 5)))
-    page = Page(0, (), (PaintOp("字", ((6., 7.), (8., 9.)), .3),))
-    snapshot = LayoutSnapshot("snapshot", "key", "doc", 0, template.page, (page,), (), "resource", "test")
-    panel.set_document(snapshot, 0, True, template)
-    panel.show()
-    context = page_context(template, snapshot, 0)
-    align = AlignmentDialog(panel, panel, *context, snapshot=snapshot)
-    align.record_a.click()
-    wait()
-    assert align.measurement == (35., 29.)
-    align.save.click()
-    assert align.result() and align.position == align.measurement
-    panel.use_alignment(align.alignment, align.position)
-    assert panel.job.strokes[0].points == ((37., 28.), (39., 26.))
-    assert panel.write_button.isEnabled()
-    panel.confirm = lambda *_: True
-    reuse = AlignmentDialog(panel, panel, *context, snapshot=snapshot)
-    reuse.recall.click()
-    assert reuse.result() and reuse.position == align.position
-    panel.write_button.click()
-    wait()
-    assert "书写完成" in panel.report.text()
-
-    preview = AlignmentDialog(panel, panel, *context, configure=True)
-    preview.show()
-    app.processEvents()
-    canvas = preview.canvas
-    qt = QtCore.Qt
-    initial = canvas.drawing_transform()
-    anchor = initial.map(QtCore.QPointF(22, 19)).toPoint()
-    def wheel(modifier):
-        event = QtGui.QWheelEvent(QtCore.QPointF(anchor), QtCore.QPointF(canvas.mapToGlobal(anchor)),
-            QtCore.QPoint(), QtCore.QPoint(0, 240), qt.NoButton, modifier, qt.NoScrollPhase, False)
-        app.sendEvent(canvas, event)
-    wheel(qt.NoModifier)
-    assert canvas.drawing_transform() == initial
-    wheel(qt.ControlModifier)
-    assert preview.zoom_reset.text() == "144%"
-    point = initial.inverted()[0].map(QtCore.QPointF(anchor))
-    assert (canvas.drawing_transform().map(point) - anchor).manhattanLength() < 1e-6
-    QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=anchor)
-    assert abs(preview.a[0].value() - point.x()) < .001 and abs(preview.a[1].value() - point.y()) < .001
-    assert preview.canvas.points == [("原点", tuple(spin.value() for spin in preview.a))]
-    assert not preview.record_b.isVisible() and not preview.check_c.isVisible() and not preview.pick.isVisible()
-    dest = anchor + QtCore.QPoint(30, 20)
-    QtTest.QTest.mousePress(canvas, qt.LeftButton, pos=anchor)
-    QtTest.QTest.mouseMove(canvas, dest)
-    QtTest.QTest.mouseRelease(canvas, qt.LeftButton, pos=dest)
-    assert (canvas.drawing_transform().map(point) - dest).manhattanLength() < 1e-6
-    b_pixel = dest + QtCore.QPoint(12, 18)
-    b_mm = canvas.drawing_transform().inverted()[0].map(QtCore.QPointF(b_pixel))
-    QtTest.QTest.mouseClick(canvas, qt.LeftButton, pos=b_pixel)
-    assert abs(preview.a[0].value() - b_mm.x()) < .001 and abs(preview.a[1].value() - b_mm.y()) < .001
-    preview.zoom_reset.click()
-    assert canvas.drawing_transform() == initial and preview.zoom_reset.text() == "100%"
-    preview.close()
-
-    measure = AlignmentDialog(panel, panel, *context, calibration=True)
-    transport.position[:] = [35., 29., 0.]
-    measure.record_a.click()
-    wait()
-    measure.b[0].setValue(15)
-    measure.show()
-    app.processEvents()
-    assert measure.nudge.isVisible() and measure.nudge.isEnabled()
-    before = len(transport.commands)
-    choose(measure.nudge.step, 100)
-    measure.nudge.buttons[(1, 0)].click()
-    assert "超出" in measure.motion_error.text() and len(transport.commands) == before
-    before_speed = list(transport.commands)
-    choose(measure.nudge.feed, 500)
-    assert panel.nudge.feed.currentData() == 500 and measure.measurement == (35.,29.)
-    assert transport.commands == before_speed
-    choose(measure.nudge.feed, 200)
-    choose(measure.nudge.step, 10)
-    measure.nudge.buttons[(1, 0)].click()
-    wait()
-    choose(measure.nudge.step, 2)
-    measure.nudge.buttons[(1, 0)].click()
-    assert panel.busy == "jog" and not measure.nudge.isEnabled() and not measure.record_b.isEnabled()
-    assert measure.stop.isVisible() and measure.stop.isEnabled()
-    measure.reject()
-    assert measure.isVisible()
-    wait()
-    assert measure.measurement == (35., 29.) and transport.position == [35., 17., 0.]
-    assert "Y 17.000" in measure.pen_position.text() and measure.stop.isHidden()
-    assert set(xy_feeds_by_pen(transport.commands[before:])[False]) == {200}
-    assert not any(cmd.startswith(b"G1 Z-") for cmd in transport.commands[before:])
-    measure.record_b.click()
-    wait()
-    measure.save.click()
-    assert measure.result() and measure.alignment.scale == 1.2 and measure.alignment.angle == 0.
-
-    assert panel.store.devices()[0].paper_calibration == (0., 1.2)
-    assert panel.registration is None
-    # Rebooting at the current pen position can reset WPos without changing WCO.
-    old_connection, old_offset = panel.connection_id, panel.offset
-    reopened = DeviceDialog(panel)
-    inspected = []
-    def inspect_initialization():
-        dialog = app.activeModalWidget()
-        inspected.append((dialog.calibration, dialog.record_b.isVisible(), dialog.check_c.isVisible()))
-        dialog.reject()
-    QtCore.QTimer.singleShot(0, inspect_initialization)
-    reopened.paper_calibrate.click()
-    assert inspected == [(True, True, True)]
-    assert reopened.use_range.isChecked() and panel.confirmed_area == profile.area
-    reopened.link.click()
-    wait()
-    assert panel.device is None and panel.connection_id is None
-    transport.position[:] = [0., 0., 0.]
-    reopened.link.click()
-    wait()
-    assert panel.device.position[:2] == (0., 0.) and panel.offset == old_offset
-    assert panel.connection_id != old_connection
-    assert reopened.use_range.isChecked() and panel.confirmed_area is None
-    choose(reopened.nudge.feed, 3500)
-    reopened.save_button.click()
-    assert panel.profile.area == profile.area and panel.confirmed_area is None
-    assert panel.profile.feed == 3500 and panel.profile.limit_area_enabled
-    reopened.use_range.setChecked(False)
-    reopened.save_button.click()
-    assert not panel.profile.limit_area_enabled and panel.profile.area == profile.area
-    reopened.close()
-
-    page_key, size, _, title = context
-    restore = AlignmentDialog(panel, panel, page_key, size, context[2], title, snapshot=snapshot)
-    restore.recall.click()
-    assert not restore.result() and restore.position is None and not restore.save.isEnabled()
-    assert "重新记录原点" in restore.status.text()
-    assert panel.profile.calibrated(restore.markings()).scale == 1.2
-    restore.record_a.click()
-    wait()
-    restore.save.click()
-    assert restore.result() and restore.position == (0., 0.) and panel.profile.calibrated(restore.alignment).scale == 1.2
-    panel.use_alignment(restore.alignment, restore.position)
-    assert panel.registration and panel.confirmed_area is None and panel.write_button.isEnabled()
-    # This transformed character crosses the old rectangle's y=0 boundary.
-    assert panel.job.strokes[0].points[-1][1] < 0
-    start = len(transport.commands)
-    panel.dry_button.click()
-    wait()
-    assert set(xy_feeds_by_pen(transport.commands[start:])[False]) == {3500}
-    assert not xy_feeds_by_pen(transport.commands[start:])[True]
-    start = len(transport.commands)
-    panel.return_button.click()
-    wait()
-    assert b"G1 X0.0000 Y0.0000 F3500\n" in transport.commands[start:]
-    start = len(transport.commands)
-    panel.write_button.click()
-    wait()
-    feeds = xy_feeds_by_pen(transport.commands[start:])
-    assert set(feeds[False]) == set(feeds[True]) == {3500}
-    trial = DeviceDialog(panel)
-    choose(trial.nudge.feed, 500)
-    start = len(transport.commands)
-    trial.trial.click()
-    wait()
-    trial_feeds = xy_feeds_by_pen(transport.commands[start:])
-    assert set(trial_feeds[False]) == set(trial_feeds[True]) == {500}
-    trial.close()
-    panel.link_button.click()
-    wait()
-    panel.set_workspace(Path(sys.argv[1]))
-    saved = DeviceDialog(panel)
-    assert saved.nudge.feed.currentData() == 500 and saved.nudge.feed.isEnabled() and not saved.nudge.step.isEnabled() and not saved.trial.isEnabled()
-    assert not saved.use_range.isChecked()
-    saved.close()
-    panel.link_button.click()
-    wait()
-    transport.report = lambda state, xyz: f"<{state}|WPos:{xyz}|Pn:Y>"
-    panel.nudge.buttons[(0, 1)].click()
-    wait()
-    assert panel.device is not None and panel.device.limits == "Y"
-    assert not (Path(sys.argv[1]) / "plotter-last-jog-fault.json").exists()
-    transport.report = lambda state, xyz: "ALARM:1" if state == "Run" else f"<{state}|WPos:{xyz}|Pn:Y>"
-    panel.nudge.buttons[(0, 1)].click()
-    wait()
-    assert panel.device is None and "plotter-last-jog-fault.json" in panel.report.text()
-    import json
-    fault = json.loads((Path(sys.argv[1]) / "plotter-last-jog-fault.json").read_bytes())
-    assert fault["operation"] == "jog" and fault["reports_before_stop"][-1] == "ALARM:1"
 finally:
     panel.shutdown()
     panel.close()
@@ -953,7 +765,11 @@ dialog = MachinePanel(None, worker_factory=worker, ports=ports)
 dialog.set_workspace(Path(sys.argv[1]))
 profile = DeviceProfile("device", "N1", "COM-test", axes=DeviceAxes(mirror_x=True, swap=True),
                         area=WorkArea(0, 0, 100, 100), limit_area_enabled=True)
+from dataclasses import replace
+from inkstruct.plotter.profiles import DeviceDatum
+profile = replace(profile, datum=replace(DeviceDatum.create(profile, "停靠点"), boot_mode="retained"))
 dialog.save_profile(profile)
+dialog.confirm = lambda *_: True
 dialog.set_document(snapshot, 0, True)
 dialog.show()
 try:
@@ -972,11 +788,14 @@ try:
     assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?"]
     assert dialog.nudge.isEnabled() and dialog.confirmed_area is None
     assert dialog.confirm_range_button.isVisible()
-    dialog.use_alignment(PageAlignment((2, 3)), (20., 20.))
-    assert dialog.job and not dialog.dry_button.isEnabled() and not dialog.write_button.isEnabled()
+    dialog.apply_fixture()
+    assert not dialog.job and not dialog.dry_button.isEnabled() and not dialog.write_button.isEnabled()
     assert not dialog.return_button.isEnabled()
+    dialog._set_frame((20., 20.))
     settings = DeviceDialog(dialog)
     assert settings.use_range.isChecked()
+    for spin, value in zip(settings.bounds, (0, 0, 100, 100)):
+        spin.setValue(value)
     settings.range_confirm.click()
     assert dialog.nudge.isEnabled() and dialog.confirmed_area == profile.area
     settings.close()
@@ -985,7 +804,7 @@ try:
     assert not dialog.nudge.isEnabled() and dialog.stop_button.isVisible()
     wait_for(lambda: dialog.busy is None)
     assert transport.position == [20., 18., 0.]
-    dialog.use_alignment(PageAlignment((2, 3)), (20, 18))
+    dialog.measure_sheet(dialog.sheet_context()[0], PageAlignment((2, 3)), dialog.device)
     placed = dialog.job
     dialog.preview_button.click()
     assert dialog.preview.job is placed and placed.strokes[0].points == ((21., 17.), (23., 15.))
@@ -993,13 +812,13 @@ try:
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     dialog.confirm = lambda *_: True
     dialog.write_button.click()
-    wait_for(lambda: "书写完成" in dialog.report.text() and dialog.busy is None)
+    wait_for(lambda: "可以取纸" in dialog.report.text() and dialog.busy is None)
     assert b"G1 Z-1.6 F5000\n" in transport.commands
     assert dialog.write_button.isEnabled()
 
     dialog.return_button.click()
     wait_for(lambda: dialog.busy is None)
-    assert transport.position == [20., 18., 0.]
+    assert transport.position == [20., 20., 0.]
 
     transport.fail_next_motion = True
     dialog.dry_button.click()
@@ -1016,7 +835,7 @@ finally:
                  capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
 
-def test_qt_sidebar_preserves_views_and_waits_between_paper_pages(tmp_path):
+def test_qt_sidebar_preserves_views_and_writes_only_selected_page(tmp_path):
     code = r"""
 import sys
 from dataclasses import replace
@@ -1055,7 +874,10 @@ p = w.machine_panel
 p.set_workspace(Path(sys.argv[1]))
 profile = DeviceProfile("device", "N1", "COM-test", area=WorkArea(0, 0, 100, 100),
                         limit_area_enabled=True)
+from inkstruct.plotter.profiles import DeviceDatum
+profile = replace(profile, datum=replace(DeviceDatum.create(profile, "停靠点"), boot_mode="zero"))
 p.save_profile(profile)
+p.confirm = lambda *_: True
 try:
     def wait_for(condition):
         end = monotonic() + 8
@@ -1096,26 +918,23 @@ try:
     before = w.workspace_views.splitter.sizes()
     p.page_list.setCurrentRow(1)
     assert w.page_picker.value() == 2 and p.paper_page.index == 1
-    p.scope.setCurrentIndex(p.scope.findData("all"))
-    assert p.paper_page.index == 0 and not p.page_list.isEnabled()
+    assert not hasattr(p, "scope") and p.page_list.isEnabled()
     p.link_button.click()
     wait_for(lambda: p.device is not None and p.busy is None)
     assert p.nudge.isEnabled() and p.confirmed_area is None and not p.write_button.isEnabled()
-    p.save_profile(profile, confirm_range=True)
+
     p.confirm = lambda *_: True
     assert p.pen_button.isVisible() and not p.pen_raised and not p.link_button.isEnabled()
     p.pen_button.click()
     wait_for(lambda: p.pen_raised and p.busy is None)
     assert p.pen_button.isVisible() and p.pen_button.text() == "落笔"
-    p.use_alignment(PageAlignment((0, 0)), transport.position[:2])
+    p._set_frame(transport.position[:2])
+    p.save_profile(profile, confirm_range=True)
+    p.measure_sheet(p.sheet_context()[0], PageAlignment((0, 0)), p.device)
     p.dry_button.click()
     wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
 
-    first_a = p.registration.origin
-    assert not p.auto_return.isChecked()
-    p.auto_return.click()
     p.write_button.click()
-    assert not p.auto_return.isEnabled()
     assert p.is_moving and p.close_blocker()
     p.write_button.click()
     wait_for(lambda: b"!" in transport.commands)
@@ -1126,7 +945,7 @@ try:
     w.element_properties_dock.raise_()
     app.processEvents()
     p.set_document(None, 0, False)
-    assert p.snapshot is snap and p.batch_active
+    assert p.snapshot is snap and p.busy == "write"
     w.machine_dock.raise_()
     app.processEvents()
     assert p.busy == "write" and p.write_button.text() == "继续" and p.snapshot is snap
@@ -1134,25 +953,10 @@ try:
     assert w.workspace_views.mode == "split" and w.workspace_views.splitter.sizes() == before
     p.set_document(snap, 0, True)
     p.write_button.click()
-    wait_for(lambda: p.waiting_for_paper)
-    assert tuple(transport.position) == (*first_a, 0.)
-    assert p.page_list.currentRow() == 1 and p.completed_pages == {0}
-    assert p.job is None and p.close_blocker() and p.write_button.text() == "换纸完成"
-    count = len(transport.commands)
-    p.write_button.click()
-    app.processEvents()
-    assert p.batch_active and not p.waiting_for_paper and len(transport.commands) == count
-    assert not p.dry_button.isEnabled() and not p.write_button.isEnabled()
-    p.use_alignment(PageAlignment((0, 0)), transport.position[:2])
-    p.dry_button.click()
-    wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
-    p.write_button.click()
-    wait_for(lambda: not p.batch_active and p.busy is None)
-    assert p.completed_pages == {0, 1} and not p.close_blocker()
-
-    p.scope.setCurrentIndex(p.scope.findData("single"))
-    p.dry_button.click()
-    wait_for(lambda: "抬笔试走完成" in p.report.text() and p.busy is None)
+    wait_for(lambda: p.busy is None)
+    assert tuple(transport.position) == (0, 0, 0)
+    assert p.page_list.currentRow() == 1 and p.completed_pages == {1}
+    assert p.journal.read() == (1, False) and not p.close_blocker()
     previous = len(transport.commands)
     transport.on_write = lambda data: sleep(.05) if data.startswith(b"G1 ") else None
     p.write_button.click()
@@ -1162,7 +966,7 @@ try:
     assert b"\x18" in transport.commands and transport.closed
     assert not p.dry_button.isEnabled() and p.registration is None
     p.set_document(replace(snap, snapshot_id="new", revision=1), 0, True)
-    assert p.snapshot.revision == 1 and p.completed_pages == set()
+    assert p.snapshot.revision == 1
 finally:
     p.shutdown()
     w.dirty = False
@@ -1215,14 +1019,22 @@ def test_page_four_pin_frame_with_unregistered_work_area():
         link.pump()
 
 
-def test_device_calibration_overrides_legacy_page_fit_without_changing_origin(tmp_path):
-    from inkstruct.plotter.profiles import DeviceProfile, PageAlignment, PlotterProfiles
+def test_old_two_point_fit_and_work_positions_are_not_docking_evidence(tmp_path):
+    from dataclasses import asdict
+    import json
+    from inkstruct.plotter.profiles import DeviceDatum, DeviceProfile, PlotterProfiles
 
     store = PlotterProfiles(tmp_path)
-    profile = DeviceProfile("first", "N1", "test", paper_calibration=(math.pi / 2, 1.1))
-    store.save(profile)
+    profile = DeviceProfile("first", "N1", "test")
+    old = asdict(profile)
+    old.update(datum=asdict(DeviceDatum.create(profile, "旧纸角")), return_after_page=True,
+               paper_calibration=(math.pi / 2, 1.1))
+    legacy = {"devices": {"first": old}, "selected": "first",
+              "placements": {"example": {"point": [3, 7], "body_point": [20, 30]}}}
+    store.legacy_path.write_text(json.dumps(legacy), encoding="utf-8")
+    original = store.legacy_path.read_bytes()
     loaded, = store.devices()
-    for origin in ((5., 10.), (25., 35.)):
-        legacy = PageAlignment(origin, (80., 60.), .2, .9)
-        assert loaded.calibrated(legacy) == PageAlignment(origin, legacy.b, math.pi / 2, 1.1)
-        assert DeviceProfile("second", "N1", "test2").calibrated(legacy) == legacy
+    assert loaded.axes == profile.axes and loaded.datum is None
+    store.save(loaded)
+    assert store.sheets(loaded) == {} and store.exchange_checkpoint(loaded) is None
+    assert store.devices() == [loaded] and store.legacy_path.read_bytes() == original

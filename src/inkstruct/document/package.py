@@ -309,6 +309,11 @@ def load_package(path: Path) -> LoadedDocument:
         flow_record = dict(styles.get("flow", {}))
         flow_record.setdefault("math", {"fraction_source": "geometric"})
         flow = FlowStyle(**flow_record).compact_body()
+        from .flow_template import bind_legacy_family
+        template = bind_legacy_family(flow.template, "document:" + session.document_id)
+        if template is not flow.template:
+            from dataclasses import replace
+            flow = replace(flow, template=template)
         if flow.named_fields != (manifest["schema_version"] == TEMPLATE_VERSION):
             raise ValueError("Template and project protocol versions disagree")
         if flow.named_fields and (manifest.get("template_content_protocol") != "inkstruct_named_fields_v1"
@@ -334,6 +339,11 @@ def load_package(path: Path) -> LoadedDocument:
             from .break_migration import migrate_v1_breaks
 
             session, migration_notice = migrate_v1_breaks(session, flow)
+        template = flow.template
+        if hasattr(template, "effective_layouts") and any(template.paper_origin(layout)
+                                                          for layout in template.effective_layouts):
+            notice = "本文含旧版纸面标记，可在写字机面板导入本机。请另存新版文档，原文件保留。"
+            migration_notice = "\n".join(filter(None, (migration_notice, notice)))
         return LoadedDocument(
             session,
             resolver,

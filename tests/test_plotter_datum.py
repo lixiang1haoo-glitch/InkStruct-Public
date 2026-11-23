@@ -4,7 +4,7 @@ from dataclasses import asdict, replace
 import pytest
 
 from inkstruct.plotter.physical import WorkArea
-from inkstruct.plotter.profiles import DeviceAxes, DeviceDatum, DeviceProfile, PageAlignment, PlotterProfiles
+from inkstruct.plotter.profiles import DeviceAxes, DeviceDatum, DeviceProfile, PlotterProfiles
 
 
 @pytest.mark.parametrize("swap", (False, True))
@@ -30,39 +30,23 @@ def test_body_ranges_follow_reference_with_signed_calibrated_axes(swap, mirror_x
         datum.origin_from_checkpoint((0, 0))
 
 
-def test_reloaded_placement_requires_current_datum_and_preserves_historic_records(tmp_path):
+def test_reloaded_measurement_requires_compatible_device_and_dock(tmp_path):
     store = PlotterProfiles(tmp_path)
     profile = DeviceProfile.create("N1", "COM3")
-    paper = PageAlignment((25, 25), (185, 25), .05, 1.025)
-    key = ("source-page", "左上挡边", paper)
-    store.place(profile, *key, (42, 53), (0, 0), connection="before")
-    legacy = store.place(profile, *key)
-    assert store.placed_position(profile, legacy, connection="before", offset=(0, 0)) == (42, 53)
-    assert store.placed_position(profile, legacy, connection="new", offset=(0, 0)) is None
-    assert store.placed_position(profile, legacy, connection="before", offset=(0, 1)) is None
-
-    datum = replace(DeviceDatum.create(profile, "纸角"), area=WorkArea(-5, -10, 190, 280), checkpoint=(25, 35))
+    with pytest.raises(ValueError):
+        store.save_sheet(profile, "source", (25, 25), (30, 45), 1)
+    datum = replace(DeviceDatum.create(profile, "停靠点"), boot_mode="retained")
     profile = replace(profile, datum=datum)
     store.save(profile)
-    store.place(profile, *key, (42, 53), (0, 0), connection="before", datum_origin=(12, 8))
-    reloaded = PlotterProfiles(tmp_path)
-    device, = reloaded.devices()
-    assert device == profile
-    record = reloaded.place(device, *key)
-    assert record["body_point"] == [30, 45] and record["datum_id"] == datum.id
-    assert reloaded.placed_position(device, record, connection="after", offset=(0, 0)) is None
-    assert reloaded.placed_position(device, record, connection=None, offset=(0, 0), datum_origin=(-4, 2)) is None
-    assert reloaded.placed_position(device, record, connection="after", offset=(0, 0), datum_origin=(-4, 2)) == (26, 47)
-    assert reloaded.placed_position(device, legacy, connection="before", offset=(0, 0), datum_origin=(-4, 2)) is None
-    with pytest.raises(ValueError, match="找回机身基准"):
-        reloaded.place(device, *key, (0, 0), (0, 0), connection="after")
-    assert reloaded.place(device, *key) == record
-    new_fixture = replace(profile, datum=DeviceDatum.create(profile, "另一个挡边"))
-    assert reloaded.placed_position(new_fixture, record, connection="before", offset=(0, 0), datum_origin=(12, 8)) is None
-    assert reloaded.place(new_fixture, *key) == legacy
-    assert len(reloaded.read()["placements"]) == 2
-    assert replace(device, axes=DeviceAxes(swap=True)).datum is None
-    assert replace(device, id="other-device").datum is None
+    store.save_sheet(profile, "source", (25, 25), datum.to_body((42, 53), (12, 8)), 1)
+    reopened = PlotterProfiles(tmp_path)
+    device, = reopened.devices()
+    record = reopened.sheet(device, "source")
+    assert device.accepts_sheet(record)
+    assert device.datum.to_work(record["virtual"], (-4, 2)) == (26, 47)
+    assert not replace(device, axes=DeviceAxes(swap=True)).accepts_sheet(record)
+    assert not replace(device, id="other-device").accepts_sheet(record)
+    assert reopened.exchange_checkpoint(device) is None
 
 
 def test_legacy_device_profile_load_does_not_promote_range(tmp_path):
@@ -120,24 +104,16 @@ def test_validate_motion_settings(field, value):
         replace(profile, **{field: value})
 
 
-def test_fixture_setup_is_scoped_and_only_changes_on_explicit_use(tmp_path):
+def test_changing_paper_stops_keeps_marks_but_requires_new_measurement(tmp_path):
     store = PlotterProfiles(tmp_path)
-    profile = DeviceProfile.create("N1", "COM3")
-    profile = replace(profile, datum=DeviceDatum.create(profile, "左上角"))
-    alignment = PageAlignment((10, 20))
-    def save(name, select):
-        store.place(profile, "paper", name, alignment, (20, 35), connection="session",
-                    datum_origin=(5, 7), select_fixture=select)
-
-    save("右边", True)
-    save("另一摆放", False)
-    store = PlotterProfiles(tmp_path)
-    assert store.fixture_setup(profile, "paper", alignment) == "右边"
-    assert not store.fixture_setup(profile, "other", alignment)
-    assert not store.fixture_setup(profile, "paper", PageAlignment((12, 15)))
-    new = replace(profile, datum=DeviceDatum.create(profile, "新纸角"))
-    assert not store.fixture_setup(new, "paper", alignment)
-    with pytest.raises(ValueError):
-        store.select_fixture_setup(new, "paper", alignment, "右边")
-    store.select_fixture_setup(profile, "paper", alignment, "另一摆放")
-    assert PlotterProfiles(tmp_path).fixture_setup(profile, "paper", alignment) == "另一摆放"
+    p = DeviceProfile.create("N1", "COM3")
+    p = replace(p, datum=replace(DeviceDatum.create(p, "停靠点"), boot_mode="zero"))
+    store.save_sheet(p, "paper", (10, 20), (15, 28), 1)
+    new = replace(p, stop_generation="changed")
+    store.save(new)
+    reopened = PlotterProfiles(tmp_path)
+    record = reopened.sheet(new, "paper")
+    assert record["mark"] == [10, 20] and not new.accepts_sheet(record)
+    assert reopened.sheet(new, "other") is None
+    reopened.save_sheet(new, "paper", record["mark"], (16, 30), 5)
+    assert new.accepts_sheet(reopened.sheet(new, "paper"))

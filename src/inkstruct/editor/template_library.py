@@ -85,8 +85,6 @@ class TemplateLibrary(QtWidgets.QWidget):
         right.addWidget(self.summary)
         self.layouts = QtWidgets.QComboBox()
         right.addWidget(self.layouts)
-        self.origin_info = QtWidgets.QLabel()
-        right.addWidget(self.origin_info)
         self.preview = FitSvgPreview()
         self.preview.setProperty('inkRole', 'previewSurface')
         self.preview_stack = QtWidgets.QStackedWidget()
@@ -371,8 +369,6 @@ class TemplateLibrary(QtWidgets.QWidget):
             self.error.setText(str(error))
             self.show_preview_status('模板读取失败\n' + str(error) if data else
                                      '没有匹配的模板' if self.list.count() else '没有可预览的页面版式')
-        if self.template is None:
-            self.origin_info.hide()
         self.layouts.setVisible(self.template is not None)
         self.info.setVisible(bool(data))
         allowed = self.template is not None and not (data and data['managed'] and data['managed']['archived'])
@@ -390,10 +386,6 @@ class TemplateLibrary(QtWidgets.QWidget):
         self.preview_epoch += 1
         epoch = self.preview_epoch
         template, key = self.template, self.layouts.currentData()
-        layout = next((p for p in template.effective_layouts if p.layout_id == key), None) if isinstance(template, FlowTemplate) else None
-        mark = template.paper_origin(layout) if layout else None
-        self.origin_info.setVisible(layout is not None)
-        self.origin_info.setText(f"纸面原点 X {mark.a[0]:.3f} · Y {mark.a[1]:.3f} mm" if mark else "此版式尚未设置纸面原点")
         if not template or key is None:
             self.show_preview_status('没有可预览的页面版式')
             return

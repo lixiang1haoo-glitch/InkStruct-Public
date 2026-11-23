@@ -93,7 +93,8 @@ def read_template(path):
         raw = stream.read(MAX_FLOW_TEMPLATE_BYTES + 1)
     if len(raw) > MAX_FLOW_TEMPLATE_BYTES:
         raise ValueError("模板文件超过 16 MiB")
-    return parse_template(raw.decode("utf-8"))
+    from .flow_template import bind_legacy_family
+    return bind_legacy_family(parse_template(raw.decode("utf-8")), "file:" + str(Path(path).resolve()))
 
 
 def geometry_preview(template, face_name, *, background_opacity=0.4):

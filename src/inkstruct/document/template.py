@@ -283,7 +283,7 @@ def template_from_record(value):
         value = {key: item for key, item in value.items() if key != 'revision'}
     if value.get("schema_version") == "inkstruct_page_template_v3":
         from .flow_template import FlowTemplate
-        return FlowTemplate(**value)
+        return FlowTemplate(**{"family_id": "", **value})
     if value.get("schema_version", PageTemplate.SCHEMA) == PageTemplate.SCHEMA:
         return PageTemplate(**value)
     from .template_slots import SlottedPageTemplate

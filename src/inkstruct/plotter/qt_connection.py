@@ -21,6 +21,7 @@ class N1Serial:
         info = next((port for port in n1_ports() if port.portName() == name), None)
         if info is None:
             raise OSError("找不到所选的炽写 N1 USB 串口。")
+        self.usb_serial = info.serialNumber()
         self.port = QtSerialPort.QSerialPort(info)
         self.buffer = bytearray()
         port = self.port
@@ -73,7 +74,7 @@ class N1Worker(QtCore.QThread):
         self.serial_factory = serial_factory
         self.requests = Queue()
         self.jog_fault_path = None
-        self.stopped_at = None
+        self.stopped_at = self.closed_idle = None
         self.control = None
         self.closing = False
 
@@ -110,9 +111,15 @@ class N1Worker(QtCore.QThread):
                         if link is not None:
                             link.serial.close()
                             link = None
-                        link = GrblLink(self.serial_factory(*args), phase=self.phase.emit,
+                        serial = self.serial_factory(args[0])
+                        expected_serial = args[1] if len(args) > 1 else ""
+                        if expected_serial and getattr(serial, "usb_serial", expected_serial) != expected_serial:
+                            serial.close()
+                            raise MachineError("USB 设备已更换，请重新选择写字机。")
+                        link = GrblLink(serial, phase=self.phase.emit,
                                         progress=self.progress.emit)
                         result = link.connect()
+                        self.reset_on_connect = link.saw_reset
                     elif link is None:
                         raise MachineError("设备尚未连接。")
                     elif kind == "disconnect":
@@ -181,9 +188,7 @@ class N1Worker(QtCore.QThread):
                     if link is not None and disconnected:
                         if motion:
                             try:
-                                stopped = link.abort()
-                                if isinstance(error, (Stopped, ExternalHold)):
-                                    self.stopped_at = stopped
+                                link.abort()
                                 if fault is not None:
                                     fault["reports_at_stop"] = list(link.recent_reports)
                             except (MachineError, OSError):
@@ -203,4 +208,9 @@ class N1Worker(QtCore.QThread):
                     self.failed.emit(kind, detail, disconnected)
         finally:
             if link is not None:
-                link.serial.close()
+                try:
+                    self.closed_idle = link.require_idle()
+                except (ValueError, MachineError, OSError):
+                    self.closed_idle = None
+                finally:
+                    link.serial.close()

@@ -88,6 +88,7 @@ def decode_status(line: str, previous_offset=None, *, n1_pin_report=False):
 
 @dataclass
 class MotionControl:
+    interrupted_cleanly: bool = False
     pause_requested: Event = field(default_factory=Event)
     stop_requested: Event = field(default_factory=Event)
     finish_stroke: Event = field(default_factory=Event)
@@ -150,6 +151,7 @@ class GrblLink:
         self.last_status = None
         self.status_count = 0
         self.status_at = 0.0
+        self.saw_reset = False
         self.metric = False
         self.motion_active = False
         self.xy_window = None
@@ -191,6 +193,7 @@ class GrblLink:
         elif line.lower().startswith(("error:", "alarm:")):
             raise MachineError(f"设备返回 {line}。")
         elif line.startswith("Grbl"):
+            self.saw_reset = True
             if self.last_status is not None:
                 raise MachineError("设备已复位，请重新核对工作坐标。")
         elif len(self.responses) < 1024:
@@ -519,7 +522,8 @@ class GrblLink:
             self.progress(number, total)
             if not dry_run and number < total and control.finish_stroke.is_set():
                 self.motion_active = False
-                raise ValueError('本笔已写完并抬笔，续写进度已保存在本机。')
+                control.interrupted_cleanly = True
+                return state
         self.pen(PEN_UP, control)
         return self.wait_idle(control, z=PEN_UP)
 

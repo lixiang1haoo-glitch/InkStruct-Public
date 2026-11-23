@@ -37,6 +37,8 @@ def _content_record(template, record=None):
     data = asdict(template) if record is None else record
     data.pop('revision', None)
     data.pop('paper_origins', None)
+    if not data.get('family_id'):
+        data.pop('family_id', None)
     # Omit the new optional property from legacy records to preserve their hashes.
     if data.get('schema_version') == 'inkstruct_page_template_v3':
         if data.get('plotter_alignment') is None:
@@ -55,10 +57,16 @@ def template_record(template, record=None):
         return None
     data = _content_record(template, record)
     revision = template.revision
-    if revision is not None and revision.content_hash == digest(data):
+    old_hash = digest(data)
+    data.pop('plotter_alignment', None)
+    for layout in data.get('layouts', ()):
+        layout.pop('plotter_alignment', None)
+    clean_hash = digest(data)
+    if revision is not None and revision.content_hash in (old_hash, clean_hash):
+        if clean_hash != revision.content_hash:
+            revision = TemplateRevision(revision.template_id, str(uuid5(UUID(revision.revision_id), clean_hash)),
+                                        revision.revision_id, revision.number + 1, clean_hash)
         data = {'schema_version': SCHEMA, 'revision': asdict(revision), 'template': data}
-    if getattr(template, 'paper_origins', ()):
-        data['paper_origins'] = [[key, asdict(mark)] for key, mark in template.paper_origins]
     return data
 
 
@@ -66,15 +74,16 @@ def template_revision(template):
     """An unchanged legacy snapshot has a deterministic identity by content."""
     record = template_record(template)
     if record['schema_version'] == SCHEMA:
-        return template.revision
+        return TemplateRevision(**record['revision'])
     key = digest(_content_record(template))
-    return TemplateRevision(str(uuid5(NAMESPACE_URL, 'inkstruct:template:' + key)),
+    family = getattr(template, 'family_id', '')
+    return TemplateRevision(str(UUID(hex=family) if family else uuid5(NAMESPACE_URL, 'inkstruct:template:' + key)),
                             str(uuid5(NAMESPACE_URL, 'inkstruct:revision:' + key)),
                             None, 1, key)
 
 
 def version_template(template, *, parent=None):
-    data = _content_record(template)
+    data = template_record(replace(template, revision=None))
     content_hash = digest(data)
     if parent is None:
         revision = TemplateRevision(str(uuid4()), str(uuid4()), None, 1, content_hash)

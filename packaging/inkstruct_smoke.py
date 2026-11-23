@@ -1254,7 +1254,7 @@ def verify_plotter_controls(panel, out):
     dialog = DeviceDialog(panel, panel)
     try:
         assert not dialog.datum_register.isEnabled()
-        assert not dialog.datum_recover.isEnabled()
+        assert not panel.return_button.isEnabled() and not panel.write_button.isEnabled()
         for pad in (dialog.nudge, panel.nudge):
             assert [pad.step.itemData(i) for i in range(pad.step.count())] == [.1,.5,1,2,5,10,20,50,100]
             assert [pad.feed.itemData(i) for i in range(7)] == [200,500,1000,2000,2500,3500,5000]
@@ -1266,19 +1266,18 @@ def verify_plotter_controls(panel, out):
         store = PlotterProfiles(directory)
         profile = DeviceProfile.create("Smoke fixture", "SIM")
         assert not profile.limit_area_enabled and profile.feed == 2500
-        profile = replace(profile, datum=DeviceDatum.create(profile, "A4 左上角"), feed=200)
+        datum = replace(DeviceDatum.create(profile, "停靠点"), boot_mode="zero")
+        profile = replace(profile, datum=datum, feed=200)
         store.save(profile)
-        alignment = PageAlignment((15, 15))
-        store.place(profile, "sheet", "fixture", alignment, (42., 53.), (0., 0.), alignment,
-                    connection="before", datum_origin=(12., 8.), select_fixture=True)
+        mark = PageAlignment((15, 15))
+        store.save_sheet(profile, "sheet", mark.a, (30., 45.), 1)
         reloaded = PlotterProfiles(directory)
         profile, = reloaded.devices()
         assert profile.feed == 200 and not profile.limit_area_enabled
-        assert reloaded.fixture_setup(profile, "sheet", alignment) == "fixture"
-        record = reloaded.place(profile, "sheet", "fixture", alignment)
-        assert reloaded.placed_position(profile, record, connection="after", offset=(0., 0.)) is None
-        assert reloaded.placed_position(profile, record, connection="after", offset=(0., 0.),
-                                        datum_origin=(-4., 2.)) == (26., 47.)
+        record = reloaded.sheet(profile, "sheet")
+        assert record["generation"] == profile.datum.id and record["mark"] == [15., 15.]
+        assert profile.datum.to_work(record["virtual"], (-4., 2.)) == (26., 47.)
+        assert reloaded.exchange_checkpoint(profile) is None
 
 
 def verify_exchange_import(library, source, wait):

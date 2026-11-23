@@ -40,7 +40,7 @@ def page_geometry(template):
 
 
 def simple_template(page):
-    return FlowTemplate(name="普通页面", mode="blank", width_mm=page.width_mm,
+    return FlowTemplate.ordinary(width_mm=page.width_mm,
                         height_mm=page.height_mm, margins_mm=(page.margin_mm,) * 4)
 
 

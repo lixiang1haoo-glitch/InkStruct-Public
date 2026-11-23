@@ -122,7 +122,7 @@ class TemplatePicker(QtWidgets.QDialog):
         try:
             ordinary = GlobalDefaultsStore().ordinary_template()
         except (ValueError, TypeError, OSError):
-            ordinary = FlowTemplate(name="普通页面", mode="blank")
+            ordinary = FlowTemplate.ordinary()
         self.options = [template, ordinary]
         self.list.addItem("普通页面 · 内置简单模板")
         from ..resource_catalog import TemplateStore, workspace_for
@@ -317,10 +317,6 @@ def perform_template_action(editor, action, template, *, target=None, save_revis
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             if action == "document":
                 candidate = dialog.configuration()
-                from ..document.flow_template import same_layout_revision
-                if candidate != template and same_layout_revision(template, candidate):
-                    from ..resource_catalog import TemplateStore, workspace_for
-                    candidate = TemplateStore(workspace_for(editor) / 'templates').save_paper_origins(template, candidate)
                 editor.template_content_panel.apply_template(candidate)
             return dialog.saved_revision
     except (ValueError, TypeError, OSError) as error:

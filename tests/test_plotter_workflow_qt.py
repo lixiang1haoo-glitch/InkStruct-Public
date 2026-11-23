@@ -13,13 +13,14 @@ def test_check_point_pen_and_reopened_page(tmp_path):
 
 def exercise(folder):
     from time import monotonic, sleep
+    from dataclasses import replace
     from types import SimpleNamespace
     from PySide6 import QtCore, QtTest, QtWidgets
     from inkstruct.editor.machine_alignment import AlignmentDialog
     from inkstruct.editor.machine_panel import MachinePanel
     from inkstruct.editor.pen_calibration import PenCalibration
     from inkstruct.plotter.qt_connection import N1Worker
-    from inkstruct.plotter.profiles import DeviceProfile, PageAlignment
+    from inkstruct.plotter.profiles import DeviceDatum, DeviceProfile, PageAlignment
     from inkstruct.scene.schema import LayoutSnapshot, Page, PaintOp
     from inkstruct.document.schema import PageProfile
     from test_plotter_machine import SimulatedGrbl
@@ -35,62 +36,43 @@ def exercise(folder):
                          ports=lambda: [SimpleNamespace(portName=lambda:"test")])
         p.set_workspace(folder)
         if not p.profile:
-            p.save_profile(DeviceProfile("id","N1","test"))
+            profile = DeviceProfile("id","N1","test")
+            p.save_profile(replace(profile, datum=replace(DeviceDatum.create(profile, "停靠点"), boot_mode="zero")))
+        p.confirm = lambda *_: True
         p.set_document(snap,0,True)
         p.show()
         p.refresh_ports()
         p.link_button.click()
         wait(p)
+        wait(p)
         return p
     def wait(p):
         end = monotonic()+20
-        while p.busy and monotonic()<end:
+        while monotonic()<end:
             app.processEvents()
+            if not p.busy:
+                app.processEvents()
+                if not p.busy:
+                    break
             sleep(.003)
         assert p.device and not p.busy, p.report.text()
 
     p = opened()
     try:
-        align = AlignmentDialog(p, p, "pdf", (70.,60.), PageAlignment((5.,5.)), "PDF 第 1 页")
+        align = AlignmentDialog(p, p.sheet_context()[0], (70.,60.), PageAlignment((5.,5.)), "PDF 第 1 页")
         align.show()
-        assert align.pen_button.text() == p.pen_button.text() == "落笔"
-        align.pen_button.click()
-        assert not p.pen_button.isEnabled() and not align.pen_button.isEnabled()
+        assert align.pen.text() == p.pen_button.text() == "落笔"
+        align.pen.click()
+        assert not p.pen_button.isEnabled() and not align.pen.isEnabled()
         wait(p)
         assert mock.position[2] == p.profile.writing_height
-        assert align.pen_button.text() == p.pen_button.text() == "抬笔"
+        assert align.pen.text() == p.pen_button.text() == "抬笔"
         p.pen_button.click()
         wait(p)
-        assert mock.position[2] == 0 and align.pen_button.text() == p.pen_button.text() == "落笔"
-        align.record_a.click()
+        assert mock.position[2] == 0 and align.pen.text() == p.pen_button.text() == "落笔"
+        align.record.click()
         wait(p)
-        calibration = AlignmentDialog(p, p, "device", (70.,60.), PageAlignment((5.,5.)),
-                                      "设备初始化", calibration=True)
-        calibration.show()
-        calibration.record_a.click()
-        wait(p)
-        calibration.b[0].setValue(10.)
-        calibration.nudge.step.setCurrentIndex(calibration.nudge.step.findData(5))
-        calibration.nudge.buttons[(1, 0)].click()
-        wait(p)
-        calibration.record_b.click()
-        wait(p)
-        calibration.check_c.click()
-        calibration.pick_point(30.,25.)
-        calibration.c_move.click()
-        wait(p)
-        assert mock.position[:2] == [25.,20.]
-        calibration.nudge.step.setCurrentIndex(calibration.nudge.step.findData(.5))
-        calibration.canvas.setFocus()
-        QtTest.QTest.keyClick(calibration.canvas, QtCore.Qt.Key.Key_Right)
-        wait(p)
-        calibration.c_read.click()
-        wait(p)
-        assert "+0.500" in calibration.c_result.text(), calibration.c_result.text()
-        calibration.close()
-        align.accept()
-        assert align.alignment == PageAlignment((5.,5.))
-        p.use_alignment(align.alignment,align.position)
+        assert p.job and p.registration.anchor == (5., 5.)
 
         wizard = PenCalibration(p,p)
         wizard.show()
@@ -118,9 +100,7 @@ def exercise(folder):
             assert "相对当前笔尖" in box.text()
             check.setChecked(True)
             box.button(QtWidgets.QMessageBox.StandardButton.Yes).click()
-        assert not p.auto_return.isChecked()
-        p.auto_return.click()
-        assert p.profile.return_after_page
+        assert not hasattr(p, "auto_return")
         returns = []
         sent_areas = []
         submit = p.worker.submit
@@ -131,6 +111,7 @@ def exercise(folder):
                 sent_areas.append(args[1])
             return submit(kind, *args)
         p.worker.submit = capture_area
+        del p.confirm
         QtCore.QTimer.singleShot(0, accept_checked_region)
         def stop_mid(done,total):
             if done == total//2 - 1:
@@ -141,7 +122,7 @@ def exercise(folder):
         p.write_button.click()
         wait(p)
         done, pending = p.journal.read()
-        assert 3 <= done <= 4 and not pending and not returns
+        assert 3 <= done <= 4 and not pending and returns
         assert p.done == done and p.progress.value() == done
         assert not p.preview_enabled and p.preview.isHidden()
         assert f"已确认完成 {done} 笔" in p.resume_hint.text()
@@ -154,11 +135,10 @@ def exercise(folder):
     mock = SimulatedGrbl()
     p = opened()
     try:
-        assert p.auto_return.isChecked()
+        assert p.datum_located
         assert p.profile.active_pen == "试验笔" and p.profile.writing_height == -.8
         assert p.done == done and "续写" in p.write_button.text()
-        assert not p.write_button.isEnabled()
-        p.use_alignment(PageAlignment((5.,5.)),(4.,3.))
+        assert p.write_button.isEnabled() and p.job.registration.origin == (0., 0.)
         p.confirm=lambda *_:True
         def estimated():
             return p.estimate_label.text().startswith("本页预计剩余")
@@ -176,16 +156,10 @@ def exercise(folder):
         assert all(a > b for a,b in zip(values, values[1:])) and values[-1] == 0
         assert p.estimate_label.text() == "本页预计剩余 0 分 0 秒"
         assert mock.commands.count(b"G1 Z-0.8 F5000\n") == 8-done
-        assert not p.journal.path.exists() and p.timing_path.exists()
-        assert mock.position == [4., 3., 0.] and "可以取纸" in p.report.text()
+        assert p.journal.read() == (8, False) and p.timing_path.exists()
+        assert mock.position == [0., 0., 0.] and "可以取纸" in p.report.text()
 
         submit = p.worker.submit
-        p.auto_return.click()
-        p.write_button.click()
-        wait(p)
-        assert tuple(mock.position[:2]) == p.job.strokes[-1].points[-1]
-        assert mock.position[2] == 0 and "可以取纸" not in p.report.text()
-        p.auto_return.click()
         def fail_return(kind, *args):
             if kind == "page-return":
                 mock.fail_next_motion = True
@@ -197,8 +171,8 @@ def exercise(folder):
             app.processEvents()
             sleep(.003)
         assert p.busy is None and p.device is None
-        assert p.completed_pages == {0} and not p.journal.path.exists()
-        assert "本页已写完，回到原点未完成" in p.report.text()
+        assert p.completed_pages == {0} and p.journal.read() == (8, False)
+        assert "回停靠点未完成" in p.report.text()
     finally:
         p.shutdown()
         p.close()

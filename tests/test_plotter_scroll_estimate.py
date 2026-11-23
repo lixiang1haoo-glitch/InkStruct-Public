@@ -124,7 +124,16 @@ def exercise(folder):
         with patch.object(machine_panel, "measure_page", measure):
             panel.set_document(dense, 0, True)
             wait(lambda: panel.paper_page is not None)
-            panel.use_alignment(PageAlignment((0., 0.)), (4., 3.))
+            from dataclasses import replace as updated
+            from inkstruct.plotter.grbl import Status
+            from inkstruct.plotter.profiles import DeviceDatum
+            panel.profile = updated(panel.profile, datum=updated(DeviceDatum.create(panel.profile, "停靠点"),
+                                                                boot_mode="zero"))
+            panel.device = Status("Idle", (4., 3., 0.), (0., 0., 0.), "")
+            panel.connection_id, panel.frame = "estimate-test", (0., 0.)
+            panel.measure_sheet(panel.sheet_context()[0], PageAlignment((0., 0.)), panel.device)
+            release.set()
+            wait(lambda: panel.job is not None)
             wait(started.is_set)
             panel.busy = "write"
             panel.run_start = 0

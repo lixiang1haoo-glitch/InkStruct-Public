@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
-from ..document.schema import digest
 from ..resource_catalog import atomic_json, catalog_write
 from .grbl import DEFAULT_WRITE_FEED, MAX_WRITE_FEED, PEN_DOWN
 from .physical import PaperRegistration, WorkArea, machine_point
@@ -84,11 +83,17 @@ class DeviceDatum:
     area: WorkArea | None = None
     checkpoint: tuple[float, float] | None = None
 
+    boot_mode: str = ""  # Empty on legacy paper-corner datums.
+    restart_positions: tuple = ()
+
     @classmethod
     def create(cls, profile, label):
         return cls(uuid4().hex, profile.id, profile.axes, label.strip())
 
     def __post_init__(self):
+        if self.boot_mode not in ("", "zero", "retained") or len(self.restart_positions) not in (0, 4):
+            raise ValueError("停靠点初始化记录无效。")
+        object.__setattr__(self, "restart_positions", tuple(machine_point(p) for p in self.restart_positions))
         if not self.id or not self.device_id or not self.label.strip():
             raise ValueError("请填写纸张限位及基准点名称。")
         if isinstance(self.axes, dict):
@@ -146,14 +151,11 @@ class DeviceProfile:
     limit_area_enabled: bool = False
     active_pen: str = ""
     pen_heights: tuple = ()
-    return_after_page: bool = False
-    paper_calibration: tuple[float, float] | None = None
+    stop_generation: str = ""
 
-    def calibrated(self, alignment):
-        if self.paper_calibration is None:
-            return alignment
-        angle, scale = self.paper_calibration
-        return replace(alignment, angle=angle, scale=scale)
+    def accepts_sheet(self, record):
+        return bool(self.datum and self.datum.boot_mode and record and record.get("generation") == self.datum.id
+                    and record.get("stops", "") == self.stop_generation and record.get("virtual") is not None)
 
     @property
     def writing_height(self):
@@ -165,7 +167,8 @@ class DeviceProfile:
 
     @classmethod
     def from_storage(cls, data):
-        profile = cls(**data)
+        profile = cls(**{key: value for key, value in data.items()
+                         if key not in {"paper_calibration", "return_after_page"}})
         if "limit_area_enabled" not in data and (profile.area or (profile.datum and profile.datum.area)):
             return replace(profile, limit_area_enabled=True)
         return profile
@@ -185,12 +188,6 @@ class DeviceProfile:
             object.__setattr__(self, "offset", machine_point(self.offset))
         if type(self.feed) is not int or not 60 <= self.feed <= MAX_WRITE_FEED:
             raise ValueError(f"XY 运动速度应在 60–{MAX_WRITE_FEED} mm/min 内。")
-        if self.paper_calibration is not None:
-            angle, scale = self.paper_calibration
-            PageAlignment((0., 0.), angle=angle, scale=scale)
-            object.__setattr__(self, "paper_calibration", (angle, scale))
-        if type(self.return_after_page) is not bool:
-            raise ValueError("写完回到原点的设置无效。")
         heights = tuple((name, float(value)) for name, value in self.pen_heights)
         if (any(not isinstance(name, str) or not name.strip() or not PEN_DOWN <= value <= -.1
                 for name, value in heights) or len(dict(heights)) != len(heights)
@@ -203,13 +200,24 @@ class DeviceProfile:
 
 class PlotterProfiles:
     def __init__(self, workspace):
-        self.path = Path(workspace) / "plotter-profiles.json"
+        self.path = Path(workspace) / "plotter-docking.json"
+        self.legacy_path = Path(workspace) / "plotter-profiles.json"
         self.lock_path = self.path.with_suffix(".lock")
 
     def read(self):
-        if not self.path.exists():
-            return {"devices": {}, "placements": {}, "selected": ""}
-        return json.loads(self.path.read_text("utf-8"))
+        if self.path.exists():
+            return json.loads(self.path.read_text("utf-8"))
+        data = {"devices": {}, "selected": ""}
+        if self.legacy_path.exists():
+            previous = json.loads(self.legacy_path.read_text("utf-8"))
+            data["selected"] = previous.get("selected", "")
+            for key, item in previous["devices"].items():
+                # Preserve motor calibration and pen settings. A legacy datum
+                # was a user-named paper corner, never a verified parking spot.
+                profile = DeviceProfile.from_storage(item)
+                device = asdict(replace(profile, datum=None))
+                data["devices"][key] = device
+        return data
 
     def devices(self):
         return [DeviceProfile.from_storage(profile) for profile in self.read()["devices"].values()]
@@ -217,67 +225,40 @@ class PlotterProfiles:
     @catalog_write
     def save(self, profile):
         data = self.read()
-        data["devices"][profile.id] = asdict(profile)
+        device = asdict(profile)
+        data["devices"][profile.id] = device
         data["selected"] = profile.id
         atomic_json(self.path, data)
 
-    def place(self, profile, page, setup, alignment, position=None, offset=None, correction=None, *,
-              connection=None, datum_origin=None, select_fixture=False, source_page=None, session_binding=None):
-        scope = digest([profile.id, page])
-        legacy_key = digest([scope, setup, asdict(profile.axes), asdict(alignment) if alignment else None])
-        datum = profile.datum
-        key = digest([legacy_key, datum.id]) if datum else legacy_key
-        if position is not None:
-            record = {"point": machine_point(position), "offset": offset, "scope": scope,
-                      "connection": connection, "setup": setup, "correction": asdict(correction or alignment)}
-            if datum is not None or datum_origin is not None:
-                if datum is None or datum_origin is None or not connection:
-                    raise ValueError("请先在本次连接中找回机身基准。")
-                record.update(datum_id=datum.id, body_point=datum.to_body(position, datum_origin))
-            if source_page is not None:
-                record["source_page"] = source_page
-            selection = self._fixture_scope(profile, page, alignment) if select_fixture else None
-            self.record(key, record, selection, session_binding=session_binding, device_id=profile.id)
-        placements = self.read()["placements"]
-        return placements.get(key) or placements.get(legacy_key)
+    @catalog_write
+    def import_marks(self, profile, marks):
+        data = self.read()
+        records = data.setdefault("paper_marks", {}).setdefault(profile.id, {})
+        additions = {key: {"mark": machine_point(point)} for key, point in marks.items() if key not in records}
+        if additions:
+            records.update(additions)
+            atomic_json(self.path, data)
 
-    @staticmethod
-    def placed_position(profile, record, *, connection, offset, datum_origin=None):
-        """Return this session's work XY, or None when only angle/scale can be recalled."""
-        if not connection or not record:
-            return None
-        if profile.datum or "datum_id" in record:
-            if profile.datum and record.get("datum_id") == profile.datum.id and datum_origin is not None:
-                return profile.datum.to_work(record["body_point"], datum_origin)
-            return None
-        saved_offset = record.get("offset")
-        offset = list(offset) if offset is not None else None
-        if record.get("connection") == connection and saved_offset == offset:
-            return machine_point(record["point"])
-        return None
+    def sheets(self, profile):
+        return self.read().get('paper_marks', {}).get(profile.id, {})
+
+    def sheet(self, profile, key):
+        return self.sheets(profile).get(key)
 
     @catalog_write
-    def record(self, key, value, selection=None, *, session_binding=None, device_id=None):
+    def save_sheet(self, profile, key, mark, virtual, source, *, layout=None):
         data = self.read()
-        data["placements"][key] = value
-        if session_binding:
-            sessions = data.setdefault("session_placements", {})
-            session = sessions.get(device_id, {})
-            if session.get("connection") != value["connection"]:
-                session = sessions[device_id] = {"connection": value["connection"], "pages": {}}
-            if selection is None:
-                session["pages"][session_binding] = value
-            else:
-                session["pages"].pop(session_binding, None)
-        if selection is not None:
-            data.setdefault("fixture_setups", {})[selection] = value["setup"]
-        atomic_json(self.path, data)
-
-    def session_placement(self, profile, binding, connection):
-        session = self.read().get("session_placements", {}).get(profile.id, {})
-        if connection and session.get("connection") == connection:
-            return session["pages"].get(binding)
-        return None
+        records = data.setdefault("paper_marks", {}).setdefault(profile.id, {})
+        entry = {"mark": machine_point(mark)}
+        if virtual is not None:
+            if not profile.datum or not profile.datum.boot_mode:
+                raise ValueError("请先完成停靠点初始化。")
+            entry.update(generation=profile.datum.id, stops=profile.stop_generation, virtual=machine_point(virtual), source=source)
+        if layout:
+            entry["layout"] = layout
+        if records.get(key) != entry:
+            records[key] = entry
+            atomic_json(self.path, data)
 
     @catalog_write
     def exchange_checkpoint(self, profile, checkpoint=None):
@@ -289,39 +270,3 @@ class PlotterProfiles:
         if previous or checkpoint:
             atomic_json(self.path, data)
         return previous
-
-    @staticmethod
-    def _fixture_scope(profile, page, alignment):
-        if not profile.datum:
-            raise ValueError("请先登记纸张限位的机身基准。")
-        return digest([profile.id, profile.datum.id, asdict(profile.axes), page,
-                       asdict(alignment) if alignment else None])
-
-    def fixture_setup(self, profile, page, alignment):
-        if not profile.datum:
-            return ""
-        key = self._fixture_scope(profile, page, alignment)
-        return self.read().get("fixture_setups", {}).get(key, "")
-
-    @catalog_write
-    def select_fixture_setup(self, profile, page, alignment, setup):
-        key = self._fixture_scope(profile, page, alignment)
-        data = self.read()
-        selections = data.setdefault("fixture_setups", {})
-        if setup:
-            record = self.place(profile, page, setup, alignment)
-            if not record or record.get("datum_id") != profile.datum.id:
-                raise ValueError("此纸张限位尚未保存该摆放。")
-            if selections.get(key) == setup:
-                return
-            selections[key] = setup
-        elif key in selections:
-            del selections[key]
-        else:
-            return
-        atomic_json(self.path, data)
-
-    def setups(self, profile, page):
-        scope = digest([profile.id, page])
-        return sorted({entry["setup"] for entry in self.read()["placements"].values()
-                       if entry.get("scope") == scope})
