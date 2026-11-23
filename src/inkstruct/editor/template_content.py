@@ -120,7 +120,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         self.connect_font_button.setVisible(bool(w.resolver.font_identity and not w.run_path))
         snapshot = getattr(w, "snapshot", None)
         key = (
-            w.source_session.document_id,
+            w.mode, w.source_session.document_id,
             w.source_session.revision,
             t,
             id(snapshot),
@@ -160,10 +160,12 @@ class TemplateContentPanel(QtWidgets.QWidget):
             f"模板：{t.name}" + (f" · 修订 {t.revision.number}" if t.revision else '') + f"\n{detail}"
             if t else "普通页面\n正文自动换行与分页。可更换为已有模板。"
         )
-        self.fill.setEnabled(t is not None and (not w.flow.named_fields or bool(t.fields)))
+        self.fill.setVisible(w.mode == "markdown")
+        self.fields.setVisible(w.mode == "markdown")
+        self.fill.setEnabled(w.mode == "markdown" and t is not None and (not w.flow.named_fields or bool(t.fields)))
         self.fill.setText("编辑旧版内容对应…" if t and not w.flow.named_fields else "填写字段…")
         if w.flow.named_fields:
-            parsed = parse_markdown(w.source_session, field_blocks=True)
+            parsed = parse_markdown(w.source_session, dialect=w.flow.source_dialect, field_blocks=True)
             values = {}
             for n in parsed.nodes:
                 if n.kind == "named_field":
@@ -212,7 +214,7 @@ class TemplateContentPanel(QtWidgets.QWidget):
         w = self.editor
         key = field_id or self.selected_field()
         if w.flow.named_fields:
-            doc = parse_markdown(w.source_session, field_blocks=True)
+            doc = parse_markdown(w.source_session, dialect=w.flow.source_dialect, field_blocks=True)
             node = next(
                 (
                     n

@@ -54,7 +54,7 @@ else:
     assert not w.editor.hasFocus()
     # The existing source shortcut must reveal a reachable editor.
     source_action = next(a for menu in w.menuBar().findChildren(QtWidgets.QMenu)
-                         for a in menu.actions() if a.text() == '聚焦 Markdown 源码')
+                         for a in menu.actions() if a.text() == '聚焦输入框')
     source_action.trigger()
     app.processEvents()
     assert views.mode == 'split' and w.editor.isVisible()

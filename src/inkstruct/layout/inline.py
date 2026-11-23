@@ -64,6 +64,7 @@ def inline_runs(node: SemanticNode, *, underline=False, strike=False):
     if node.kind in {
         "text",
         "text_special",
+        "literal_text",
         "code_inline",
         "softbreak",
         "hardbreak",
@@ -313,6 +314,9 @@ def break_lines(boxes: list[InlineBox], width: float, *, first_width=None, cance
             if used > limit + 1e-9:
                 if last_fit is not None:
                     end = last_fit
+                    break
+                if box.run.kind == "literal_text":
+                    end = max(start + 1, end - 1)
                     break
                 if legal:
                     break

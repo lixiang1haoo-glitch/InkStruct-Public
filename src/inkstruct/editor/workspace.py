@@ -71,7 +71,7 @@ def organize_workspace(w):
         ("全选", "selectAll", QtGui.QKeySequence.StandardKey.SelectAll),
     ):
         action(edit_menu, title, lambda m=method: edit(m), shortcut)
-    action(edit_menu, "聚焦 Markdown 源码", lambda: w.workspace_views.focus_source(), "Ctrl+1")
+    action(edit_menu, "聚焦输入框", lambda: w.workspace_views.focus_source(), "Ctrl+1")
     toolbar.addStretch()
 
     # Keep backing controls owned but hidden. The unified dialog edits a draft,
@@ -144,7 +144,8 @@ def organize_workspace(w):
     left_layout = QtWidgets.QVBoxLayout(left)
     left_layout.setContentsMargins(0, 0, 0, 0)
     source_header = QtWidgets.QHBoxLayout()
-    source_header.addWidget(QtWidgets.QLabel("Markdown 源码"))
+    w.source_heading = QtWidgets.QLabel("Markdown 源码" if w.mode == "markdown" else "正文")
+    source_header.addWidget(w.source_heading)
     source_header.addStretch()
     paste = QtWidgets.QToolButton()
     paste.setText("粘贴")
@@ -163,7 +164,7 @@ def organize_workspace(w):
     w.editor.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
     w.editor.setMinimumSize(220, 180)
     w.editor.setPlaceholderText(
-        "在这里输入或粘贴 Markdown…\n\n例如：12.34\n\n右侧会实时显示手写页面。"
+        "输入或粘贴 Markdown" if w.mode == "markdown" else "输入或粘贴文字"
     )
     w.editor.setProperty("inkRole", "sourceEditor")
     split.addWidget(left)

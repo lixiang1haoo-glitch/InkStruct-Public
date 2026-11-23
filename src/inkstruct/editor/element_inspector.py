@@ -261,8 +261,6 @@ class ElementInspector(QtWidgets.QWidget):
             defaults, warning = GlobalDefaultsStore().load()
             if warning:
                 raise ValueError(warning)
-            if self.editor.run_path.endswith(".inkfont") and defaults.mode != "markdown":
-                raise ValueError("当前字体包文档需要 Markdown 模式，请先调整全局默认。")
             apply_to_document(self.editor, defaults)
             self.error.setStyleSheet("color: #236747;")
             self.error.setText("默认排版参数已用于本文；当前模板、纸张、独立设置和字体保留。")

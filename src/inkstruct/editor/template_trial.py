@@ -39,7 +39,7 @@ class TrialWorker(QtCore.QRunnable):
     def run(self):
         try:
             document = parse_markdown(
-                self.session, field_blocks=self.flow.named_fields, cancelled=self.cancel
+                self.session, dialect=self.flow.source_dialect, field_blocks=self.flow.named_fields, cancelled=self.cancel
             )
             snapshot = layout_markdown(
                 document,

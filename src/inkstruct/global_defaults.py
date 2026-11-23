@@ -29,6 +29,8 @@ class LayoutDefaults:
             or not isinstance(self.symbols, str)
         ):
             raise ValueError("全局默认包含无效的内容模式或字体路径")
+        if self.flow.content_mode != self.mode:
+            object.__setattr__(self, "flow", replace(self.flow, content_mode=self.mode))
         if (
             self.flow.table_overrides
             or self.flow.image_overrides
@@ -229,8 +231,6 @@ def apply_to_document(editor, defaults, *, resources=None, apply_template=False,
         return False
     if resources is not None:
         editor.run_path, editor.symbol_path, editor.resolver = resources
-    if defaults.mode != editor.mode:
-        editor.session_path = editor.session_hash = None
     editor.flow, editor.loaded_style, editor.page, editor.mode = (
         flow,
         defaults.style,

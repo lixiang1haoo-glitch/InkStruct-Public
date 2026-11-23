@@ -166,7 +166,7 @@ class GlyphInspector(QtWidgets.QWidget):
 
     def set_ready(self, ready):
         ready = bool(ready and self.fragment and self.glyph and not self.job
-                     and self.editor.mode == "markdown")
+                     and not self.editor.legacy_review)
         self.fields.setEnabled(ready)
         self.apply_button.setEnabled(ready)
         self.reset_button.setEnabled(ready)
@@ -309,7 +309,7 @@ class GlyphInspector(QtWidgets.QWidget):
     def ready(self):
         w = self.editor
         if (not self.fragment or not self.glyph or not w.canvas.isEnabled() or self.job
-                or w.mode != "markdown" or w.selected_fragment is None
+                or w.legacy_review or w.selected_fragment is None
                 or self.fragment not in w.snapshot.fragments):
             raise ValueError("预览正在更新或选择已变化，请重新选择字符后应用。")
 

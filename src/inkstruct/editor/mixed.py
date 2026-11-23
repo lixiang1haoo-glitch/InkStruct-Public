@@ -62,12 +62,12 @@ def build_markdown(
     first_page=None,
 ):
     check_cancel(cancelled)
-    source = source_key(session, flow.markdown_dialect)
+    source = source_key(session, flow.source_dialect)
     if flow.named_fields:
         source = (*source, "named-fields-v1")
     document = cache.parsed.get(source) if cache is not None else None
     if document is None:
-        document = parse_markdown(session, dialect=flow.markdown_dialect, cancelled=cancelled,
+        document = parse_markdown(session, dialect=flow.source_dialect, cancelled=cancelled,
                                   field_blocks=flow.named_fields)
         check_cancel(cancelled)
         if cache is not None:
@@ -288,6 +288,20 @@ class MarkdownWorker(QtCore.QRunnable):
         self.signals.finished.emit(result)
 
 
+def save_recovery(path, *, pending_font=None, **arguments):
+    if pending_font is not None:
+        # Autosave can run before the first preview returns the portable font resources.
+        run, symbols = pending_font
+        try:
+            built = build_markdown(arguments["session"], 0, arguments["resolver"], run, symbols,
+                                   arguments["page"], arguments["style"], arguments["flow"], None)
+            arguments["resolver"] = built["resolver"]
+        except (DocumentLimitError, ValueError, OSError):
+            # A missing font or oversized draft must still be recoverable as text.
+            pass
+    return save_package(path, **arguments)
+
+
 class RecoveryWorker(QtCore.QRunnable):
     def __init__(self, request, arguments):
         super().__init__()
@@ -297,7 +311,7 @@ class RecoveryWorker(QtCore.QRunnable):
     def run(self):
         result = dict(self.request)
         try:
-            result['hash'] = save_package(result['path'], **self.arguments)
+            result['hash'] = save_recovery(result['path'], **self.arguments)
         except Exception as error:  # noqa: BLE001 - transport worker errors to GUI
             result['error'] = str(error)
         self.signals.finished.emit(result)
@@ -377,6 +391,7 @@ class MixedWindow(ReviewWindow):
             self.flow = calibrate_tables(self.flow, SymbolProvider.from_zip(Path(symbols)))
         self.symbol_path = str(Path(symbols).resolve()) if symbols else defaults.symbols
         self.mode = mode if mode != 'markdown' or source or run or symbols else defaults.mode
+        self.flow = replace(self.flow, content_mode=self.mode)
         self.markdown_document = None
         self.source_syncing = False
         self.source_error = None
@@ -415,8 +430,8 @@ class MixedWindow(ReviewWindow):
         self.run_path = str(Path(path).resolve())
         self.symbol_path = ""
         self.resolver = AssetResolver()
-        self.mode = "markdown"
-        self.mode_picker.setCurrentIndex(self.mode_picker.findData("markdown"))
+        if self.legacy_review:
+            self.session_path = self.session_hash = None
         self.mark_dirty()
         self.schedule_layout()
 
@@ -460,7 +475,7 @@ class MixedWindow(ReviewWindow):
         row = WrappingLayout()
         self.mode_picker = QtWidgets.QComboBox()
         self.mode_picker.addItem("Markdown 混排", "markdown")
-        self.mode_picker.addItem("纯文本检查", "plain-text")
+        self.mode_picker.addItem("纯文本", "plain-text")
         self.mode_picker.setCurrentIndex(self.mode_picker.findData(self.mode))
         self.mode_picker.currentIndexChanged.connect(self.mode_changed)
         row.add_group(QtWidgets.QLabel("内容模式"), self.mode_picker)
@@ -550,22 +565,23 @@ class MixedWindow(ReviewWindow):
 
     def update_mode_controls(self):
         markdown = self.mode == "markdown"
+        if hasattr(self, "source_heading"):
+            self.source_heading.setText("Markdown 源码" if markdown else "正文")
+        self.editor.setPlaceholderText("输入或粘贴 Markdown" if markdown else "输入或粘贴文字")
         for control in (
             *self.flow_controls.values(),
             self.dialect_picker,
             self.block_picker,
-            self.diagnostic_picker,
             self.table_settings_button,
             self.footnote_settings_button,
             self.math_settings_button,
             self.code_settings_button,
-            self.template_settings_button,
             self.image_settings_button,
         ):
             control.setEnabled(markdown)
         self.setWindowTitle(
             "InkStruct · "
-            + ("Markdown 混排" if markdown else "纯文本字形检查")
+            + ("Markdown 混排" if markdown else "纯文本")
             + (" *" if self.dirty else "")
         )
 
@@ -704,13 +720,15 @@ class MixedWindow(ReviewWindow):
         self.mark_dirty()
         self.schedule_layout()
 
+    @property
+    def legacy_review(self):
+        return bool(self.session_path and Path(self.session_path).suffix.lower() == ".inkreview")
+
     def mode_changed(self):
-        if self.run_path and Path(self.run_path).suffix == '.inkfont' and self.mode_picker.currentData() != 'markdown':
-            self.mode_picker.setCurrentIndex(self.mode_picker.findData('markdown'))
-            self.status.setText('字体包使用 Markdown 模式；普通文字可直接输入。')
-            return
+        if self.legacy_review:
+            self.session_path = self.session_hash = None
         self.mode = self.mode_picker.currentData()
-        self.session_path = self.session_hash = None
+        self.flow = replace(self.flow, content_mode=self.mode)
         self.mark_dirty()
         self.schedule_layout()
 
@@ -798,7 +816,7 @@ class MixedWindow(ReviewWindow):
 
     def parse_current_source(self):
         try:
-            return parse_markdown(self.source_session, dialect=self.flow.markdown_dialect,
+            return parse_markdown(self.source_session, dialect=self.flow.source_dialect,
                                   field_blocks=self.flow.named_fields)
         except DocumentLimitError as error:
             self.message_error(error)
@@ -876,9 +894,9 @@ class MixedWindow(ReviewWindow):
         if keep_startup:
             self.partial_revision = self.revision
             self.canvas.load_page(replace(self.canvas.snapshot, revision=self.revision), 0)
-        if self.integrated and self.mode == "markdown":
+        if self.integrated and not self.legacy_review:
             if not keep_startup:
-                self.status.setText("正在更新 Markdown 分页预览…旧快照暂不可标记或导出")
+                self.status.setText("正在更新分页预览…旧快照暂不可标记或导出")
             self.run_label.setText(
                 "汉字："
                 + (self.run_path or "项目内嵌资源")
@@ -928,7 +946,7 @@ class MixedWindow(ReviewWindow):
         }
 
     def launch_layout(self):
-        if not self.integrated or self.mode == "plain-text":
+        if not self.integrated or self.legacy_review:
             return super().launch_layout()
         if self.closed or self.editor.composing or self.worker or self.source_error:
             return
@@ -1127,7 +1145,7 @@ class MixedWindow(ReviewWindow):
         return super().load_all()
 
     def asset_for_fragment(self, fragment):
-        if self.integrated and self.mode == "markdown":
+        if self.integrated and not self.legacy_review:
             return self.asset_lookup.get(fragment.asset_id)
         return super().asset_for_fragment(fragment)
 
@@ -1188,7 +1206,7 @@ class MixedWindow(ReviewWindow):
         )
         self.repair_template_button.setEnabled(
             bool(
-                self.mode == "markdown"
+                not self.legacy_review
                 and self.canvas.isEnabled()
                 and not self.source_syncing
                 and self.editor.toPlainText() == self.buffer.display
@@ -1356,6 +1374,7 @@ class MixedWindow(ReviewWindow):
         self.book = ReviewBook()
         self.flow, self.page, self.loaded_style = defaults.flow, defaults.page, defaults.style
         self.run_path, self.symbol_path, self.mode = defaults.run, defaults.symbols, defaults.mode
+        self.flow = replace(self.flow, content_mode=self.mode)
         self.source_error = None
         self.project_migration_notice = ""
         self.session_path = self.session_hash = None
@@ -1398,7 +1417,7 @@ class MixedWindow(ReviewWindow):
                 if p.stat().st_size > 2 * 1024 * 1024:
                     raise ValueError("源码超过 2 MiB")
                 source = p.read_bytes().decode("utf-8-sig")
-                if p.suffix.lower() in {".md", ".markdown"} or self.mode == "markdown":
+                if self.mode == "markdown":
                     self.import_markdown(source, p.parent)
                 else:
                     self.replace_text(source)
@@ -1406,9 +1425,11 @@ class MixedWindow(ReviewWindow):
                 self.message_error(error)
 
     def import_markdown(self, source, root):
+        if self.mode == "plain-text":
+            return self.replace_text(source)
         from ..document.images import import_local_images
 
-        document = parse_markdown(source, dialect=self.flow.markdown_dialect,
+        document = parse_markdown(source, dialect=self.flow.source_dialect,
                                   field_blocks=self.flow.named_fields)
         references = {dict(node.attributes).get("src") for top in document.nodes
                       for node in top.walk() if node.kind == "image"}
@@ -1418,11 +1439,6 @@ class MixedWindow(ReviewWindow):
         edit = self.source_session.apply(0, len(self.source_session.source), source)
         self.flow = flow
         self.source_error = None
-        if self.mode != "markdown":
-            self.mode = "markdown"
-            self.session_path = self.session_hash = None
-            with QtCore.QSignalBlocker(self.mode_picker):
-                self.mode_picker.setCurrentIndex(self.mode_picker.findData(self.mode))
         if previous != flow.images:
             # Keep image replacement reversible alongside the source edit.
             history = self.source_session._undo
@@ -1463,13 +1479,13 @@ class MixedWindow(ReviewWindow):
         if self.project_save_dialog or self.closed:
             return False
         if self.project_save is not None:
-            if save_as or self.mode == 'plain-text':
+            if save_as or self.legacy_review:
                 self.status.setText('正在保存项目，请保存完成后重试。')
                 return False
             if self.edit_generation != self.project_save.generation:
                 self.project_save_pending = True
             return True
-        if not self.integrated or self.mode == 'plain-text':
+        if not self.integrated or self.legacy_review:
             return super().save_project_as() if save_as else super().save_project()
         if self.source_error:
             self.message_error(self.source_error)
@@ -1522,7 +1538,7 @@ class MixedWindow(ReviewWindow):
             self.message_error(result['error'])
             self.project_save_finished.emit(False)
             return
-        same_document = (request.epoch == self.recovery_epoch and self.mode == 'markdown'
+        same_document = (request.epoch == self.recovery_epoch and not self.legacy_review
                          and (self.session_path, self.session_hash) == (request.bound_path, request.bound_hash))
         if same_document:
             self.session_path, self.session_hash = request.path, result['hash']
@@ -1595,6 +1611,7 @@ class MixedWindow(ReviewWindow):
             self.resolver = AssetResolver()
             self.symbol_path = ""
             self.mode = "plain-text"
+            self.flow = replace(self.flow, content_mode=self.mode)
             self.session_hash = expected
         else:
             loaded = import_table_project(path) if legacy else load_package(path)
@@ -1606,7 +1623,7 @@ class MixedWindow(ReviewWindow):
             self.page, style, self.flow = loaded.page, loaded.style, loaded.flow
             self.book = ReviewBook(reviews)
             self.run_path = self.symbol_path = ""
-            self.mode = "markdown"
+            self.mode = loaded.flow.content_mode
             self.optimize.setChecked(loaded.optimize)
             self.session_hash = loaded.file_hash
         self.source_error = None
@@ -1672,7 +1689,10 @@ class MixedWindow(ReviewWindow):
             self.recovery_hash = None
         # The worker owns mutable session/selection maps. Glyphs and profiles
         # are immutable and can be shared with concurrent layout and editing.
+        needs_font = (self.mode == "plain-text" and (self.run_path or self.symbol_path)
+                      and (self.snapshot is None or self.snapshot.revision != self.revision))
         return {
+            'pending_font': (self.run_path, self.symbol_path) if needs_font else None,
             'session': SourceSession.restore(
                 self.source_session.source, self.source_session.identity_record()
             ),
@@ -1687,7 +1707,7 @@ class MixedWindow(ReviewWindow):
         }
 
     def start_recovery(self):
-        if (self.closed or self.mode != 'markdown' or not self.dirty or self.source_error
+        if (self.closed or self.legacy_review or not self.dirty or self.source_error
                 or self.project_save is not None):
             return
         if self.recovery_worker is not None:
@@ -1721,14 +1741,14 @@ class MixedWindow(ReviewWindow):
 
     def write_recovery(self):
         """Explicit synchronous save; automatic saves use start_recovery instead."""
-        if self.closed or self.mode != "markdown" or not self.dirty or self.source_error:
+        if self.closed or self.legacy_review or not self.dirty or self.source_error:
             return
         if self.recovery_worker is not None:
             self.recovery_pending = True
             return
         try:
             arguments = self.recovery_arguments()
-            self.recovery_hash = save_package(self.recovery_path, **arguments)
+            self.recovery_hash = save_recovery(self.recovery_path, **arguments)
         except (ValueError, OSError) as error:
             self.status.setText("自动恢复副本未保存：" + str(error))
 

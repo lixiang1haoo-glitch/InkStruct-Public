@@ -266,6 +266,8 @@ def layout_markdown(
     check_cancel(cancelled)
     page, style = page or PageProfile(), style or StyleProfile()
     flow = flow or FlowStyle()
+    if flow.content_mode == "plain-text":
+        flow = replace(flow, paragraph_gap_mm=0, first_line_indent_mm=0, paragraph_align="left")
     if flow.named_fields and _regions is None:
         from .flow_templates import layout_flow_template
         return layout_flow_template(document,resolver,page=page,style=style,flow=flow,cancelled=cancelled)

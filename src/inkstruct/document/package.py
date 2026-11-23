@@ -44,6 +44,7 @@ PACKAGE_DIALECTS = {
     })
     for name in ("markdown", "obsidian")
 }
+PACKAGE_DIALECTS["plain-text"] = {dialect_version("plain-text")}
 MAX_MEMBER_BYTES = 16_000_000
 # Catalogs aggregate many individually bounded glyphs, including font provenance.
 # The writer can legitimately exceed the per-glyph/member size in this one index.
@@ -98,6 +99,8 @@ def package_bytes(
     from .table_style import omit_default_total_width_mode
 
     flow_record = asdict(flow or FlowStyle())
+    if flow_record["content_mode"] == "markdown":
+        flow_record.pop("content_mode")
     omit_default_total_width_mode(flow_record)
     if flow and flow.template:
         flow_record['template'] = template_record(flow.template, flow_record['template'])
@@ -150,7 +153,7 @@ def package_bytes(
         })
     manifest = {
         "schema_version": TEMPLATE_VERSION if (flow or FlowStyle()).named_fields else FONT_VERSION if any(g.font_core for pool in resolver.pools.values() for g in pool) else VERSION,
-        "dialect": dialect_version(flow_record["markdown_dialect"]),
+        "dialect": dialect_version((flow or FlowStyle()).source_dialect),
         "math_version": MATH_VERSION,
         "seed": resolver.seed,
         "optimize": optimize,
@@ -266,7 +269,8 @@ def load_package(path: Path) -> LoadedDocument:
         styles = read_json(members["styles.json"], dict, "styles.json")
         if (
             manifest["dialect"] not in PACKAGE_DIALECTS.get(
-                styles.get("flow", {}).get("markdown_dialect", "markdown"), ()
+                ("plain-text" if styles.get("flow", {}).get("content_mode") == "plain-text"
+                 else styles.get("flow", {}).get("markdown_dialect", "markdown")), ()
             )
         ):
             raise ValueError("Document manifest and flow dialect disagree")
@@ -329,7 +333,7 @@ def load_package(path: Path) -> LoadedDocument:
             # Migrate before the first edit, while legacy source offsets still
             # refer to the saved source. Oversized drafts remain recoverable.
             try:
-                document = parse_markdown(session, dialect=flow.markdown_dialect, field_blocks=flow.named_fields)
+                document = parse_markdown(session, dialect=flow.source_dialect, field_blocks=flow.named_fields)
             except DocumentLimitError:
                 pass
             else:

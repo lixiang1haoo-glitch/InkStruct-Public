@@ -29,7 +29,7 @@ class WorkspaceViews(QtCore.QObject):
         self.group = QtWidgets.QButtonGroup(self)
         self.buttons = {}
         for key, title, description in (
-            ("source", "源码", "只显示 Markdown 源码"),
+            ("source", "源码", "只显示输入框"),
             ("split", "并排", "并排显示源码和连续页面预览"),
             ("preview", "预览", "只显示连续页面预览"),
         ):

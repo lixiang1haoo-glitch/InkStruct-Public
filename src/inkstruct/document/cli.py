@@ -146,8 +146,9 @@ def run_document_command(args) -> tuple[int, dict]:
             from .markdown import parse_markdown
 
             session = loaded.session if loaded else SourceSession(source)
-            dialect = args.dialect or (loaded.flow.markdown_dialect if loaded else "markdown")
-            document = parse_markdown(session, dialect=dialect,field_blocks=bool(loaded and loaded.flow.named_fields))
+            dialect = args.dialect or (loaded.flow.source_dialect if loaded else "markdown")
+            document = parse_markdown(session, dialect=dialect,
+                                      field_blocks=bool(loaded and loaded.flow.named_fields))
             if args.command == "resources":
                 from ..assets.resolver import AssetResolver, gap_capture_csv
                 from ..assets.symbol_provider import SymbolProvider
@@ -234,7 +235,7 @@ def run_document_command(args) -> tuple[int, dict]:
                 from .template_authoring import read_template
 
                 flow = replace(flow, template=read_template(args.template))
-            document = parse_markdown(session, dialect=flow.markdown_dialect,field_blocks=flow.named_fields)
+            document = parse_markdown(session, dialect=flow.source_dialect,field_blocks=flow.named_fields)
             visible = "".join(o.text for o in document.occurrences)
             if flow.template:
                 if any(v is not None for v in (args.page_width, args.page_height, args.margin)):

@@ -55,7 +55,7 @@ class BodyPage(QtWidgets.QWidget):
         form = QtWidgets.QFormLayout()
         self.mode = QtWidgets.QComboBox()
         self.mode.addItem("Markdown 混排", "markdown")
-        self.mode.addItem("纯文本检查", "plain-text")
+        self.mode.addItem("纯文本", "plain-text")
         self.mode.setCurrentIndex(self.mode.findData(owner.mode))
         self.dialect = QtWidgets.QComboBox()
         self.dialect.addItem("普通 Markdown", "markdown")
@@ -143,7 +143,8 @@ class BodyPage(QtWidgets.QWidget):
             ],
         )
         self.flow.layout().insertRow(1, "正文对齐", self.paragraph_align)
-        column.addWidget(label("段落"))
+        paragraph_title = label("段落")
+        column.addWidget(paragraph_title)
         column.addWidget(self.flow)
         self.heading_group = ProfileForm(owner.flow, [("heading_gap_mm", "标题段距", 0, 100, " mm")])
         heading_form = self.heading_group.layout()
@@ -158,13 +159,23 @@ class BodyPage(QtWidgets.QWidget):
             heading_form.addRow(f"H{i} 标题字号", control)
             self.headings.append(control)
             self.initial_headings.append(control.value())
-        column.addWidget(label("标题"))
+        heading_title = label("标题")
+        column.addWidget(heading_title)
         column.addWidget(self.heading_group)
         column.addWidget(natural)
         column.addWidget(label("尺寸单位为毫米。实际行距仍受笔迹边界限制；修改后将重新分页。"))
         column.addStretch()
         compact_form_parameters(self)
         align_form_labels(form, self.style.layout(), self.flow.layout(), heading_form)
+
+        def show_mode_settings():
+            markdown = self.mode.currentData() == "markdown"
+            form.setRowVisible(self.dialect, markdown)
+            for widget in (paragraph_title, self.flow, heading_title, self.heading_group):
+                widget.setVisible(markdown)
+
+        self.mode.currentIndexChanged.connect(show_mode_settings)
+        show_mode_settings()
 
     def configuration(self):
         acceptable(self)
@@ -478,6 +489,15 @@ class SettingsDialog(QtWidgets.QDialog):
         if self.scope is None:
             return
         section = self.sections[self.scope]
+        if self.scope in {"document", "defaults"}:
+            body = section.drafts.get("body")
+            mode = body[1].mode.currentData() if body else section.draft_owner().mode
+            for index, key in enumerate(self.items):
+                hidden = mode == "plain-text" and key in {"math", "table", "image", "code", "footnote"}
+                self.navigation.item(index).setHidden(hidden)
+            if self.navigation.currentItem() and self.navigation.currentItem().isHidden():
+                self.navigation.setCurrentRow(list(self.items).index("body"))
+                return
         about = self.scope == "app" and self.current == "about"
         self.reset.setVisible(self.scope == "app" and not about)
         self.copy_button.setVisible(self.scope == "document" and self.document.can_copy())

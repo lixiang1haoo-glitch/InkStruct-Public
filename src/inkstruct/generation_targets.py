@@ -68,12 +68,12 @@ def _han(text):
 def extract_document(source, supported, *, flow=None, identity=None):
     from .document.markdown import parse_markdown
     from .document.source import clusters
-    document = parse_markdown(source, dialect=flow.markdown_dialect if flow else 'markdown',
+    document = parse_markdown(source, dialect=flow.source_dialect if flow else 'markdown',
                               field_blocks=flow.named_fields if flow else True)
     roots = document.nodes
     diagnostics = [asdict(d) for d in document.diagnostics]
     excluded = []
-    if flow is not None and flow.named_fields:
+    if flow is not None and flow.content_mode == "markdown" and flow.named_fields:
         from .document.named_fields import split_fields
         body, fields, issues = split_fields(document, flow.template)
         used_layouts = set(flow.template.start_pages + flow.template.loop_pages)
@@ -97,7 +97,8 @@ def extract_document(source, supported, *, flow=None, identity=None):
     found.sort(key=lambda row: row[0])
     origin = {'kind': 'document', 'sha256': hashlib.sha256(source.encode()).hexdigest(),
               'parser': document.dialect, 'identity': identity,
-              'policy': 'parsed printable text/math/code/captions; no URLs or resource paths',
+              'policy': ('literal source characters' if flow and flow.content_mode == 'plain-text' else
+                         'parsed printable text/math/code/captions; no URLs or resource paths'),
               'excluded_unreferenced_fields': excluded,
               'scope': 'current flow reachable fields' if flow else 'conservative Markdown printable nodes; no template context'}
     return target_manifest(''.join(r[1] for r in found), supported, source=origin,

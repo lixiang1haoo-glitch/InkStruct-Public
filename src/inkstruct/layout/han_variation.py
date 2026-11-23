@@ -51,7 +51,7 @@ def legacy_strokes(strokes, occurrence_id, config):
     return tuple(tuple(point(p) for p in stroke) for stroke in warped)
 
 
-TEXT_KINDS = {"text", "text_special", "wiki_link", "wiki_embed"}
+TEXT_KINDS = {"literal_text", "text", "text_special", "wiki_link", "wiki_embed"}
 
 
 def random_values(identity, seed, channel):

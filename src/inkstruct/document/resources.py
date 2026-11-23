@@ -74,7 +74,7 @@ def inspect_resources(document, resolver, *, flow=None):
             key: getattr(flow.math, key)
             for key in ("fraction_source", "radical_source", "delimiter_source")
         },
-        "dialect": flow.markdown_dialect,
+        "dialect": flow.source_dialect,
         "diagnostics": [asdict(d) for d in document.diagnostics],
         "scope": "visible text, semantic math symbols and configured captured constructions; layout readiness is separate",
         "machine_export_ready": False,

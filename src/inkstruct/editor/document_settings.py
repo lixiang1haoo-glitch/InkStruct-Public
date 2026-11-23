@@ -31,7 +31,7 @@ NAMES = {
 OPTIONS = {
     "justify": "两端对齐", "left": "左对齐", "center": "居中", "right": "右对齐",
     "full": "整字宽", "handwriting": "按笔迹排列", "capture": "保留采集留白",
-    "markdown": "Markdown 混排", "plain-text": "纯文本检查", "obsidian": "Obsidian 静态扩展",
+    "markdown": "Markdown 混排", "plain-text": "纯文本", "obsidian": "Obsidian 静态扩展",
 }
 
 
@@ -55,13 +55,12 @@ def with_geometry(template, values):
 class PageSetup(QtWidgets.QWidget):
     def __init__(self, editor, advanced):
         super().__init__()
-        self.template = editor.flow.template if editor.mode == "markdown" else None
+        self.template = editor.flow.template
         self.editable = self.template is None or (
             isinstance(self.template, FlowTemplate) and self.template.kind == "simple"
         )
         self.template = self.template or simple_template(editor.page)
         self.controls = {}
-        self.uniform = editor.mode == "plain-text"
         column = QtWidgets.QVBoxLayout(self)
         if not self.editable:
             from .template_manager import description
@@ -90,11 +89,9 @@ class PageSetup(QtWidgets.QWidget):
         form.addRow("尺寸", self.size_label)
         self.form = form
         for i, key in enumerate(PAGE_FIELDS):
-            if self.uniform and i > 2:
-                break
             control = CompactSpinBox()
             control.setObjectName(key)
-            title = "页边距" if self.uniform and i == 2 else NAMES[key]
+            title = NAMES[key]
             control.setAccessibleName(title)
             control.setDecimals(6)
             control.setRange(0.000001 if i < 2 else 0, 2000)
@@ -155,9 +152,6 @@ class PageSetup(QtWidgets.QWidget):
         acceptable(self)
         values = self.original | {key: control.value() for key, control in self.controls.items()
                                   if control.value() != self.initial[key]}
-        if self.uniform:
-            for key in PAGE_FIELDS[3:]:
-                values[key] = values["top_mm"]
         return values
 
 
@@ -229,7 +223,7 @@ class LayoutSettings(QtWidgets.QStackedWidget):
         page = PageSetup(state, advanced) if key == "page" else layout_settings_page(
             owner, key, for_document=True, defaults=self.defaults,
         )
-        if key == "body" and (state.session_path or state.run_path.endswith(".inkfont")):
+        if key == "body" and state.session_path and state.session_path.suffix.lower() == ".inkreview":
             page.mode.setEnabled(False)
             page.mode.setToolTip("当前项目或字体沿用其内容模式。")
         panel = page if key == "math" else scroll_page(page)
@@ -323,19 +317,14 @@ class LayoutSettings(QtWidgets.QStackedWidget):
         if {"table", "image"} & changes.keys() and editor.element_inspector.has_pending():
             raise ValueError("请先在右侧元素属性中应用或取消修改，再应用文档设置。")
         style, flow, mode = self.updated_layout(editor.style, editor.flow, editor.mode, changes)
-        if editor.run_path.endswith(".inkfont") and mode != "markdown":
-            raise ValueError("当前字体包须使用 Markdown 模式。")
         page = editor.page
         if geometry is not None:
             opened = self.drafts["page"][1].template
-            if editor.mode == "markdown" and editor.flow.template is not None and editor.flow.template != opened:
+            if editor.flow.template is not None and editor.flow.template != opened:
                 raise ValueError("当前文档的模板已变化，请重新打开设置。")
-            if mode == "plain-text":
-                page = replace(page, width_mm=geometry.width_mm, height_mm=geometry.height_mm,
-                               margin_mm=min(geometry.margins_mm))
         editor.loaded_style, editor.flow, editor.page, editor.mode = style, flow, page, mode
         editor._sync_document_controls(style)
-        if geometry is not None and mode == "markdown" and geometry != flow.template:
+        if geometry is not None and geometry != flow.template:
             editor.template_content_panel.apply_template(geometry)
         else:
             editor.mark_dirty()
@@ -350,31 +339,23 @@ class LayoutSettings(QtWidgets.QStackedWidget):
         values = values.copy()
         mode = values.pop("mode", mode)
         fields = {key: values.pop(key) for key in tuple(values) if hasattr(style, key)}
-        return replace(style, **fields), replace(flow, **values), mode
+        return replace(style, **fields), replace(flow, content_mode=mode, **values), mode
 
     def default_geometry(self, store, defaults):
-        if defaults.mode == "plain-text":
-            return simple_template(defaults.page)
         return defaults.flow.template or store.ordinary_template(defaults.page)
 
     def persist_defaults(self, store, defaults, values, geometry):
         style, flow, mode = self.updated_layout(defaults.style, defaults.flow, defaults.mode, values)
-        if defaults.run.endswith(".inkfont") and mode != "markdown":
-            raise ValueError("使用字体包的新建文档须使用 Markdown 模式。")
         page, ordinary = defaults.page, None
         if geometry is not None:
-            if mode == "plain-text":
-                page = replace(page, width_mm=geometry.width_mm, height_mm=geometry.height_mm,
-                               margin_mm=min(geometry.margins_mm))
+            previous = defaults.flow.template or store.ordinary_template(defaults.page)
+            if not isinstance(previous, FlowTemplate) or previous.kind != "simple":
+                raise ValueError("新建文档默认使用专用模板，请在模板库中调整版式。")
+            template = with_geometry(previous, page_geometry(geometry))
+            if defaults.flow.template is None:
+                ordinary = (previous, template)
             else:
-                previous = defaults.flow.template or store.ordinary_template(defaults.page)
-                if not isinstance(previous, FlowTemplate) or previous.kind != "simple":
-                    raise ValueError("新建文档默认使用专用模板，请在模板库中调整版式。")
-                template = with_geometry(previous, page_geometry(geometry))
-                if defaults.flow.template is None:
-                    ordinary = (previous, template)
-                else:
-                    flow = replace(flow, template=template)
+                flow = replace(flow, template=template)
         updated = replace(defaults, style=style, flow=flow, mode=mode, page=page)
         store.save(updated, ordinary=ordinary)
 
@@ -392,8 +373,6 @@ class LayoutSettings(QtWidgets.QStackedWidget):
             if not isinstance(previous, FlowTemplate) or previous.kind != "simple":
                 raise ValueError("新建文档默认使用专用模板，请在模板库中调整版式。")
             geometry = with_geometry(previous, values)
-            if defaults.mode == "plain-text" and len(set(geometry.margins_mm)) != 1:
-                raise ValueError("纯文本的新建默认只支持一致的四向页边距。")
             old_values = page_geometry(previous)
             save = lambda: self.persist_defaults(store, defaults, {}, geometry)
         else:

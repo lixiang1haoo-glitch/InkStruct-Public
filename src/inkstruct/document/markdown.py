@@ -68,7 +68,40 @@ class MarkdownDocument:
         )
 
 
+PLAIN_DIALECT = "inkstruct-literal-text-v1"
+
+
+def literal_document(session, cancelled):
+    """Each physical line is one body paragraph, including empty lines."""
+    nodes = []
+    pending = []
+    start = 0
+
+    def finish(end):
+        span = SourceSpan(start, end)
+        anchor = session.atom_ids[start] if start < len(session.atom_ids) else "end"
+        key = digest([session.document_id, "literal-line", anchor])
+        occurrences = tuple(Occurrence(session.occurrence_id(s, role="literal", text=t), key, s, t)
+                            for s, t in pending)
+        leaf = SemanticNode(key + ":text", "literal_text", span, occurrences=occurrences)
+        nodes.append(SemanticNode(key, "paragraph", span, children=(leaf,)))
+
+    for span, text in clusters(session.source):
+        check_cancel(cancelled)
+        if text in ("\n", "\r", "\r\n"):
+            finish(span.start)
+            pending.clear()
+            start = span.end
+        else:
+            pending.append((span, text))
+    finish(len(session.source))
+    validate_nodes(nodes, cancelled=cancelled)
+    return MarkdownDocument(session.document_id, session.revision, session.source, tuple(nodes), (), PLAIN_DIALECT)
+
+
 def dialect_version(dialect):
+    if dialect == "plain-text":
+        return PLAIN_DIALECT
     if dialect not in {"markdown", "obsidian"}:
         raise ValueError("Unknown Markdown dialect")
     return OBSIDIAN_VERSION if dialect == "obsidian" else DIALECT_VERSION
@@ -81,6 +114,8 @@ def parse_markdown(
     check_cancel(cancelled)
     version = dialect_version(dialect) + ("/named-fields-v1" if field_blocks else "")
     session = SourceSession(session) if isinstance(session, str) else session
+    if dialect == "plain-text":
+        return literal_document(session, cancelled)
     view = parser_view(session.source, cancelled=cancelled)
     source = located(view)
     line_starts = [0] + [i + 1 for i, c in enumerate(source) if c == "\n"]

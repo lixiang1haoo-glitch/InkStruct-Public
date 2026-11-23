@@ -680,7 +680,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 defaults, warning = store.load()
                 if warning:
                     raise ValueError(warning)
-                store.save(replace(defaults, run=str(Path(target).resolve()), symbols='', mode='markdown'))
+                store.save(replace(defaults, run=str(Path(target).resolve()), symbols=''))
             except (ValueError, OSError) as error:
                 self.failed(str(error))
                 return

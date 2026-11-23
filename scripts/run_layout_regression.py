@@ -30,7 +30,7 @@ def main():
         'test_recorded_math_symbols.py','test_document_resources.py','test_document_package.py','test_source_identity.py',
         'test_measurement_cache.py','test_preview_serialization.py','test_table_export.py','test_break_commands.py',
         'test_markdown*.py','test_obsidian*.py','test_flow_templates.py','test_flow_template_qt.py',
-        'test_continuation*.py','test_suffix_continuation.py','test_footnote*.py','test_mixed_tables.py',
+        'test_continuation*.py','test_suffix_continuation.py','test_footnote*.py','test_mixed_tables.py','test_plain_content_mode.py',
         'test_parse_cancellation.py','test_template_fields.py','test_template_slots.py','test_templates.py',
         'test_capture_management.py','test_generation_targets.py','test_generation_workflow.py','test_generation_parallel.py','test_generation_variants.py',
         'test_character_sets.py','test_character_sets_qt.py','test_parallel_export.py','test_background_export_qt.py',

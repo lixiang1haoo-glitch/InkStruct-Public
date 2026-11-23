@@ -152,7 +152,7 @@ def run_binding_command(args):
     flow = loaded.flow
     if args.template:
         flow = replace(flow, template=read_template(args.template))
-    document = parse_markdown(loaded.session, dialect=flow.markdown_dialect,field_blocks=flow.named_fields)
+    document = parse_markdown(loaded.session, dialect=flow.source_dialect,field_blocks=flow.named_fields)
     if flow.named_fields and args.template_action=='bind':
         raise ValueError('Template v3 uses explicit :::field blocks in the authoritative Markdown, not legacy node binding requests')
     if args.template_action == "inspect-content":

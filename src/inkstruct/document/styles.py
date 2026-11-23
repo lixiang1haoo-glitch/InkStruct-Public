@@ -55,6 +55,11 @@ class FlowStyle:
     han_variation: HanVariation = field(default_factory=HanVariation)
     han_spacing: str = "handwriting"
     digits_follow_latin: bool = True
+    content_mode: str = "markdown"
+
+    @property
+    def source_dialect(self):
+        return "plain-text" if self.content_mode == "plain-text" else self.markdown_dialect
 
     def compact_body(self):
         if self.han_spacing == self.latin_spacing == self.punctuation_spacing == "handwriting" and self.digits_follow_latin:
@@ -64,6 +69,8 @@ class FlowStyle:
 
     def layout_record(self):
         record = asdict(self)
+        if self.content_mode == "markdown":
+            record.pop("content_mode")
         if record['template'] is not None:
             record['template'].pop('paper_origins', None)
             record['template'].pop('family_id', None)
@@ -108,6 +115,8 @@ class FlowStyle:
                 or len({v.key for v in corrections}) != len(corrections)):
             raise ValueError("字符校正重复或超过 4096 条")
         object.__setattr__(self, "glyph_corrections", corrections)
+        if self.content_mode not in {"markdown", "plain-text"}:
+            raise ValueError("Unknown document content mode")
         if self.markdown_dialect not in {"markdown", "obsidian"}:
             raise ValueError("Unknown Markdown dialect")
         if isinstance(self.footnote, dict):

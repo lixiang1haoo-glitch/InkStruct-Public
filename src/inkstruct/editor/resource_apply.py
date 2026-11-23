@@ -355,10 +355,8 @@ class ResourceApplyDialog(QtWidgets.QDialog):
                 if not hasattr(w, '_resource_history'):
                     w._resource_history = ResourceHistory(w)
                 old = w._resource_history.state()
-                w.run_path, w.symbol_path, w.mode = self.font, '', 'markdown'
+                w.run_path, w.symbol_path = self.font, ''
                 w.resolver = self.result['resolver']
-                with QtCore.QSignalBlocker(w.mode_picker):
-                    w.mode_picker.setCurrentIndex(w.mode_picker.findData('markdown'))
                 w._resource_history.push(old)
                 w.mark_dirty()
                 w.schedule_layout()

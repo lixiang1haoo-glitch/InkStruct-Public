@@ -112,7 +112,7 @@ def run_rename_command(args):
     if loaded:
         flow = replace(loaded.flow, template=updated, template_bindings=updated_bindings)
         snapshot = layout_markdown(
-            parse_markdown(loaded.session, dialect=flow.markdown_dialect),
+            parse_markdown(loaded.session, dialect=flow.source_dialect),
             loaded.resolver,
             page=updated.page,
             style=loaded.style,

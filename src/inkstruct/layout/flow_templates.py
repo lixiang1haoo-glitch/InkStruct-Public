@@ -18,9 +18,12 @@ def layout_flow_template(document, resolver, *, page, style, flow, cancelled=Non
     from .blocks import layout_markdown
 
     template = flow.template
-    body, definitions, issues = split_fields(document, template)
+    if flow.content_mode == "plain-text":
+        body, definitions, issues = document, {}, ()
+    else:
+        body, definitions, issues = split_fields(document, template)
     diagnostics = list(issues)
-    if "/named-fields-v1" not in document.dialect and ":::field" in document.source:
+    if flow.content_mode == "markdown" and "/named-fields-v1" not in document.dialect and ":::field" in document.source:
         # Protocol must be chosen before parsing, so a legacy document containing
         # literal :::field remains unchanged until explicitly converted.
         diagnostics.append(
