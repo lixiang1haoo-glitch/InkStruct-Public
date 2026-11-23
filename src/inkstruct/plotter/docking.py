@@ -4,10 +4,8 @@ from dataclasses import asdict, dataclass, field
 from math import dist
 
 from ..document.schema import digest
-from .grbl import PEN_UP, Z_TOLERANCE_MM
+from .grbl import PEN_UP, STATIONARY_TOLERANCE_MM, Z_TOLERANCE_MM
 from .physical import machine_point
-
-STATIONARY_TOLERANCE_MM = .01
 
 
 def idle_xy(status):

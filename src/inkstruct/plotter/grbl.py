@@ -1,10 +1,11 @@
 """Blocking Grbl transactions for the N1. The owning worker holds the serial port."""
 
+import errno
 import math
 import re
 from collections import deque
 from dataclasses import dataclass, field
-from threading import Event
+from threading import Event, Lock
 from time import monotonic, sleep
 
 from .physical import COORDINATE_DECIMALS, MachinePage, WorkArea, axis_trial, machine_point
@@ -16,6 +17,7 @@ Z_TOLERANCE_MM = .05
 DEFAULT_WRITE_FEED = 2500
 MAX_WRITE_FEED = 5000
 XY_TOLERANCE_MM = .075
+STATIONARY_TOLERANCE_MM = .01
 PIN_INTERIOR_MM = 2.0
 RAISED_SEGMENT_MM = .75
 MAX_PACKET_LINES = 6
@@ -26,6 +28,27 @@ ENDPOINT_POLL = .008
 
 class MachineError(RuntimeError):
     pass
+
+
+class ProgressSaveError(Exception):
+    def __init__(self, number, state, cause):
+        self.state = state
+        super().__init__(f"书写进度保存失败，请核对第 {number} 笔。{cause}")
+
+
+def save_stroke_progress(journal, number, before_pen, state, control):
+    backoff = (0, .04, .10, .20)
+    for attempt, delay in enumerate(backoff, start=1):
+        if control.stop_requested.wait(delay):
+            raise Stopped("已停止作业。")
+        try:
+            journal.save(number - int(before_pen), before_pen)
+            return
+        except OSError as error:
+            code = getattr(error, "winerror", None)
+            transient = code in (5, 32, 33) if code else error.errno in (errno.EACCES, errno.EBUSY, errno.EAGAIN)
+            if not transient or attempt == len(backoff):
+                raise ProgressSaveError(number, state, error) from error
 
 
 class ExternalHold(MachineError):
@@ -92,6 +115,38 @@ class MotionControl:
     pause_requested: Event = field(default_factory=Event)
     stop_requested: Event = field(default_factory=Event)
     finish_stroke: Event = field(default_factory=Event)
+    pause_at_idle: Event = field(default_factory=Event)
+    manual_lock: Lock = field(default_factory=Lock)
+    requested_height: float | None = None
+    accepting_manual: bool = True
+
+    def request_idle_pause(self, height=None):
+        with self.manual_lock:
+            if not self.accepting_manual or self.stop_requested.is_set():
+                return False
+            if height is not None:
+                if not PEN_DOWN <= height <= PEN_UP or self.requested_height is not None:
+                    return False
+                self.requested_height = height
+            self.pause_at_idle.set()
+            return True
+
+    def take_height(self):
+        with self.manual_lock:
+            height, self.requested_height = self.requested_height, None
+            return height
+
+    def resume_idle(self):
+        with self.manual_lock:
+            if self.requested_height is None:
+                self.pause_at_idle.clear()
+
+    def finish_unless_paused(self):
+        with self.manual_lock:
+            if self.pause_at_idle.is_set():
+                return False
+            self.accepting_manual = False
+            return True
 
 
 @dataclass
@@ -141,11 +196,12 @@ class XYWindow:
 
 
 class GrblLink:
-    def __init__(self, serial, *, phase=lambda _phase: None, progress=lambda _done, _total: None):
+    def __init__(self, serial, *, phase=lambda _phase: None, progress=lambda _done, _total: None, pen_state=lambda _state: None):
         self.paused_seconds = 0.0
         self.serial = serial
         self.phase = phase
         self.progress = progress
+        self.pen_state = pen_state
         self.responses = deque()
         self.recent_reports = deque(maxlen=16)
         self.last_status = None
@@ -431,11 +487,14 @@ class GrblLink:
                     self.xy_window = window
                     self.send_xy_packet([target], [self.xy_command(target, feed)], control, monotonic())
                     state = self.finish_xy(window, feed, control)
+                    self.xy_window = None
+                    state = self.manual_at_rest(state, control)
             return state
         finally:
             self.xy_window = None
 
     def move_path(self, state, points, area, feed, z, control, *, segment_travel=True):
+        state = self.manual_at_rest(state, control)
         if self.segment_unbounded_travel and segment_travel and area is None and z == PEN_UP:
             return self.bounded_pen_up(state, points, feed, control)
         start = state.position[:2]
@@ -468,6 +527,8 @@ class GrblLink:
                         size += len(line) + 1
                     if lines:
                         next_status = self.send_xy_packet(targets, lines, control, next_status)
+                        if control.pause_at_idle.is_set():
+                            break
                         no_progress_until = self.motion_time() + 1.5 + MAX_PENDING_MM * 60 / feed
                     else:
                         end = self.status(control, timeout=.5)
@@ -481,9 +542,70 @@ class GrblLink:
                             raise MachineError("设备未继续沿已发送的轨迹移动。")
                         sleep(.016)
                 state = self.finish_xy(window, feed, control)
+                self.xy_window = None
+                state = self.manual_at_rest(state, control)
             return state
         finally:
             self.xy_window = None
+
+    def verify_rest(self, control, expected):
+        fresh = self.status(control)
+        if (fresh.state != "Idle" or not fresh.position or fresh.blocking_pins or
+                fresh.offset != expected.offset or expected.state != "Idle" or
+                math.dist(fresh.position, expected.position) > STATIONARY_TOLERANCE_MM):
+            raise MachineError("笔尖未确认停稳，或设备坐标已变化。")
+        return fresh
+
+    def change_height(self, state, target, control):
+        if not PEN_DOWN <= target <= PEN_UP:
+            raise ValueError("笔尖高度超出设备支持的范围。")
+        if not PEN_DOWN - Z_TOLERANCE_MM <= state.position[2] <= PEN_UP + Z_TOLERANCE_MM:
+            raise MachineError("当前 Z 坐标超出升降笔范围。")
+        self.pen(target, control)
+        result = self.wait_idle(control, z=target)
+        if math.dist(state.position[:2], result.position[:2]) > STATIONARY_TOLERANCE_MM:
+            raise MachineError("升降笔过程中 XY 已变化，请重新核对位置。")
+        return result
+
+    def manual_at_rest(self, state, control):
+        if not control.pause_at_idle.is_set():
+            return state
+        original_z = state.position[2]
+        state = self.verify_rest(control, state)
+        self.phase("paused")
+        self.pen_state(state)
+        while control.pause_at_idle.is_set():
+            self.checkpoint(control)
+            target = control.take_height()
+            if target is not None:
+                state = self.change_height(state, target, control)
+                self.pen_state(state)
+            if control.stop_requested.wait(.05):
+                raise Stopped("已停止作业。")
+            state = self.verify_rest(control, state)
+        self.checkpoint(control)
+        # The user explicitly resumed. Restore the interrupted path's pen height
+        # at the verified stationary XY before admitting further segments.
+        if abs(state.position[2] - original_z) > Z_TOLERANCE_MM:
+            state = self.change_height(state, original_z, control)
+        self.phase("running")
+        return state
+
+    def settle_progress_failure(self, error, control, area, dock, feed):
+        state = self.verify_rest(control, error.state)
+        if abs(state.position[2] - PEN_UP) > Z_TOLERANCE_MM:
+            raise MachineError("进度保存失败后未确认笔尖已抬起。")
+        # Both journal boundaries are after a verified pen-up Idle. Only the
+        # current session's admitted rectangle authorizes an automatic return.
+        if dock is None or state.offset is None or area is None or not (
+                area.contains(state.position[:2]) and area.contains(dock)):
+            return state, False
+        self.referenced_idle_xy = state.position[:2]
+        state = self.move_to(dock, area, control, feed=feed)
+        state = self.verify_rest(control, state)
+        if math.dist(state.position[:2], dock) > XY_TOLERANCE_MM:
+            raise MachineError("进度保存失败后未确认到达停靠点。")
+        return state, True
 
     def enter_motion(self, control):
         self.motion_active = True
@@ -509,7 +631,7 @@ class GrblLink:
                                    segment_travel=segment_travel)
             if not dry_run:
                 if journal is not None:
-                    journal.save(number - 1, True)
+                    save_stroke_progress(journal, number, True, state, control)
                 self.pen(height, control)
                 state = self.wait_idle(control, z=height, poll=ENDPOINT_POLL)
             state = self.move_path(state, stroke.points[1:], area, feed,
@@ -518,7 +640,7 @@ class GrblLink:
                 self.pen(PEN_UP, control)
                 state = self.wait_idle(control, z=PEN_UP, poll=ENDPOINT_POLL)
                 if journal is not None:
-                    journal.save(number, False)
+                    save_stroke_progress(journal, number, False, state, control)
             self.progress(number, total)
             if not dry_run and number < total and control.finish_stroke.is_set():
                 self.motion_active = False
@@ -569,8 +691,7 @@ class GrblLink:
         self.phase("running")
         height = height if down else PEN_UP
         self.command("G21 G90 G94", control)
-        self.pen(height, control)
-        return self.wait_idle(control, z=height)
+        return self.change_height(state, height, control)
 
     def touch(self, area: WorkArea | None, control: MotionControl):
         state = self.require_idle(control, for_motion=True)

@@ -785,7 +785,7 @@ try:
     assert not dialog.write_button.isEnabled() and not dialog.dry_button.isEnabled()
     dialog.link_button.click()
     wait_for(lambda: dialog.device is not None and dialog.busy is None)
-    assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?"]
+    assert transport.commands == [b"?", b"$$\n", b"$I\n", b"?", b"?"]
     assert dialog.nudge.isEnabled() and dialog.confirmed_area is None
     assert dialog.confirm_range_button.isVisible()
     dialog.apply_fixture()
@@ -937,7 +937,7 @@ try:
     p.write_button.click()
     assert p.is_moving and p.close_blocker()
     p.write_button.click()
-    wait_for(lambda: b"!" in transport.commands)
+    wait_for(lambda: "已暂停" in p.report.text())
     assert not w.close() and app.activeModalWidget() is None
     assert p.busy == "write" and p.stop_button.isEnabled()
     w.problems_dock.raise_()

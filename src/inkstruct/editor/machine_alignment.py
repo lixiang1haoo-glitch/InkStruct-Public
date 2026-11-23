@@ -147,6 +147,8 @@ class AlignmentDialog(QtWidgets.QDialog):
         self.canvas.update()
         p.refresh_motion_controls(self.pad, ready)
         p.refresh_pen_button(self.pen)
+        if self.session != p.connection_id:
+            self.pen.setEnabled(False)
         self.record.setEnabled(bool(ready and p.pen_raised and self.mark and (p.datum_located or self.recovery)))
 
     def capture(self):

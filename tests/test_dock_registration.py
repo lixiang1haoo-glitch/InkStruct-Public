@@ -1,5 +1,6 @@
 """Physical position evidence and the Windows single-sheet workflow."""
 import os
+from pathlib import Path
 from dataclasses import replace
 from time import monotonic, sleep
 from types import SimpleNamespace
@@ -247,6 +248,30 @@ def test_selected_page_dock_reconnect_and_abort(tmp_path, monkeypatch):
         assert panel.datum_located and panel.store.sheet(panel.profile, key) == saved
         reconnect()
         assert panel.datum_located and panel.done == 1
+        # Start another sheet. A failure committing its lifted stroke keeps the
+        # connection and its frame. Reconnection alone must not resume writing.
+        from inkstruct.plotter.physical import WorkArea
+        import json
+        replace_file = os.replace
+        progress_path = panel.journal.path
+        def fail_completion(source, destination):
+            if Path(destination) == progress_path and not json.loads(Path(source).read_bytes())["check_stroke"]:
+                raise PermissionError(13, "progress file busy")
+            return replace_file(source, destination)
+        with monkeypatch.context() as m:
+            m.setattr(os, "replace", fail_completion)
+            assert panel.run_job("write", local_area=WorkArea(-100, -100, 100, 100)), panel.report.text()
+            wait()
+        assert panel.device and panel.frame == tuple(serial.position[:2])
+        assert "保存失败" in panel.report.text() and "已确认抬笔回停靠点" in panel.report.text()
+        assert panel.journal.read() == (0, True) and not panel.completed_pages
+        before = len(serial.commands)
+        reconnect()
+        assert panel.datum_located and panel.uncertain and panel.done == 0
+        assert not any(command.startswith(b"G1 ") for command in serial.commands[before:])
+        assert panel.run_job("write", start=0)  # Explicit decision to rewrite the checked stroke.
+        wait()
+        assert panel.journal.read() == (1, False)
         # The previous proof was consumed. Failure to save a clean disconnect
         # at a nonzero position cannot revive that proof on the next open.
         with monkeypatch.context() as m:

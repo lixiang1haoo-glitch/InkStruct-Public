@@ -245,7 +245,8 @@ class MachinePanel(QtWidgets.QWidget):
         write_layout.addWidget(self.nudge)
         self.return_button = self.button("回停靠点", self.park_at_datum)
         self.pen_button = self.button("落笔", self.toggle_pen)
-        write_layout.addWidget(pair_widget((self.return_button, self.pen_button)))
+        self.moving_down = self.button("暂停并落笔", lambda: self.request_moving_pen(True))
+        write_layout.addWidget(pair_widget((self.return_button, self.pen_button, self.moving_down)))
         self.alignment_status = label("当前页待对位")
         write_layout.addWidget(self.alignment_status)
         self.temp_button = self.button("临时对位…", self.toggle_temporary)
@@ -285,6 +286,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.worker.succeeded.connect(self.succeeded)
         self.worker.failed.connect(self.failed)
         self.worker.phase.connect(self.on_phase)
+        if hasattr(self.worker, "pen_state"):
+            self.worker.pen_state.connect(self.on_pen_state)
         self.worker.progress.connect(self.on_progress)
 
         self.page_list.currentRowChanged.connect(self.select_page)
@@ -1086,10 +1089,14 @@ class MachinePanel(QtWidgets.QWidget):
         self.preview_button.setEnabled(ready and not busy)
         self.refresh_motion_controls(self.nudge, positioning and self.datum_located)
         self.refresh_pen_button(self.pen_button)
+        self.moving_down.setText("原地落笔" if self.can_pause_for_pen and
+                                 self.worker.control.pause_at_idle.is_set() else "暂停并落笔")
+        self.moving_down.setVisible(self.can_pause_for_pen)
+        self.moving_down.setEnabled(self.pen_button.isEnabled())
         self.return_button.setEnabled(safe and self.pen_raised)
         self.dry_button.setEnabled(safe and ready and self.job is not None)
         if moving:
-            paused = self.worker.control.pause_requested.is_set()
+            paused = self.worker.control.pause_at_idle.is_set()
             self.write_button.setText("继续" if paused else "暂停")
             self.write_button.setEnabled(not canceling)
         else:
@@ -1111,10 +1118,10 @@ class MachinePanel(QtWidgets.QWidget):
         motion = kind not in {"connect", "disconnect", "position-datum", "position-read"}
         trial = self.dock_trial
         commissioning = trial and trial.mode and trial.connection == self.connection_id
-        if trial and not trial.mode and motion:
+        if trial and not trial.mode and motion and kind != "pen":
             self.message("三轮重启期间请保持笔尖位置不变。")
             return False
-        recovery_action = kind in {"jog", "device-jog"} or (kind == "pen" and not args[0])
+        recovery_action = kind in {"jog", "device-jog", "pen"}
         if motion and not self.datum_located and not recovery_action and not (commissioning and kind == "axis-trial"):
             self.message("请先恢复停靠点。", error=True)
             return False
@@ -1215,7 +1222,8 @@ class MachinePanel(QtWidgets.QWidget):
 
     def recover_connection(self, status):
         saved, self.previous_checkpoint = self.previous_checkpoint, None
-        if self.dock_trial or getattr(self.worker, "reset_on_connect", False):
+        if (self.dock_trial or getattr(self.worker, "reset_on_connect", False)
+                or not getattr(self.worker, "stable_on_connect", False)):
             return False
         self.frame = restored_frame(self.profile, saved, status)
         if self.frame is not None:
@@ -1277,22 +1285,46 @@ class MachinePanel(QtWidgets.QWidget):
         if self.profile and self.device is not None:
             self.submit("jog", self.profile.axes.map(x, y), self.confirmed_area, self.profile.feed)
 
+    @property
+    def can_pause_for_pen(self):
+        return self.is_moving and self.busy not in {"pen", "calibrate-height"}
+
     def refresh_pen_button(self, button):
+        moving = self.can_pause_for_pen
         down = self.device is not None and not self.pen_raised
-        button.setText("抬笔" if down else "落笔")
-        button.setEnabled(self.device is not None and self.device.state == "Idle" and self.busy is None
-                          and not self.closing and (down or (self.range_ready and self.datum_located)))
+        if moving:
+            button.setText("原地抬笔" if self.worker.control.pause_at_idle.is_set() else "暂停并抬笔")
+        else:
+            button.setText("抬笔" if down else "落笔")
+        button.setEnabled(bool(self.device and self.device.state == "Idle" and not self.closing
+                               and (self.busy is None or moving and not self.worker.control.stop_requested.is_set())))
+
+    def request_moving_pen(self, down):
+        if self.can_pause_for_pen and not self.closing:
+            target = self.profile.writing_height if down else PEN_UP
+            if self.worker.control.request_idle_pause(target):
+                self.elapsed_start = None
+                self.message("正在等待已发送的行程停稳，随后原地升降笔。")
+                self.refresh_buttons()
+
+    def on_pen_state(self, control, status):
+        if self.closing or not self.device or not self.is_moving or self.worker.control is not control:
+            return
+        self.device = status
+        self.show_position()
+        self.message("已暂停，笔尖已抬起。" if self.pen_raised else "已暂停，笔尖已落下。")
+        self.refresh_buttons()
 
     def toggle_pen(self):
-        if self.device is None or self.busy or self.closing or self.device.state != "Idle":
-            return
-        if not self.pen_raised:
-            self.raise_pen()
-        elif self.range_ready:
-            self.submit("pen", True, self.confirmed_area, self.profile.writing_height)
+        if self.can_pause_for_pen:
+            self.request_moving_pen(False)
+        elif self.device and not self.busy and not self.closing and self.device.state == "Idle":
+            self.submit("pen", self.pen_raised, self.confirmed_area, self.profile.writing_height)
 
     def raise_pen(self):
-        if self.device is not None and not self.pen_raised:
+        if self.can_pause_for_pen:
+            self.request_moving_pen(False)
+        elif self.device is not None and not self.pen_raised:
             self.submit("pen", False, self.confirmed_area)
 
     def handle_primary(self):
@@ -1388,7 +1420,7 @@ class MachinePanel(QtWidgets.QWidget):
                 self.prepare_session()
             if self.journal:
                 self.journal = replace(self.journal, placement=self.placement_details())
-            options.append(dict(height=self.profile.writing_height, start=start, journal=self.journal))
+            options.append(dict(height=self.profile.writing_height, start=start, journal=self.journal, failure_dock=target))
         if self.submit(kind, job, area, self.profile.feed, *options):
             self.preview_button.setChecked(False)
             self.toggle_preview()
@@ -1441,17 +1473,18 @@ class MachinePanel(QtWidgets.QWidget):
     def toggle_pause(self):
         if not self.is_moving or self.worker.control.stop_requested.is_set():
             return
-        pause = self.worker.control.pause_requested
-        if pause.is_set():
-            pause.clear()
+        control = self.worker.control
+        if control.pause_at_idle.is_set():
+            control.resume_idle()
         else:
-            pause.set()
+            control.request_idle_pause()
             self.elapsed_start = None
         self.refresh_buttons()
 
     def interrupt_after_stroke(self):
         if self.busy == "write":
             self.worker.control.finish_stroke.set()
+            self.worker.control.resume_idle()
             self.worker.control.pause_requested.clear()
             self.message("正在写完当前笔，抬笔后将保留本页进度。")
 
@@ -1477,6 +1510,10 @@ class MachinePanel(QtWidgets.QWidget):
 
     def succeeded(self, kind, status):
         if self.closing or self.busy != kind:
+            return
+        if kind == "write" and getattr(self.worker, "progress_failure", None):
+            self.device = status
+            self.failed(kind, self.worker.progress_failure, False)
             return
         self.busy = None
         self.device = status

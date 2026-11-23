@@ -1,12 +1,13 @@
 """Exclusive Windows serial access for the N1, isolated from the GUI thread."""
 
 from datetime import datetime, timezone
+from math import dist
 from queue import Queue
 from time import monotonic
 
 from PySide6 import QtCore, QtSerialPort
 
-from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, ExternalHold, GrblLink, MachineError, MotionControl, Stopped
+from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, ProgressSaveError, STATIONARY_TOLERANCE_MM, ExternalHold, GrblLink, MachineError, MotionControl, Stopped
 
 N1_USB_ID = (0x28e9, 0x018a)
 
@@ -66,6 +67,7 @@ class N1Serial:
 class N1Worker(QtCore.QThread):
     succeeded = QtCore.Signal(str, object)
     failed = QtCore.Signal(str, str, bool)
+    pen_state = QtCore.Signal(object, object)
     phase = QtCore.Signal(str)
     progress = QtCore.Signal(int, int)
 
@@ -105,6 +107,7 @@ class N1Worker(QtCore.QThread):
                     if link is not None:
                         link.referenced_idle_xy = args[0]
                     continue
+                self.progress_failure = None
                 self.stopped_at = None
                 try:
                     if kind == "connect":
@@ -117,13 +120,18 @@ class N1Worker(QtCore.QThread):
                             serial.close()
                             raise MachineError("USB 设备已更换，请重新选择写字机。")
                         link = GrblLink(serial, phase=self.phase.emit,
-                                        progress=self.progress.emit)
+                                        progress=self.progress.emit,
+                                        pen_state=lambda state: self.pen_state.emit(control, state))
                         result = link.connect()
+                        fresh = link.require_idle()
+                        self.stable_on_connect = (result.offset is not None and fresh.offset == result.offset
+                                                  and dist(result.position, fresh.position) <= STATIONARY_TOLERANCE_MM)
+                        result = fresh
                         self.reset_on_connect = link.saw_reset
                     elif link is None:
                         raise MachineError("设备尚未连接。")
                     elif kind == "disconnect":
-                        self.stopped_at = link.require_idle()
+                        self.stopped_at = link.verify_rest(control, link.require_idle(control))
                         link.serial.close()
                         link = result = None
                     elif kind == "position-datum":
@@ -161,11 +169,20 @@ class N1Worker(QtCore.QThread):
                         result = link.trial_axes(axes, area, feed, control, confirmed_area=confirmed_area)
                     elif kind in {"dry", "write"}:
                         page, area, feed, *settings = args
-                        options = settings[0] if settings else {}
-                        result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed, **options)
+                        options = dict(settings[0]) if settings else {}
+                        dock = options.pop("failure_dock", None)
+                        try:
+                            result = link.run_page(page, area, control, dry_run=kind == "dry", feed=feed, **options)
+                        except ProgressSaveError as error:
+                            self.progress_failure = str(error)
+                            result, parked = link.settle_progress_failure(error, control, area, dock, feed)
+                            self.progress_failure += (" 已确认抬笔回停靠点。" if parked else
+                                                      " 笔尖已抬起停稳，请核对返回路径。")
                     else:
                         raise ValueError(f"无法识别的设备操作：{kind}")
                     if link is not None:
+                        while not control.finish_unless_paused():
+                            result = link.manual_at_rest(result, control)
                         link.motion_active = False
                         if link.referenced_idle_xy is not None and result.state == "Idle":
                             link.referenced_idle_xy = result.position[:2]
@@ -195,7 +212,7 @@ class N1Worker(QtCore.QThread):
                                 pass
                         link.serial.close()
                         link = None
-                    detail = str(error)
+                    detail = (self.progress_failure + " " if self.progress_failure else "") + str(error)
                     if motion or isinstance(error, Stopped):
                         detail += " 请检查笔尖、当前位置和纸面对位，再重新连接。"
                     if fault is not None:
@@ -209,7 +226,7 @@ class N1Worker(QtCore.QThread):
         finally:
             if link is not None:
                 try:
-                    self.closed_idle = link.require_idle()
+                    self.closed_idle = link.verify_rest(None, link.require_idle())
                 except (ValueError, MachineError, OSError):
                     self.closed_idle = None
                 finally:
