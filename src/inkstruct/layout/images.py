@@ -127,8 +127,9 @@ def measure_image(block, resolver, style, flow, width, cancelled):
                 issues.append(
                     Diagnostic(
                         "svg-ink-overflow",
-                        "SVG ink approaches figure edge; add padding inside its viewBox",
+                        "SVG 笔迹靠近插图边缘，如需留白可扩大 viewBox。",
                         block.node.span,
+                        "warning",
                     )
                 )
             issues.append(

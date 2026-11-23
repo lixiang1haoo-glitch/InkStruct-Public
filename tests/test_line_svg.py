@@ -215,14 +215,16 @@ def test_native_document_pagination_provenance_and_machine_svg(tmp_path):
         assert b"original_base64" not in z.read("styles.json")
 
 
-def test_local_import_and_final_size_failure_diagnostics(tmp_path):
+def test_local_import_and_final_size_edge_warning(tmp_path):
     resource(tmp_path)
     doc = parse_markdown("![](plot.svg)")
     flow, issues = import_local_images(doc, FlowStyle(), tmp_path)
     assert not issues and isinstance(flow.images[0], LineSvgResource)
     small = replace(flow, image=ImageStyle(width_mm=0.1))
     result = layout_markdown(doc, resolver(), flow=small)
-    assert not result.exportable and any(d.code == "svg-ink-overflow" for d in result.diagnostics)
+    assert [d.severity for d in result.diagnostics if d.code == "svg-ink-overflow"] == ["warning"]
+    assert result.plotter_exportable
+    assert plan_from_snapshot(result).pages[0].strokes
     with pytest.raises(ValueError):
         ImageStyle(svg_tolerance_mm=0)
 
