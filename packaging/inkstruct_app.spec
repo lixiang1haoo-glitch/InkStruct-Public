@@ -51,13 +51,17 @@ data = [(str(root/'LICENSE'), 'licenses/inkstruct'),
         (str(root/'src/inkstruct/editor/resources'), 'inkstruct/editor/resources'),
         (str(root/'packaging/inkstruct_layout_smoke.py'), '.'),
         (str(root/'artifacts/structures/characters.sqlite3'), 'data'),
-        (str(kernel/'handwriting_collector'), 'collector_kernel/handwriting_collector'),
         (str(root/'configs'), 'configs'),
         (str(root/'third_party/makemeahanzi/graphics.txt'), 'third_party/makemeahanzi'),
         (str(root/'third_party/makemeahanzi/dictionary.txt'), 'third_party/makemeahanzi'),
         (str(root/'third_party/makemeahanzi/COPYING'), 'licenses/makemeahanzi'),
         (str(root/'third_party/makemeahanzi/LGPL'), 'licenses/makemeahanzi'),
         (str(root/'third_party/makemeahanzi/APL'), 'licenses/makemeahanzi/APL')]
+# Ship the desktop collector kernel without the retired line-capture workflow.
+collector_files = ('__init__.py', '__main__.py', 'canvas.py', 'config.py', 'models.py',
+                   'paths.py', 'storage.py', 'tasks.py', 'ui.py')
+data += [(str(kernel/'handwriting_collector'/name), 'collector_kernel/handwriting_collector')
+         for name in collector_files]
 # Exact source identities are used by reference correction and generation manifests.
 data += [(str(p), 'inkstruct') for p in (root/'src/inkstruct').glob('*.py')
          if p.stem not in ('train', 'model', 'dataset')]
