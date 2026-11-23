@@ -173,6 +173,7 @@ class InkStructWindow(QtWidgets.QMainWindow):
             if action.text() == '设置':
                 self.collector.menuBar().removeAction(action)
         self.library.use_requested.connect(self.choose_font_for_document)
+        self.template_library.applied_to_document.connect(self.show_document)
         self.generator.centralWidget().publish_requested.connect(self.use_generated)
         self.generator.centralWidget().history_publish_requested.connect(self.publish_generated_batch)
         self.statusBar().showMessage(
@@ -217,7 +218,10 @@ class InkStructWindow(QtWidgets.QMainWindow):
     def choose_font_for_document(self, path):
         from .resources_ui import use_document_font
         if use_document_font(self.editor, path, self):
-            self.tabs.setCurrentIndex(3)
+            self.show_document()
+
+    def show_document(self):
+        self.tabs.setCurrentWidget(self.editor)
 
     def use_generated(self):
         workflow = self.generator.centralWidget()

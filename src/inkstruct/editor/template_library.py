@@ -35,6 +35,8 @@ def preview_layouts(template):
 
 
 class TemplateLibrary(QtWidgets.QWidget):
+    applied_to_document = QtCore.Signal()
+
     def __init__(self, editor, parent=None):
         super().__init__(parent)
         self.editor = editor
@@ -530,7 +532,11 @@ class TemplateLibrary(QtWidgets.QWidget):
     def use(self):
         from .resource_apply import TemplateApplyDialog
         if self.template:
-            TemplateApplyDialog(self.editor, self.template, self).exec()
+            dialog = TemplateApplyDialog(self.editor, self.template, self)
+            result = dialog.exec()
+            dialog.deleteLater()
+            if result == QtWidgets.QDialog.DialogCode.Accepted:
+                self.applied_to_document.emit()
 
     def set_default(self):
         def action():

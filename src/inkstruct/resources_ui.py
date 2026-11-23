@@ -69,9 +69,14 @@ def open_management(editor, category='templates'):
     if category == 'templates':
         from .editor.template_library import TemplateLibrary
         resources = TemplateLibrary(editor, dialog)
+        resources.applied_to_document.connect(dialog.accept)
     else:
         resources = FontLibrary(workspace_for(editor) / 'fonts')
-        resources.use_requested.connect(lambda path: use_document_font(editor, path, dialog))
+        def apply_font(path):
+            if use_document_font(editor, path, dialog):
+                dialog.accept()
+
+        resources.use_requested.connect(apply_font)
     col.addWidget(resources)
     close = QtWidgets.QPushButton('关闭资源管理')
     close.clicked.connect(dialog.accept)
