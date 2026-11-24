@@ -179,6 +179,7 @@ class DeviceDialog(QtWidgets.QDialog):
 
     def refresh(self, *_):
         connected = self.panel.device is not None
+        retained = bool(getattr(self.panel.worker, "retained_port", None))
         idle = self.panel.busy is None
         profile = self.panel.profile
         choices = ["设备默认"] + list(dict(profile.pen_heights)) if profile else []
@@ -251,11 +252,11 @@ class DeviceDialog(QtWidgets.QDialog):
         self.datum_reset.setVisible(located)
         self.change_stops.setVisible(bool(datum and not trial))
         self.change_stops.setEnabled(ready)
-        self.devices.setEnabled(idle and not connected and not trial)
-        self.add_button.setEnabled(idle and not connected and not trial)
-        self.editor.setEnabled(idle and bool(profile))
+        self.devices.setEnabled(idle and not connected and not retained and not trial)
+        self.add_button.setEnabled(idle and not connected and not retained and not trial)
+        self.editor.setEnabled(idle and bool(profile) and not retained)
         self.link.setEnabled(idle and bool(profile) and (not connected or self.panel.pen_raised))
-        self.link.setText("断开" if connected else "连接")
+        self.link.setText(self.panel.link_button.text())
         self.position.setText(self.panel.position_label.text())
         self.error.setText(self.panel.report.text())
         self.stop.setVisible(self.panel.is_moving)
@@ -264,7 +265,7 @@ class DeviceDialog(QtWidgets.QDialog):
         for button in self.record_buttons:
             button.setEnabled(ready and not waiting)
         self.trial.setEnabled(bool(ready and ((trial and trial.mode) or (located and self.panel.range_ready))))
-        self.save_button.setEnabled(idle and (not trial or bool(trial.mode)))
+        self.save_button.setEnabled(idle and not retained and (not trial or bool(trial.mode)))
 
     def select_pen(self, index):
         try:

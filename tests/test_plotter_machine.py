@@ -23,6 +23,7 @@ class SimulatedGrbl:
         self.position = [0., 0., 0.]
         self.held = False
         self.fail_next_motion = False
+        self.unavailable = False
         self.on_write = lambda _data: None
         self.run_reports = 0
         self.closed = False
@@ -57,6 +58,7 @@ class SimulatedGrbl:
             self.held = False
         elif data == b"\x18":
             self.held = False
+            self.run_reports = 0
             self.responses.clear()
         else:
             if data == b"$$\n":
@@ -65,6 +67,7 @@ class SimulatedGrbl:
                 self.responses.extend((self.firmware, "[OPT:VMPHL,15,1023]"))
             elif data.startswith(b"G1 "):
                 if self.fail_next_motion:
+                    self.unavailable = True
                     raise OSError("USB disconnected")
                 for word in data.decode().split()[1:]:
                     if word[0] in "XYZ":
@@ -824,7 +827,11 @@ try:
     dialog.dry_button.click()
     wait_for(lambda: dialog.device is None and dialog.busy is None)
     assert dialog.registration is None and dialog.confirmed_area is None
-    assert transport.closed and "重新连接" in dialog.report.text()
+    assert not transport.closed and "重新连接" in dialog.report.text()
+    assert dialog.release_port_button.isEnabled()
+    dialog.release_port_button.click()
+    wait_for(lambda: dialog.busy is None)
+    assert transport.closed and not dialog.worker.retained_port
 finally:
     dialog.shutdown()
     dialog.close()
@@ -963,7 +970,8 @@ try:
     wait_for(lambda: any(command.startswith(b"G1 ") for command in transport.commands[previous:]))
     p.stop_button.click()
     wait_for(lambda: p.busy is None and p.device is None)
-    assert b"\x18" in transport.commands and transport.closed
+    assert b"\x18" in transport.commands and not transport.closed
+    assert p.link_button.text() == "重新读取状态" and p.release_port_button.isVisible()
     assert not p.dry_button.isEnabled() and p.registration is None
     p.set_document(replace(snap, snapshot_id="new", revision=1), 0, True)
     assert p.snapshot.revision == 1

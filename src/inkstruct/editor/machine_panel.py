@@ -220,8 +220,10 @@ class MachinePanel(QtWidgets.QWidget):
             lambda: self.select_profile(self.device_picker.currentData())
         )
         self.link_button = self.button("连接", self.toggle_connection)
+        self.release_port_button = self.button("断开串口", lambda: self.submit("disconnect"))
         self.manage_devices = self.button("设备管理…", self.open_devices)
         connect_layout.addWidget(pair_widget((self.device_picker, self.link_button)))
+        connect_layout.addWidget(self.release_port_button)
         connect_layout.addWidget(self.manage_devices)
         self.position_label = label("未连接")
         connect_layout.addWidget(self.position_label)
@@ -1065,6 +1067,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def refresh_buttons(self, *_):
         busy, connected = self.busy is not None or self.closing, self.device is not None
+        retained = bool(getattr(self.worker, "retained_port", None))
         moving = self.is_moving
         canceling = moving and self.worker.control.stop_requested.is_set()
         available = connected and not busy
@@ -1073,11 +1076,13 @@ class MachinePanel(QtWidgets.QWidget):
         ready = self.current_page_ready()
         document_ready = self.candidate is not None and self.candidate[0] is self.snapshot
         self.page_list.setEnabled(document_ready and not busy)
-        self.device_picker.setEnabled(not connected and not busy)
-        self.manage_devices.setEnabled(not busy)
-        self.link_button.setText("断开" if connected else "连接")
+        self.device_picker.setEnabled(not connected and not retained and not busy)
+        self.manage_devices.setEnabled(not busy and not retained)
+        self.release_port_button.setVisible(retained)
+        self.release_port_button.setEnabled(not busy)
+        self.link_button.setText("重新读取状态" if retained else "断开" if connected else "连接")
         self.link_button.setEnabled(not busy and
-                                    (self.pen_raised if connected else self.available_port() is not None))
+                                    (retained or (self.pen_raised if connected else self.available_port() is not None)))
         needs_datum = connected and not self.datum_located
         self.confirm_range_button.setVisible(bool(connected and (needs_datum or not self.range_ready)))
         self.confirm_range_button.setText("初始化或恢复停靠点…" if needs_datum else "确认工作范围…")
@@ -1114,6 +1119,9 @@ class MachinePanel(QtWidgets.QWidget):
 
     def submit(self, kind, *args):
         if self.busy is not None or self.closing:
+            return False
+        retained = getattr(self.worker, "retained_port", None)
+        if retained and kind not in {"connect", "disconnect"}:
             return False
         motion = kind not in {"connect", "disconnect", "position-datum", "position-read"}
         trial = self.dock_trial
@@ -1173,7 +1181,7 @@ class MachinePanel(QtWidgets.QWidget):
                 args = axes, effective, feed, area
         # Consume the on-disk proof before opening the serial port. While
         # connected there is no reusable credential to survive a reset/crash.
-        if kind == "connect":
+        if kind == "connect" and not retained:
             # Keep the consume/open/close/save sequence exclusive across app
             # instances, including the interval after the serial handle closes.
             try:
@@ -1196,7 +1204,7 @@ class MachinePanel(QtWidgets.QWidget):
                 return False
         self.busy = kind
         if not self.worker.submit(kind, *args):
-            if kind == "connect":
+            if kind == "connect" and not retained:
                 self.release_session_lock()
             self.busy = None
             return False
@@ -1247,7 +1255,9 @@ class MachinePanel(QtWidgets.QWidget):
                 self.recovery_options()
 
     def toggle_connection(self):
-        if self.device is None:
+        if port := getattr(self.worker, "retained_port", None):
+            self.submit("connect", port, self.profile.serial)
+        elif self.device is None:
             self.refresh_ports()
             if port := self.available_port():
                 if not self.profile.serial and not self.confirm("核对设备",
@@ -1496,7 +1506,8 @@ class MachinePanel(QtWidgets.QWidget):
 
     def show_position(self):
         if self.device is None:
-            self.position_label.setText("设备尚未连接")
+            self.position_label.setText("串口已保留 · 待核对设备状态" if getattr(self.worker, "retained_port", None)
+                                        else "设备尚未连接")
             self.preview.point = None
         else:
             x, y, z = self.device.position
@@ -1635,7 +1646,9 @@ class MachinePanel(QtWidgets.QWidget):
             if self.uncertain and done < len(self.job.strokes):
                 detail += f"请检查第 {done + 1} 笔的纸面笔迹。"
         if disconnected:
-            self.release_session_lock()
+            self.previous_checkpoint = None
+            if not getattr(self.worker, "retained_port", None):
+                self.release_session_lock()
             if self.dock_trial and (self.dock_trial.mode or kind not in {"connect", "disconnect"}):
                 self.dock_trial = None
             self.device = None

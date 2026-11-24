@@ -30,6 +30,10 @@ class MachineError(RuntimeError):
     pass
 
 
+class StatusTimeout(MachineError):
+    pass
+
+
 class PageInterrupted(MachineError):
     """A page operation failed at a known XY, with no queued XY movement."""
     def __init__(self, message, anchor):
@@ -322,7 +326,7 @@ class GrblLink:
                 self.send("?")
                 next_query = monotonic() + .25
             self.pump()
-        raise MachineError("设备未返回状态。")
+        raise StatusTimeout("设备未返回状态。")
 
     def command(self, command: str, control=None):
         self.checkpoint(control)
@@ -435,6 +439,8 @@ class GrblLink:
 
     def send_xy_packet(self, targets, lines, control, next_status):
         self.checkpoint(control)
+        if monotonic() - self.status_at > .8:
+            self.interrupt_xy(control, 0)
         self.xy_window.arm(targets)
         self.send("\n".join(lines) + "\n")
         remaining = len(lines)
@@ -444,7 +450,7 @@ class GrblLink:
             self.checkpoint(control)
             now = monotonic()
             if now - self.status_at > .8:
-                raise MachineError("运动期间未收到设备状态。")
+                self.interrupt_xy(control, remaining)
             if remaining and awaiting_status <= self.status_count and now >= next_status:
                 awaiting_status = self.status_count + 1
                 self.send("?")
@@ -458,11 +464,36 @@ class GrblLink:
             raise MachineError("设备未确认所有已发送的笔段。")
         return next_status
 
+    def interrupt_xy(self, control, remaining):
+        # Stop adding segments. Account for every outstanding acknowledgement
+        # before using the GRBL planner barrier, including on closed paths.
+        deadline = monotonic() + 2.5
+        while remaining and monotonic() < deadline:
+            self.checkpoint(control)
+            if self.responses:
+                remaining -= int(self.responses.popleft() == "ok")
+            else:
+                self.pump(.025)
+        if remaining:
+            raise MachineError("运动回报超时，已发笔段仍有未确认的指令。")
+        self.command("G4 P0", control)
+        state = self.status(control)
+        if (state.state != "Idle" or state.position is None or state.offset is None
+                or math.dist(state.position[:2], self.xy_window.points[-1]) > XY_TOLERANCE_MM):
+            raise MachineError("运动回报超时，未确认已发笔段的终点。")
+        raise PageInterrupted("运动回报超时，本次运动已中断。", state)
+
+    def xy_status(self, control):
+        try:
+            return self.status(control, timeout=.5)
+        except StatusTimeout:
+            self.interrupt_xy(control, 0)
+
     def finish_xy(self, window, feed, control):
         end = self.motion_time() + (window.distance - window.progress) * 60 / feed + 1.5
         while self.motion_time() < end:
             self.checkpoint(control)
-            status = self.status(control, timeout=.5)
+            status = self.xy_status(control)
             if status.state == "Idle" and math.dist(status.position[:2], window.points[-1]) <= XY_TOLERANCE_MM:
                 # A closed path may end at its initial coordinate before the
                 # first Run report. GRBL's zero dwell is a planner barrier.
@@ -536,7 +567,7 @@ class GrblLink:
                             break
                         no_progress_until = self.motion_time() + 1.5 + MAX_PENDING_MM * 60 / feed
                     else:
-                        end = self.status(control, timeout=.5)
+                        end = self.xy_status(control)
                         if end.state == "Idle":
                             if math.dist(end.position[:2], origin) > XY_TOLERANCE_MM:
                                 raise MachineError("设备已空闲，但没有到达排队行程的终点。")

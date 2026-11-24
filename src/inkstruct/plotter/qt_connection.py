@@ -63,6 +63,11 @@ class N1Serial:
     def close(self):
         self.port.close()
 
+    @property
+    def unavailable(self):
+        errors = QtSerialPort.QSerialPort.SerialPortError
+        return not self.port.isOpen() or self.port.error() in (errors.ResourceError, errors.DeviceNotFoundError)
+
 
 class N1Worker(QtCore.QThread):
     succeeded = QtCore.Signal(str, object)
@@ -79,6 +84,7 @@ class N1Worker(QtCore.QThread):
         self.stopped_at = self.closed_idle = None
         self.control = None
         self.closing = False
+        self.retained_port = None
 
     def submit(self, kind, *arguments):
         if self.closing:
@@ -104,36 +110,41 @@ class N1Worker(QtCore.QThread):
             while (request := self.requests.get()) is not None:
                 kind, args, control = request
                 if kind == "restore-idle-reference":
-                    if link is not None:
+                    if link is not None and not self.retained_port:
                         link.referenced_idle_xy = args[0]
                     continue
                 self.page_failure = None
                 self.stopped_at = None
                 try:
                     if kind == "connect":
-                        if link is not None:
-                            link.serial.close()
-                            link = None
-                        serial = self.serial_factory(args[0])
+                        if link is not None and self.retained_port != args[0]:
+                            raise ValueError("请先断开当前串口。")
+                        recovering = link is not None
+                        port_name = args[0]
+                        serial = link.serial if recovering else self.serial_factory(port_name)
                         expected_serial = args[1] if len(args) > 1 else ""
-                        if expected_serial and getattr(serial, "usb_serial", expected_serial) != expected_serial:
-                            serial.close()
-                            raise MachineError("USB 设备已更换，请重新选择写字机。")
                         link = GrblLink(serial, phase=self.phase.emit,
                                         progress=self.progress.emit,
                                         pen_state=lambda state: self.pen_state.emit(control, state))
+                        if expected_serial and getattr(serial, "usb_serial", expected_serial) != expected_serial:
+                            raise MachineError("USB 设备与档案不符，请断开串口后重新选择写字机。")
                         result = link.connect()
                         fresh = link.require_idle()
                         self.stable_on_connect = (result.offset is not None and fresh.offset == result.offset
                                                   and dist(result.position, fresh.position) <= STATIONARY_TOLERANCE_MM)
                         result = fresh
-                        self.reset_on_connect = link.saw_reset
+                        self.reset_on_connect = recovering or link.saw_reset
+                        self.retained_port = None
                     elif link is None:
                         raise MachineError("设备尚未连接。")
                     elif kind == "disconnect":
-                        self.stopped_at = link.verify_rest(control, link.require_idle(control))
+                        if not self.retained_port:
+                            self.stopped_at = link.verify_rest(control, link.require_idle(control))
                         link.serial.close()
                         link = result = None
+                        self.retained_port = None
+                    elif self.retained_port:
+                        raise ValueError("请先重新读取设备状态。")
                     elif kind == "position-datum":
                         result = link.confirm_datum_position(control)
                     elif kind.startswith("position"):
@@ -189,11 +200,11 @@ class N1Worker(QtCore.QThread):
                     self.succeeded.emit(kind, result)
                 except (MachineError, OSError, ValueError) as error:
                     motion = bool(link and link.motion_active)
-                    disconnected = motion or not isinstance(error, ValueError)
+                    session_lost = motion or not isinstance(error, ValueError)
                     fault = None
                     fault_path = self.jog_fault_path
                     manual = kind in {"jog", "device-jog"}
-                    if (link and (manual or motion) and disconnected
+                    if (link and (manual or motion) and session_lost
                             and fault_path and not isinstance(error, Stopped)):
                         fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
                                  "n1_firmware": link.n1_firmware, "error": str(error),
@@ -202,18 +213,22 @@ class N1Worker(QtCore.QThread):
                             fault.update(delta_mm=args[0], range_confirmed=args[1] is not None)
                         else:
                             fault_path = fault_path.with_name("plotter-last-motion-fault.json")
-                    if link is not None and disconnected:
-                        if motion:
+                    if link is not None and session_lost:
+                        unavailable = getattr(link.serial, "unavailable", False)
+                        if motion and not unavailable:
                             try:
                                 link.abort()
                                 if fault is not None:
                                     fault["reports_at_stop"] = list(link.recent_reports)
                             except (MachineError, OSError):
                                 pass
-                        link.serial.close()
-                        link = None
+                        self.retained_port = port_name
                     detail = (self.page_failure + " " if self.page_failure else "") + str(error)
-                    if motion or isinstance(error, Stopped):
+                    if self.retained_port and getattr(link.serial, "unavailable", False):
+                        detail += " 当前串口不可用，请检查 USB，手动断开串口后重新连接。"
+                    elif self.retained_port:
+                        detail += " 串口已保留。请检查笔尖与设备，然后重新读取状态。"
+                    elif motion or isinstance(error, Stopped):
                         detail += " 请检查笔尖、当前位置和纸面对位，再重新连接。"
                     if fault is not None:
                         from ..resource_catalog import atomic_json
@@ -222,11 +237,12 @@ class N1Worker(QtCore.QThread):
                             detail += f" 本次回包已保存至 {fault_path.name}。"
                         except OSError:
                             pass
-                    self.failed.emit(kind, detail, disconnected)
+                    self.failed.emit(kind, detail, session_lost)
         finally:
             if link is not None:
                 try:
-                    self.closed_idle = link.verify_rest(None, link.require_idle())
+                    if not self.retained_port:
+                        self.closed_idle = link.verify_rest(None, link.require_idle())
                 except (ValueError, MachineError, OSError):
                     self.closed_idle = None
                 finally:

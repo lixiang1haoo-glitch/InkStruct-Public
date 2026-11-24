@@ -251,3 +251,92 @@ def test_small_increments_of_xy_drift_do_not_rebase_the_paused_position():
     with pytest.raises(MachineError, match="暂停期间 XY"):
         controller.manual_at_rest(state, control)
     assert not any(command.startswith(b"G1 ") for command in serial.commands)
+
+
+@pytest.mark.parametrize("phase", ["raised", "drawing", "missing-ack", "offset-change"])
+def test_motion_report_gap_keeps_serial_and_stops_page(tmp_path, phase):
+    from time import sleep
+
+    page = PlotPage(2, 200, 270, (
+        PlotStroke("interrupted", ((107.97, 68.51), (108.84, 66.68))),
+        PlotStroke("next", ((110., 70.), (111., 71.))),
+    ))
+    job = position_page(page, PaperRegistration((0., 0.)))
+    journal = ProgressFile.for_page(tmp_path, "report-gap", page, "layout", "N1")
+    serial = SimulatedGrbl()
+    dock = (101., 64.)
+    serial.position[:2] = dock
+    opened = []
+    def open_port(name):
+        opened.append(name)
+        return serial
+    worker = N1Worker(serial_factory=open_port)
+    results = Queue()
+    direct = QtCore.Qt.ConnectionType.DirectConnection
+    worker.succeeded.connect(lambda kind, value: results.put((kind, value)), direct)
+    worker.failed.connect(lambda kind, reason, lost: results.put(("failed", reason)), direct)
+    gap = []
+    def interrupt(command):
+        serial.run_reports = 0
+        if not gap and command.startswith(b"G1 X") and (serial.position[2] < 0) == (phase == "drawing"):
+            gap.append(len(serial.commands))
+            if phase == "missing-ack":
+                serial.responses.pop()
+            if phase == "offset-change":
+                serial.report = lambda state, coords: f"<{state}|WPos:{coords}|WCO:1,0,0>"
+            sleep(.85)
+    serial.on_write = interrupt
+    worker.start()
+    try:
+        worker.submit("connect", "sim")
+        assert results.get(timeout=5)[0] == "connect"
+        worker.submit("write", job, None, 5000, dict(journal=journal, failure_dock=dock))
+        kind, result = results.get(timeout=10)
+        assert gap and not serial.closed
+        after = serial.commands[gap[0]:]
+        if phase in {"drawing", "raised"}:
+            assert kind == "write" and "确认抬笔回停靠点" in worker.page_failure
+            assert b"!" not in after and b"\x18" not in after
+            motion = [c for c in after if c.startswith(b"G1 ")]
+            assert motion[0] == b"G1 Z0 F5000\n" and all(c.startswith(b"G1 X") for c in motion[1:])
+            assert result.position == (*dock, 0.) and journal.read() == (0, phase == "drawing")
+        else:
+            assert kind == "failed" and worker.retained_port == "sim"
+            assert not any(c.startswith(b"G1 ") for c in after)
+            worker.submit("jog", (1., 0.), None)
+            assert results.get(timeout=5)[0] == "failed"
+            worker.submit("connect", "sim")
+            assert results.get(timeout=5)[0] == "connect" and worker.reset_on_connect
+            assert opened == ["sim"] and not worker.retained_port
+        worker.submit("disconnect")
+        assert results.get(timeout=5)[0] == "disconnect" and serial.closed
+    finally:
+        worker.shutdown()
+        assert worker.wait(5000)
+
+
+def test_identity_fault_keeps_original_port_until_explicit_release():
+    serial = SimulatedGrbl()
+    serial.usb_serial = "unexpected"
+    opened = []
+    def open_port(port):
+        opened.append(port)
+        return serial
+    worker = N1Worker(serial_factory=open_port)
+    results = Queue()
+    direct = QtCore.Qt.ConnectionType.DirectConnection
+    worker.failed.connect(lambda kind, detail, lost: results.put(("failed", kind)), direct)
+    worker.succeeded.connect(lambda kind, status: results.put(("ok", kind)), direct)
+    worker.start()
+    try:
+        for kind, args in (("connect", ("COM3", "expected")), ("jog", ((1., 0.), None)),
+                           ("connect", ("COM4", "expected")), ("connect", ("COM3", "expected"))):
+            worker.submit(kind, *args)
+            assert results.get(timeout=5) == ("failed", kind)
+            assert not serial.closed and not serial.commands and worker.retained_port == "COM3"
+        assert opened == ["COM3"]
+        worker.submit("disconnect")
+        assert results.get(timeout=5) == ("ok", "disconnect") and serial.closed
+    finally:
+        worker.shutdown()
+        assert worker.wait(5000)
