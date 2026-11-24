@@ -198,7 +198,8 @@ class N1Worker(QtCore.QThread):
                         if link.referenced_idle_xy is not None and result.state == "Idle":
                             link.referenced_idle_xy = result.position[:2]
                     self.succeeded.emit(kind, result)
-                except (MachineError, OSError, ValueError) as error:
+                # A failed request must not unwind the serial owner's event loop.
+                except Exception as error:
                     motion = bool(link and link.motion_active)
                     session_lost = motion or not isinstance(error, ValueError)
                     fault = None
@@ -220,8 +221,9 @@ class N1Worker(QtCore.QThread):
                                 link.abort()
                                 if fault is not None:
                                     fault["reports_at_stop"] = list(link.recent_reports)
-                            except (MachineError, OSError):
-                                pass
+                            except Exception as stop_error:
+                                if fault is not None:
+                                    fault["stop_error"] = str(stop_error)
                         self.retained_port = port_name
                     detail = (self.page_failure + " " if self.page_failure else "") + str(error)
                     if self.retained_port and getattr(link.serial, "unavailable", False):
@@ -235,8 +237,8 @@ class N1Worker(QtCore.QThread):
                         try:
                             atomic_json(fault_path, fault)
                             detail += f" 本次回包已保存至 {fault_path.name}。"
-                        except OSError:
-                            pass
+                        except Exception as log_error:
+                            detail += f" 本次故障记录未保存：{log_error}"
                     self.failed.emit(kind, detail, session_lost)
         finally:
             if link is not None:

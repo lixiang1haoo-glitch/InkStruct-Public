@@ -340,3 +340,28 @@ def test_identity_fault_keeps_original_port_until_explicit_release():
     finally:
         worker.shutdown()
         assert worker.wait(5000)
+
+
+def test_unexpected_motion_and_stop_errors_do_not_exit_serial_worker():
+    serial = SimulatedGrbl()
+    worker = N1Worker(serial_factory=lambda _: serial)
+    results = Queue()
+    direct = QtCore.Qt.ConnectionType.DirectConnection
+    worker.failed.connect(lambda kind, detail, lost: results.put(("failed", kind)), direct)
+    worker.succeeded.connect(lambda kind, status: results.put(("ok", kind)), direct)
+    def fail(command):
+        if command.startswith(b"G1 ") or command == b"!":
+            raise RuntimeError("simulated transport callback error")
+    worker.start()
+    try:
+        worker.submit("connect", "sim")
+        assert results.get(timeout=5) == ("ok", "connect")
+        serial.on_write = fail
+        worker.submit("pen", False, None)
+        assert results.get(timeout=5) == ("failed", "pen")
+        assert worker.isRunning() and worker.retained_port == "sim" and not serial.closed
+        worker.submit("disconnect")
+        assert results.get(timeout=5) == ("ok", "disconnect") and serial.closed
+    finally:
+        worker.shutdown()
+        assert worker.wait(5000)
