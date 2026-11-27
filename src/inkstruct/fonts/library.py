@@ -77,10 +77,13 @@ class LocalFontConsent(ValueError):
 
 
 def import_font(source, root, progress=lambda message: None, *, workers=None, include_dynamics=False,
-                approved_hash=None):
+                approved_hash=None, convert_installed=False):
     """Verify the source snapshot and publish an exchange copy or a validated legacy fallback."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
+    source = Path(source)
+    if convert_installed and source.resolve().parent != root.resolve():
+        raise ValueError("请选择字体库内的原包")
     if approved_hash is None:
         with ZipFile(source) as archive:
             manifest = package_manifest(archive)
@@ -98,6 +101,8 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
         telemetry = {}
         legacy = not exchange_manifest(font.manifest)
         local = legacy and (capacity.local_package(font.manifest) or len(font.records) > exchange_codec.MAX_CANDIDATES)
+        if convert_installed and (not legacy or local):
+            raise ValueError("此字体无法整包转换为通用 v1")
         if local and approved_hash != font.manifest["content_hash"]:
             raise LocalFontConsent(len(font.records), font.manifest["content_hash"])
         stats = (verify_font(font, progress=progress, workers=workers, telemetry=telemetry)
@@ -117,27 +122,36 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
                 migration = exchange_codec.convert(staged, converted, extensions=channels, legacy_context=True)
                 exchange = FontPackage(converted, verify_all=False)
             except (ValueError, KeyError, TypeError, ArithmeticError, BadZipFile, OSError) as error:
+                if convert_installed:
+                    raise
                 migration = None
                 fallback = f"；转换未完成，已使用验证通过的原版：{error}"
             else:
-                originals = root / "originals"
-                originals.mkdir(exist_ok=True)
-                original = originals / filename
-                try:
-                    publish_copy(staged, original)
-                except OSError:
+                if convert_installed:
+                    if file_digest(source) != file_digest(staged):
+                        raise ValueError("原字体在转换期间发生变化，请重新选择")
+                    original = source
+                else:
+                    originals = root / "originals"
+                    originals.mkdir(exist_ok=True)
+                    original = originals / filename
                     try:
-                        originals.rmdir()
+                        publish_copy(staged, original)
                     except OSError:
-                        pass
-                    raise
+                        try:
+                            originals.rmdir()
+                        except OSError:
+                            pass
+                        raise
                 font, staged = exchange, converted
         target = root / (font.manifest["package_id"] + ".inkfont")
         details = entry(font)
         progress("正在加入字体库…")
         if exchange_manifest(font.manifest):
+            added_bytes = 0
             try:
                 os.link(staged, target)
+                added_bytes = target.stat().st_size
             except FileExistsError:
                 existing = FontPackage(target, verify_all=False)
                 if existing.manifest["content_hash"] != font.manifest["content_hash"]:
@@ -148,6 +162,11 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
             publish_copy(staged, target)
     # Removing the staging hard link changes ctime on Windows. Stamp the final
     # file after cleanup so the UI does not immediately re-read its full index.
+    if convert_installed:
+        message = f"v1 字体已就绪。原包位置：{original}。新增 {added_bytes:,} 字节。"
+    else:
+        message = (f"字体已导入 · {(migration or stats)['characters']} 字，{(migration or stats)['candidates']} 份候选"
+                   + ("；已转换为统一 v1，原版已保留" if original else "") + ("；已作为本机大容量字体使用" if local else "") + fallback)
     return {
         "path": str(target),
         "entry": (fingerprint(target), *details),
@@ -155,8 +174,7 @@ def import_font(source, root, progress=lambda message: None, *, workers=None, in
         "verification_runtime": telemetry,
         "local_capacity": local,
         "original_path": str(original) if original else None, "migration": migration,
-        "message": (f"字体已导入 · {(migration or stats)['characters']} 字，{(migration or stats)['candidates']} 份候选"
-                    + ("；已转换为统一 v1，原版已保留" if original else "") + ("；已作为本机大容量字体使用" if local else "") + fallback),
+        "message": message,
     }
 
 

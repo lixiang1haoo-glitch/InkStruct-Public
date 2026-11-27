@@ -80,6 +80,22 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
         heading.addWidget(self.import_button)
         heading.addWidget(self.create_button)
         layout.addLayout(heading)
+        self.migration_tip = QtWidgets.QWidget()
+        tip_row = QtWidgets.QHBoxLayout(self.migration_tip)
+        self.migration_label = QtWidgets.QLabel()
+        self.migration_label.setWordWrap(True)
+        self.migration_label.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+        tip_row.addWidget(self.migration_label, 1)
+        convert = QtWidgets.QPushButton("转换并保留原包…")
+        convert.clicked.connect(lambda: self.convert_installed(self.suggested_font))
+        tip_row.addWidget(convert)
+        dismiss = QtWidgets.QPushButton("跳过提示")
+        dismiss.clicked.connect(self.dismiss_migration_tip)
+        tip_row.addWidget(dismiss)
+        self.migration_settings = QtCore.QSettings("InkStruct", "FontLibrary")
+        self.suggested_font = None
+        self.migration_tip.hide()
+        layout.addWidget(self.migration_tip)
         self.list = FontList()
         self.list.setObjectName("installed_fonts")
         self.list.setSpacing(6)
@@ -597,6 +613,9 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
             self.folder_action.setEnabled(self.job is None and selected)
             self.rename_action.setEnabled(self.job is None and selected)
             self.archive_action.setEnabled(self.job is None and selected)
+            self.convert_action.setEnabled(selected and self.use_button.isEnabled()
+                                           and self.can_convert(self.selected()))
+            self.migration_tip.setEnabled(self.job is None)
         # Keep one main action; the same browser also serves the font picker.
         for button, primary in ((self.import_button, not self.use_button.isEnabled()),
                                 (self.use_button, self.use_button.isEnabled())):
@@ -764,7 +783,51 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
                 self.writer_filter.addItem(writer, writer)
             self.writer_filter.setCurrentIndex(max(0, self.writer_filter.findData(selected_writer)))
         self.filter_fonts()
+        self.update_migration_tip()
         self.load_metadata()
+
+    def can_convert(self, path):
+        summary = self.metadata_for(path)
+        return bool(summary and summary['manifest']['package_kind'] in ('developer', 'user')
+                    and not capacity.local_package(summary['manifest'])
+                    and summary.get('candidate_count', 0) <= exchange_codec.MAX_CANDIDATES)
+
+    def update_migration_tip(self):
+        self.suggested_font = None
+        if not self.migration_settings.value('v1MigrationTipSeen', False, type=bool):
+            # Prefer large packages for which first load is expensive.
+            for name, record in self.catalog.items():
+                path = self.root / name
+                stamp = (record.get('summary') or {}).get('stamp') or ()
+                if (not record.get('archived') and not record.get('error') and len(stamp) >= 3
+                        and stamp[2] >= 64 * 1024**2 and self.can_convert(path)):
+                    self.suggested_font = path
+                    self.migration_label.setText(f"「{record['summary']['manifest']['name']}」可转换为 v1，加快首次加载。")
+                    break
+        self.migration_tip.setVisible(self.suggested_font is not None)
+
+    def dismiss_migration_tip(self):
+        self.migration_settings.setValue('v1MigrationTipSeen', True)
+        self.migration_tip.hide()
+
+    def convert_installed(self, path):
+        if self.job or not path or not self.can_convert(path):
+            return
+        dialog = QtWidgets.QMessageBox(self)
+        dialog.setWindowTitle("转换并保留原包")
+        dialog.setText(f"为「{self.metadata_for(path)['manifest']['name']}」生成 v1 副本？")
+        dialog.setInformativeText(f"原包保存在 {path}。已有文档继续使用原字体。")
+        dynamics = QtWidgets.QCheckBox("在 v1 副本中保留压力与时间")
+        dialog.setCheckBox(dynamics)
+        accept = dialog.addButton("转换", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        dialog.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        dialog.exec()
+        if dialog.clickedButton() is accept:
+            include = dynamics.isChecked()
+            if path == self.suggested_font:
+                self.dismiss_migration_tip()
+            self.submit(lambda report: import_font(path, self.root, report, include_dynamics=include,
+                                                  convert_installed=True))
 
     def describe_font(self, path):
         key, stamp = str(path), fingerprint(path)

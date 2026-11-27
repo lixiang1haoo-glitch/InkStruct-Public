@@ -15,6 +15,13 @@ def labels_of(image):
     return [child for child in image.children if child.kind == "image_label"]
 
 
+def label_position(nodes, label_id):
+    node = next((item for item in nodes if item.node_id == label_id), None)
+    if node:
+        label = ImageLabel.from_node(node)
+        return label.x, label.y
+
+
 def comment_span(source, label):
     match = PATTERN.search(source, label.span.start, label.span.end)
     return match.span() if match else None
@@ -75,6 +82,7 @@ class ImageLabelDialog(QtWidgets.QDialog):
         self.canvas.label_placed.connect(self.add_at)
         self.canvas.label_selected.connect(lambda _, label_id: self.select_id(label_id))
         self.canvas.label_moved.connect(self.move)
+        self.canvas.label_position = lambda key: label_position(self.nodes, key)
         self.canvas.label_placement_cancelled.connect(self._cancel_placement)
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -232,6 +240,7 @@ class ImageLabelDialog(QtWidgets.QDialog):
     def move(self, _, label_id, dx, dy):
         node = next((node for node in self.nodes if node.node_id == label_id), None)
         if node and move_label(self.session, node, dx, dy):
+            self.canvas.accept_label_move(self.session.revision)
             self._read_labels()
             self.refresh_preview()
 
@@ -314,6 +323,7 @@ class ImageLabelControls(QtWidgets.QPushButton):
         self.clicked.connect(self.open_editor)
         self.editor.canvas.label_selected.connect(self.select_label)
         self.editor.canvas.label_moved.connect(self.move)
+        self.editor.canvas.label_position = lambda key: label_position(labels_of(self.image), key) if self.image else None
         self.hide()
 
     def set_image(self, node):
@@ -373,4 +383,5 @@ class ImageLabelControls(QtWidgets.QPushButton):
             return
         node = next((node for node in labels_of(self.image) if node.node_id == label_id), None)
         if node and move_label(self.editor.source_session, node, dx, dy):
+            self.editor.canvas.accept_label_move(self.editor.revision + 1)
             self.commit()

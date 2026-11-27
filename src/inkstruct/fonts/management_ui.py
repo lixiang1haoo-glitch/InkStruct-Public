@@ -329,6 +329,7 @@ class FontManagement:
         self.more_button.setText('更多操作')
         self.more_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         menu = QtWidgets.QMenu(self.more_button)
+        self.convert_action = menu.addAction('转换并保留原包…', lambda: self.convert_installed(self.selected()))
         self.folder_action = menu.addAction('打开字体包所在文件夹', self.open_font_folder)
         self.rename_action = menu.addAction('修改库内显示名称…', self.rename_font)
         self.archive_action = menu.addAction('移出字体库 / 恢复', self.archive_font)

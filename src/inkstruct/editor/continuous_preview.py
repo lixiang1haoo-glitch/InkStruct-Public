@@ -16,6 +16,7 @@ from ..document.limits import validate_snapshot
 from ..global_defaults import GlobalDefaultsStore
 from .preview_process import PreviewProcess
 from .preview_wire import write_page
+from .label_drag_preview import DragOverlay, LabelPage, PrepareLabelPage
 
 FULL = (-1, -1)
 TILE = 512  # Device pixels, independent of Windows display scaling.
@@ -114,6 +115,10 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self._label_highlight = None
         self._label_drag = None
         self._label_offset = QtCore.QPointF()
+        self._overlay = None
+        self._label_page = self._label_page_key = self._label_worker = None
+        self.label_position = None
+        self._drag_anchor = None
         # Keys contain an epoch, not a page/snapshot: cached pixels never retain
         # old documents or their potentially large trajectory catalogs.
         self.preview_cache = BoundedCache(max_entries=256, max_weight=96 * 1024**2)
@@ -166,6 +171,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         return QtCore.QRectF(QtCore.QRect(self.mapFrom(viewport, QtCore.QPoint()), viewport.size()))
 
     def clear_document(self):
+        self._overlay = self._label_page = self._label_page_key = None
         self._cancel_render()
         self._generation += 1
         self._page_tokens = []
@@ -181,6 +187,10 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
 
     def load_page(self, snapshot, index, *, startup_image=None):
         if snapshot is not self.snapshot:
+            if self._overlay and (snapshot.document_id != self.snapshot.document_id
+                                  or self._overlay.index >= len(snapshot.pages)
+                                  or snapshot.revision != self._overlay.accepted_revision):
+                self._overlay = None
             validate_snapshot(snapshot)
             first = snapshot.pages[0] if snapshot.pages else None
             if startup_image is not None:
@@ -211,6 +221,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
         self.resize_page()
 
     def resize_page(self):
+        if self._overlay and self._overlay.render_key != self._render_key():
+            self._overlay = None
         self.cancel_label_interaction()
         self._cancel_render()
         self._rects.clear()
@@ -255,6 +267,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             self.place_image_label(None)
             self.label_placement_cancelled.emit()
         if self._label_drag:
+            if self._overlay and not self._overlay.accepted:
+                self._overlay = None
             self._label_drag = None
             self._label_offset = QtCore.QPointF()
             self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
@@ -286,6 +300,7 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
             self._raster_settings_changed()
 
     def _raster_settings_changed(self):
+        self._overlay = self._label_page = self._label_page_key = None
         self._cancel_render()
         self._errors.clear()
         self.update()
@@ -396,6 +411,51 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 self._job.signals.finished.connect(self._prepared)
                 QtCore.QThreadPool.globalInstance().start(self._job)
             break
+        else:
+            if indices:
+                self._prepare_labels(indices[0])
+
+    def _prepare_labels(self, index):
+        key = self._key(index, FULL)
+        if self._label_worker or self._label_page_key == key:
+            return
+        self._label_page_key, self._label_page = key, None
+        if not any(f.image_label for f in self.snapshot.pages[index].fragments):
+            return
+        job = PrepareLabelPage(self.snapshot, index, key, self._spec(), self.render_acceleration)
+        self._label_worker = job
+        job.signals.result.connect(self._labels_ready)
+        QtCore.QThreadPool.globalInstance().start(job)
+
+    @QtCore.Slot(object, object)
+    def _labels_ready(self, key, page):
+        self._label_worker = None
+        if not self._closed and key == self._label_page_key and self.snapshot:
+            self._label_page = page
+        self._queue()
+
+    def _begin_label_preview(self, index, label):
+        key = self._key(index, FULL)
+        try:
+            page = self._label_page if key == self._label_page_key else None
+            if page is None:
+                page = LabelPage(self.snapshot, index, self._spec(), self.render_acceleration)
+                self._label_page_key, self._label_page = key, page
+            layers = page.layers(label)
+        except (ValueError, MemoryError, OverflowError):
+            return
+        if layers:
+            tiles = {tile:self.preview_cache.get(self._key(index, tile))
+                     for tile in self._tiles(index, self.viewport_rect())}
+            if index == 0 and self._startup_background:
+                tiles[FULL] = self._startup_background[1]
+            self._overlay = DragOverlay(index, self._generation, self._render_key(), *layers,
+                                        tiles, QtCore.QPointF())
+
+    def accept_label_move(self, revision):
+        if self._overlay:
+            self._overlay.accepted = True
+            self._overlay.accepted_revision = revision
 
     @QtCore.Slot(object)
     def _prepared(self, result):
@@ -457,6 +517,15 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 painter.drawText(QtCore.QRectF(page.left(),page.top()-20,page.width(),18),
                                  QtCore.Qt.AlignmentFlag.AlignLeft,f'第 {index+1} 页 · 来源版式：{origin}')
             painted = False
+            overlay = self._overlay
+            if overlay and overlay.index != index:
+                overlay = None
+            if overlay and overlay.generation != self._generation:
+                ready = all(self.preview_cache.get(self._key(index, tile)) is not None
+                            for tile in self._tiles(index, self.viewport_rect()))
+                if ((index, self._render_key()) in self._errors or ready
+                        or (index == 0 and self._startup_background)):
+                    self._overlay = overlay = None
             if index == 0 and self._startup_background is not None:
                 painter.save()
                 painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
@@ -465,7 +534,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 painted = True
             else:
                 for tile in self._tiles(index, dirty):
-                    image = self.preview_cache.get(self._key(index, tile))
+                    image = (overlay.tiles.get(tile) if overlay and overlay.generation != self._generation
+                             else self.preview_cache.get(self._key(index, tile)))
                     if image is not None:
                         x, y = (0, 0) if tile == FULL else (tile[0] * TILE / dpr, tile[1] * TILE / dpr)
                         painter.drawImage(QtCore.QPointF(page.left() + x, page.top() + y), image)
@@ -476,6 +546,13 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                 painter.drawText(page, QtCore.Qt.AlignmentFlag.AlignCenter, message)
             elif index == 0 and self._first_painted_generation != self._generation:
                 first_painted = not page.intersected(dirty).intersected(self.viewport_rect()).isEmpty()
+            if painted and overlay:
+                origin = page.topLeft() + overlay.box.topLeft()
+                painter.save()
+                painter.setClipRect(page)
+                painter.drawImage(origin, overlay.clean)
+                painter.drawImage(origin + overlay.offset, overlay.ink)
+                painter.restore()
             reviews = self.reviews if self.show_marks else {}
             geometry = tuple((fragment, self.rect_for(fragment, page))
                              for fragment in self.snapshot.pages[index].fragments
@@ -485,7 +562,8 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                                  or (self._label_highlight and fragment.image_label == self._label_highlight)))
             if self._label_highlight:
                 for highlight in self._highlight_rect(geometry).values():
-                    highlight.translate(self._label_offset)
+                    highlight.translate(overlay.offset if overlay and overlay.generation == self._generation
+                                        else self._label_offset)
                     painter.setPen(QtGui.QPen(self.palette().highlight().color(), 2))
                     painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
                     painter.drawRect(highlight.adjusted(-3, -3, 3, 3))
@@ -535,8 +613,11 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
                     image_id, label_id = fragment.image_label
                     image_rect = self._image_rect(geometry, image_id, position)
                     if not image_rect.isEmpty():
+                        self._overlay = None
                         self.label_selected.emit(image_id, label_id)
                         self._label_drag = (image_id, label_id, image_rect, position)
+                        self._drag_anchor = self.label_position(label_id) if self.label_position else None
+                        self._begin_label_preview(index, fragment.image_label)
                         self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
                         return
         for fragment, rect in geometry:
@@ -550,19 +631,40 @@ class ContinuousPageCanvas(QtWidgets.QWidget):
 
     def mouseMoveEvent(self, event):
         if self._label_drag:
-            self._label_offset = event.position() - self._label_drag[3]
-            self.update()
+            old = self._label_offset
+            self._label_offset = self._drag_delta(event.position())
+            if self._overlay:
+                overlay = self._overlay
+                overlay.offset = self._label_offset
+                area = overlay.box.translated(self.page_rect(overlay.index).topLeft())
+                for rect in self._highlight_rect(self._geometry(overlay.index)).values():
+                    area = area.united(rect)
+                self.update(area.translated(old).united(area.translated(overlay.offset))
+                            .adjusted(-5,-5,5,5).toAlignedRect())
+            else:
+                self.update()
         else:
             super().mouseMoveEvent(event)
+
+    def _drag_delta(self, position):
+        _, _, rect, start = self._label_drag
+        delta = position - start
+        if self._drag_anchor:
+            x,y = self._drag_anchor
+            return QtCore.QPointF(max(-x,min(100-x,delta.x()*100/rect.width()))*rect.width()/100,
+                                  max(-y,min(100-y,delta.y()*100/rect.height()))*rect.height()/100)
+        return delta
 
     def mouseReleaseEvent(self, event):
         if not self._label_drag or event.button() != QtCore.Qt.MouseButton.LeftButton:
             return super().mouseReleaseEvent(event)
         image_id, label_id, rect, start = self._label_drag
-        delta = event.position() - start
-        self.cancel_label_interaction()
-        if self.isEnabled() and delta.manhattanLength() >= QtWidgets.QApplication.startDragDistance():
+        delta = self._drag_delta(event.position())
+        if self._overlay:
+            self._overlay.offset = delta
+        if self.isEnabled() and (event.position()-start).manhattanLength() >= QtWidgets.QApplication.startDragDistance():
             self.label_moved.emit(image_id, label_id, 100 * delta.x() / rect.width(), 100 * delta.y() / rect.height())
+        self.cancel_label_interaction()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key.Key_Escape and (self._label_placement or self._label_drag):

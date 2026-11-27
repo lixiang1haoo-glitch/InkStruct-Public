@@ -25,6 +25,19 @@ def rewrite(source, output, change):
     core.write_archive(output, members, manifest)
 
 
+def test_convert_library_font_reuses_original_and_counts_only_new_files(font_path):
+    root = font_path.parent
+    original = font_path.read_bytes()
+    first = library.import_font(font_path, root, convert_installed=True)
+    converted = Path(first['path'])
+    assert converted != font_path and Path(first['original_path']) == font_path
+    assert f"{converted.stat().st_size:,} 字节" in first['message']
+    second = library.import_font(font_path, root, convert_installed=True)
+    assert second['path'] == first['path'] and '新增 0 字节' in second['message']
+    assert font_path.read_bytes() == original and not (root/'originals').exists()
+    assert core.FontPackage(converted).verify()['points'] > 0
+
+
 def test_single_validation_without_layout_allocation(font_path, tmp_path, monkeypatch):
     font = core.FontPackage(font_path)
     glyphs = tuple(font.glyphs())
