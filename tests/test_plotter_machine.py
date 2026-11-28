@@ -445,16 +445,14 @@ try:
     assert transport.position == [35., 30., 0.]
     assert set(xy_feeds_by_pen(transport.commands)[False]) == {2500}
     choose(setup.nudge.feed, 200)
-    setup.axes[0].setChecked(True)
-    setup.axes[2].setChecked(True)
     choose(setup.nudge.step, 50)
     before = len(transport.commands)
     setup.nudge.buttons[(1, 0)].click()
     assert isinstance(setup.stop.parentWidget(), QtWidgets.QDialogButtonBox)
     assert not setup.stop.isHidden()
     wait()
-    assert transport.position == [35., -20., 0.] and not panel.profile.axes.swap
-    assert b"G1 X35.0000 Y-20.0000 F200\n" in transport.commands
+    assert transport.position == [85., 30., 0.] and not panel.profile.axes.swap
+    assert b"G1 X85.0000 Y30.0000 F200\n" in transport.commands
     assert set(xy_feeds_by_pen(transport.commands[before:])[False]) == {200}
     assert panel.store.devices()[0].feed == panel.nudge.feed.currentData() == 200
     choose(setup.nudge.step, 50)
@@ -463,20 +461,14 @@ try:
     choose(setup.nudge.step, 1)
     setup.nudge.buttons[(1, 0)].click()
     wait()
-    assert transport.position == [35., 29., 0.]
+    assert transport.position == [36., 30., 0.]
     assert not any(command.startswith(b"G1 Z-") for command in transport.commands)
     setup.use_range.setChecked(True)
     setup.record_buttons[0].click()
     wait()
-    assert [spin.value() for spin in setup.bounds[:2]] == [35., 29.]
+    assert [spin.value() for spin in setup.bounds[:2]] == [36., 30.]
     for spin, value in zip(setup.bounds, (0, 0, 100, 100), strict=True):
         spin.setValue(value)
-    # Existing coordinates cannot be promoted into a calibrated dock by saving settings.
-    setup.save_button.click()
-    assert not panel.datum_located and not panel.profile.axes.swap
-    assert "初始化" in setup.error.text()
-    setup.axes[0].setChecked(False)
-    setup.axes[2].setChecked(False)
     setup.save_button.click()
     assert panel.profile.limit_area_enabled and panel.confirmed_area == panel.profile.area
     # Commissioning jogs are bounded and do not establish a paper measurement.

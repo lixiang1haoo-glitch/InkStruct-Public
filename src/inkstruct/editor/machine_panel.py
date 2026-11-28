@@ -534,7 +534,7 @@ class MachinePanel(QtWidgets.QWidget):
         if not ok:
             return
         if choice not in labels:
-            self.open_devices()
+            self.open_initialization()
             return
         title, key, index = options[labels.index(choice)]
         if index is not None:
@@ -547,6 +547,17 @@ class MachinePanel(QtWidgets.QWidget):
         record = records[key]
         dialog = AlignmentDialog(self, key, record["layout"]["size"], PageAlignment(record["mark"]),
                                  title, recovery=True, archived=True)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def open_initialization(self, parent=None):
+        from .machine_initialization import InitializationDialog
+
+        if self.busy is not None or self.device is None or self.dock_trial is not None:
+            return
+        dialog = InitializationDialog(self, parent or self)
         try:
             dialog.exec()
         finally:
@@ -1127,6 +1138,9 @@ class MachinePanel(QtWidgets.QWidget):
         motion = kind not in {"connect", "disconnect", "position-datum", "position-read"}
         trial = self.dock_trial
         commissioning = trial and trial.mode and trial.connection == self.connection_id
+        if kind == "axis-trial" and not commissioning:
+            self.message("请在初始化向导的轴线校正步骤试画 X/Y。", error=True)
+            return False
         if trial and not trial.mode and motion and kind != "pen":
             self.message("三轮重启期间请保持笔尖位置不变。")
             return False
@@ -1168,8 +1182,8 @@ class MachinePanel(QtWidgets.QWidget):
                 self.trial_axes_sent = axes
                 # A draft can narrow a registered device's area. It must not
                 # expand the work area or bypass it by unchecking the field.
-                effective = draft if commissioning else area
-                if commissioning and self.profile.limit_area_enabled and effective is None:
+                effective = draft
+                if self.profile.limit_area_enabled and effective is None:
                     self.message("请核对初始化试画的安全范围。", error=True)
                     return False
                 if area is not None and draft is not None:
@@ -1563,7 +1577,7 @@ class MachinePanel(QtWidgets.QWidget):
             if kind == "connect":
                 message = "已连接。请在设备管理中完成停靠点初始化。"
                 if self.dock_trial:
-                    message = "已重连，请在设备管理中记录本轮重启读数。"
+                    message = "已重连，请在初始化向导中记录本轮重启读数。"
                 elif recovered:
                     message = "已恢复停靠点和本机纸面原点。"
                 elif self.profile.datum and self.profile.datum.boot_mode:
