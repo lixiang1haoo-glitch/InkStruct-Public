@@ -142,3 +142,29 @@ def test_library_retries_permission_errors_without_a_file_change(bundled, tmp_pa
         wait(lambda: window.inspection_job is None)
         window.close()
         app.processEvents()
+
+def test_upgrade_known_reference_in_place_even_when_renamed(bundled, tmp_path, monkeypatch):
+    from inkstruct.fonts import reference
+    from inkstruct.fonts.library import file_digest
+
+    library = tmp_path / "fonts"
+    previous = install_reference(bundled, library).rename(library / "custom-name.inkfont")
+    monkeypatch.setattr(reference, "HAN_ONLY_SHA256", file_digest(previous))
+    # Change the reference's bytes while retaining its validated identity.
+    with ZipFile(bundled, "a") as archive:
+        archive.comment = b"next release"
+    upgraded = install_reference(bundled, library)
+    assert upgraded == previous and file_digest(upgraded) == file_digest(bundled)
+    assert list(library.glob("*.inkfont")) == [previous]
+    stamp = upgraded.stat().st_mtime_ns
+    assert install_reference(bundled, library) == upgraded and upgraded.stat().st_mtime_ns == stamp
+
+
+def test_customized_reference_is_not_overwritten(bundled, tmp_path):
+    library = tmp_path / "fonts"
+    customized = install_reference(bundled, library)
+    with ZipFile(customized, "a") as archive:
+        archive.comment = b"user variant"
+    content = customized.read_bytes()
+    assert install_reference(bundled, library) == customized
+    assert customized.read_bytes() == content

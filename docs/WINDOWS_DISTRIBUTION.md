@@ -4,7 +4,7 @@ Windows 版提供安装程序、免安装 ZIP 和对应源码。应用源码、�
 
 ## 构建产物和验证
 
-- 0.1.153 为 Windows 本机测试版。免安装包 `InkStruct-0.1.153-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.153-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，补齐字体库中的参考字体。完成时可选桌面快捷方式和开始菜单，默认只勾选桌面。
+- 0.1.154 为 Windows 本机测试版。免安装包 `InkStruct-0.1.154-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.154-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，补齐字体库中的参考字体。完成时可选桌面快捷方式和开始菜单，默认只勾选桌面。
 - 更新后，写字机的所有 XY 移动共用「运动速度」。已有设备沿用保存的书写速度，新建设备默认 2500 mm/min。[写字机使用说明](USER_GUIDE.md#书写与限位提示)
 
 免安装用户可在字体库导入 ZIP 内的「参考字体.inkfont」。已有字体和文档绑定仍可继续使用。
@@ -40,3 +40,5 @@ Windows PDF 底图由系统的 Windows.Data.Pdf 渲染。JPEG 参考图片由 Pi
 构建脚本将锁定的 NumPy wheel 中两个扩展的运行库导入名改为系统的 `msvcp140.dll`。ZIP 和安装程序都使用微软提供的系统运行库。[Windows PDF API](https://learn.microsoft.com/uwp/api/windows.data.pdf) · [构建依赖清单](../packaging/windows-x64-py313.lock)
 
 0.1.68 的源码和历史验证记录可从原发行页查阅。[0.1.68 发行页](https://github.com/lixiang1haoo-glitch/InkStruct-Public/releases/tag/app-v0.1.68) · [历史构建记录](releases/0.1.68-windows.json)
+
+构建 0.1.154 Windows 本机测试版时，按 `packaging/reference-symbols.lock.json` 将授权的 user_001 字体放到指定输入路径。构建校验 SHA-256，仅提取非汉字的笔迹和排版属性。安装时会原位更新已知的旧版参考字体。

@@ -51,6 +51,11 @@ def main():
     library = output / "isolated-workspace" / "fonts"
     reference = library / "参考字体.inkfont"
     assert digest(reference) == digest(installed / reference.name)
+    from inkstruct.fonts.management import inspect_font
+    mixed = inspect_font(reference, "", preset="mixed")
+    assert not mixed["missing"] and b"<polyline" in mixed["svg"]
+    formula = inspect_font(reference, "", preset="formula")
+    assert not formula["missing"]
     control = library / "normal-file"
     control.touch()
     expected_rules = access_rules(control)
@@ -83,7 +88,7 @@ def main():
     if remaining != [sentinel] or digest(sentinel) != previous:
         raise ValueError(f"Uninstall did not remove only the installed payload: {remaining[:10]}")
     assert reference.is_file() and reference.stat().st_mtime_ns == modified
-    result = {"reference_font_clean_upgrade_uninstall": True, "installer_sha256": record["sha256"], "installed_zip_members_exact": len(members),
+    result = {"reference_font_mixed_and_formula_coverage": True, "reference_font_clean_upgrade_uninstall": True, "installer_sha256": record["sha256"], "installed_zip_members_exact": len(members),
               "native": native, "uninstall_preserved_synthetic_user_data": True,
               "shell_integration_skipped_for_isolation": True}
     (output / "installer-verification.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

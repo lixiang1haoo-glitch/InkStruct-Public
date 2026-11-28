@@ -58,6 +58,7 @@ def source_snapshot():
         ROOT / "packaging/InkStruct.nsi",
         ROOT / "packaging/build_windows_installer.py",
         ROOT / "packaging/build_reference_font.py",
+        ROOT / "packaging/reference-symbols.lock.json",
         ROOT / "packaging/verify_windows_installer.py",
         *sorted((ROOT / "configs").rglob("*.json")),
         *sorted((ROOT / "configs/character_sets").glob("*.txt")),

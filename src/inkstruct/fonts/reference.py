@@ -14,6 +14,8 @@ from .library import file_digest
 REFERENCE_ID = "3e5f7d55-94bc-5265-88b4-12c7c17a17b7"
 REFERENCE_NAME = "参考字体"
 REFERENCE_FILE = REFERENCE_NAME + ".inkfont"
+# Exact official Han-only archive shipped in 0.1.152 and 0.1.153.
+HAN_ONLY_SHA256 = bytes.fromhex("0133f9add44afb5cb5dd6c2822bae10de563b753c50fca215c3b175a3aeededd")
 
 
 def is_reference(path):
@@ -49,14 +51,22 @@ def install_reference(source, library):
     """Recognize renamed copies and publish without replacing another user's font."""
     source, library = Path(source), Path(library)
     library.mkdir(parents=True, exist_ok=True)
+    previous = None
     for path in library.glob("*.inkfont"):
         if is_reference(path):
             try:
                 verify(path)
             except (PermissionError, BadZipFile, ValueError, KeyError, TypeError):
                 continue
-            if os.name == "nt" and file_digest(path) == file_digest(source):
-                _repair_152_acl(path)
+            installed_digest = file_digest(path)
+            if installed_digest == file_digest(source):
+                if os.name == "nt":
+                    _repair_152_acl(path)
+                return path
+            if installed_digest == HAN_ONLY_SHA256:
+                previous = path
+                continue
+            # A user-owned variant carrying the reference ID remains untouched.
             return path
     if not is_reference(source):
         raise ValueError("安装包中的参考字体无效")
@@ -68,6 +78,9 @@ def install_reference(source, library):
         with os.fdopen(fd, "wb") as target, source.open("rb") as original:
             shutil.copyfileobj(original, target)
         verify(staged)
+        if previous is not None and file_digest(previous) == HAN_ONLY_SHA256:
+            os.replace(staged, previous)
+            return previous
         checksum = file_digest(staged)
         number = 1
         while True:
