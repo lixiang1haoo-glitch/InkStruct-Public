@@ -18,7 +18,7 @@ from ..plotter.export import ROUTING_VERSION
 from ..plotter.grbl import DEFAULT_WRITE_FEED, PEN_UP, PIN_INTERIOR_MM, XY_TOLERANCE_MM, Z_TOLERANCE_MM
 from ..plotter.physical import PaperRegistration, WorkArea, machine_point, position_page
 from ..plotter.profiles import DeviceDatum, PageAlignment, PlotterProfiles
-from ..plotter.qt_connection import N1Worker, n1_ports
+from ..plotter.qt_connection import N1Worker, serial_ports
 from ..plotter.schema import PlotPage
 from ..plotter.write_session import LEGACY_ROUTE, estimate_seconds, motion_seconds, record_time, timing_factor
 from ..renderers.pages import page_draw
@@ -165,7 +165,7 @@ class MachinePanel(QtWidgets.QWidget):
     status_changed = QtCore.Signal(str)
     machine_state = QtCore.Signal()
 
-    def __init__(self, parent, *, worker_factory=N1Worker, ports=n1_ports):
+    def __init__(self, parent, *, worker_factory=N1Worker, ports=serial_ports):
         super().__init__(parent)
         self.setObjectName("machine_control_panel")
         self.ports = ports
@@ -415,7 +415,7 @@ class MachinePanel(QtWidgets.QWidget):
 
     def _require_datum_reading(self, status):
         if (status is not self.device or self.connection_id is None or self.profile is None
-                or status.state != "Idle" or not self.pen_raised or status.blocking_pins):
+                or status.state != "Idle" or not self.pen_raised):
             raise ValueError("请确认已连接对应的设备，抬笔停稳并重新读取基准点。")
         return status.position[:2]
 
@@ -684,7 +684,7 @@ class MachinePanel(QtWidgets.QWidget):
         self.scanned = True
         self.port_records = tuple(self.ports())
         if not self.port_records and self.device is None:
-            self.message("未发现炽写 N1。请连接 USB 后打开设备管理。")
+            self.message("未发现串口。请连接写字机后在设备管理中刷新。")
         self.refresh_buttons()
 
     def message(self, text, error=False, *, page_specific=False):
@@ -1222,8 +1222,8 @@ class MachinePanel(QtWidgets.QWidget):
         if self.profile is None:
             return None
         matches = [p.portName() for p in self.port_records
-                   if (getattr(p, "serialNumber", lambda: "")() == self.profile.serial
-                       if self.profile.serial else p.portName() == self.profile.port)]
+                   if getattr(p, "serialNumber", lambda: "")() == self.profile.serial
+                   and (self.profile.serial or p.portName() == self.profile.port)]
         if self.profile.port in matches:
             return self.profile.port
         return matches[0] if len(matches) == 1 else None
@@ -1266,7 +1266,7 @@ class MachinePanel(QtWidgets.QWidget):
                 if self.submit("connect", port, self.profile.serial):
                     self.message(f"正在读取 {port} 的设备状态…")
             else:
-                self.message("所选设备尚未连接 USB。", error=True)
+                self.message("未找到与所选设备档案匹配的串口。", error=True)
         else:
             self.submit("disconnect")
 

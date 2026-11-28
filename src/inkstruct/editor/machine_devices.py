@@ -1,4 +1,4 @@
-"""Device management and commissioning for the shared N1 connection."""
+"""Device management and commissioning for the shared plotter connection."""
 
 from dataclasses import replace
 
@@ -149,25 +149,39 @@ class DeviceDialog(QtWidgets.QDialog):
             self.reload()
 
     def add(self):
-        self.panel.refresh_ports()
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("添加写字机")
         form = QtWidgets.QFormLayout(dialog)
-        name = QtWidgets.QLineEdit("炽写 N1")
+        name = QtWidgets.QLineEdit("写字机")
         name.setMaxLength(40)
         ports = QtWidgets.QComboBox()
-        for port in self.panel.port_records:
-            serial = getattr(port, "serialNumber", lambda: "")()
-            ports.addItem(port.portName(), (port.portName(), serial))
         form.addRow("设备名称", name)
-        form.addRow("USB 串口", ports)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(ports, 1)
+        refresh = QtWidgets.QPushButton("刷新")
+        row.addWidget(refresh)
+        form.addRow("串口", row)
+        empty = label("未发现串口。连接设备后点击「刷新」。")
+        form.addRow(empty)
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok |
                                              QtWidgets.QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setEnabled(bool(ports.count()))
+        def refresh_list():
+            previous = ports.currentData()
+            self.panel.refresh_ports()
+            ports.clear()
+            for port in self.panel.port_records:
+                description = port.description().strip()
+                key = (port.portName(), port.serialNumber())
+                ports.addItem(f"{port.portName()} · {description}" if description else port.portName(), key)
+                if key == previous:
+                    ports.setCurrentIndex(ports.count() - 1)
+            empty.setVisible(not ports.count())
+            buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setEnabled(bool(ports.count()))
+
+        refresh.clicked.connect(refresh_list)
+        refresh_list()
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
-        if not ports.count():
-            form.addRow(label("连接炽写 N1 后再添加设备。"))
         form.addRow(buttons)
         if dialog.exec():
             try:

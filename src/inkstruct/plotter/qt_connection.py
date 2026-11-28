@@ -1,4 +1,4 @@
-"""Exclusive Windows serial access for the N1, isolated from the GUI thread."""
+"""Exclusive plotter serial access, isolated from the GUI thread."""
 
 from datetime import datetime, timezone
 from math import dist
@@ -9,19 +9,16 @@ from PySide6 import QtCore, QtSerialPort
 
 from .grbl import DEFAULT_WRITE_FEED, PEN_DOWN, STATIONARY_TOLERANCE_MM, ExternalHold, GrblLink, MachineError, MotionControl, PageInterrupted, Stopped
 
-N1_USB_ID = (0x28e9, 0x018a)
 
-
-def n1_ports():
-    return [port for port in QtSerialPort.QSerialPortInfo.availablePorts()
-            if (port.vendorIdentifier(), port.productIdentifier()) == N1_USB_ID]
+def serial_ports():
+    return QtSerialPort.QSerialPortInfo.availablePorts()
 
 
 class N1Serial:
     def __init__(self, name):
-        info = next((port for port in n1_ports() if port.portName() == name), None)
+        info = next((port for port in serial_ports() if port.portName() == name), None)
         if info is None:
-            raise OSError("找不到所选的炽写 N1 USB 串口。")
+            raise OSError(f"找不到所选串口 {name}。请刷新串口列表。")
         self.usb_serial = info.serialNumber()
         self.port = QtSerialPort.QSerialPort(info)
         self.buffer = bytearray()
@@ -31,8 +28,12 @@ class N1Serial:
             port.setParity(port.Parity.NoParity), port.setStopBits(port.StopBits.OneStop),
             port.setFlowControl(port.FlowControl.NoFlowControl),
         )
-        if not all(configured) or not port.open(QtCore.QIODevice.OpenModeFlag.ReadWrite):
-            raise OSError(f"无法独占打开 {name}。{port.errorString()}")
+        if not all(configured):
+            raise OSError(f"无法配置串口 {name}。{port.errorString()}")
+        if not port.open(QtCore.QIODevice.OpenModeFlag.ReadWrite):
+            if port.error() == port.SerialPortError.PermissionError:
+                raise OSError(f"串口 {name} 被占用或无访问权限。{port.errorString()}")
+            raise OSError(f"无法打开串口 {name}。{port.errorString()}")
 
     def write(self, data):
         if self.port.write(data) != len(data):
@@ -126,7 +127,7 @@ class N1Worker(QtCore.QThread):
                         link = GrblLink(serial, phase=self.phase.emit,
                                         progress=self.progress.emit,
                                         pen_state=lambda state: self.pen_state.emit(control, state))
-                        if expected_serial and getattr(serial, "usb_serial", expected_serial) != expected_serial:
+                        if len(args) > 1 and getattr(serial, "usb_serial", expected_serial) != expected_serial:
                             raise MachineError("USB 设备与档案不符，请断开串口后重新选择写字机。")
                         result = link.connect()
                         fresh = link.require_idle()
@@ -208,7 +209,7 @@ class N1Worker(QtCore.QThread):
                     if (link and (manual or motion) and session_lost
                             and fault_path and not isinstance(error, Stopped)):
                         fault = {"time_utc": datetime.now(timezone.utc).isoformat(), "operation": kind,
-                                 "n1_firmware": link.n1_firmware, "error": str(error),
+                                 "firmware_report": link.firmware_report, "error": str(error),
                                  "reports_before_stop": list(link.recent_reports)}
                         if manual:
                             fault.update(delta_mm=args[0], range_confirmed=args[1] is not None)

@@ -9,7 +9,7 @@ from .physical import machine_point
 
 
 def idle_xy(status):
-    if (status is None or status.state != "Idle" or status.blocking_pins or not status.position
+    if (status is None or status.state != "Idle" or not status.position
             or abs(status.position[2] - PEN_UP) > Z_TOLERANCE_MM):
         raise ValueError("请抬笔、停稳并重新读取位置。")
     return machine_point(status.position[:2])

@@ -1,4 +1,4 @@
-"""Blocking Grbl transactions for the N1. The owning worker holds the serial port."""
+"""Blocking Grbl transactions for plotters with Z-axis pen control."""
 
 import errno
 import math
@@ -24,6 +24,7 @@ MAX_PACKET_LINES = 6
 MAX_PENDING_MM = 15.0
 STATUS_INTERVAL = .04
 ENDPOINT_POLL = .008
+WCO_WAIT_SECONDS = 3.
 
 
 class MachineError(RuntimeError):
@@ -31,6 +32,10 @@ class MachineError(RuntimeError):
 
 
 class StatusTimeout(MachineError):
+    pass
+
+
+class CommandRejected(MachineError):
     pass
 
 
@@ -75,17 +80,12 @@ class Status:
     position: tuple[float, float, float] | None
     offset: tuple[float, float, float] | None
     limits: str
-    n1_pin_report: bool = False
-
-    @property
-    def blocking_pins(self):
-        # CX-Elite reports the inputs during ordinary motion. Controller faults
-        # arrive separately as Alarm, Hold, Door, or an error response.
-        return "" if self.n1_pin_report else self.limits
 
 
 def position_vector(value: str):
     entries = value.split(",")
+    if len(entries) == 2:
+        raise MachineError("此设备只报告 X/Y。写字机笔控需要支持 Z 轴升降并报告笔高。")
     if len(entries) not in (3, 4):
         raise MachineError("设备返回了无法识别的坐标。")
     try:
@@ -97,7 +97,7 @@ def position_vector(value: str):
     return values[:3]
 
 
-def decode_status(line: str, previous_offset=None, *, n1_pin_report=False):
+def decode_status(line: str, previous_offset=None):
     if not line.startswith("<") or not line.endswith(">"):
         raise MachineError("设备状态响应不完整。")
     state, *fields = line[1:-1].split("|")
@@ -105,13 +105,16 @@ def decode_status(line: str, previous_offset=None, *, n1_pin_report=False):
     offset = position_vector(data["WCO"]) if "WCO" in data else previous_offset
     if "WPos" in data:
         position = position_vector(data["WPos"])
-    elif "MPos" in data and offset is not None:
-        position = tuple(a - b for a, b in zip(position_vector(data["MPos"]), offset, strict=True))
+    elif "MPos" in data:
+        machine = position_vector(data["MPos"])
+        if offset is None:
+            return Status(state, None, None, data.get("Pn", ""))
+        position = tuple(a - b for a, b in zip(machine, offset, strict=True))
         if not all(math.isfinite(value) for value in position):
             raise MachineError("设备工作坐标不是有限数值。")
     else:
         position = None
-    return Status(state, position, offset, data.get("Pn", ""), n1_pin_report)
+    return Status(state, position, offset, data.get("Pn", ""))
 
 
 @dataclass
@@ -217,7 +220,7 @@ class GrblLink:
         self.motion_active = False
         self.xy_window = None
         self.referenced_idle_xy = None
-        self.n1_firmware = False
+        self.firmware_report = ""
         self.segment_unbounded_travel = False
         self.packet_bytes = 120
 
@@ -236,7 +239,7 @@ class GrblLink:
             self.recent_reports.append(line[:512])
         if line.startswith("<"):
             previous = self.last_status.offset if self.last_status else None
-            self.last_status = decode_status(line, previous, n1_pin_report=self.n1_firmware)
+            self.last_status = decode_status(line, previous)
             self.status_count += 1
             self.status_at = monotonic()
             if self.metric and previous is not None and self.last_status.offset != previous:
@@ -247,11 +250,11 @@ class GrblLink:
                     raise ExternalHold("设备在作业中被外部暂停。")
                 if state.split(":")[0] not in {"Idle", "Run", "Hold"}:
                     raise MachineError(f"作业中设备进入 {state} 状态。")
-                if set(self.last_status.blocking_pins) & set("XYZ"):
-                    raise MachineError(f"作业中设备报告了轴限位（Pn:{self.last_status.limits}）。")
                 if self.xy_window is not None:
                     self.xy_window.observe(self.last_status)
-        elif line.lower().startswith(("error:", "alarm:")):
+        elif line.lower().startswith("error:"):
+            raise CommandRejected(f"设备返回 {line}。")
+        elif line.lower().startswith("alarm:"):
             raise MachineError(f"设备返回 {line}。")
         elif line.startswith("Grbl"):
             self.saw_reset = True
@@ -346,7 +349,10 @@ class GrblLink:
 
     def connect(self):
         # Read status before any command. Settings are queried, never rewritten.
-        state = self.status()
+        try:
+            state = self.status()
+        except StatusTimeout as error:
+            raise StatusTimeout("串口已打开，设备未返回 Grbl 状态。请核对所选串口和通信协议。") from error
         if state.state != "Idle":
             raise MachineError(f"设备报告 {state.state}，请在设备侧检查并恢复到 Idle 后重新连接。")
         if state.position is None:
@@ -368,30 +374,32 @@ class GrblLink:
             raise MachineError("无法确认设备状态使用毫米。请在设备侧核对 Grbl 的 $13 设置。")
         self.metric = True
         identity = self.command("$I")
-        self.n1_firmware = "[VER:1.1f / CX-Elite V2.1.003:]" in identity
-        self.segment_unbounded_travel = self.n1_firmware and any(
-            re.fullmatch(r"\$21\s*=\s*0(?:\.0+)?\s*(?:\([^()]*\))?", line)
-            for line in settings
+        self.firmware_report = next((line for line in identity if line.startswith("[VER:")), "")
+        hard_limits = [line for line in settings if re.match(r"^\$21\s*=", line)]
+        self.segment_unbounded_travel = not (
+            len(hard_limits) == 1 and re.fullmatch(r"\$21\s*=\s*1(?:\.0+)?\s*(?:\([^()]*\))?", hard_limits[0])
         )
         for line in identity:
             capacity = re.fullmatch(r"\[OPT:[^,]*,\d+,(\d+)\]", line)
             if capacity and int(capacity[1]) >= 64:
                 self.packet_bytes = min(240, int(capacity[1]) - 1)
         status = self.require_idle()
-        if self.n1_firmware and status.offset is None:
-            # WCO only appears periodically among the N1's WPos reports.
-            deadline = monotonic() + 3
-            while status.offset is None and monotonic() < deadline:
-                sleep(.05)
-                status = self.require_idle()
+        deadline = monotonic() + WCO_WAIT_SECONDS
+        while status.offset is None and monotonic() < deadline:
+            sleep(min(.05, max(0., deadline - monotonic())))
+            remaining = deadline - monotonic()
+            if remaining > 0:
+                try:
+                    status = self.require_idle(timeout=remaining)
+                except StatusTimeout:
+                    # This optional query cannot qualify a connection for automatic recovery.
+                    break
         return status
 
-    def require_idle(self, control=None, *, for_motion=False):
-        status = self.status(control)
+    def require_idle(self, control=None, *, for_motion=False, timeout=2.5):
+        status = self.status(control, timeout=timeout)
         if not self.metric or status.state != "Idle" or status.position is None:
             raise MachineError(f"需要设备处于 Idle 并返回有效的毫米工作坐标，当前状态为 {status.state}。")
-        if set(status.blocking_pins) & set("XYZ"):
-            raise MachineError(f"设备报告了轴限位（Pn:{status.limits}），无法移动。")
         if (self.referenced_idle_xy is not None
                 and math.dist(status.position[:2], self.referenced_idle_xy) > XY_TOLERANCE_MM):
             raise MachineError("设备待机期间的笔位读数已变化，请重新连接并对准机身基准。")
@@ -427,7 +435,10 @@ class GrblLink:
         raise MachineError("等待设备 Idle 超时。")
 
     def pen(self, height, control):
-        self.command(f"G1 Z{height:g} F5000", control)
+        try:
+            self.command(f"G1 Z{height:g} F5000", control)
+        except CommandRejected as error:
+            raise MachineError(f"设备拒绝 Z 轴升降笔指令，请核对笔控方式。{error}") from error
 
     def xy(self, point: Point, feed: int, control):
         self.command(self.xy_command(point, feed), control)
@@ -503,7 +514,7 @@ class GrblLink:
                     self.command("G4 P0", control)
                     sleep(.025)
                     status = self.status(control, timeout=.5)
-                    if (status.state != "Idle" or status.blocking_pins or
+                    if (status.state != "Idle" or
                             math.dist(status.position[:2], window.points[-1]) > XY_TOLERANCE_MM):
                         raise MachineError("设备到位复核未通过。")
                 return status
@@ -586,7 +597,7 @@ class GrblLink:
 
     def verify_rest(self, control, expected):
         fresh = self.status(control)
-        if (fresh.state != "Idle" or not fresh.position or fresh.blocking_pins or
+        if (fresh.state != "Idle" or not fresh.position or
                 fresh.offset != expected.offset or expected.state != "Idle" or
                 math.dist(fresh.position, expected.position) > STATIONARY_TOLERANCE_MM):
             raise MachineError("笔尖未确认停稳，或设备坐标已变化。")

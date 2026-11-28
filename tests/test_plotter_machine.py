@@ -313,7 +313,7 @@ def test_device_jog_respects_controller_fault_and_firmware_identity(case):
 
     serial.report = report
     area = WorkArea(0, 0, 30, 14 if case == "boundary" else 30)
-    if case in {"unknown", "alarm"}:
+    if case == "alarm":
         with pytest.raises(MachineError, match="限位|ALARM"):
             link.jog((0, 3), area, MotionControl(), commissioning=True)
     else:
@@ -618,7 +618,7 @@ def test_pin_telemetry_and_independent_motion_checks(case):
         return f"<{state}|WPos:{xyz}" + (f"|Pn:{limits}>" if triggered else ">")
     serial.report = report
     area = WorkArea(0, 0, 13 if case == "boundary" else 30, 30)
-    if case in {"deviation", "unknown"}:
+    if case == "deviation":
         with pytest.raises(MachineError, match="轨迹|限位"):
             link.move_to((target, 10), area, MotionControl())
     else:
