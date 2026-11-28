@@ -170,6 +170,7 @@ def test_editor_input_paste_import_switch_font_save_and_recover(tmp_path, monkey
         source = tmp_path / "input.txt"
         source.write_bytes(TEXT.replace("\n", "\r\n").encode())
         monkeypatch.setattr(QtWidgets.QFileDialog, "getOpenFileName", lambda *_: (str(source), ""))
+        monkeypatch.setattr(window, "choose_import_action", lambda: "replace")
         window.open_text()
         ready(updated)
         assert window.snapshot.plotter_exportable and len(window.snapshot.pages) == 2

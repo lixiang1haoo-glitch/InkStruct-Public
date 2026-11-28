@@ -94,6 +94,9 @@ class FlowCanvas(QtWidgets.QWidget):
                                QtCore.Qt.AlignmentFlag.AlignCenter, ch)
                 p.restore()
                 p.setPen(QtGui.QPen(color, 0.5))
+            elif f.role == "body" and r.height_mm >= 10:
+                p.drawText(QtCore.QRectF(r.x_mm + 1, r.y_mm + 5, r.width_mm - 1, 5),
+                           QtCore.Qt.AlignmentFlag.AlignLeft, "示例文字")
             title = (
                 f"{f.order}. 正文"
                 if f.role == "body"

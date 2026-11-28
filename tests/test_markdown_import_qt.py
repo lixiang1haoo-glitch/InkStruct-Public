@@ -45,6 +45,7 @@ def acknowledge(box):
     return QtWidgets.QMessageBox.Ok
 QtWidgets.QMessageBox.exec = acknowledge
 QtWidgets.QFileDialog.getOpenFileName = lambda *a: (str(path), "")
+w.choose_import_action = lambda: "replace"
 w.open_text()
 assert w.source_session.source == source and len(w.flow.images) == 3, (w.flow.images, warnings)
 assert len(warnings) == 1 and "3 处引用" in warnings[0][0]

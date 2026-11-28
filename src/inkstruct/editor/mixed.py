@@ -1401,26 +1401,47 @@ class MixedWindow(ReviewWindow):
                 if p.stat().st_size > 2 * 1024 * 1024:
                     raise ValueError("源码超过 2 MiB")
                 source = p.read_bytes().decode("utf-8-sig")
-                if self.mode == "markdown":
-                    self.import_markdown(source, p.parent)
-                else:
-                    self.replace_text(source)
+                current = self.source_session.source
+                action = self.choose_import_action() if current else "replace"
+                if action is None:
+                    return
+                self.import_markdown(source, p.parent, append=action == "append")
             except (ValueError, OSError) as error:
                 self.message_error(error)
 
-    def import_markdown(self, source, root):
-        if self.mode == "plain-text":
-            return self.replace_text(source)
+    def choose_import_action(self):
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("导入 Markdown / 文本")
+        box.setText("当前文档已有正文。如何导入所选文件？")
+        role = QtWidgets.QMessageBox.ButtonRole
+        append = box.addButton("在文末追加", role.AcceptRole)
+        replace_all = box.addButton("替换全文", role.DestructiveRole)
+        cancel = box.addButton("取消", role.RejectRole)
+        box.setDefaultButton(append)
+        box.setEscapeButton(cancel)
+        box.exec()
+        return {append: "append", replace_all: "replace"}.get(box.clickedButton())
+
+    def import_markdown(self, source, root, *, append=False):
         from ..document.images import import_local_images
 
-        document = parse_markdown(source, dialect=self.flow.source_dialect,
-                                  field_blocks=self.flow.named_fields)
-        references = {dict(node.attributes).get("src") for top in document.nodes
-                      for node in top.walk() if node.kind == "image"}
         previous = self.flow.images
-        kept = tuple(image for image in previous if image.source not in references)
-        flow, issues = import_local_images(document, replace(self.flow, images=kept), root)
-        edit = self.source_session.apply(0, len(self.source_session.source), source)
+        kept, flow, issues = previous, self.flow, ()
+        if self.mode == "markdown":
+            document = parse_markdown(source, dialect=flow.source_dialect,
+                                      field_blocks=flow.named_fields)
+            if not append:
+                references = {dict(node.attributes).get("src") for top in document.nodes
+                              for node in top.walk() if node.kind == "image"}
+                kept = tuple(image for image in previous if image.source not in references)
+            flow, issues = import_local_images(document, replace(flow, images=kept), root)
+        current = self.source_session.source
+        if append and not source:
+            return
+        needs_break = (append and current and not current.endswith(("\r", "\n"))
+                       and not source.startswith(("\r", "\n")))
+        separator = "\n" if needs_break else ""
+        edit = self.source_session.apply(len(current) if append else 0, len(current), separator + source)
         self.flow = flow
         self.source_error = None
         if previous != flow.images:
