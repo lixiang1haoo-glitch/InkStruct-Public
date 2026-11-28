@@ -341,16 +341,11 @@ class LocatedInlineParser(ParserInline):
         return state.tokens
 
 
-def make_parser(*, obsidian=False, cancelled=None) -> MarkdownIt:
+def make_parser(*, cancelled=None) -> MarkdownIt:
     md = MarkdownIt("commonmark", {"html": True, "typographer": False, "maxNesting": 32})
     md.block = LocatedBlockParser()
     md.inline = LocatedInlineParser()
     md.enable(["table", "strikethrough"])
-    if obsidian:
-        from .obsidian import callout_core, wiki_link
-
-        md.inline.ruler.before("link", "wiki_link", instrument_rule(wiki_link))
-        md.core.ruler.before("inline", "obsidian_callouts", callout_core)
     md.core.ruler.before("inline", "task_list_markers", task_list_core)
     md.core.ruler.disable(["normalize", "text_join"])
     if cancelled is not None:

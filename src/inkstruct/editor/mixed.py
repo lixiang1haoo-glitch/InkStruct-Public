@@ -479,14 +479,6 @@ class MixedWindow(ReviewWindow):
         self.mode_picker.setCurrentIndex(self.mode_picker.findData(self.mode))
         self.mode_picker.currentIndexChanged.connect(self.mode_changed)
         row.add_group(QtWidgets.QLabel("内容模式"), self.mode_picker)
-        self.dialect_picker = QtWidgets.QComboBox()
-        self.dialect_picker.addItem("普通 Markdown", "markdown")
-        self.dialect_picker.addItem("Obsidian 静态扩展", "obsidian")
-        self.dialect_picker.setToolTip(
-            "双链显示文字；Callout 展开；嵌入仅显示显式标签，不读取库内容"
-        )
-        self.dialect_picker.currentIndexChanged.connect(self.dialect_changed)
-        row.addWidget(self.dialect_picker)
         self.button("撤销正文", lambda: self.source_history("undo"), row)
         self.button("重做正文", lambda: self.source_history("redo"), row)
         self.optimize = QtWidgets.QCheckBox("优化路径（自动允许反转）")
@@ -569,7 +561,6 @@ class MixedWindow(ReviewWindow):
         self.editor.setPlaceholderText("输入或粘贴 Markdown" if markdown else "输入或粘贴文字")
         for control in (
             *self.flow_controls.values(),
-            self.dialect_picker,
             self.block_picker,
             self.table_settings_button,
             self.math_settings_button,
@@ -727,11 +718,6 @@ class MixedWindow(ReviewWindow):
             self.session_path = self.session_hash = None
         self.mode = self.mode_picker.currentData()
         self.flow = replace(self.flow, content_mode=self.mode)
-        self.mark_dirty()
-        self.schedule_layout()
-
-    def dialect_changed(self):
-        self.flow = replace(self.flow, markdown_dialect=self.dialect_picker.currentData())
         self.mark_dirty()
         self.schedule_layout()
 
@@ -1670,10 +1656,6 @@ class MixedWindow(ReviewWindow):
                 c.setValue(value)
         with QtCore.QSignalBlocker(self.mode_picker):
             self.mode_picker.setCurrentIndex(self.mode_picker.findData(self.mode))
-        with QtCore.QSignalBlocker(self.dialect_picker):
-            self.dialect_picker.setCurrentIndex(
-                self.dialect_picker.findData(self.flow.markdown_dialect)
-            )
 
     def open_project(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(

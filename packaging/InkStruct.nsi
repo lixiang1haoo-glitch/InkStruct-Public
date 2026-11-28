@@ -1,6 +1,7 @@
 Unicode true
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
 !include "LogicLib.nsh"
+!include "nsDialogs.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
 
@@ -19,10 +20,42 @@ VIAddVersionKey /LANG=2052 "ProductVersion" "${VERSION}"
 
 Page directory
 Page instfiles
+Page custom ShortcutPage ShortcutFinish
 UninstPage uninstConfirm
 UninstPage instfiles
 
 Var Isolated
+Var DesktopCheck
+Var MenuCheck
+Var DesktopDir
+Var MenuDir
+
+Function ShortcutPage
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateLabel} 0 0 100% 16u "安装完成。请选择从哪里打开 InkStruct。"
+  Pop $0
+  ${NSD_CreateCheckbox} 0 24u 100% 14u "添加桌面快捷方式"
+  Pop $DesktopCheck
+  ${NSD_Check} $DesktopCheck
+  ${NSD_CreateCheckbox} 0 46u 100% 14u "添加到开始菜单"
+  Pop $MenuCheck
+  nsDialogs::Show
+FunctionEnd
+
+Function ShortcutFinish
+  ${NSD_GetState} $DesktopCheck $0
+  ${If} $0 == ${BST_CHECKED}
+    CreateShortCut "$DesktopDir\InkStruct.lnk" "$INSTDIR\InkStruct.exe"
+  ${EndIf}
+  ${NSD_GetState} $MenuCheck $0
+  ${If} $0 == ${BST_CHECKED}
+    CreateShortCut "$MenuDir\InkStruct.lnk" "$INSTDIR\InkStruct.exe"
+  ${EndIf}
+FunctionEnd
 
 !define VC_RUNTIME_KEY "Software\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
 !define VC_RUNTIME_URL "https://aka.ms/vc14/vc_redist.x64.exe"
@@ -74,9 +107,27 @@ FunctionEnd
 Section "InkStruct"
   SetOutPath "$INSTDIR"
   File /r "${PAYLOAD}\*"
+  StrCpy $0 "$LOCALAPPDATA\InkStruct\workspace\fonts"
+  StrCpy $DesktopDir "$DESKTOP"
+  StrCpy $MenuDir "$SMPROGRAMS"
+  ${If} $Isolated == 1
+    StrCpy $0 "$INSTDIR\..\isolated-workspace\fonts"
+    StrCpy $DesktopDir "$INSTDIR\..\isolated-desktop"
+    StrCpy $MenuDir "$INSTDIR\..\isolated-menu"
+    CreateDirectory "$DesktopDir"
+    CreateDirectory "$MenuDir"
+  ${EndIf}
+  ExecWait '"$INSTDIR\InkStruct.exe" --install-reference-font "$0"' $1
+  ${If} ${Errors}
+  ${OrIf} $1 != 0
+    DetailPrint "参考字体安装失败。"
+    SetErrorLevel 11
+    Abort "参考字体安装失败。"
+  ${EndIf}
+  IfSilent 0 +2
+  CreateShortCut "$DesktopDir\InkStruct.lnk" "$INSTDIR\InkStruct.exe"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   ${If} $Isolated != 1
-    CreateShortCut "$SMPROGRAMS\InkStruct.lnk" "$INSTDIR\InkStruct.exe"
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\InkStruct" "DisplayName" "InkStruct"
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\InkStruct" "DisplayVersion" "${VERSION}"
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\InkStruct" "InstallLocation" "$INSTDIR"
@@ -91,6 +142,7 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
   ${If} $Isolated != 1
+    Delete "$DESKTOP\InkStruct.lnk"
     Delete "$SMPROGRAMS\InkStruct.lnk"
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\InkStruct"
   ${EndIf}

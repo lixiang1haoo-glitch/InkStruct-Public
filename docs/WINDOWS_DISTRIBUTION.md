@@ -4,12 +4,11 @@ Windows 版提供安装程序、免安装 ZIP 和对应源码。应用源码、�
 
 ## 构建产物和验证
 
-- 0.1.151 为 Windows 本机测试版。免安装包 `InkStruct-0.1.151-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.151-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，创建开始菜单入口。
+- 0.1.152 为 Windows 公开测试版。免安装包 `InkStruct-0.1.152-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.152-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，补齐字体库中的参考字体。完成时可选桌面快捷方式和开始菜单，默认只勾选桌面。
 - 更新后，写字机的所有 XY 移动共用「运动速度」。已有设备沿用保存的书写速度，新建设备默认 2500 mm/min。[写字机使用说明](USER_GUIDE.md#书写与限位提示)
 
-体验包从同版本的 Windows 构建派生。免安装体验包名为 `InkStruct-<版本>-Windows-x64-Portable-Experience.zip`。安装体验包名为 `InkStruct-<版本>-Windows-x64-Installer-Experience.zip`，解压后运行其中的 EXE。
+免安装用户可在字体库导入 ZIP 内的「参考字体.inkfont」。已有字体和文档绑定仍可继续使用。
 
-解压体验包后，在字体库点「导入字体…」并选择「示例资源」中的 `InkStruct 示例手写体.inkfont`。在模板库点「导入模板…」并选择 `双页预印教案.json`，可使用 183 × 259 mm 的双页预印模板。
 - 安装和免安装版本依赖 Microsoft Visual C++ x64 运行库 14.51 或更新版本。安装程序在运行库缺失或版本过低时提供微软下载入口。静默安装返回退出码 10。安装好运行库后重新运行安装程序。[微软官方下载](https://aka.ms/vc14/vc_redist.x64.exe)
 - 发行页附构建提交、依赖哈希和回归记录。隔离安装验收会跳过开始菜单与卸载注册。安装器未签名。
 

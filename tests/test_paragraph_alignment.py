@@ -29,7 +29,7 @@ def lines(snapshot):
     return result
 
 
-@pytest.mark.parametrize('dialect', ['markdown', 'obsidian'])
+@pytest.mark.parametrize('dialect', ['markdown'])
 def test_independent_controls_and_exclusions(dialect):
     inside = '# 甲\n\n乙\n\n|甲|\n|---|\n|乙|\n\n![甲](a.png)\n\n$$\n1\n$$\n\n> 甲\n\n- 乙\n\n```\n\\end{paragraphalign}\n```\n\n丙'
     source = '甲\n' + scoped('right', inside) + '\n丁'

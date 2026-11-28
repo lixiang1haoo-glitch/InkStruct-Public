@@ -129,7 +129,7 @@ def test_legacy_sampled_number_brackets_migrate_before_first_edit(tmp_path):
 def test_m5_combination_coverage_paging_routing_edit_undo_and_roundtrip(sample, tmp_path):
     s, r = SourceSession(FIXTURE.read_text()), resources()
     flow = FlowStyle(
-        markdown_dialect="obsidian",
+        markdown_dialect="markdown",
         math=STYLE
         if sample
         else replace(
@@ -187,7 +187,7 @@ def test_m5_combination_coverage_paging_routing_edit_undo_and_roundtrip(sample, 
     save_package(file, s, r, args["page"], args["style"], flow=flow, optimize=True)
     loaded = load_package(file)
     again = layout_markdown(
-        parse_markdown(loaded.session, dialect="obsidian"),
+        parse_markdown(loaded.session, dialect="markdown"),
         loaded.resolver,
         page=loaded.page,
         style=loaded.style,

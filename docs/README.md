@@ -80,7 +80,6 @@
 - [混排内容缓存](MARKDOWN_CACHE.md)：解析、资源解析、独立度量、完整布局、路由、页面 SVG 缓存及普通文档前后部续排，内容失效、请求隔离、容量控制与真实多页编辑测量。
 - [项目迁移与恢复](PROJECT_RECOVERY.md)：原生项目校验、独立恢复会话、故障注入与已安装环境迁移验证。
 - [复杂表格分页评估](COMPLEX_TABLE_PAGINATION.md)：rowspan 传递行组、超高单元格/脚注阻断、来源定位和后续内部拆分设计边界。
-- [Obsidian 静态扩展](OBSIDIAN_STATIC.md)：独立方言开关、双链可见标签、展开的 Callout、显式嵌入标签与来源定位。
 - [录制公式结构](MATH_SAMPLED_CONSTRUCTIONS.md)：录制减号分数线、分段适配根号和缩放括号，来源选择、原始轨迹保存与真实样张。
 - [受控数学语法](MATH_SYNTAX.md)：命令白名单、源区间、数学资源扫描和 M4a–M4c 受控手写公式几何。
 - [旧文档中的注释标记](FOOTNOTES.md)

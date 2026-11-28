@@ -31,7 +31,7 @@ NAMES = {
 OPTIONS = {
     "justify": "两端对齐", "left": "左对齐", "center": "居中", "right": "右对齐",
     "full": "整字宽", "handwriting": "按笔迹排列", "capture": "保留采集留白",
-    "markdown": "Markdown 混排", "plain-text": "纯文本", "obsidian": "Obsidian 静态扩展",
+    "markdown": "Markdown 混排", "plain-text": "纯文本",
 }
 
 

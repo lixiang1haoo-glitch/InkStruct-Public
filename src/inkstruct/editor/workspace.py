@@ -78,7 +78,7 @@ def organize_workspace(w):
     # while existing load/save paths continue using these authoritative controls.
     storage = QtWidgets.QWidget(w)
     storage.setObjectName('settings_backing_controls')
-    controls = [w.mode_picker, w.dialect_picker, w.em, w.line_height, w.stroke,
+    controls = [w.mode_picker, w.em, w.line_height, w.stroke,
                 *w.flow_controls.values(), w.run_label, w.template_settings_button,
                 w.math_settings_button, w.code_settings_button, w.table_settings_button,
                 w.image_settings_button]
@@ -172,7 +172,7 @@ def organize_workspace(w):
     right_layout = QtWidgets.QVBoxLayout(right)
     right_layout.setContentsMargins(0, 0, 0, 0)
     nav = QtWidgets.QHBoxLayout()
-    nav.addWidget(QtWidgets.QLabel("页面预览 · 连续滚动"))
+    nav.addWidget(QtWidgets.QLabel("页面预览"))
     w.page_picker.setToolTip("向上：上一页；向下：下一页。输入页码可直接跳转，滚动时页码自动更新")
     nav.addStretch()
     nav.addWidget(w.page_picker)

@@ -66,8 +66,6 @@ def inline_runs(node: SemanticNode, *, underline=False, strike=False):
         "softbreak",
         "hardbreak",
         "break_hint",
-        "wiki_link",
-        "wiki_embed",
     }:
         return [InlineRun(o, node.kind, underline, strike) for o in node.occurrences]
     if node.kind in {"inline", "em", "strong", "s", "link"}:

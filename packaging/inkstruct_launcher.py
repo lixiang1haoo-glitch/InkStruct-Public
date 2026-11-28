@@ -11,6 +11,10 @@ def main():
     # Without this, a font verification child would open another application.
     import multiprocessing
     multiprocessing.freeze_support()
+    if len(sys.argv) == 3 and sys.argv[1] == "--install-reference-font":
+        from inkstruct.fonts.reference import REFERENCE_FILE, install_reference
+        install_reference(Path(sys.executable).parent / REFERENCE_FILE, Path(sys.argv[2]))
+        return 0
     if len(sys.argv) > 2 and sys.argv[1] == '--inkstruct-preview-worker':
         os.environ['QT_QPA_PLATFORM'] = ('windows' if sys.platform == 'win32' and
                                        os.environ.get('INKSTRUCT_PREVIEW_BACKEND') == 'gpu' else 'offscreen')

@@ -8,7 +8,7 @@
 .venv/bin/inkstruct document resources path/to/report.inkdoc --capture-csv artifacts/new-capture.csv
 ```
 
-继承项目中的 Obsidian/普通 Markdown 方言、三类公式构件来源、资源和选择记录。隐藏的双链目标不成为采集需求，任务方框/图片占位不被当成普通字符。只使用项目内嵌资源，不能同时指定 `--run` 或 `--symbols`；旧 `.inktable` 导入仍需它所引用的样本包存在且哈希一致。
+继承项目中的 内容模式、三类公式构件来源、资源和选择记录。任务方框/图片占位不被当成普通字符。只使用项目内嵌资源，不能同时指定 `--run` 或 `--symbols`；旧 `.inktable` 导入仍需它所引用的样本包存在且哈希一致。
 
 已有资产/标定丢失时返回恢复资源诊断，不能自动换用另一个样本。扫描需要做出新选择时，只在临时副本中选择，结果列在 JSON 中，不写回 `.inkdoc`。原项目可以处于缺字草稿状态，但语法错误必须先处理，避免把未知语法误转为采集任务。
 
@@ -18,7 +18,7 @@
 .venv/bin/inkstruct document resources example.md --symbols /path/to/samples.zip --fraction-source sample --radical-source sample --delimiter-source sample --capture-csv artifacts/new-capture.csv
 ```
 
-三项来源可分别设为 `geometric` 或 `sample`；原文默认几何模式，原生项目默认继承已保存的模式，也允许显式覆盖用于比较。原生覆盖仅影响这次报告，不改项目设置。原文中的汉字可加 `--run`，Obsidian 原文加 `--dialect obsidian`。
+三项来源可分别设为 `geometric` 或 `sample`；原文默认几何模式，原生项目默认继承已保存的模式，也允许显式覆盖用于比较。原生覆盖仅影响这次报告，不改项目设置。原文中的汉字可加 `--run`。
 
 原文检查按明确提供的字库统计采集需求，不自动添加内置数字池；原生项目若已经内嵌内置数字，会视为可用。内置数字可用于布局验证，但不应被解释为作者已经采集过相应数字。
 
@@ -38,6 +38,6 @@ JSON 的 `construction_requirements` 给出每个构件的字符、源区间和�
 
 ## 证据
 
-`tests/test_document_resources.py` 覆盖 11 类结构、独立模式、精确源范围与布局身份一致、只读选样、旧选样不可恢复、Obsidian 原生继承/覆盖、Unicode 区分、定义内公式、退化字形与就绪状态区分，以及两种旧表格资源模式。专项 19 项通过；全量 1293 passed、4 skipped（收集于最后两项旧表格专项加入前），后补两项已包含在专项通过记录中。
+`tests/test_document_resources.py` 覆盖 11 类结构、独立模式、精确源范围与布局身份一致、只读选样、旧选样不可恢复、原生设置继承/覆盖、Unicode 区分、定义内公式、退化字形与就绪状态区分，以及两种旧表格资源模式。专项 19 项通过；全量 1293 passed、4 skipped（收集于最后两项旧表格专项加入前），后补两项已包含在专项通过记录中。
 
 真实验证为 `artifacts/markdown_resource_scan_20261013/result/`：四页 M5 项目含 23 个录制结构需求，完整包零缺口；另建草稿去掉 `−√()` 后恰有四类缺口，CSV 各 5 次。扫描前后输入哈希一致，原真实项目和用户 ZIP 未改动。根目录的第一次试跑将需求数预期误记为 20，实际逐式核对为 23；仅 `result/` 是完成验证的产物，脚本 `verify_real.py` 保留复现过程。

@@ -83,8 +83,8 @@ def test_missing_selected_specimen_reports_restore_without_reselecting():
 
 
 def test_native_scan_inherits_dialect_sources_assets_and_does_not_write_project(tmp_path, capsys):
-    s = SourceSession("[[隐藏路径|12]] $\\sqrt{\\frac{1}{2}}$ $\\left(3\\right)$")
-    flow = FlowStyle(math=STYLE, markdown_dialect="obsidian")
+    s = SourceSession("[12](https://example.org) $\\sqrt{\\frac{1}{2}}$ $\\left(3\\right)$")
+    flow = FlowStyle(math=STYLE, markdown_dialect="markdown")
     file, capture = tmp_path / "draft.inkdoc", tmp_path / "capture.csv"
     save_package(
         file, s, AssetResolver(builtin_numbers=True), PageProfile(), StyleProfile(), flow=flow
@@ -92,7 +92,7 @@ def test_native_scan_inherits_dialect_sources_assets_and_does_not_write_project(
     original = file.read_bytes()
     assert main(["document", "resources", str(file), "--capture-csv", str(capture)]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["dialect"] == "obsidian"
+    assert report["dialect"] == "markdown"
     assert {g["character"] for g in report["gaps"]} == {"√", "−", "(", ")"}
     rows = list(csv.DictReader(capture.open(encoding="utf-8-sig")))
     assert len(rows) == 4 and all(row["repeats"] == "5" for row in rows)
@@ -146,14 +146,15 @@ def test_raw_mode_is_explicit_and_unicode_requirements_do_not_alias(tmp_path, ca
     assert not {"-", "∥"} & {g["character"] for g in report["gaps"]}
 
 
-def test_notes_and_fixed_source_requirements_are_not_lost_and_geometric_rules_need_no_assets():
+def test_literal_markers_and_fixed_source_requirements_are_not_lost_and_geometric_rules_need_no_assets():
     doc = parse_markdown("1[^a]\n\n[^a]: $\\sqrt{2}$ $\\overline{3}$")
     r = AssetResolver(builtin_numbers=True)
     report = inspect_resources(doc, r, flow=FlowStyle(math=STYLE))
-    assert [g["character"] for g in report["gaps"]] == ["√", "−"]
+    literal = {"[", "^", "a", "]", ":"}
+    assert {g["character"] for g in report["gaps"]} == literal | {"√", "−"}
     assert len(report["construction_requirements"]) == 2
     geometric = FlowStyle(math=MathStyle(fraction_source="geometric"))
-    assert not inspect_resources(doc, r, flow=geometric)["gaps"]
+    assert {g["character"] for g in inspect_resources(doc, r, flow=geometric)["gaps"]} == literal
 
 
 def test_existing_choices_are_returned_unchanged_and_geometry_is_not_claimed():

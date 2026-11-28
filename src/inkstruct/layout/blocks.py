@@ -118,7 +118,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
         flush()
 
     def visit(node, indent=0, quote=0, marker=""):
-        if node.kind in {"paragraph", "heading", "callout_title"}:
+        if node.kind in {"paragraph", "heading"}:
             children = node.children[0].children if len(node.children) == 1 else ()
             if (
                 node.kind == "paragraph"
@@ -158,7 +158,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
                     quote,
                     marker,
                     scale if node.kind == "heading" else 1,
-                    node.kind in {"heading", "callout_title"},
+                    node.kind == "heading",
                     task=task,
                     first_indent=(
                         flow.first_line_indent_mm
@@ -168,7 +168,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
                     paragraph_align=alignment,
                 )
             )
-        elif node.kind in {"blockquote", "callout"}:
+        elif node.kind == "blockquote":
             for child in node.children:
                 visit(child, indent + flow.quote_indent_mm, quote + 1)
         elif node.kind in {"bullet_list", "ordered_list"}:

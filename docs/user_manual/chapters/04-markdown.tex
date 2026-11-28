@@ -77,23 +77,6 @@ PNG / JPEG & 作为完整图片，与手写图题一起预览。 & 参考 SVG/PN
 \subsection{图片标注（0.1.75）}
 在排版预览中选中图片，在右侧\ui{表格与图片}点\ui{编辑图片标注…}。在独立窗口中点\ui{添加文字…}，再点击图内位置。可输入单行文字或行内公式，例如 \code{$F_1$}。标注沿用文档字体，可拖动位置或单独调整字号。点\ui{应用}后保存项目。导出写字机 SVG 时，标注会转为书写路径。
 
-\section{Obsidian 静态扩展}
-\entry{设置 → 正文 → Markdown 格式 → Obsidian 静态扩展}
-\par\noindent\begin{minipage}{\linewidth}
-\begin{Source}
-[[资料/测量|12.50]]
-
-> [!note]- 测量记录
-> 13.25
-
-![[附件/原记录|原记录说明]]
-\end{Source}
-\end{minipage}\par\medskip
-双链只显示标签；无别名时显示目标文字。Callout 按引用样式展开，折叠标记不会把纸面内容隐藏。带显式标签的嵌入只显示标签，并提醒目标内容未展开；没有标签的嵌入会报错。该模式不读取 Obsidian 库，也不执行插件、CSS、动态查询或递归嵌入。
-
-管道表格中的别名分隔符应转义，例如 \code{[[资料/测量\|12.50]]}。需要真正放入图片时，使用普通 Markdown 图片和显式资源导入流程。
-
-
 \section{AI 生成内容与换行分页}
 预期由 AI 读取项目的 Markdown 生成规范和用户要求，生成正文后复制粘贴或导入。\code{\newline}、\code{\linebreak} 强制换行；\code{\newpage}、\code{\pagebreak}、\code{\clearpage} 进入下一物理页；\code{\framebreak} 仅在连续正文流中进入下一个文本框。两类跳转不在表格单元格或固定字段中执行。控制语法直接包含在 Markdown 中，无需新增插入按钮。当前无浮动图表队列，\code{\clearpage} 与普通强制分页的可见效果相同。
 

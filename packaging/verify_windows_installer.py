@@ -38,6 +38,16 @@ def main():
             if digest(installed / filename) != sha256(source.read(member)).hexdigest():
                 raise ValueError(f"Installed file differs from the verified ZIP: {filename}")
     assert (installed / "_internal/licenses/runtime/NSIS-COPYING.txt").is_file()
+    library = output / "isolated-workspace" / "fonts"
+    reference = library / "参考字体.inkfont"
+    assert digest(reference) == digest(installed / reference.name)
+    reference = reference.rename(library / "renamed.inkfont")
+    modified = reference.stat().st_mtime_ns
+    assert (output / "isolated-desktop/InkStruct.lnk").is_file()
+    assert not (output / "isolated-menu/InkStruct.lnk").exists()
+    subprocess.run(f'"{installer}" /S /ISOLATED /D={installed}', env=env, cwd=output,
+                   timeout=120, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    assert list(library.glob("*.inkfont")) == [reference] and reference.stat().st_mtime_ns == modified
     font = synthetic_font(output)
     native = verify(installed / "InkStruct.exe", "installed-native", "--windows-style-check", font, output)
     sentinel = installed / "user-files" / "keep.txt"
@@ -52,7 +62,8 @@ def main():
     remaining = [path for path in installed.rglob("*") if path.is_file()]
     if remaining != [sentinel] or digest(sentinel) != previous:
         raise ValueError(f"Uninstall did not remove only the installed payload: {remaining[:10]}")
-    result = {"installer_sha256": record["sha256"], "installed_zip_members_exact": len(members),
+    assert reference.is_file() and reference.stat().st_mtime_ns == modified
+    result = {"reference_font_clean_upgrade_uninstall": True, "installer_sha256": record["sha256"], "installed_zip_members_exact": len(members),
               "native": native, "uninstall_preserved_synthetic_user_data": True,
               "shell_integration_skipped_for_isolation": True}
     (output / "installer-verification.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

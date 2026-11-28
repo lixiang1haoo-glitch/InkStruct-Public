@@ -269,10 +269,10 @@ class MachinePanel(QtWidgets.QWidget):
         self.route_stats = label("")
         write_layout.addWidget(self.route_stats)
         self.route_stats.hide()
-        self.optimize = QtWidgets.QCheckBox("优化书写路径（同 SVG 导出）")
-        self.optimize.setChecked(True)
-        self.optimize.toggled.connect(self.change_routing)
-        write_layout.addWidget(self.optimize)
+        self.original_order = QtWidgets.QCheckBox("按原笔序书写")
+        self.prefer_original_order = False
+        self.original_order.toggled.connect(self.change_routing)
+        write_layout.addWidget(self.original_order)
         self.resume_hint = label("")
         write_layout.addWidget(self.resume_hint)
         write_layout.addWidget(self.write_button)
@@ -854,7 +854,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.estimate_label.setText("正在计算本页预计用时…")
             self.route_stats.hide()
             self.route_stats.clear()
-            self.optimize.setEnabled(False)
+            self.original_order.setEnabled(False)
             self.refresh_buttons()
         background = self.snapshot.pages[page.index].background
         args = (key[0], self.snapshot.document_id, page, background.sha256 if background else "", device_id)
@@ -889,6 +889,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.done, self.uncertain = 0, False
         self.journal, routed, legacy = self.prepared
         version = ROUTING_VERSION
+        with QtCore.QSignalBlocker(self.original_order):
+            self.original_order.setChecked(self.prefer_original_order)
         if self.journal:
             try:
                 self.done, self.uncertain = self.journal.read()
@@ -904,18 +906,18 @@ class MachinePanel(QtWidgets.QWidget):
                     self.saved_placement = data.get("placement")
                     if type(optimized) is not bool:
                         raise ValueError("笔序记录损坏")
-                    with QtCore.QSignalBlocker(self.optimize):
-                        self.optimize.setChecked(optimized)
+                    with QtCore.QSignalBlocker(self.original_order):
+                        self.original_order.setChecked(not optimized)
             except (KeyError, TypeError, ValueError, OSError) as error:
                 self.progress_error = f"无法读取续写记录：{error}"
-            self.journal = replace(self.journal, optimized=self.optimize.isChecked(), route_version=version)
+            self.journal = replace(self.journal, optimized=not self.original_order.isChecked(), route_version=version)
         if version == LEGACY_ROUTE:
             routed = legacy
-        selected = routed if self.optimize.isChecked() else page
+        selected = page if self.original_order.isChecked() else routed
         if selected is not self.paper_page:
             self.unplaced_preview = None
         self.paper_page = selected
-        self.optimize.setEnabled(not (self.journal and self.journal.path.exists()))
+        self.original_order.setEnabled(not (self.journal and self.journal.path.exists()))
 
     def placement_details(self):
         if not self.registration or not self.profile:
@@ -926,6 +928,7 @@ class MachinePanel(QtWidgets.QWidget):
                 "pen": self.profile.active_pen, "connection": self.connection_id}
 
     def change_routing(self):
+        self.prefer_original_order = self.original_order.isChecked()
         if self.prepared is None or self.busy:
             return
         self.placement_work.cancel()
@@ -1465,7 +1468,7 @@ class MachinePanel(QtWidgets.QWidget):
                 self.display_remaining()
                 self.run_estimate = (self.base_estimate if self.page_timing else
                                      estimate_seconds(job.strokes[start:], self.profile.feed, self.device.position[:2]))
-                self.optimize.setEnabled(False)
+                self.original_order.setEnabled(False)
             self.progress.setRange(0, len(job.strokes))
             self.progress.setFormat("%v / %m 笔 · %p%")
             self.progress.setValue(start)

@@ -26,7 +26,7 @@ def project(tmp_path, width=110, source="12.3\n\n45.6\n\n78.9"):
         anchors=(Anchor("baseline", 12, 18),),
     )
     template = PageTemplate("Generic test", width, 150, face, face)
-    flow = FlowStyle(template=template, markdown_dialect="obsidian")
+    flow = FlowStyle(template=template, markdown_dialect="markdown")
     session = SourceSession(source)
     resolver = AssetResolver(builtin_numbers=True)
     layout_markdown(parse_markdown(session), resolver, flow=flow)
@@ -94,7 +94,7 @@ def test_inspect_bind_reopen_preserves_native_content_and_removal(tmp_path, caps
     assert code == 0 and not report["content_fit_checked"]
     assert report["project_sha256"] == sha256(original).hexdigest()
     assert [n["source"] for n in report["nodes"]] == ["12.3\n", "45.6\n", "78.9"]
-    assert report["dialect"] == "obsidian"
+    assert report["dialect"] == "markdown"
     bindings = request(tmp_path, report)
     output = tmp_path / "bound.inkdoc"
     code, result = command(capsys, "bind", path, "--bindings", bindings, "--output", output)

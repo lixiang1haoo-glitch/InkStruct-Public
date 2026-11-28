@@ -142,7 +142,7 @@ def test_invalidations_equal_uncached_rebuild(change, monkeypatch):
             inputs["flow"], **{change: replace(current, **{field: getattr(current, field) * 1.1})}
         )
     elif change == "dialect":
-        inputs["flow"] = replace(inputs["flow"], markdown_dialect="obsidian")
+        inputs["flow"] = replace(inputs["flow"], content_mode="plain-text")
     elif change == "seed":
         inputs["resolver"] = AssetResolver(embedded=(one, two), seed=3, builtin_numbers=True)
     elif change == "document":

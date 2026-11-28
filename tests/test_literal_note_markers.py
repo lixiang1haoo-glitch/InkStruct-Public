@@ -49,7 +49,7 @@ def test_markers_keep_text_and_spans_after_reopen(tmp_path, grid):
         assert "footnote" not in json.loads(archive.read("styles.json"))["flow"]
     saved = load_package(copy)
     assert saved.session.source == text and saved.flow == flow
-    for dialect in ("markdown", "obsidian"):
+    for dialect in ("markdown",):
         parsed = parse_markdown(saved.session, dialect=dialect)
         kinds = {n.kind for root in parsed.nodes for n in root.walk()}
         assert {"math_inline", "link"} <= kinds

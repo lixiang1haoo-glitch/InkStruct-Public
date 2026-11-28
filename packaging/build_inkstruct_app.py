@@ -57,8 +57,7 @@ def source_snapshot():
         ROOT / "packaging/nsis-win.lock.json",
         ROOT / "packaging/InkStruct.nsi",
         ROOT / "packaging/build_windows_installer.py",
-        ROOT / "packaging/build_windows_experience.py",
-        ROOT / "packaging/experience-resources.lock.json",
+        ROOT / "packaging/build_reference_font.py",
         ROOT / "packaging/verify_windows_installer.py",
         *sorted((ROOT / "configs").rglob("*.json")),
         *sorted((ROOT / "configs/character_sets").glob("*.txt")),
@@ -132,7 +131,11 @@ def main():
         if sys.platform == "win32":
             from windows_bundle import prepare_windows_bundle
 
-            windows_validation = prepare_windows_bundle(output / "dist/InkStruct", log)
+            from build_reference_font import build_reference_font
+
+            bundle = output / "dist/InkStruct"
+            windows_validation = prepare_windows_bundle(bundle, log)
+            windows_validation["reference_font"] = build_reference_font(ROOT, bundle)
     if before != source_snapshot():
         raise ValueError("构建期间源码发生变化，当前包不可作为冻结版本验收；请检查后重建")
     bundle_validation = (

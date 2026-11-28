@@ -251,9 +251,8 @@ def apply_to_document(editor, defaults, *, resources=None, apply_template=False,
             value = getattr(flow, key)
             control.setRange(min(control.minimum(), value), max(control.maximum(), value))
             control.setValue(value)
-    with QtCore.QSignalBlocker(editor.mode_picker), QtCore.QSignalBlocker(editor.dialect_picker):
+    with QtCore.QSignalBlocker(editor.mode_picker):
         editor.mode_picker.setCurrentIndex(editor.mode_picker.findData(defaults.mode))
-        editor.dialect_picker.setCurrentIndex(editor.dialect_picker.findData(flow.markdown_dialect))
     editor.mark_dirty()
     editor.schedule_layout()
     return True

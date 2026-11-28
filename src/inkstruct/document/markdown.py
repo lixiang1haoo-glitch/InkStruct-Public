@@ -13,7 +13,6 @@ from .image_labels import (
     bind_image_labels, validate_label_text,
 )
 from .limits import bounded_parse, validate_nodes
-from .obsidian import OBSIDIAN_VERSION
 from .paragraph_align import resolve_paragraph_alignment
 from .schema import Diagnostic, Occurrence, SourceSpan, digest
 from .source import clusters
@@ -102,9 +101,9 @@ def literal_document(session, cancelled):
 def dialect_version(dialect):
     if dialect == "plain-text":
         return PLAIN_DIALECT
-    if dialect not in {"markdown", "obsidian"}:
+    if dialect != "markdown":
         raise ValueError("Unknown Markdown dialect")
-    return OBSIDIAN_VERSION if dialect == "obsidian" else DIALECT_VERSION
+    return DIALECT_VERSION
 
 
 @bounded_parse
@@ -264,8 +263,6 @@ def parse_markdown(
                         "code_inline",
                         "fence",
                         "code_block",
-                        "wiki_link",
-                        "wiki_embed",
                     }
                     and token.content
                 ):
@@ -294,22 +291,6 @@ def parse_markdown(
                     text = " " if token.type == "break_hint" else "\n"
                     identity = session.occurrence_id(span, role=token.type, text=text)
                     occurrences.append(Occurrence(identity, node_id, span, text))
-                if token.type in {"wiki_link", "wiki_embed"}:
-                    if token.meta.get("obsidian_error"):
-                        diagnostics.append(
-                            Diagnostic(
-                                "obsidian-reference-invalid", token.meta["obsidian_error"], span
-                            )
-                        )
-                    elif token.type == "wiki_embed":
-                        diagnostics.append(
-                            Diagnostic(
-                                "obsidian-embed-label-only",
-                                "Embed is shown as its explicit label; target content is not expanded",
-                                span,
-                                "warning",
-                            )
-                        )
                 if token.type in {"html_block", "html_inline", "image"}:
                     diagnostics.append(
                         Diagnostic(
@@ -335,7 +316,7 @@ def parse_markdown(
         return tuple(roots)
 
     # HTML is parsed into inert source nodes, never executed, fetched or rendered here.
-    parser = make_parser(obsidian=dialect == "obsidian", cancelled=cancelled)
+    parser = make_parser(cancelled=cancelled)
     if field_blocks:
         from .named_fields import install_fields
         install_fields(parser,cancelled)

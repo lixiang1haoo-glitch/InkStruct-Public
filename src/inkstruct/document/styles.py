@@ -115,7 +115,9 @@ class FlowStyle:
         object.__setattr__(self, "glyph_corrections", corrections)
         if self.content_mode not in {"markdown", "plain-text"}:
             raise ValueError("Unknown document content mode")
-        if self.markdown_dialect not in {"markdown", "obsidian"}:
+        if self.markdown_dialect == "obsidian":
+            object.__setattr__(self, "markdown_dialect", "markdown")
+        if self.markdown_dialect != "markdown":
             raise ValueError("Unknown Markdown dialect")
         images = tuple(
             (LineSvgResource(**v) if v.get("schema_version") == SVG_SCHEMA else RasterResource(**v))

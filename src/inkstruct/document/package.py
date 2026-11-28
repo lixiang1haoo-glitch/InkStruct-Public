@@ -38,11 +38,12 @@ TEMPLATE_VERSION = "inkstruct_document_package_v3"
 # Only these exact historical grammars are accepted, never arbitrary revisions.
 PACKAGE_DIALECTS = {
     name: frozenset({
-        dialect_version(name),
-        dialect_version(name).removesuffix("/break-commands-v2"),
-        dialect_version(name).removesuffix("/break-commands-v2") + "/break-commands-v1",
+        version,
+        version.removesuffix("/break-commands-v2"),
+        version.removesuffix("/break-commands-v2") + "/break-commands-v1",
     })
-    for name in ("markdown", "obsidian")
+    for name, version in (("markdown", dialect_version("markdown")),
+                          ("obsidian", "inkstruct-obsidian-static-v1/markdown-it-py-4.0.0/break-commands-v2"))
 }
 PACKAGE_DIALECTS["plain-text"] = {dialect_version("plain-text")}
 MAX_MEMBER_BYTES = 16_000_000

@@ -98,22 +98,53 @@ def exercise(folder):
         panel.set_document(snap, 0, True)
         expected = route_page(panel.raw_page, optimize=True).page
         assert panel.paper_page.strokes == expected.strokes != panel.raw_page.strokes
-        panel.optimize.setChecked(False)
+        from test_plotter_machine import SimulatedGrbl
+        from inkstruct.plotter.grbl import GrblLink, MotionControl
+        from inkstruct.plotter.physical import WorkArea
+
+        def dispatched_xy():
+            serial = SimulatedGrbl()
+            link = GrblLink(serial)
+            link.connect()
+            placed = position_page(panel.paper_page, PaperRegistration((0, 0)))
+            link.run_page(placed, WorkArea(0, 0, 100, 100), MotionControl(), dry_run=False, feed=900)
+            strokes = []
+            down = False
+            tip = (0., 0.)
+            for line in serial.commands:
+                if line.startswith(b"G1 Z"):
+                    down = float(line.split()[1][1:]) < 0
+                    if down:
+                        strokes.append([tip])
+                elif line.startswith(b"G1 X"):
+                    tip = tuple(float(word[1:]) for word in line.split()[1:3])
+                    if down:
+                        strokes[-1].append(tip)
+            return list(map(tuple, strokes))
+
+        assert not panel.original_order.isChecked()
+        actual = dispatched_xy()
+        assert actual == [stroke.points for stroke in expected.strokes]
+        panel.original_order.setChecked(True)
         assert panel.paper_page is panel.raw_page
-        panel.optimize.setChecked(True)
+        assert dispatched_xy() == [stroke.points for stroke in panel.raw_page.strokes]
+        source = [stroke.points for stroke in panel.raw_page.strokes]
+        assert any(stroke.points[::-1] in source for stroke in expected.strokes)
+        assert [frozenset(s.points) for s in expected.strokes] != list(map(frozenset, source))
+        panel.original_order.setChecked(False)
         journal = panel.journal
         journal.save(2, True)
         record = json.loads(journal.path.read_bytes())
         assert record.pop("route_version") == ROUTING_VERSION
         journal.path.write_text(json.dumps(record), encoding="utf-8")
         panel.change_page()
-        assert panel.paper_page is panel.raw_page and not panel.optimize.isEnabled()
+        assert panel.paper_page is panel.raw_page and not panel.original_order.isEnabled()
         assert panel.done == 2 and panel.uncertain
         panel.journal.save(3, False)
         assert json.loads(journal.path.read_bytes())["route_version"] != ROUTING_VERSION
         journal.path.unlink()
         panel.change_page()
-        assert panel.paper_page.strokes == expected.strokes and panel.optimize.isEnabled()
+        assert panel.paper_page.strokes == expected.strokes and panel.original_order.isEnabled()
 
         # A progress signal can arrive before the worker finishes measuring a dense page.
         from inkstruct.plotter.profiles import PageAlignment

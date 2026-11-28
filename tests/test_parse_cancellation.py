@@ -15,7 +15,7 @@ from inkstruct.layout.inline import LayoutCancelled as LegacyCancelled
 @pytest.mark.parametrize("path", sorted(Path("examples").glob("markdown*.md")))
 def test_uncancelled_parser_keeps_exact_tree_ranges_and_diagnostics(path):
     session = SourceSession(path.read_text())
-    for dialect in ("markdown", "obsidian"):
+    for dialect in ("markdown",):
         expected = markdown.parse_markdown(session, dialect=dialect)
         assert (
             markdown.parse_markdown(session, dialect=dialect, cancelled=threading.Event())

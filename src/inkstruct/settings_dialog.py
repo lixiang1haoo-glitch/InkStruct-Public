@@ -32,7 +32,7 @@ CATEGORIES = (
         "body",
         "排版默认设置",
         "正文与段落",
-        "内容模式 Markdown Obsidian 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 汉字间距 英文 字母与数字间距 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
+        "内容模式 Markdown 字高 行高 笔宽 段距 标题 首行 列表 引用 缩进 汉字间距 英文 字母与数字间距 字距 标点 句读 间距 对齐 两端 抖动 中文 微扰 随机 种子",
     ),
     (
         "math",
@@ -56,12 +56,7 @@ class BodyPage(QtWidgets.QWidget):
         self.mode.addItem("Markdown 混排", "markdown")
         self.mode.addItem("纯文本", "plain-text")
         self.mode.setCurrentIndex(self.mode.findData(owner.mode))
-        self.dialect = QtWidgets.QComboBox()
-        self.dialect.addItem("普通 Markdown", "markdown")
-        self.dialect.addItem("Obsidian 静态扩展", "obsidian")
-        self.dialect.setCurrentIndex(self.dialect.findData(owner.flow.markdown_dialect))
         form.addRow("内容模式", self.mode)
-        form.addRow("Markdown 格式", self.dialect)
         self.paragraph_align = QtWidgets.QComboBox()
         self.paragraph_align.setObjectName("paragraph_align")
         self.paragraph_align.setAccessibleName("正文对齐")
@@ -169,7 +164,6 @@ class BodyPage(QtWidgets.QWidget):
 
         def show_mode_settings():
             markdown = self.mode.currentData() == "markdown"
-            form.setRowVisible(self.dialect, markdown)
             for widget in (paragraph_title, self.flow, heading_title, self.heading_group):
                 widget.setVisible(markdown)
 
@@ -187,7 +181,6 @@ class BodyPage(QtWidgets.QWidget):
         )
         return self.style.configuration(), {k: getattr(flow, k) for k in self.flow.controls} | {
             "heading_scales": headings,
-            "markdown_dialect": self.dialect.currentData(),
             "heading_gap_mm": self.heading_group.configuration().heading_gap_mm,
             "paragraph_align": self.paragraph_align.currentData(),
             "han_variation": self.variation_configuration(),
@@ -211,7 +204,6 @@ class BodyPage(QtWidgets.QWidget):
         self.style.reset_defaults()
         self.flow.reset_defaults()
         self.mode.setCurrentIndex(0)
-        self.dialect.setCurrentIndex(0)
         self.heading_group.reset_defaults()
         self.paragraph_align.setCurrentIndex(0)
         self.han_enabled.setChecked(False)

@@ -32,7 +32,7 @@ def add_document_parser(groups) -> None:
     for command in (inspector, resources):
         command.add_argument(
             "--dialect",
-            choices=("markdown", "obsidian"),
+            choices=("markdown",),
             default="markdown" if command is inspector else None,
         )
     resources.add_argument("--run", type=Path)
@@ -50,7 +50,7 @@ def add_document_parser(groups) -> None:
         p.add_argument("--mode", choices=("plain-text", "markdown"), default="plain-text")
         p.add_argument(
             "--dialect",
-            choices=("markdown", "obsidian"),
+            choices=("markdown",),
             help="Markdown dialect; inherit portable project setting",
         )
         p.add_argument("--run", type=Path, help="existing generated run directory")

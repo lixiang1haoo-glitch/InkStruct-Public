@@ -11,7 +11,7 @@ from ..document.han_variation import LEGACY
 
 def eligible_occurrences(document):
     return {o.occurrence_id for root in document.nodes for node in root.walk()
-            if node.kind in {"text", "text_special", "wiki_link", "wiki_embed"}
+            if node.kind in {"text", "text_special"}
             for o in node.occurrences if o.text and is_han(o.text[0])}
 
 
@@ -51,7 +51,7 @@ def legacy_strokes(strokes, occurrence_id, config):
     return tuple(tuple(point(p) for p in stroke) for stroke in warped)
 
 
-TEXT_KINDS = {"literal_text", "text", "text_special", "wiki_link", "wiki_embed"}
+TEXT_KINDS = {"literal_text", "text", "text_special"}
 
 
 def random_values(identity, seed, channel):

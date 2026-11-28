@@ -468,7 +468,7 @@ def _historical_package(session, resolver, flow, suffix):
     return output.getvalue()
 
 
-@pytest.mark.parametrize("dialect", ["markdown", "obsidian"])
+@pytest.mark.parametrize("dialect", ["markdown"])
 def test_legacy_paging_aliases_migrate_explicitly_without_modifying_original_or_choices(tmp_path, dialect):
     session = SourceSession(r"1\newpage2\pagebreak[4]3\clearpage4")
     resolver = AssetResolver(builtin_numbers=True)
@@ -509,7 +509,7 @@ def test_legacy_migration_preserves_code_escaping_weak_options_and_command_bound
     assert len(loaded.migration_notice) > 0
 
 
-@pytest.mark.parametrize("dialect", ["markdown", "obsidian"])
+@pytest.mark.parametrize("dialect", ["markdown"])
 @pytest.mark.parametrize("suffix", ["", "/break-commands-v1", "/break-commands-v2"])
 def test_known_historical_grammars_without_controls_open_unchanged(tmp_path, dialect, suffix):
     session, resolver = SourceSession("123"), AssetResolver(builtin_numbers=True)
