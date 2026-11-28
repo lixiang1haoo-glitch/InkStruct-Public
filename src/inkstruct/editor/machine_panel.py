@@ -164,6 +164,8 @@ class MachinePanel(QtWidgets.QWidget):
     page_selected = QtCore.Signal(int)
     status_changed = QtCore.Signal(str)
     machine_state = QtCore.Signal()
+    connection_changed = QtCore.Signal(bool)
+    machine_error = QtCore.Signal(str)
 
     def __init__(self, parent, *, worker_factory=N1Worker, ports=serial_ports):
         super().__init__(parent)
@@ -434,10 +436,13 @@ class MachinePanel(QtWidgets.QWidget):
             raise ValueError("请确认已连接对应的设备，抬笔停稳并重新读取基准点。")
         return status.position[:2]
 
-    def begin_dock_trial(self, status):
+    def begin_dock_trial(self, status, mode=""):
+        if mode not in ("", "zero", "retained"):
+            raise ValueError("请选择设备的重启行为。")
         point = self._require_datum_reading(status)
         self.invalidate_datum()
-        self.dock_trial = DockTrial(self.profile.id, point, self.connection_id)
+        self.dock_trial = DockTrial(self.profile.id, point, self.connection_id,
+                                    mode=mode, origin=point if mode else None)
         self.refresh_buttons()
 
     def record_restart(self, status):
@@ -460,11 +465,11 @@ class MachinePanel(QtWidgets.QWidget):
         trial = self.dock_trial
         if not (trial and trial.mode and trial.connection == self.connection_id
                 and trial.trial_axes is not None and self.device and self.pen_raised):
-            raise ValueError("请完成三轮重启和 X/Y 试画，再保存核对后的方向和比例。")
+            raise ValueError("请先确认停靠点并完成 X/Y 试画，再保存方向和比例。")
         profile = replace(self.profile, axes=axes, datum=None,
                           area=area, offset=self.offset, limit_area_enabled=area is not None)
         datum = replace(DeviceDatum.create(profile, "停靠点"), boot_mode=trial.mode,
-                        restart_positions=(trial.initial, *trial.readings))
+                        restart_positions=(trial.initial, *trial.readings) if trial.readings else ())
         if area is not None:
             area.require(trial.origin, "停靠点")
             datum = replace(datum, area=datum.to_body_area(area, trial.origin))
@@ -552,12 +557,12 @@ class MachinePanel(QtWidgets.QWidget):
         finally:
             dialog.deleteLater()
 
-    def open_initialization(self, parent=None):
+    def open_initialization(self, parent=None, *, detect=False):
         from .machine_initialization import InitializationDialog
 
         if self.busy is not None or self.device is None or self.dock_trial is not None:
             return
-        dialog = InitializationDialog(self, parent or self)
+        dialog = InitializationDialog(self, parent or self, detect=detect)
         try:
             dialog.exec()
         finally:
@@ -575,11 +580,11 @@ class MachinePanel(QtWidgets.QWidget):
         finally:
             dialog.deleteLater()
 
-    def capture_position(self, callback, *, datum=False):
+    def capture_position(self, callback, *, datum=False, commissioning=False):
         if self.device is None:
             return False
         context = self.connection_id, self.profile, self.frame, self.offset
-        if self.submit("position-datum" if datum else "position-read"):
+        if self.submit("position-datum" if datum else "position-read", commissioning):
             self.position_callback = callback, context
             return True
         return False
@@ -700,6 +705,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.refresh_buttons()
 
     def message(self, text, error=False, *, page_specific=False):
+        if error:
+            self.machine_error.emit(text)
         self.page_report = page_specific
         self.report.setText(text)
         set_tone(self.report, "danger" if error else "status")
@@ -1269,13 +1276,13 @@ class MachinePanel(QtWidgets.QWidget):
             if token == self.connection_id and not self.closing:
                 self.recovery_options()
 
-    def toggle_connection(self):
+    def toggle_connection(self, *, confirmed_profile=None):
         if port := getattr(self.worker, "retained_port", None):
             self.submit("connect", port, self.profile.serial)
         elif self.device is None:
             self.refresh_ports()
             if port := self.available_port():
-                if not self.profile.serial and not self.confirm("核对设备",
+                if not self.profile.serial and confirmed_profile != self.profile.id and not self.confirm("核对设备",
                         f"此串口没有设备序列号。请确认连接的是「{self.profile.name}」原先登记的写字机。"):
                     return
                 if self.submit("connect", port, self.profile.serial):
@@ -1597,7 +1604,9 @@ class MachinePanel(QtWidgets.QWidget):
                         self.refresh_buttons()
                         return
                 else:
-                    message = "设备坐标已变化，已舍弃此前的位置读取。"
+                    self.message("设备坐标已变化，请重新读取。", error=True)
+                    self.refresh_buttons()
+                    return
             if kind == "position-datum" and self.datum_located:
                 message = "停靠点已定位。"
         elif kind == "write":
@@ -1639,6 +1648,8 @@ class MachinePanel(QtWidgets.QWidget):
         self.refresh_document()
         self.message(message, page_specific=kind in {"write", "dry", "page-return"})
         self.refresh_buttons()
+        if kind in {"connect", "disconnect"}:
+            self.connection_changed.emit(kind == "connect")
 
     def failed(self, kind, detail, disconnected):
         if self.closing or self.busy != kind:
@@ -1664,7 +1675,7 @@ class MachinePanel(QtWidgets.QWidget):
             self.previous_checkpoint = None
             if not getattr(self.worker, "retained_port", None):
                 self.release_session_lock()
-            if self.dock_trial and (self.dock_trial.mode or kind not in {"connect", "disconnect"}):
+            if self.dock_trial and (self.dock_trial.mode or kind not in {"connect", "disconnect", "position-datum"}):
                 self.dock_trial = None
             self.device = None
             self.connection_id = None

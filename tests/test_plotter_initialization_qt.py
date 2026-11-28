@@ -3,8 +3,11 @@ import os
 from time import monotonic, sleep
 from types import SimpleNamespace
 
+import pytest
 
-def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
+
+@pytest.mark.parametrize("mode,unstable", [("zero", False), ("retained", False), ("", False), ("", True)])
+def test_guided_initialization_and_exclusive_axis_trial(tmp_path, mode, unstable):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6 import QtCore, QtWidgets
     from inkstruct.editor.machine_devices import DeviceDialog
@@ -17,6 +20,8 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     port = SimpleNamespace(portName=lambda: "SIM", serialNumber=lambda: "wizard")
     controller = SimulatedGrbl()
+    origin = (12., 18.) if mode else (0., 0.)
+    controller.position[:2] = origin
     def connect(_port):
         controller.closed = False
         return controller
@@ -26,6 +31,8 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
     panel.set_workspace(tmp_path)
     panel.save_profile(DeviceProfile.create("模拟 N1", "SIM", "wizard"))
     panel.confirm = lambda *_: True
+    operations = []
+    panel.worker.succeeded.connect(lambda kind, _state: operations.append(kind))
     manager = DeviceDialog(panel)
     manager.show()
 
@@ -37,7 +44,7 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
         assert panel.busy is None, panel.report.text()
         app.processEvents()
 
-    def visit(interact):
+    def visit(interact, *, detect=False):
         errors = []
         def drive():
             wizard = app.activeModalWidget()
@@ -50,7 +57,7 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
                     wait()
                     wizard.reject()
         QtCore.QTimer.singleShot(0, drive)
-        manager.datum_register.click()
+        (manager.redetect if detect else manager.datum_register).click()
         if errors:
             raise errors[0]
 
@@ -63,28 +70,53 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
 
     def commission(w):
         assert w.nudge.isVisible() and not w.trial_button.isVisible()
+        w.modes[mode].click()
+        operations.clear()
         w.advance.click()
+        assert "正在读取" in w.heading.text()
         wait()
-        assert "第 2 步" in w.heading.text() and not w.nudge.isVisible()
-        for n in (1, 2, 3):
-            assert f"{n} / 3" in w.instructions.text()
-            assert not w.advance.isEnabled() and not w.trial_button.isVisible()
-            no_trial()
-            w.link.click()
-            wait()
-            assert panel.device is None and not w.advance.isEnabled()
-            w.link.click()
-            wait()
-            assert w.advance.isEnabled()
-            w.advance.click()
-            wait()
-        assert "第 3 步" in w.heading.text() and w.trial_button.isVisible()
+        if mode:
+            assert operations == ["position-datum"]
+            assert panel.dock_trial.mode == mode and panel.dock_trial.origin == origin
+            assert "停靠点已确认" in w.heading.text()
+        else:
+            assert operations == ["position-datum", "disconnect"]
+            for n in (1, 2, 3):
+                assert f"第 {n} / 3 轮" in w.heading.text()
+                assert "保持笔尖不动。请关闭写字机电源，再重新通电。" in w.instructions.text()
+                assert w.advance.text() == ("连接、读取并继续校准" if n == 3 else "连接、读取并断开")
+                assert w.advance.isEnabled() and not w.nudge.isVisible()
+                assert panel.device is None and controller.closed
+                operations.clear()
+                if unstable and n == 2:
+                    original = controller.report
+                    reads = 0
+                    def drift(state, xyz):
+                        nonlocal reads
+                        if panel.busy == "position-datum":
+                            reads += 1
+                            if reads == 2:
+                                return original(state, "1,0,0")
+                        return original(state, xyz)
+                    controller.report = drift
+                    w.advance.click()
+                    wait()
+                    controller.report = original
+                    assert operations == ["connect"] and panel.device and not controller.closed
+                    assert len(panel.dock_trial.readings) == 1 and w.advance.text() == "重新读取并断开"
+                    assert "读取失败" in w.heading.text() and "第 2 / 3 轮" in w.heading.text()
+                    assert "尚未稳定" in w.instructions.text()
+                w.advance.click()
+                wait()
+                assert operations == ["connect", "position-datum"] + (["disconnect"] if n < 3 else [])
+            assert "检测完成" in w.heading.text() and not controller.closed
+        assert w.trial_button.isVisible()
         assert not w.advance.isEnabled()
         w.axes[0].setChecked(True)
         w.axes[2].setChecked(True)
         w.nudge.buttons[(1, 0)].click()
         wait()
-        assert controller.position[:2] == [0, -1]
+        assert controller.position[:2] == [origin[0], origin[1] - 1]
         before = len(controller.commands)
         panel.confirm = lambda *_: False
         w.trial_button.click()
@@ -107,15 +139,18 @@ def test_guided_initialization_and_exclusive_axis_trial(tmp_path):
         no_trial()
         assert panel.datum_located and panel.profile.axes.swap and panel.profile.axes.mirror_x
         datum = panel.profile.datum
-        assert datum.restart_positions == ((0, 0),) * 4 and "重新初始化" in manager.datum_register.text()
+        assert datum.restart_positions == (() if mode else ((0, 0),) * 4)
+        assert datum.boot_mode == (mode or "zero") and manager.redetect.isVisible()
+        assert panel.frame == origin
         visit(lambda w: w.cancel.click())
         assert panel.datum_located and panel.profile.datum == datum
         def cancel_restart(w):
+            assert w.modes[""].isChecked()
             w.advance.click()
             wait()
             assert panel.dock_trial is not None
             w.close()
-        visit(cancel_restart)
+        visit(cancel_restart, detect=True)
         assert panel.dock_trial is None and not panel.datum_located
         assert panel.store.devices()[0].datum == datum
         no_trial()

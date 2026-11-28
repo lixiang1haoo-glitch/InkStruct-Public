@@ -407,13 +407,15 @@ class GrblLink:
             raise MachineError("Z 工作坐标超出升降笔范围，请在设备侧核对笔尖位置。")
         return status
 
-    def confirm_datum_position(self, control):
+    def confirm_datum_position(self, control, *, retry_unstable=False):
         first = self.require_idle(control)
         if abs(first.position[2] - PEN_UP) > Z_TOLERANCE_MM:
             raise ValueError("请先抬笔，再记录机身基准。")
         second = self.require_idle(control)
         if (abs(second.position[2] - PEN_UP) > Z_TOLERANCE_MM
                 or math.dist(first.position[:2], second.position[:2]) > XY_TOLERANCE_MM):
+            if retry_unstable:
+                raise ValueError("笔尖读数尚未稳定，请保持笔尖不动后重试。")
             raise MachineError("设备读数尚未稳定，请重新连接并对准机身基准。")
         self.referenced_idle_xy = second.position[:2]
         return second

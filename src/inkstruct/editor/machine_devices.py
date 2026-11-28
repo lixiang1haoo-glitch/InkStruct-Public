@@ -139,7 +139,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.raise_button = panel.button("抬笔", panel.raise_pen)
         locate.addWidget(self.raise_button)
         self.datum_register = panel.button("开始初始化…", lambda: panel.open_initialization(self))
-        locate.addWidget(self.datum_register)
+        self.redetect = panel.button("重新检测重启行为…", lambda: panel.open_initialization(self, detect=True))
+        locate.addWidget(pair_widget((self.datum_register, self.redetect)))
         self.datum_park = panel.button("回停靠点", panel.park_at_datum)
         self.datum_reset = panel.button("重新恢复位置", panel.invalidate_datum)
         locate.addWidget(pair_widget((self.datum_park, self.datum_reset)))
@@ -294,6 +295,8 @@ class DeviceDialog(QtWidgets.QDialog):
         self.datum_status.setText("停靠点已定位。" if located else "请恢复停靠点。" if datum else "设备尚未初始化。")
         self.datum_register.setText("重新初始化…" if datum else "开始初始化…")
         self.datum_register.setEnabled(ready and not trial)
+        self.redetect.setVisible(datum is not None)
+        self.redetect.setEnabled(ready and not trial)
         self.datum_park.setVisible(located)
         self.datum_park.setEnabled(readable and located and (not profile.limit_area_enabled or
                                    (area is not None and area.contains(self.panel.frame)

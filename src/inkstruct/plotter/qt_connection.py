@@ -160,7 +160,7 @@ class N1Worker(QtCore.QThread):
                     elif self.retained_port:
                         raise ValueError("请先重新读取设备状态。")
                     elif kind == "position-datum":
-                        result = link.confirm_datum_position(control)
+                        result = link.confirm_datum_position(control, retry_unstable=bool(args and args[0]))
                     elif kind.startswith("position"):
                         result = link.require_idle(control)
                         if result.offset is None and kind == "position-read":
