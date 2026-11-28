@@ -13,6 +13,90 @@ AXIS_HELP = "点左右按钮时笔尖却上下移动，请勾选「交换 XY 轴
 TRIAL_HELP = "请确保笔尖四周 100 mm 内可绘制。正常书写视角下，X 轴正向指正右方，Y 轴正向指正下方。"
 
 
+class AddDeviceDialog(QtWidgets.QDialog):
+    def __init__(self, panel, parent):
+        super().__init__(parent)
+        self.panel = panel
+        self.setWindowTitle("添加写字机")
+        form = QtWidgets.QFormLayout(self)
+        self.ports = QtWidgets.QTreeWidget()
+        self.ports.setHeaderHidden(True)
+        self.ports.setAccessibleName("按识别结果选择串口")
+        form.addRow(self.ports)
+        refresh = QtWidgets.QPushButton("刷新")
+        refresh.clicked.connect(self.refresh_ports)
+        form.addRow(refresh)
+        self.name = QtWidgets.QLineEdit()
+        self.name.setMaxLength(40)
+        form.addRow("设备名称", self.name)
+        self.hint = label("")
+        form.addRow(self.hint)
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok |
+                                                QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        form.addRow(self.buttons)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        self.ports.currentItemChanged.connect(self.selection_changed)
+        self.name.textChanged.connect(self.update_button)
+        self.refresh_ports()
+
+    def refresh_ports(self):
+        from ..plotter.qt_connection import port_category
+        role = QtCore.Qt.ItemDataRole.UserRole
+        selected = self.ports.currentItem()
+        previous = selected.data(0, role) if selected else None
+        self.panel.refresh_ports()
+        with QtCore.QSignalBlocker(self.ports):
+            self.ports.clear()
+            groups = {}
+            for key in ("已识别的写字机", "待识别设备", "其他串口"):
+                group = QtWidgets.QTreeWidgetItem(self.ports, [key])
+                group.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
+                groups[key] = group
+            restored = None
+            for port in self.panel.port_records:
+                category = port_category(port)
+                description = port.description().strip()
+                text = " · ".join(filter(None, (port.portName(), description)))
+                if category == "已识别的写字机":
+                    text = "炽写 N1 · " + text
+                item = QtWidgets.QTreeWidgetItem(groups[category], [text])
+                key = (port.portName(), port.serialNumber(), category)
+                item.setData(0, role, key)
+                if category == "其他串口":
+                    item.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
+                elif key == previous:
+                    restored = item
+            self.ports.expandAll()
+            known = groups["已识别的写字机"]
+            if restored is None and previous is None and known.childCount() == 1:
+                restored = known.child(0)
+            self.ports.setCurrentItem(restored)
+        self.selection_changed()
+
+    def selection_changed(self, *_):
+        item = self.ports.currentItem()
+        self.selection = item.data(0, QtCore.Qt.ItemDataRole.UserRole) if item else None
+        name = ""
+        if self.selection and self.selection[2] != "其他串口":
+            known = self.selection[2] == "已识别的写字机"
+            name = "炽写 N1" if known else "写字机 " + self.selection[0]
+            self.hint.setText("连接时核对设备。" if known else "请确认此串口连接的是写字机，连接时将核对协议。")
+        else:
+            self.hint.setText("请选择写字机或待识别设备。" if self.panel.port_records else "未发现串口。连接设备后点击「刷新」。")
+        self.name.setPlaceholderText(name)
+        self.update_button()
+
+    def update_button(self):
+        button = self.buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+        button.setEnabled(bool(self.selection and self.selection[2] != "其他串口"))
+        button.setText("添加待识别设备" if self.selection and self.selection[2] == "待识别设备" else "添加")
+
+    def profile(self):
+        port, serial, _ = self.selection
+        return DeviceProfile.create(self.name.text().strip() or self.name.placeholderText(), port, serial)
+
+
 class DeviceDialog(QtWidgets.QDialog):
     def __init__(self, panel, parent=None):
         super().__init__(parent or panel)
@@ -34,6 +118,9 @@ class DeviceDialog(QtWidgets.QDialog):
         rail.addWidget(self.devices, 1)
         self.add_button = panel.button("添加写字机…", self.add)
         rail.addWidget(self.add_button)
+        self.rename_button = panel.button("重命名…", self.rename_device)
+        self.remove_button = panel.button("移除…", self.remove_device)
+        rail.addWidget(pair_widget((self.rename_button, self.remove_button)))
         self.link = panel.button("连接", self.toggle_connection)
         rail.addWidget(self.link)
 
@@ -62,8 +149,6 @@ class DeviceDialog(QtWidgets.QDialog):
         self.datum_park = panel.button("回停靠点", panel.park_at_datum)
         self.datum_reset = panel.button("重新恢复位置", panel.invalidate_datum)
         locate.addWidget(pair_widget((self.datum_park, self.datum_reset)))
-        self.change_stops = panel.button("纸张挡边已更换…", panel.change_paper_stops)
-        locate.addWidget(self.change_stops)
         options.addWidget(locating)
         self.pen_choice = QtWidgets.QComboBox()
         self.pen_choice.setAccessibleName("当前笔具")
@@ -149,47 +234,37 @@ class DeviceDialog(QtWidgets.QDialog):
             self.reload()
 
     def add(self):
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("添加写字机")
-        form = QtWidgets.QFormLayout(dialog)
-        name = QtWidgets.QLineEdit("写字机")
-        name.setMaxLength(40)
-        ports = QtWidgets.QComboBox()
-        form.addRow("设备名称", name)
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(ports, 1)
-        refresh = QtWidgets.QPushButton("刷新")
-        row.addWidget(refresh)
-        form.addRow("串口", row)
-        empty = label("未发现串口。连接设备后点击「刷新」。")
-        form.addRow(empty)
-        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok |
-                                             QtWidgets.QDialogButtonBox.StandardButton.Cancel)
-        def refresh_list():
-            previous = ports.currentData()
-            self.panel.refresh_ports()
-            ports.clear()
-            for port in self.panel.port_records:
-                description = port.description().strip()
-                key = (port.portName(), port.serialNumber())
-                ports.addItem(f"{port.portName()} · {description}" if description else port.portName(), key)
-                if key == previous:
-                    ports.setCurrentIndex(ports.count() - 1)
-            empty.setVisible(not ports.count())
-            buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setEnabled(bool(ports.count()))
+        dialog = AddDeviceDialog(self.panel, self)
+        try:
+            if dialog.exec():
+                self.panel.save_profile(dialog.profile())
+                self.reload()
+        except (OSError, ValueError) as error:
+            self.error.setText(str(error))
+        finally:
+            dialog.deleteLater()
 
-        refresh.clicked.connect(refresh_list)
-        refresh_list()
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        form.addRow(buttons)
-        if dialog.exec():
+    def rename_device(self):
+        old = self.panel.profile
+        if old is None:
+            return
+        name, ok = QtWidgets.QInputDialog.getText(self, "重命名写字机", "设备名称", text=old.name)
+        if ok and name.strip() != old.name:
             try:
-                profile = DeviceProfile.create(name.text(), *ports.currentData())
-                self.panel.save_profile(profile)
+                self.panel.rename_device(old.id, name.strip())
                 self.reload()
             except (OSError, ValueError) as error:
                 self.error.setText(str(error))
+
+    def remove_device(self):
+        old = self.panel.profile
+        if old is None or not self.panel.confirm("移除写字机", f"移除「{old.name}」({old.port}) 的本机档案？该设备的校正和纸面原点也会移除。"):
+            return
+        try:
+            self.panel.remove_device(old.id)
+            self.reload()
+        except (OSError, ValueError) as error:
+            self.error.setText(str(error))
 
     def refresh(self, *_):
         connected = self.panel.device is not None
@@ -249,7 +324,7 @@ class DeviceDialog(QtWidgets.QDialog):
         elif trial:
             self.datum_status.setText("已确认停靠点。固定测试纸，点动到四周有余量的位置，试画 X/Y，核对方向及比例后保存。")
         elif located:
-            self.datum_status.setText("停靠点已定位。移动纸张挡边后，请登记挡边变更。")
+            self.datum_status.setText("停靠点已定位。")
         elif datum:
             self.datum_status.setText("请在书写侧栏选择已实测的版式，用原纸面标记恢复；没有可用记录时请重新初始化。")
         else:
@@ -264,10 +339,10 @@ class DeviceDialog(QtWidgets.QDialog):
                                    (area is not None and area.contains(self.panel.frame)
                                     and area.contains(self.panel.device.position[:2]))))
         self.datum_reset.setVisible(located)
-        self.change_stops.setVisible(bool(datum and not trial))
-        self.change_stops.setEnabled(ready)
         self.devices.setEnabled(idle and not connected and not retained and not trial)
         self.add_button.setEnabled(idle and not connected and not retained and not trial)
+        self.rename_button.setEnabled(bool(profile and idle and not trial))
+        self.remove_button.setEnabled(bool(profile and self.add_button.isEnabled()))
         self.editor.setEnabled(idle and bool(profile) and not retained)
         self.link.setEnabled(idle and bool(profile) and (not connected or self.panel.pen_raised))
         self.link.setText(self.panel.link_button.text())

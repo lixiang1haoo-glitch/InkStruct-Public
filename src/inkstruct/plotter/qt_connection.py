@@ -14,6 +14,19 @@ def serial_ports():
     return QtSerialPort.QSerialPortInfo.availablePorts()
 
 
+def port_category(info):
+    """Classify passive enumeration data; opening the selected port is a separate action."""
+    ids = (getattr(info, "vendorIdentifier", lambda: 0)(),
+           getattr(info, "productIdentifier", lambda: 0)())
+    if ids == (0x28E9, 0x018A):
+        return "已识别的写字机"
+    description = info.description().strip().casefold()
+    if not any(ids) and (description in {"通信端口", "通讯端口", "communications port"}
+                         or "bluetooth" in description or "蓝牙" in description):
+        return "其他串口"
+    return "待识别设备"
+
+
 class N1Serial:
     def __init__(self, name):
         info = next((port for port in serial_ports() if port.portName() == name), None)

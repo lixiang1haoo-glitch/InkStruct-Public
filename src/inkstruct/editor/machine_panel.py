@@ -373,6 +373,21 @@ class MachinePanel(QtWidgets.QWidget):
         self.profiles = [p for p in self.profiles if p.id != profile.id] + [profile]
         self.reload_profiles()
 
+    def rename_device(self, identifier, name):
+        if self.busy or self.dock_trial or not self.profile or self.profile.id != identifier:
+            raise ValueError("请先完成当前操作，再重命名所选设备。")
+        self.store.rename_device(identifier, name)
+        self.profile = replace(self.profile, name=name.strip())
+        self.profiles = [self.profile if p.id == identifier else p for p in self.profiles]
+        self.reload_profiles()
+
+    def remove_device(self, identifier):
+        if (self.device or self.busy or self.dock_trial or getattr(self.worker, "retained_port", None)
+                or not self.profile or self.profile.id != identifier):
+            raise ValueError("请结束当前操作并断开所选设备，再移除档案。")
+        self.store.remove_device(identifier)
+        self.set_workspace(self.store.path.parent)
+
     def select_profile(self, identifier):
         if self.device is not None or self.busy is not None or self.dock_trial:
             return False
@@ -480,20 +495,6 @@ class MachinePanel(QtWidgets.QWidget):
             self.message("停车路径超出已确认的工作范围。", error=True)
             return False
         return self.submit("return", self.frame, self.confirmed_area, self.profile.feed)
-
-    def change_paper_stops(self):
-        if self.busy or not self.device or not self.profile or not self.confirm(
-            "更换纸张挡边", "确认纸张的固定位置或方向已经改变？各版式保留选好的标记，下次使用时重新实测。"
-        ):
-            return
-        self.temporary = None
-        try:
-            self._persist_profile(replace(self.profile, stop_generation=uuid4().hex))
-        except (OSError, ValueError) as error:
-            self.invalidate_datum()
-            self.message(f"挡边变更未保存，请重新登记挡边：{error}", error=True)
-            return
-        self.reload_sheet()
 
     def recovery_options(self):
         if not self.device or self.datum_located or self.dock_trial:

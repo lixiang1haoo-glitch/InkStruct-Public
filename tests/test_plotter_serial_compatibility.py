@@ -150,12 +150,15 @@ def test_add_and_refresh_unidentified_port_only_opens_explicit_selection(tmp_pat
     panel.set_workspace(tmp_path)
     settings = DeviceDialog(panel)
     def choose(dialog):
-        combo = dialog.findChild(QtWidgets.QComboBox)
-        ok = dialog.findChild(QtWidgets.QDialogButtonBox).button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
-        assert not ok.isEnabled() and combo.count() == 0
+        ok = dialog.buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+        assert not ok.isEnabled()
         available.append(SimpleNamespace(portName=lambda: "COM9", description=lambda: "Legacy UART", serialNumber=lambda: ""))
         next(b for b in dialog.findChildren(QtWidgets.QPushButton) if b.text() == "刷新").click()
-        assert combo.currentText() == "COM9 · Legacy UART" and ok.isEnabled()
+        assert not ok.isEnabled()
+        entry = dialog.ports.topLevelItem(1).child(0)
+        assert entry.text(0) == "COM9 · Legacy UART"
+        dialog.ports.setCurrentItem(entry)
+        assert ok.isEnabled() and ok.text() == "添加待识别设备"
         ok.click()
         return dialog.result()
     try:
@@ -176,3 +179,76 @@ def test_add_and_refresh_unidentified_port_only_opens_explicit_selection(tmp_pat
         panel.shutdown()
         settings.close()
         panel.close()
+
+
+def test_serial_port_groups_and_refresh_preserve_explicit_choice(tmp_path):
+    from PySide6 import QtCore, QtWidgets
+    from inkstruct.editor.machine_devices import AddDeviceDialog
+    from inkstruct.editor.machine_panel import MachinePanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    def port(name, description, vid=0, pid=0):
+        return SimpleNamespace(portName=lambda: name, description=lambda: description,
+                               vendorIdentifier=lambda: vid, productIdentifier=lambda: pid,
+                               serialNumber=lambda: "")
+    ports = [port("COM1", "通信端口"), port("COM9", "USB UART", 1, 2),
+             port("COM3", "USB 串行设备", 0x28E9, 0x018A)]
+    panel = MachinePanel(None, ports=lambda: list(ports))
+    panel.set_workspace(tmp_path)
+    dialog = AddDeviceDialog(panel, panel)
+    try:
+        groups = [dialog.ports.topLevelItem(i) for i in range(3)]
+        assert [g.text(0) for g in groups] == ["已识别的写字机", "待识别设备", "其他串口"]
+        assert dialog.profile().name == "炽写 N1" and dialog.profile().port == "COM3"
+        assert not groups[2].child(0).flags() & QtCore.Qt.ItemFlag.ItemIsEnabled
+        dialog.ports.setCurrentItem(groups[1].child(0))
+        dialog.name.setText("备用机")
+        dialog.refresh_ports()
+        assert dialog.profile().port == "COM9" and dialog.profile().name == "备用机"
+        ports[:] = ports[:1]
+        dialog.refresh_ports()
+        assert not dialog.buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).isEnabled()
+    finally:
+        dialog.close()
+        panel.shutdown()
+
+
+def test_manage_selected_profile_without_changing_other_bindings(tmp_path, monkeypatch):
+    from PySide6 import QtWidgets
+    from inkstruct.editor.machine_devices import DeviceDialog
+    from inkstruct.editor.machine_panel import MachinePanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = MachinePanel(None, ports=lambda: [])
+    panel.set_workspace(tmp_path)
+    first = DeviceProfile.create("炽写 N1", "COM3", "unit")
+    extra = DeviceProfile.create("写字机", "COM1")
+    for profile in (first, extra):
+        panel.save_profile(profile)
+        panel.store.import_marks(profile, {"page": (2., 3.)})
+        panel.store.exchange_checkpoint(profile, {"xy": [4., 5.]})
+    dialog = DeviceDialog(panel)
+    try:
+        initial = panel.store.read()
+        monkeypatch.setattr(QtWidgets.QInputDialog, "getText", lambda *a, **kw: ("误加端口", True))
+        dialog.rename_button.click()
+        renamed = panel.store.read()
+        assert renamed["devices"][extra.id].pop("name") == "误加端口"
+        initial["devices"][extra.id].pop("name")
+        assert renamed == initial
+        panel.confirm = lambda *_: False
+        dialog.remove_button.click()
+        assert panel.profile.name == "误加端口" and len(panel.profiles) == 2
+        panel.confirm = lambda *_: True
+        dialog.remove_button.click()
+        remaining = panel.store.read()
+        assert panel.profile == first and dialog.devices.count() == 1
+        for section in ("devices", "paper_marks", "reconnect_positions"):
+            assert remaining[section] == {first.id: initial[section][first.id]}
+        assert remaining["selected"] == first.id
+        dialog.remove_button.click()
+        assert not panel.store.devices() and panel.profile is None
+        assert not dialog.remove_button.isEnabled() and not dialog.rename_button.isEnabled()
+    finally:
+        dialog.close()
+        panel.shutdown()

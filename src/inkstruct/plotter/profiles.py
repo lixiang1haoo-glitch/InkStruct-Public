@@ -231,6 +231,26 @@ class PlotterProfiles:
         atomic_json(self.path, data)
 
     @catalog_write
+    def rename_device(self, identifier, name):
+        data = self.read()
+        if identifier not in data["devices"] or not name.strip():
+            raise ValueError("请选择已有设备并填写名称。")
+        data["devices"][identifier]["name"] = name.strip()
+        atomic_json(self.path, data)
+
+    @catalog_write
+    def remove_device(self, identifier):
+        data = self.read()
+        if identifier not in data["devices"]:
+            raise ValueError("该写字机档案已移除。")
+        del data["devices"][identifier]
+        for section in ("paper_marks", "reconnect_positions"):
+            data.get(section, {}).pop(identifier, None)
+        if data["selected"] == identifier:
+            data["selected"] = next(iter(data["devices"]), "")
+        atomic_json(self.path, data)
+
+    @catalog_write
     def import_marks(self, profile, marks):
         data = self.read()
         records = data.setdefault("paper_marks", {}).setdefault(profile.id, {})

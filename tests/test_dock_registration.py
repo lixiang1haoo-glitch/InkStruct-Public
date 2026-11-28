@@ -398,10 +398,9 @@ def test_clean_window_close_away_from_dock_restores_full_mapping(tmp_path):
         assert panel.frame == (-60., -60.) and panel.datum_located
         assert panel.store.sheet(panel.profile, key)["virtual"] == [80., 95.]
         assert not any(line.startswith(b"G1") for line in serial.commands)
-        panel.confirm = lambda *_: True
-        panel.change_paper_stops()
-        old = panel.store.sheet(panel.profile, key)
-        assert old["mark"] == list(mark.a) and not panel.profile.accepts_sheet(old)
+        panel.rename_device(p.id, "同一台设备")
+        assert panel.datum_located and panel.frame == (-60., -60.)
+        assert panel.profile.accepts_sheet(panel.store.sheet(panel.profile, key))
     finally:
         panel.shutdown()
         panel.close()
