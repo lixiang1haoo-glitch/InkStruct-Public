@@ -57,13 +57,13 @@ def test_partial_preview_keeps_multipage_prefix_and_page_order():
     assert [p.source_layout for p in result.pages] == [t.layout(i).label for i in range(len(result.pages))]
 
 
-def test_placed_footnotes_survive_but_future_definitions_do_not_appear():
+def test_literal_markers_do_not_pull_future_paragraphs_into_preview():
     t = template(layouts=(PageLayout('p1','p1',(frame(w=45,h=70),)),))
     result = render('1[^a]\n\n```\n' + '2'*100 + '\n```\n\n3[^b]\n\n[^a]: 456\n\n[^b]: 789', t)
     assert 'template-body-no-progress' in codes(result)
-    assert any(o.execution_domain == 'page-footnotes' for p in result.pages for o in p.paint_ops)
+    assert not any(o.execution_domain == 'page-footnotes' for p in result.pages for o in p.paint_ops)
     text = ''.join(f.text for f in result.fragments)
-    assert all(c in text for c in '1456') and all(c not in text for c in '3789')
+    assert '1[^a]' in text and all(c not in text for c in '3456789')
 
 
 def test_valid_template_layout_has_no_preview_stop_error():

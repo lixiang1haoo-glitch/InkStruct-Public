@@ -43,7 +43,6 @@ CATEGORIES = (
     ("table", "排版默认设置", "表格", "默认 独立 总宽 行高 列宽 对齐 留白 重复表头 跨页 跨页表头"),
     ("image", "排版默认设置", "图片", "默认 独立 宽度 高度 对齐 图题 SVG 容差"),
     ("code", "排版默认设置", "代码块", "字号 字格 行高 制表位 换行"),
-    ("footnote", "排版默认设置", "脚注", "字号 间距 编号 分隔线 高度"),
 )
 
 
@@ -493,7 +492,7 @@ class SettingsDialog(QtWidgets.QDialog):
             body = section.drafts.get("body")
             mode = body[1].mode.currentData() if body else section.draft_owner().mode
             for index, key in enumerate(self.items):
-                hidden = mode == "plain-text" and key in {"math", "table", "image", "code", "footnote"}
+                hidden = mode == "plain-text" and key in {"math", "table", "image", "code"}
                 self.navigation.item(index).setHidden(hidden)
             if self.navigation.currentItem() and self.navigation.currentItem().isHidden():
                 self.navigation.setCurrentRow(list(self.items).index("body"))
@@ -632,9 +631,7 @@ def layout_settings_page(owner, key, *, for_document=False, defaults=False):
         from .editor.code_settings import CodeSettingsDialog
 
         return embed(CodeSettingsDialog(owner.flow.code))
-    from .editor.footnote_settings import FootnoteSettingsDialog
-
-    return embed(FootnoteSettingsDialog(owner.flow.footnote))
+    raise ValueError(f"未知设置分类：{key}")
 
 
 def open_settings(editor, collector=None, parent=None, *, category=None, scope=None):

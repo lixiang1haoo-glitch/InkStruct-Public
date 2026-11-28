@@ -351,11 +351,6 @@ def parse_markdown(
     nodes = expand_html_tables(nodes, session, diagnostics, html_sources)
     validate_nodes(nodes, cancelled=cancelled)
     check_cancel(cancelled)
-    from .footnotes import resolve_footnotes
-
-    nodes = resolve_footnotes(nodes, session, diagnostics)
-    validate_nodes(nodes, cancelled=cancelled)
-    check_cancel(cancelled)
     from .equations import resolve_equations
 
     nodes = resolve_equations(nodes, session, diagnostics)

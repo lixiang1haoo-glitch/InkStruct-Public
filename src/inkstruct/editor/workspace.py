@@ -81,7 +81,7 @@ def organize_workspace(w):
     controls = [w.mode_picker, w.dialect_picker, w.em, w.line_height, w.stroke,
                 *w.flow_controls.values(), w.run_label, w.template_settings_button,
                 w.math_settings_button, w.code_settings_button, w.table_settings_button,
-                w.image_settings_button, w.footnote_settings_button]
+                w.image_settings_button]
     controls.extend(buttons[title] for title in ('标题字号…', '选择字形目录…', '刷新字形', '载入全部字'))
     controls.extend((w.optimize, w.page_export, w.filter, w.glyph_list, w.summary, w.inspector,
                      w.selection_label, w.note, w.show_marks, w.next_button, *w.rating_buttons,

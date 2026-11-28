@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from math import ceil
 
 from ..assets.resolver import AssetResolver
 from ..document.break_commands import FLOW_BREAK_KINDS
@@ -39,14 +40,11 @@ from .inline import (
     measure_runs,
 )
 from .justification import justify_line
-from .note_units import AtomicBand
 from .plain import CLOSING, OPENING
 from .table_pages import (
     first_group_height,
     paginate_table,
-    paginate_table_with_notes,
     paint_table,
-    table_boxes,
 )
 from .tables import measure_table
 
@@ -66,7 +64,6 @@ class BodyBlock:
     unsupported: bool = False
     first_indent: float = 0
     task: SemanticNode | None = None
-    note_label: SemanticNode | None = None
     paragraph_align: str = ""
 
 
@@ -106,7 +103,6 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
             result.append(replace(
                 block, node=replace(block.node, node_id=identity, span=span), runs=tuple(part),
                 marker=block.marker if first else "", task=block.task if first else None,
-                note_label=block.note_label if first else None,
                 first_indent=block.first_indent if first else 0,
             ))
             part.clear()
@@ -122,19 +118,7 @@ def body_blocks(document: MarkdownDocument, flow=None, *, frame_breaks=False):
         flush()
 
     def visit(node, indent=0, quote=0, marker=""):
-        if node.kind == "footnote_entry":
-            first = len(result)
-            for child in node.children:
-                visit(child, indent + flow.list_indent_mm, quote)
-            if (
-                len(result) > first
-                and node.children[0].kind == "paragraph"
-                and result[first].node.kind == "paragraph"
-            ):
-                result[first] = replace(
-                    result[first], marker=dict(node.attributes)["number"], note_label=node
-                )
-        elif node.kind in {"paragraph", "heading", "callout_title"}:
+        if node.kind in {"paragraph", "heading", "callout_title"}:
             children = node.children[0].children if len(node.children) == 1 else ()
             if (
                 node.kind == "paragraph"
@@ -257,10 +241,7 @@ def layout_markdown(
     style: StyleProfile | None = None,
     flow: FlowStyle | None = None,
     cancelled=None,
-    _footnotes=None,
-    _atomic_bands=None,
-    _fixed_references=(),
-    _references_only=False,
+    _fixed_field=False,
     _regions=None,
 ) -> LayoutSnapshot:
     check_cancel(cancelled)
@@ -277,42 +258,7 @@ def layout_markdown(
         return layout_template_fields(
             document, resolver, page=page, style=style, flow=flow, cancelled=cancelled
         )
-    if (
-        _footnotes is None
-        and not _references_only
-        and (
-            _fixed_references
-            or any(
-                n.kind in {"footnote_reference", "footnote_definition"}
-                for root in document.nodes
-                for n in root.walk()
-            )
-        )
-    ):
-        from .footnotes import layout_footnotes
-
-        return layout_footnotes(
-            document,
-            resolver,
-            page=page,
-            style=style,
-            flow=flow,
-            cancelled=cancelled,
-            fixed_references=_fixed_references,
-            regions=_regions,
-        )
     diagnostics = [d for d in document.diagnostics if d.code != "layout-pending"]
-    if _footnotes is False:
-        for root in document.nodes:
-            for node in root.walk():
-                if node.kind in {"footnote_reference", "footnote_definition"}:
-                    diagnostics.append(
-                        Diagnostic(
-                            "footnote-layout-pending",
-                            "This footnote combination has not passed coordinated pagination",
-                            node.span,
-                        )
-                    )
     if _regions is None:
         for root in document.nodes:
             for node in root.walk():
@@ -372,7 +318,7 @@ def layout_markdown(
                 table_style,
                 cancelled=cancelled,
                 math_style=flow.math,
-                footnote_style=flow.footnote,
+
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
                 han_spacing=flow.han_spacing,
@@ -409,12 +355,12 @@ def layout_markdown(
                 scale=block.scale,
                 cancelled=cancelled,
                 math_style=flow.math,
-                footnote_style=flow.footnote,
+
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
                 han_spacing=flow.han_spacing,
                 digits_follow_latin=(flow.digits_follow_latin and block.node.kind == "paragraph"
-                                     and not _references_only),
+                                     and not _fixed_field),
                 han_variation=flow.han_variation,
             )
             diagnostics.extend(issues)
@@ -430,8 +376,6 @@ def layout_markdown(
                 )
                 for i, c in enumerate(block.marker)
             ]
-            if block.note_label:
-                runs = [InlineRun(o, role="footnote-label") for o in block.note_label.occurrences]
             prefix, issues = measure_runs(runs, resolver, style, cancelled=cancelled,
                                           latin_spacing=flow.latin_spacing, punctuation_spacing=flow.punctuation_spacing,
                                           han_spacing=flow.han_spacing)
@@ -467,7 +411,7 @@ def layout_markdown(
                 cancelled=cancelled,
                 math_style=flow.math,
                 math_width=max(0.01, width),
-                footnote_style=flow.footnote,
+
                 latin_spacing=flow.latin_spacing,
                 punctuation_spacing=flow.punctuation_spacing,
                 han_spacing=flow.han_spacing,
@@ -504,10 +448,8 @@ def layout_markdown(
 
     prepared = None
     if (
-        not _regions and _footnotes is not False
-        and _atomic_bands is None
-        and not _fixed_references
-        and not _references_only
+        not _regions
+        and not _fixed_field
     ):
         prepared = prepare(
             document,
@@ -520,7 +462,6 @@ def layout_markdown(
             measured_images,
             code_continuations,
             cancelled,
-            pager=_footnotes,
         )
     resume = prepared.common if prepared else 0
     previous = prepared.previous if prepared else None
@@ -536,9 +477,6 @@ def layout_markdown(
             fragments.append([])
             ops.append(BudgetedOps(point_meter))
             images.append([])
-            if _footnotes:
-                _footnotes.finish()
-                _footnotes.start(i+1)
     y, line_index = region_top, 0
     previous_grid_line = None
     previous_heading_page = None
@@ -560,8 +498,6 @@ def layout_markdown(
         previous_heading_page = state.previous_heading_page
         region_left, region_top, region_right, region_bottom = page_bounds(state.page)
         diagnostics.extend(previous.diagnostics[: state.diagnostics])
-        if _footnotes:
-            _footnotes.restore(state.footnotes, previous.note_pages, previous.note_diagnostics)
 
     def checkpoint():
         return Checkpoint(
@@ -573,7 +509,6 @@ def layout_markdown(
             line_index,
             previous_heading_page,
             len(diagnostics) - placement_diagnostics_start,
-            _footnotes.checkpoint() if _footnotes else None,
         )
 
     def new_page(*, physical=False):
@@ -584,13 +519,9 @@ def layout_markdown(
         count=_regions.page_index+1 if _regions else len(fragments)+1
         allocating_page(count)
         while len(fragments)<count:
-            if _footnotes:
-                _footnotes.finish()
             fragments.append([])
             ops.append(BudgetedOps(point_meter))
             images.append([])
-            if _footnotes:
-                _footnotes.start(len(fragments)-1)
         region_left, region_top, region_right, region_bottom = page_bounds(len(fragments) - 1)
         y = region_top
         previous_grid_line = None
@@ -626,17 +557,25 @@ def layout_markdown(
 
     def rewrap(block,lines,metrics,pos,indent):
         """Reflow unconsumed measured boxes, never truncate or reparse Markdown."""
-        remaining=[b for line in lines[pos:] for b in line]
+        remaining=[b.natural or b for line in lines[pos:] for b in line]
         width=max(.01,content_width-indent)
         if (pos==0 and block.node.kind=='math_block' and block.node.math
                 and any(n.kind=='EquationTag' for n in block.node.math.walk())):
             remaining,issues=measure_runs(block.runs,resolver,style,scale=block.scale,
                                          cancelled=cancelled,math_style=flow.math,math_width=width,
-                                         footnote_style=flow.footnote,latin_spacing=flow.latin_spacing,
+                                         latin_spacing=flow.latin_spacing,
                                          punctuation_spacing=flow.punctuation_spacing,
                                          han_spacing=flow.han_spacing)
             if sum(b.advance for b in remaining)<=width+1e-8:
                 diagnostics.extend(issues)
+        if grid and grid.cell_width and block.node.kind != 'math_block':
+            from .cell_lines import cell_lines
+            tail = cell_lines(remaining, grid, width, style.stroke_width_mm, cancelled)
+            sizes = []
+            for line in tail:
+                height = max([grid.cell_height] + [b.ascent + b.descent for b in line if b.math])
+                sizes.append((height / 2, height / 2, height))
+            return lines[:pos] + tail, metrics[:pos] + sizes
         if block.node.kind in {'fence','code_block'}:
             if flow.code.wrap_lines:
                 tail=[]
@@ -675,30 +614,8 @@ def layout_markdown(
             sizes.append((a,d,max(line_height,a+d)))
         return lines[:pos]+tail,metrics[:pos]+sizes
 
-    def current_page_position():
-        return y, region_top, region_bottom
-
     def current_y():
         return y
-
-    def capture_start():
-        return y, len(fragments[-1]), len(ops[-1]), len(images[-1])
-
-    def capture_end(start, span, *, table=None, x=0):
-        if _atomic_bands is not None:
-            top, fs, ps, rs = start
-            _atomic_bands.append(
-                AtomicBand(
-                    top,
-                    y,
-                    tuple(fragments[-1][fs:]),
-                    tuple(ops[-1][ps:]),
-                    tuple(images[-1][rs:]),
-                    span,
-                    table,
-                    x,
-                )
-            )
 
     def place_box(box, x, baseline, index, *, stroke_width=None, repeated=False,
                   container_id=None, image_label=None):
@@ -824,13 +741,6 @@ def layout_markdown(
                     ops.append(current_ops)
                     images.append(list(old_page.images))
             diagnostics.extend(previous.diagnostics[old.diagnostics :])
-            if _footnotes:
-                _footnotes.restore(
-                    previous.checkpoints[-1].footnotes,
-                    previous.note_pages,
-                    previous.note_diagnostics,
-                    boundary=old.footnotes,
-                )
             checkpoints.extend(suffix_checkpoints(previous, old_index, state))
             suffix_reused = len(measured) - block_index
             suffix_page = old.page
@@ -838,6 +748,7 @@ def layout_markdown(
         if prepared:
             checkpoints.append(state)
         block, lines, metrics, indent, prefix = measured[block_index]
+        original_indent = indent
         if block.node.kind in FLOW_BREAK_KINDS:
             # Page controls skip remaining frames on this physical page. Empty
             # pages and trailing controls do not create spurious blank output.
@@ -876,51 +787,7 @@ def layout_markdown(
                     )
                     if not next_block.keep_next:
                         break
-            foot_heading_fits = True
-            if _footnotes and block.keep_next:
-                probe = _footnotes.probe()
-                future_y = y + gap
-                for offset, (future_block, future_lines, future_metrics, _, _) in enumerate(
-                    measured[block_index:]
-                ):
-                    if future_block.node.kind in FLOW_BREAK_KINDS:
-                        break
-                    if offset:
-                        future_y += (
-                            flow.heading_gap_mm if future_block.keep_next else flow.paragraph_gap_mm
-                        )
-                    if future_block.node.node_id in measured_images:
-                        future_lines = [
-                            [
-                                b
-                                for line in measured_images[future_block.node.node_id].lines
-                                for b in line
-                            ]
-                        ]
-                    if future_block.node.node_id in measured_tables:
-                        future_table = measured_tables[future_block.node.node_id]
-                        header_rows = future_table.model.header_rows
-                        first_group = next(
-                            (g for g in future_table.model.row_groups if g[0] >= header_rows), None
-                        )
-                        rows = range(first_group[1] if first_group else future_table.model.rows)
-                        future_lines = [table_boxes(future_table, rows)]
-                    keep = (
-                        len(future_lines) if future_block.keep_next else min(2, len(future_lines))
-                    )
-                    for future_line, (_, _, future_height) in zip(
-                        future_lines[:keep], future_metrics[:keep]
-                    ):
-                        future_y += future_height
-                        if not probe.can_fit([future_line], future_y):
-                            foot_heading_fits = False
-                            break
-                        probe.accept(future_line, future_y)
-                    if not foot_heading_fits or not future_block.keep_next:
-                        break
-            if (
-                y + gap + required > region_bottom or not foot_heading_fits
-            ) and required <= content_height:
+            if y + gap + required > region_bottom and required <= content_height:
                 new_page()
             else:
                 y += gap
@@ -928,19 +795,14 @@ def layout_markdown(
             figure = measured_images[block.node.node_id]
             if _regions and (figure.width+indent>content_width+1e-8 or block_end(y + figure.total_height)>region_bottom+1e-8):
                 seek_fit(figure.width+indent,figure.total_height)
-            caption_boxes = [box for line in figure.lines for box in line]
             while True:
                 check_cancel(cancelled)
                 figure_end = block_end(y + figure.total_height)
                 fits_geometry = figure_end <= region_bottom + 1e-9
-                fits_notes = not _footnotes or _footnotes.can_fit(
-                    [caption_boxes], figure_end
-                )
-                if fits_geometry and fits_notes:
+                if fits_geometry:
                     break
                 if (
                     y > region_top
-                    or (_footnotes and _footnotes.can_advance())
                     or (
                         len(fragments) == 1
                         and figure.total_height <= content_height
@@ -950,9 +812,6 @@ def layout_markdown(
                     new_page()
                     continue
                 break  # Impossible empty-page combination: emit debug geometry once.
-            if _footnotes:
-                _footnotes.accept(caption_boxes, figure_end)
-            capture = capture_start()
             if figure.total_height > region_bottom - region_top + 1e-9:
                 diagnostics.append(
                     Diagnostic(
@@ -1074,7 +933,6 @@ def layout_markdown(
                     )
                 )
             y = figure_end
-            capture_end(capture, block.node.span)
             line_index += 1
             previous_heading_page = None
             continue
@@ -1084,16 +942,6 @@ def layout_markdown(
                 from .flow_tables import paginate_regions
                 chunks = paginate_regions(
                     table, indent, current_y, seek_fit, new_page, _regions,
-                    cancelled=cancelled, pager=_footnotes,
-                )
-            elif _footnotes:
-                chunks = paginate_table_with_notes(
-                    table,
-                    _footnotes,
-                    current_page_position,
-                    new_page,
-                    content_height,
-                    diagnostics,
                     cancelled=cancelled,
                 )
             else:
@@ -1114,7 +962,6 @@ def layout_markdown(
                     active_table = table
                     table_top = y + table.style.stroke_width_mm / 2
                     table_end = y + chunk.height + table.style.stroke_width_mm
-                capture = capture_start()
                 # Width is the distance between outside border centrelines.
                 x = (
                     region_left
@@ -1144,7 +991,6 @@ def layout_markdown(
                         )
                     )
                 y = table_end
-                capture_end(capture, block.node.span, table=active_table, x=x)
             previous_heading_page = None
             continue
         pos = 0
@@ -1158,8 +1004,10 @@ def layout_markdown(
                 seek_fit(0, metrics[pos][2])
                 continue
             if _regions and not block.rule:
+                indent = (ceil(original_indent / grid.cell_width - 1e-9) * grid.cell_width
+                          if grid and grid.cell_width else original_indent)
                 lines,metrics=rewrap(block,lines,metrics,pos,indent)
-                required_width=sum(b.advance for b in lines[pos])+indent+(block.first_indent if pos==0 else 0)
+                required_width=sum(b.advance for b in lines[pos])+indent+(block.first_indent if pos==0 and not (grid and grid.cell_width) else 0)
                 end = line_geometry(y, metrics[pos], align_baseline=align_baseline, padding=padding,
                                     previous=previous_grid_line)[1]
                 if required_width > content_width + 1e-8 or end > line_bottom + 1e-8:
@@ -1174,7 +1022,6 @@ def layout_markdown(
                     continue
             count, candidate_start = 0, y
             candidate_previous = previous_grid_line
-            probe = _footnotes.probe() if _footnotes else None
             while pos + count < len(lines):
                 candidate_baseline, candidate_bottom = line_geometry(
                     candidate_start, metrics[pos + count], align_baseline=align_baseline, padding=padding,
@@ -1182,21 +1029,13 @@ def layout_markdown(
                 )
                 if candidate_bottom > line_bottom + 1e-9:
                     break
-                if probe:
-                    candidate = lines[pos + count]
-                    if not probe.can_fit([candidate], candidate_bottom):
-                        break
-                    probe.accept(candidate, candidate_bottom)
                 candidate_start = candidate_bottom
                 if grid and align_baseline:
                     candidate_previous = (candidate_baseline, minimum_height)
                 count += 1
             remaining = len(lines) - pos
-            protected_heading = (
-                _footnotes and pos == 0 and previous_heading_page == len(fragments) - 1
-            )
             if (
-                not _regions and not protected_heading
+                not _regions
                 and remaining - count == 1
                 and count >= 2
                 and y > region_top
@@ -1216,7 +1055,7 @@ def layout_markdown(
                 continue
             # At least two body lines on either side of a page boundary when feasible.
             if (
-                not _regions and not protected_heading
+                not _regions
                 and count == 1
                 and remaining > 1
                 and y > region_top
@@ -1224,36 +1063,27 @@ def layout_markdown(
             ):
                 new_page()
                 continue
-            if remaining - count == 1 and count > 2:
+            if remaining - count == 1 and count > 2 and not (grid and grid.cell_width):
                 count -= 1
-            if count == 0 and _footnotes and _footnotes.can_advance():
-                new_page()
-                continue
             if count == 0 and grid:
-                _regions.stop("正文行及其脚注无法同时放入纸张行格，排版已停止。")
+                _regions.stop("正文行无法放入纸张行格，排版已停止。")
             if count == 0:
                 count = 1  # Over-tall line: emit once with an error, never loop forever.
             for local in range(pos, pos + count):
                 line = lines[local]
-                capture = (
-                    capture_start()
-                    if block.rule or (_atomic_bands is not None and not line)
-                    else None
-                )
                 ascent, descent, height = metrics[local]
                 baseline, end = line_geometry(
                     y, metrics[local], align_baseline=align_baseline, padding=padding,
                     previous=previous_grid_line,
                 )
-                if _footnotes:
-                    _footnotes.accept(line, end)
                 if not (grid and align_baseline) and height > region_bottom - region_top + 1e-9:
                     diagnostics.append(
                         Diagnostic(
                             "line-height-overflow", "Line exceeds empty page", block.node.span
                         )
                     )
-                first_indent = block.first_indent if local == 0 else 0
+                cells = grid and grid.cell_width and align_baseline
+                first_indent = block.first_indent if local == 0 and not cells else 0
                 line_width = sum(b.advance for b in line)
                 if line_width > content_width - indent - first_indent + 1e-9:
                     code_line = block.node.kind in {"fence", "code_block"}
@@ -1295,7 +1125,8 @@ def layout_markdown(
                     used = line_width - sum(box.advance for box in line[trailing:])
                     line = [*line[:trailing], *(replace(box, advance=0) for box in line[trailing:])]
                     spare = max(0, content_width - indent - used)
-                    x += spare / 2 if block.paragraph_align == "center" else spare
+                    offset = spare / 2 if block.paragraph_align == "center" else spare
+                    x += int(offset / grid.cell_width + 1e-9) * grid.cell_width if cells else offset
                 if local in code_continuations.get(block.node.node_id, ()):
                     cy = baseline - flow.code.em_mm * 0.35
                     ops[-1].append(
@@ -1386,12 +1217,18 @@ def layout_markdown(
                         )
                 decoration = []
                 extra = [0.0] * len(line)
-                if (block.paragraph_align == "justify"
+                if (not cells and block.paragraph_align == "justify"
                         and local+1 < len(lines) and line and line[-1].status != "line-break"):
                     line, extra = justify_line(line, content_width-indent-first_indent)
                 for box, gap_after in zip(line, extra):
                     left = x
-                    x = place_box(box, x, baseline, line_index) + gap_after
+                    pen_baseline = baseline
+                    if cells and box.glyph:
+                        _, top, _, bottom = box.glyph.bounds
+                        pen_baseline += (box.glyph.metrics.baseline - (top + bottom) / 2) * box.em
+                    elif cells and box.math:
+                        pen_baseline += (box.ascent - box.descent) / 2
+                    x = place_box(box, x, pen_baseline, line_index) + gap_after
                     if box.run.underline or box.run.strike:
                         decoration.append((left, x, box))
                 for name in ("underline", "strike"):
@@ -1439,8 +1276,6 @@ def layout_markdown(
                 y = end
                 if grid and align_baseline:
                     previous_grid_line = (baseline, minimum_height)
-                if capture is not None:
-                    capture_end(capture, block.node.span)
                 line_index += 1
             pos += count
             if pos < len(lines):
@@ -1448,9 +1283,6 @@ def layout_markdown(
         previous_heading_page = len(fragments) - 1 if block.keep_next else None
     if prepared and not suffix_reused:
         checkpoints.append(checkpoint())
-    if _footnotes:
-        _footnotes.expand_final()
-        _footnotes.finish()
     pages, body_pages = [], []
     for i, (fs, ps) in enumerate(zip(fragments, ops)):
         if (resume and i < previous.checkpoints[resume].page) or (
@@ -1538,6 +1370,5 @@ def layout_markdown(
         cancelled,
         suffix_reused=suffix_reused,
         body_pages=tuple(body_pages) if template else None,
-        pager=_footnotes,
     )
     return snapshot

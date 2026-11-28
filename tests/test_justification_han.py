@@ -217,19 +217,3 @@ def test_keyword_document_argument_supports_variation():
     document=parse_markdown("汉")
     result=layout_markdown(document=document,resolver=resources(),flow=FlowStyle(han_variation=HanVariation(enabled=True)))
     assert result.plotter_exportable
-
-
-def test_justification_keeps_footnote_marker_attached_to_anchor_character():
-    session=SourceSession("中文测试[^a]汉字后文汉字后文\n\n[^a]: 中文")
-    page=PageProfile(38,160,5)
-    original=render(session,page=page)
-    justified=render(session,FlowStyle(paragraph_align="justify"),page=page)
-    assert justified.plotter_exportable,justified.diagnostics
-    def pair(snapshot):
-        anchor=next(f for f in snapshot.fragments if f.span.start==3)
-        marker=next(f for f in snapshot.fragments if f.span.start==4 and f.container_id is None)
-        return anchor,marker
-    a,b=pair(original)
-    c,d=pair(justified)
-    assert c.x_mm>a.x_mm
-    assert d.x_mm-c.x_mm-c.advance_mm==pytest.approx(b.x_mm-a.x_mm-a.advance_mm)

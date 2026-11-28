@@ -311,6 +311,7 @@ def load_package(path: Path) -> LoadedDocument:
             ):
                 raise ValueError("Selected glyph is missing from the embedded resource set")
         flow_record = dict(styles.get("flow", {}))
+        flow_record.pop("footnote", None)  # Retired in 0.1.148.
         flow_record.setdefault("math", {"fraction_source": "geometric"})
         flow = FlowStyle(**flow_record).compact_body()
         from .flow_template import bind_legacy_family

@@ -69,10 +69,30 @@ class FlowCanvas(QtWidgets.QWidget):
             p.drawRect(QtCore.QRectF(r.x_mm, r.y_mm, r.width_mm, r.height_mm))
             if f.paper_grid:
                 p.setPen(QtGui.QPen(QtGui.QColor("#0284c7"), 0.35, QtCore.Qt.PenStyle.DashLine))
+                columns = f.paper_grid.columns
                 for baseline in f.paper_grid.baselines():
                     y = r.y_mm + baseline + t.offset_y_mm
                     x = r.x_mm + t.offset_x_mm
-                    p.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(x + r.width_mm, y))
+                    if columns:
+                        h = f.paper_grid.cell_height(r.height_mm)
+                        w = r.width_mm / columns
+                        p.drawRect(QtCore.QRectF(x, y - h/2, r.width_mm, h))
+                        # Subpixel divisions merge on screen at the current zoom.
+                        for c in range(1, columns, max(1, int(1 / max(.001, w * scale)))):
+                            p.drawLine(QtCore.QPointF(x+c*w, y-h/2), QtCore.QPointF(x+c*w, y+h/2))
+                    else:
+                        p.drawLine(QtCore.QPointF(x, y), QtCore.QPointF(x + r.width_mm, y))
+                p.save()
+                sample = QtGui.QFont(p.font())
+                size = min(5, f.paper_grid.cell_height(r.height_mm)*.75, r.width_mm/columns) if columns else 4
+                sample.setPointSizeF(max(.1, size*.70))
+                p.setFont(sample)
+                y = r.y_mm + f.paper_grid.first_mm + t.offset_y_mm
+                for c, ch in enumerate("示例"[:min(columns or 2, 2)]):
+                    w = r.width_mm / columns if columns else 4.
+                    p.drawText(QtCore.QRectF(x+c*w, y-size/(2 if columns else 1), w, size),
+                               QtCore.Qt.AlignmentFlag.AlignCenter, ch)
+                p.restore()
                 p.setPen(QtGui.QPen(color, 0.5))
             title = (
                 f"{f.order}. 正文"
@@ -536,8 +556,21 @@ class _TemplateDraft(QtWidgets.QDialog):
             self, "选择参考图片", "", "图片 (*.png *.jpg *.jpeg)"
         )
         if path:
+            from ..document.paper_candidates import body_candidates
+            background = import_reference_image(path)
+            layout = self.current_layout()
+            found = body_candidates(background, self.template.width_mm, self.template.height_mm)
+            frames = layout.frames
+            if found:
+                use = not layout.body_frames or QtWidgets.QMessageBox.question(
+                    self, "识别到正文区域", f"采用新底图识别出的 {len(found)} 个正文框？选择「否」保留当前正文框。",
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No,
+                ) == QtWidgets.QMessageBox.StandardButton.Yes
+                if use:
+                    frames = (*found, *(f for f in frames if f.role != "body"))
             self.update_layout(
-                background=import_reference_image(path),
+                background=background, frames=frames,
                 source_page=None,
                 source_sha256="",
                 source_size_mm=None,

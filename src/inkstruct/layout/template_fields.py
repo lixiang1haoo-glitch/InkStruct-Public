@@ -47,16 +47,6 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
                 )
             )
             continue
-        if any(n.kind == "footnote_definition" for n in nodes):
-            diagnostics.append(
-                TemplateDiagnostic(
-                    "template-footnote-definition-binding",
-                    "Bind reference-containing source blocks to fields; footnote definitions belong to the page-bottom note area",
-                    span,
-                    target=target,
-                )
-            )
-            continue
         faces = (
             (template.first, template.continuation) if binding.pages == "all" else (template.first,)
         )
@@ -133,18 +123,6 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
 
     bound_ids = {n.node_id for _, nodes, _ in selected for n in nodes}
     body = replace(document, nodes=tuple(n for n in document.nodes if n.node_id not in bound_ids))
-    fixed_references = tuple(
-        sorted(
-            (
-                n
-                for _, nodes, _ in selected
-                for root in nodes
-                for n in root.walk()
-                if n.kind == "footnote_reference"
-            ),
-            key=lambda n: n.span.start,
-        )
-    )
     result = layout_markdown(
         body,
         resolver,
@@ -152,7 +130,6 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
         style=style,
         flow=no_bindings,
         cancelled=cancelled,
-        _fixed_references=fixed_references,
     )
     diagnostics.extend(result.diagnostics)
     point_meter = PointAccumulator(result.pages)
@@ -202,7 +179,7 @@ def layout_template_fields(document, resolver, *, page, style, flow, cancelled=N
                 style=field_style,
                 flow=field_flow,
                 cancelled=cancelled,
-                _references_only=True,
+                _fixed_field=True,
             )
             diagnostics.extend(with_template_target(d, target) for d in snapshot.diagnostics)
             if len(snapshot.pages) > 1:

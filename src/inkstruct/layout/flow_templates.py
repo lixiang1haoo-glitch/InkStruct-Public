@@ -11,7 +11,7 @@ from ..scene.schema import LayoutSnapshot, Page, PaintOp
 from .flow_regions import NoRegionProgress, RegionCursor
 from .inline import check_cancel
 
-VERSION = "template-single-flow-v3/named-fields-v1/partial-preview-v1/paper-grid-v2"
+VERSION = "template-single-flow-v3/named-fields-v1/partial-preview-v1/paper-grid-v3"
 
 
 def layout_flow_template(document, resolver, *, page, style, flow, cancelled=None):
@@ -107,7 +107,7 @@ def layout_flow_template(document, resolver, *, page, style, flow, cancelled=Non
                     nodes=tuple(
                         n
                         for n in node.children
-                        if not n.kind.startswith("footnote_") and n.kind != "named_field_error"
+                        if n.kind != "named_field_error"
                     ),
                     diagnostics=(),
                 )
@@ -137,7 +137,7 @@ def layout_flow_template(document, resolver, *, page, style, flow, cancelled=Non
                 style=style,
                 flow=inner,
                 cancelled=cancelled,
-                _references_only=True,
+                _fixed_field=True,
             )
             diagnostics.extend(with_template_target(d, target) for d in fixed.diagnostics)
             if len(fixed.pages) > 1:

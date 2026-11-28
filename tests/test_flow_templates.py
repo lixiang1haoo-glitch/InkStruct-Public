@@ -153,7 +153,6 @@ def test_repeated_fields_and_page_number_do_not_add_pages():
         (":::field other\n123\n:::", "template-field-unknown"),
         (":::field name\n123\n\n456", "template-field-syntax"),
         (":::field name\n:::field other\n123\n:::\n:::", "template-field-syntax"),
-        (":::field name\n1[^x]\n:::\n\n[^x]: 2", "template-field-footnote"),
     ],
 )
 def test_protocol_errors(source, expected):
@@ -211,7 +210,7 @@ def test_empty_body_no_body_frames_and_fields_only_are_finite():
     assert "template-body-no-progress" in codes(render("123", t))
 
 
-def test_different_frame_width_table_rows_and_body_footnotes():
+def test_different_frame_width_table_rows_and_body():
     t = template(
         loop=("p1", "p2"),
         layouts=(
@@ -222,10 +221,10 @@ def test_different_frame_width_table_rows_and_body_footnotes():
     from inkstruct.document.table_style import TableStyle
 
     flow = FlowStyle(template=t, table=TableStyle(width_mm=60))
-    snap = render("|1|2|\n|---|---|\n|3|4|\n|5|6|\n\n1[^x]\n\n[^x]: 123 456", t, flow=flow)
+    snap = render("|1|2|\n|---|---|\n|3|4|\n|5|6|\n\n123 456", t, flow=flow)
     assert not codes(snap), snap.diagnostics
     assert len(snap.pages) >= 2
-    assert any(f.container_id for f in snap.fragments)
+    assert any(op.points for p in snap.pages for op in p.paint_ops)
 
 
 def test_v3_package_frozen_reopen_and_svg(tmp_path):
@@ -379,7 +378,7 @@ def test_body_list_code_and_notes_cross_ordered_frames():
         )
     )
     snap = render(
-        "1. 123 456 789 123 456\n2. 789 123 456\n\n1[^x]\n\n[^x]: 123 456\n\n```\n123456\n789\n```",
+        "1. 123 456 789 123 456\n2. 789 123 456\n\n123 456\n\n```\n123456\n789\n```",
         t,
     )
     assert not codes(snap), snap.diagnostics
@@ -388,7 +387,7 @@ def test_body_list_code_and_notes_cross_ordered_frames():
     primary = Counter(f.occurrence_id for f in snap.fragments if not f.repeated)
     assert all(v == 1 for v in primary.values())
     notes = [f for f in snap.fragments if f.container_id and f.container_id.startswith("footnote:")]
-    assert notes and all(f.x_mm >= 60 for f in notes)
+    assert not notes
 
 
 def test_unplaced_field_content_is_not_silently_ignored():

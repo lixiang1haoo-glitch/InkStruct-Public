@@ -29,7 +29,6 @@ class InlineRun:
     strike: bool = False
     role: str = "content"
     math: MathNode | None = None
-    footnote: tuple[Occurrence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -43,6 +42,7 @@ class InlineBox:
     glyph: ResolvedGlyph | None
     status: str
     math: MathBox | None = None
+    natural: InlineBox | None = None
 
 
 def inline_runs(node: SemanticNode, *, underline=False, strike=False):
@@ -55,9 +55,6 @@ def inline_runs(node: SemanticNode, *, underline=False, strike=False):
         if attrs.get("blocked") == "true" or attrs.get("strength", "4") != "4":
             return []
         return [InlineRun(Occurrence(node.node_id, node.node_id, node.span, "\f"), node.kind)]
-    if node.kind == "footnote_reference" and node.occurrences:
-        occurrence = Occurrence(node.node_id + ":reference", node.node_id, node.span, "\ufffc")
-        return [InlineRun(occurrence, "footnote_reference", footnote=node.occurrences)]
     if node.kind in {"math_inline", "math_block"} and node.math:
         occurrence = Occurrence(node.node_id + ":math", node.node_id, node.span, "\ufffc")
         return [InlineRun(occurrence, node.kind, underline, strike, math=node.math)]
@@ -97,7 +94,7 @@ def measure_runs(
     character_em=None,
     math_style=None,
     math_width=None,
-    footnote_style=None,
+
     latin_spacing="capture",
     punctuation_spacing="capture",
     han_spacing="full",
@@ -109,73 +106,6 @@ def measure_runs(
     for index, run in enumerate(runs):
         check_cancel(cancelled)
         o = run.occurrence
-        if run.footnote:
-            from ..document.footnote_style import FootnoteStyle
-
-            note_style = footnote_style or FootnoteStyle()
-            # One unbreakable raised box, using selected centreline digits. The
-            # composite shares the math-box placement contract, not math syntax
-            # or the separately configurable formula font size.
-            children, issues = measure_runs(
-                [InlineRun(o) for o in run.footnote],
-                resolver,
-                style,
-                scale=scale * note_style.reference_scale,
-                cancelled=cancelled,
-                latin_spacing=latin_spacing,
-                punctuation_spacing=punctuation_spacing,
-                han_spacing=han_spacing,
-            )
-            reference_em = style.em_mm * scale * note_style.reference_scale
-            rise = style.em_mm * scale * note_style.reference_raise_em
-            if reference_em < style.stroke_width_mm * 6:
-                issues.append(
-                    Diagnostic(
-                        "footnote-size-limit",
-                        "Footnote reference is too small for the selected pen width",
-                        o.span,
-                    )
-                )
-            glyphs, x = [], 0
-            for child in children:
-                glyphs.append(
-                    MathGlyph(
-                        child.run.occurrence,
-                        child.glyph,
-                        x,
-                        -rise,
-                        child.em,
-                        child.advance,
-                        child.origin_offset,
-                        child.ascent,
-                        child.descent,
-                        child.status,
-                    )
-                )
-                x += child.advance
-            measured = MathBox(
-                x,
-                max(b.ascent + rise for b in children),
-                max(0, max(b.descent - rise for b in children)),
-                0,
-                tuple(glyphs),
-                diagnostics=tuple(issues),
-            )
-            diagnostics.extend(issues)
-            boxes.append(
-                InlineBox(
-                    run,
-                    measured.width,
-                    measured.ascent,
-                    measured.descent,
-                    reference_em,
-                    0,
-                    None,
-                    "ready" if measured.ready else "unsupported",
-                    measured,
-                )
-            )
-            continue
         if run.math:
             measured = measure_math(
                 run.math,
@@ -304,10 +234,7 @@ def break_lines(boxes: list[InlineBox], width: float, *, first_width=None, cance
                 right is None
                 or box.status == "break-hint"
                 or right.status in {"line-break", "break-hint"}
-                or (
-                    right.run.kind != "footnote_reference"
-                    and legal_break(box.run.occurrence.text, right.run.occurrence.text)
-                )
+                or legal_break(box.run.occurrence.text, right.run.occurrence.text)
             )
             if used <= limit + 1e-9 and legal:
                 last_fit = end

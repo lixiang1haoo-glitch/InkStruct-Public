@@ -73,7 +73,7 @@ def measure_image(block, resolver, style, flow, width, cancelled):
         style,
         cancelled=cancelled,
         math_style=flow.math,
-        footnote_style=flow.footnote,
+
         latin_spacing=flow.latin_spacing,
         punctuation_spacing=flow.punctuation_spacing,
         han_spacing=flow.han_spacing,

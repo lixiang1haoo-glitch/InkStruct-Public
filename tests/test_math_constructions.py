@@ -168,15 +168,15 @@ def test_new_settings_are_optional_and_bounded():
     assert MathStyle(**old) == MathStyle()
 
 
-def test_document_numbered_array_inline_table_footnote_and_machine_roundtrip(tmp_path):
+def test_document_numbered_array_inline_table_and_machine_roundtrip(tmp_path):
     raw = array(r"\hline\vec{1}&\frac{2}{3}\\\cline{1-1}\ddot{4}&5\\\hline", "|lr|")
     source = (
         "$$\n"
         + raw
         + r"\tag{1}\label{array}"
-        + "\n$$\n\n6[^a]\n\n|7|\n|---|\n|$"
+        + "\n$$\n\n6\n\n|7|\n|---|\n|$"
         + raw.replace("|", r"\|")
-        + "$|\n\n[^a]: $"
+        + "$|\n\n$"
         + raw
         + "$ $\\eqref{array}$"
     )

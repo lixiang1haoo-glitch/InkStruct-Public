@@ -536,7 +536,6 @@ class MixedWindow(ReviewWindow):
         self.diagnostic_picker.currentIndexChanged.connect(self.update_diagnostic_action)
         navigation.add_group(QtWidgets.QLabel("正文块"), self.block_picker)
         self.table_settings_button = self.button("表格设置…", self.table_settings, navigation)
-        self.footnote_settings_button = self.button("脚注设置…", self.footnote_settings, navigation)
         navigation.add_group(QtWidgets.QLabel("诊断"), self.diagnostic_picker)
         self.repair_template_button = self.button(
             "修正模板…", self.repair_template_diagnostic, navigation
@@ -573,7 +572,6 @@ class MixedWindow(ReviewWindow):
             self.dialect_picker,
             self.block_picker,
             self.table_settings_button,
-            self.footnote_settings_button,
             self.math_settings_button,
             self.code_settings_button,
             self.image_settings_button,
@@ -788,20 +786,6 @@ class MixedWindow(ReviewWindow):
                 self.flow = replace(self.flow, math=dialog.configuration())
                 self.mark_dirty()
                 self.schedule_layout()
-        finally:
-            dialog.deleteLater()
-
-    def footnote_settings(self):
-        from .footnote_settings import FootnoteSettingsDialog
-
-        dialog = FootnoteSettingsDialog(self.flow.footnote, self)
-        try:
-            if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-                configured = dialog.configuration()
-                if configured != self.flow.footnote:
-                    self.flow = replace(self.flow, footnote=configured)
-                    self.mark_dirty()
-                    self.schedule_layout()
         finally:
             dialog.deleteLater()
 

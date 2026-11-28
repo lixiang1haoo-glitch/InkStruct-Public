@@ -185,7 +185,7 @@ def measure_table(
     *,
     cancelled=None,
     math_style=None,
-    footnote_style=None,
+
     latin_spacing="capture",
     punctuation_spacing="capture",
     han_spacing="full",
@@ -210,7 +210,7 @@ def measure_table(
             text_style,
             cancelled=cancelled,
             math_style=math_style,
-            footnote_style=footnote_style,
+
             latin_spacing=latin_spacing,
             punctuation_spacing=punctuation_spacing,
             han_spacing=han_spacing,

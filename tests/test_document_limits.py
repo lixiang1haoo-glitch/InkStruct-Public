@@ -100,7 +100,7 @@ def test_page_limit_exact_boundary_and_source_preservation(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "source", ["12.50", "$\\frac{12}{34}$", "|12|34|\n|---|---|\n|5.6|7.8|", "12[^a]\n\n[^a]: 34"]
+    "source", ["12.50", "$\\frac{12}{34}$", "|12|34|\n|---|---|\n|5.6|7.8|", "12\n\n34"]
 )
 def test_geometry_limits_cover_mixed_elements(source, monkeypatch):
     from test_math_sample_constructions import resolver
@@ -131,8 +131,8 @@ def test_repeated_template_fields_count_toward_document_points(monkeypatch):
     assert error.value.kind == "points"
 
 
-def test_nested_footnote_passes_share_expansion_budget(monkeypatch):
-    doc = parse_markdown("12[^a]\n\n[^a]: 34")
+def test_multiple_paragraphs_share_expansion_budget(monkeypatch):
+    doc = parse_markdown("12\n\n34")
     observed = {}
     original = limits.WorkBudget.add
 
@@ -145,7 +145,7 @@ def test_nested_footnote_passes_share_expansion_budget(monkeypatch):
     expected = layout_markdown(doc, AssetResolver(builtin_numbers=True))
     assert len(observed) == 1
     total = next(iter(observed.values()))
-    assert total > sum(len(o.points) for p in expected.pages for o in p.paint_ops)
+    assert total >= sum(len(o.points) for p in expected.pages for o in p.paint_ops)
     limited(monkeypatch, expanded_points=total - 1)
     with pytest.raises(limits.DocumentLimitError) as error:
         layout_markdown(doc, AssetResolver(builtin_numbers=True))

@@ -14,7 +14,7 @@ from ..document.limits import policy_key
 from ..document.schema import digest
 from .measurement_cache import _freeze, _weight
 
-VERSION = "footnote-pagination-v4"
+VERSION = "body-pagination-v5"
 _active = ContextVar("inkstruct_continuation", default=None)
 
 
@@ -65,7 +65,6 @@ class Checkpoint:
     line_index: int
     previous_heading_page: int | None
     diagnostics: int
-    footnotes: object = None
 
     def position(self):
         # Buffer counts may differ after an edit. Geometry and generated IDs
@@ -75,7 +74,6 @@ class Checkpoint:
             self.y,
             self.line_index,
             self.previous_heading_page,
-            self.footnotes.position() if self.footnotes is not None else None,
         )
 
 
@@ -89,9 +87,6 @@ class Continuation:
     resources: tuple
     resource_weight: int
     finished_pages: tuple
-    coordination: tuple
-    note_pages: tuple
-    note_diagnostics: tuple
 
 
 @dataclass(frozen=True)
@@ -103,11 +98,10 @@ class Prepared:
     common: int
     resources: tuple
     suffix: int
-    coordination: tuple
 
 
 def prepare(
-    document, resolver, page, style, flow, measured, tables, images, codes, cancelled, *, pager=None
+    document, resolver, page, style, flow, measured, tables, images, codes, cancelled
 ):
     cache = _active.get()
     if cache is None:
@@ -136,13 +130,6 @@ def prepare(
     inputs = tuple(inputs)
     resources = tuple(g for pool in resolver.pools.values() for g in pool)
     previous = cache.get(key)
-    coordination = pager.continuation_inputs() if pager else ()
-    # A note edit can affect earlier body-page reservations. Until dependencies
-    # are proven equal, no body checkpoint is safe, even before its reference.
-    if previous and (
-        previous.coordination != coordination or (pager and previous.resources != resources)
-    ):
-        previous = None
     check_cancel(cancelled)
     common = 0
     if previous:
@@ -170,7 +157,6 @@ def prepare(
         common,
         resources,
         suffix,
-        coordination,
     )
 
 
@@ -194,14 +180,6 @@ def suffix_checkpoints(previous, old_index, current):
             ops=old.ops + (current.ops - boundary.ops if same_page else 0),
             images=old.images + (current.images - boundary.images if same_page else 0),
             diagnostics=old.diagnostics + current.diagnostics - boundary.diagnostics,
-            footnotes=replace(
-                old.footnotes,
-                diagnostics=old.footnotes.diagnostics
-                + current.footnotes.diagnostics
-                - boundary.footnotes.diagnostics,
-            )
-            if old.footnotes is not None
-            else None,
         )
 
 
@@ -214,7 +192,6 @@ def publish(
     *,
     suffix_reused=0,
     body_pages=None,
-    pager=None,
 ):
     if prepared is None:
         return
@@ -241,9 +218,6 @@ def publish(
         prepared.resources,
         resource_weight,
         pages,
-        prepared.coordination,
-        tuple(pager.pages) if pager else (),
-        tuple(pager.diagnostics) if pager else (),
     )
     # Geometry storage dominates; count points conservatively without traversing
     # every float. Reuse validated prefix weights; account for the resource
@@ -256,9 +230,6 @@ def publish(
             key,
             result.checkpoints,
             result.diagnostics,
-            result.coordination,
-            result.note_pages,
-            result.note_diagnostics,
             check=lambda: check_cancel(cancelled),
         )
     )

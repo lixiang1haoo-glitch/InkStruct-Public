@@ -14,7 +14,6 @@ ISSUE_LABELS = {
     "template-field-height-overflow": "内容超出填写区高度，请增大区域或调整排版。",
     "template-field-ink-overflow": "实际笔迹超出填写区，请调整区域或排版。",
     "template-field-image-overflow": "图片超出填写区，请调整图片或区域尺寸。",
-    "template-footnote-definition-binding": "脚注定义不能单独绑定到填写区。",
 }
 
 

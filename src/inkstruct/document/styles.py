@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass, field, replace
 from ..math.style import MathStyle
 from .code_style import CodeStyle
 from .flow_template import FlowTemplate
-from .footnote_style import FootnoteStyle
 from .glyph_corrections import GlyphCorrection
 from .han_variation import HanVariation
 from .images import MAX_IMAGE_CATALOG_BYTES, MAX_IMAGE_RESOURCES, ImageStyle, RasterResource
@@ -46,7 +45,6 @@ class FlowStyle:
     images: tuple[RasterResource | LineSvgResource, ...] = ()
     image: ImageStyle = field(default_factory=lambda: ImageStyle(height_mm=60))
     image_overrides: tuple[tuple[str, ImageStyle], ...] = ()
-    footnote: FootnoteStyle = field(default_factory=FootnoteStyle)
     markdown_dialect: str = "markdown"
     glyph_corrections: tuple[GlyphCorrection, ...] = ()
     latin_spacing: str = "handwriting"
@@ -119,10 +117,6 @@ class FlowStyle:
             raise ValueError("Unknown document content mode")
         if self.markdown_dialect not in {"markdown", "obsidian"}:
             raise ValueError("Unknown Markdown dialect")
-        if isinstance(self.footnote, dict):
-            object.__setattr__(self, "footnote", FootnoteStyle(**self.footnote))
-        if not isinstance(self.footnote, FootnoteStyle):
-            raise ValueError("Invalid footnote style")  # noqa: TRY004 - serialized configuration
         images = tuple(
             (LineSvgResource(**v) if v.get("schema_version") == SVG_SCHEMA else RasterResource(**v))
             if isinstance(v, dict)

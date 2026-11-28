@@ -111,22 +111,6 @@ def test_colspan_does_not_connect_rows_or_justify_internal_splitting():
     assert not issues and [c.rows for c in chunks] == [(0, 1), (0, 2)]
 
 
-def test_oversized_note_group_is_consumed_once_and_diagnostic_locates_its_rows(tmp_path):
-    source = "1[^a]\n\n[^a]: 2\n\n    " + CHAIN
-    doc = parse_markdown(source)
-    flow = FlowStyle(table=TableStyle(width_mm=50, min_row_height_mm=20))
-    s = layout_markdown(
-        doc, AssetResolver(builtin_numbers=True), page=PageProfile(80, 65, 5), flow=flow
-    )
-    assert not s.plotter_exportable and len(s.pages) < 8
-    issues = [d for d in s.diagnostics if d.code == "footnote-line-height-overflow"]
-    assert issues and "Atomic footnote table row group needs" in issues[0].message
-    selected = source[issues[0].span.start : issues[0].span.end]
-    assert "<td>5</td>" in selected and "<td>7</td>" not in selected
-    assert "empty note page supplies" in issues[0].message
-    coverage(doc, s)
-    with pytest.raises(ValueError):
-        plan_from_snapshot(s)
 
 
 def test_valid_chain_cells_stay_on_one_page_and_preserve_instances():

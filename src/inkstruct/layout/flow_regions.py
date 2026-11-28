@@ -15,7 +15,14 @@ class GridBands:
         self.last = top + offset + grid.last_mm
         self.line_bottom = bottom + offset
         self.pitch = grid.pitch
-        if self.pitch:
+        self.cell_width = frame.region.width_mm / grid.columns if grid.columns else 0
+        if self.cell_width:
+            self.cell_height = grid.cell_height(frame.region.height_mm)
+            self.top = self.first - self.cell_height / 2
+            self.bottom = self.last + self.cell_height / 2
+            self.line_bottom = self.bottom
+            self.tail = self.cell_height / 2
+        elif self.pitch:
             self.tail = min(self.pitch / 4, max(0, self.line_bottom - self.last))
             self.top = max(top + offset, self.first + self.tail - self.pitch)
             self.bottom = self.last + self.tail
@@ -34,6 +41,13 @@ class GridBands:
         return self.first + index * self.pitch
 
     def line(self, start, ascent, descent, *, previous=None):
+        if self.cell_width:
+            pitch = self.pitch or self.cell_height
+            row = max(0, ceil((start - self.top - 1e-8) / pitch))
+            bands = 1 + max(0, ceil((ascent + descent - self.cell_height - 1e-8) / pitch))
+            center = self.first + (row + (bands - 1) / 2) * pitch
+            end = self.first + (row + bands - 1) * pitch + self.tail
+            return center, end
         required = start + ascent
         if previous is not None:
             previous_baseline, minimum_height = previous
@@ -60,10 +74,6 @@ class RegionCursor:
         self.frame_index = 0
         self.span = SourceSpan(0, 0)
         self.capture_partial = None
-        widths = [
-            p.body_frames[-1].region.width_mm for p in template.effective_layouts if p.body_frames
-        ]
-        self.note_width = min(widths) if widths else template.width_mm
         if not template.layout(0).body_frames:
             found = self.candidates(include_current=False)
             if found:
@@ -152,24 +162,3 @@ class RegionCursor:
         if self.capture_partial is not None:
             error.pages, error.diagnostics = self.capture_partial()
         raise error
-
-    def note_bounds(self, index):
-        frames = self.template.layout(index).body_frames
-        if not frames:
-            return 0, 0, 0, 0
-        a, b, _, d = frames[-1].region.bounds
-        t = self.template
-        return (
-            a + t.offset_x_mm,
-            b + t.offset_y_mm,
-            a + self.note_width + t.offset_x_mm,
-            d + t.offset_y_mm,
-        )
-
-    def note_bottom(self, index, bottom):
-        if (
-            index == self.page_index
-            and self.frame_index < len(self.template.layout(index).body_frames) - 1
-        ):
-            return self.note_bounds(index)[1]
-        return bottom

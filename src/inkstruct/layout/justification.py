@@ -22,7 +22,7 @@ def justify_line(line, width):
     for left, right in pairwise(visible):
         a, b = placed[left], placed[right]
         first, second = a.run.occurrence.text, b.run.occurrence.text
-        if (first in OPENING or second in CLOSING or b.run.kind == "footnote_reference"
+        if (first in OPENING or second in CLOSING
                 or (a.run.kind == b.run.kind == "code_inline"
                     and a.run.occurrence.node_id == b.run.occurrence.node_id)):
             continue

@@ -18,7 +18,7 @@ from ._math_mapping import block_math, inline_math
 from .break_commands import block_flow_break, inline_break
 from .paragraph_align import block_paragraph_align
 from .cancellation import check_cancel
-from .footnotes import footnote_definition, footnote_reference
+from markdown_it.rules_block.reference import reference
 from .schema import SourceSpan
 from .source_map import MappedText
 from .tasks import task_list_core
@@ -149,12 +149,12 @@ class LocatedBlockParser(ParserBlock):
             {"alt": ["paragraph", "reference", "blockquote", "list"]},
         )
         self.ruler.before("fence", "paragraph_align", block_paragraph_align, {"alt": ["paragraph", "reference"]})
-        self.ruler.before(
-            "reference",
-            "footnote_definition",
-            footnote_definition,
-            {"alt": ["paragraph", "reference", "blockquote", "list"]},
-        )
+        def link_definition(state, start, end, silent):
+            offset = state.bMarks[start] + state.tShift[start]
+            if state.src.startswith("[^", offset):
+                return False
+            return reference(state, start, end, silent)
+        self.ruler.at("reference", link_definition, {"alt": ["paragraph", "reference"]})
         self.ruler.before(
             "fence",
             "math_block",
@@ -314,7 +314,6 @@ class LocatedInlineParser(ParserInline):
         super().__init__()
         self.ruler.before("escape", "break_command", inline_break)
         self.ruler.before("escape", "math_inline", inline_math)
-        self.ruler.before("link", "footnote_reference", footnote_reference)
         for entry in self.ruler.__rules__:
             self.ruler.at(entry.name, instrument_rule(entry.fn))
         # Joining plain/entity/delimiter tokens loses lexeme provenance. AST consumers

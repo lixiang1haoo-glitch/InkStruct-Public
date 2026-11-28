@@ -101,15 +101,6 @@ def split_fields(document, template):
                     key,
                 )
             )
-        if any(n.kind.startswith("footnote_") for n in node.walk()):
-            diagnostics.append(
-                issue(
-                    "template-field-footnote",
-                    "字段内不能使用脚注；请将脚注移到正文。",
-                    node.span,
-                    key,
-                )
-            )
     for key, f in declared.items():
         node = definitions.get(key)
         text = document.source[node.span.start : node.span.end] if node else ""

@@ -115,14 +115,14 @@ def test_heading_chain_is_rewound_and_old_pagination_diagnostics_not_duplicated(
     parity(session, resolver, cache, **kwargs)
 
 
-def test_footnote_definition_edit_invalidates_body_checkpoints():
+def test_literal_definition_edit_reuses_prior_body_checkpoints():
     session = SourceSession(PREFIX + "\n\n1[^n]\n\n[^n]: 2")
     resolver, cache = AssetResolver(builtin_numbers=True), ContinuationCache()
     build(session, resolver, cache)
     session.apply(len(session.source) - 1, len(session.source), "3")
     parity(session, resolver, cache)
     assert cache.statistics()["entries"] == 1
-    assert cache.statistics()["reused_blocks"] == 0
+    assert cache.statistics()["reused_blocks"] > 0
 
 
 @pytest.mark.parametrize("mode", ["blank", "preprinted"])

@@ -9,7 +9,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from test_footnote_pages import assert_bands
 from test_math_layout import resolver as basic_resolver
 from test_math_sample_constructions import STYLE, assets
 
@@ -159,7 +158,6 @@ def test_m5_combination_coverage_paging_routing_edit_undo_and_roundtrip(sample, 
     assert Counter(f.occurrence_id for f in snapshot.fragments if not f.repeated) == Counter(
         o.occurrence_id for o in doc.occurrences
     )
-    assert_bands(snapshot)
     expected_choices = r.selection_records()
     canonical = lambda points: min(points, tuple(reversed(points)))
     for page in plan_from_snapshot(snapshot).pages:

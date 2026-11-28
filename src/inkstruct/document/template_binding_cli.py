@@ -100,7 +100,7 @@ def inspect_content(loaded, document, flow):
                 "kind": n.kind,
                 "span": asdict(n.span),
                 "source": document.source[n.span.start : n.span.end],
-                "bindable": n.kind != "footnote_definition",
+                "bindable": True,
                 "bound_region": bound.get(n.node_id),
             }
             for n in document.nodes

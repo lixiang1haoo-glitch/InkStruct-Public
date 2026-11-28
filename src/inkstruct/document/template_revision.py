@@ -49,6 +49,8 @@ def _content_record(template, record=None):
             for frame in layout['frames']:
                 if frame.get('paper_grid') is None:
                     frame.pop('paper_grid', None)
+                elif not frame['paper_grid'].get('columns'):
+                    frame['paper_grid'].pop('columns', None)
     return data
 
 

@@ -154,7 +154,7 @@ def test_code_escapes_and_command_boundaries_remain_literal():
     "source",
     [
         "|1|\n|---|\n|2\\newpage3|",
-        "1[^a]\n\n[^a]: 2\\newpage3",
+
         ":::field box\n1\\clearpage2\n:::\n\n3",
     ],
 )
@@ -262,8 +262,8 @@ def test_weak_line_break_hint_allows_a_break_inside_a_numeric_run():
     assert [box.run.occurrence.text for box in lines[-1]] == ["2"]
 
 
-def test_manual_controls_in_footnotes_and_table_cells_do_not_move_main_flow():
-    source = "1[^a]\\framebreak2\n\n|3|\n|---|\n|4\\newline5\\framebreak6|\n\n[^a]: 7\\newline8\\framebreak9"
+def test_manual_controls_in_table_cells_do_not_move_main_flow():
+    source = "1\\framebreak2\n\n|3|\n|---|\n|4\\newline5\\framebreak6|"
     from inkstruct.document.table_style import TableStyle
 
     t = template(
@@ -445,13 +445,13 @@ def test_page_break_skips_template_pages_without_body_frames():
 
 
 @pytest.mark.parametrize("command", ["newpage", "pagebreak", "clearpage", "framebreak"])
-def test_both_flow_controls_are_blocked_in_html_tables_and_footnotes(command):
+def test_flow_controls_are_blocked_in_html_cells_only(command):
     source = r"1[^a]" + "\n\n<table><tr><td>2\\" + command + "3</td></tr></table>\n\n[^a]: 4\\" + command + "5"
     doc = parse_markdown(source, field_blocks=True)
     controls = [n for root in doc.nodes for n in root.walk() if n.kind in {"pagebreak", "framebreak"}]
     assert len(controls) == 2
-    assert all(dict(n.attributes).get("blocked") == "true" for n in controls)
-    assert sum(d.code.endswith("break-context") for d in doc.diagnostics) == 2
+    assert [dict(n.attributes).get("blocked") == "true" for n in controls] == [True, False]
+    assert sum(d.code.endswith("break-context") for d in doc.diagnostics) == 1
 
 
 def _historical_package(session, resolver, flow, suffix):
@@ -528,17 +528,6 @@ def test_unknown_grammar_is_still_rejected(tmp_path):
         load_package(path)
 
 
-def test_physical_break_keeps_body_footnotes_on_their_own_page():
-    t = template(layouts=(PageLayout("p1", "p1", (
-        frame("a", x=5, y=5, h=100), frame("b", x=65, y=5, h=100, order=2),
-    )),))
-    source = "1[^a]\\newpage2[^b]\n\n[^a]: 3\n\n[^b]: 4"
-    result = render(source, t)
-    assert result.plotter_exportable, result.diagnostics
-    main = [f for f in visible(result) if f.span.start in {0, source.index("2[^b]")}]
-    assert [(f.text, f.page_index) for f in main] == [("1", 0), ("2", 1)]
-    notes = [f for f in visible(result) if f.container_id and f.container_id.startswith("footnote:")]
-    assert [(f.text, f.page_index) for f in notes if f.text in "34"] == [("3", 0), ("4", 1)]
 
 
 def test_migration_keeps_leading_control_anchor_and_ordered_marker_choices(tmp_path):

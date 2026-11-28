@@ -73,8 +73,8 @@ def test_scopes_precedence_geometry_frozen_reopen_and_svg(font, tmp_path):
     assert resolver.usage_warnings() == restored.resolver.usage_warnings()
 
 
-def test_nested_footnotes_and_cache_never_double_correct(font):
-    session = SourceSession("A[^a]\n\n[^a]: A")
+def test_paragraphs_and_cache_never_double_correct(font):
+    session = SourceSession("A\n\nA")
     resolver = AssetResolver(embedded=font.glyphs(), builtin_numbers=True)
     cache = MarkdownBuildCache()
     args = (session, 1, resolver, "", "", PageProfile(), StyleProfile())

@@ -36,19 +36,6 @@ Markdown 文字中可用 \code{\newline}、\code{\linebreak} 强制换行，原�
 方框和勾线由可书写折线绘制。点击预览中的方框会更新源码，可使用正文撤销恢复。列表文字仍需要字形资源；方框不需要另外采集。只有当前预览完成后才可操作，过期页面不会修改新源码。
 
 \Needspace{8\baselineskip}
-\section{脚注}
-\entry{设置 → 元素 → 脚注设置…}
-\par\noindent\begin{minipage}{\linewidth}
-\begin{Source}
-12.50[^1]
-
-[^1]: 0.05
-\end{Source}
-\end{minipage}\par\medskip
-脚注按首次引用顺序编号，放在页底；同一标签多次引用共享注释。长注释可续页。设置可调整标记与注释字号、行高、与正文的距离、分隔线以及页底预留比例。
-
-定义放在顶层。脚注可以包含已支持的代码、公式、表格和图形；复杂结构仍遵循各自的分页规则。不要在定义内递归引用另一个脚注。缺失定义或不可容纳的内容会显示诊断，先修正再导出。
-
 \section{代码与字面内容}
 \entry{设置 → 元素 → 代码设置…}
 使用单反引号包住行内代码，或使用三反引号围成代码块。代码区不解释数学定界符或普通 Markdown 标记。例如：
@@ -107,7 +94,7 @@ PNG / JPEG & 作为完整图片，与手写图题一起预览。 & 参考 SVG/PN
 
 
 \section{AI 生成内容与换行分页}
-预期由 AI 读取项目的 Markdown 生成规范和用户要求，生成正文后复制粘贴或导入。\code{\newline}、\code{\linebreak} 强制换行；\code{\newpage}、\code{\pagebreak}、\code{\clearpage} 进入下一物理页；\code{\framebreak} 仅在连续正文流中进入下一个文本框。两类跳转不在表格单元格、脚注或固定字段中执行。控制语法直接包含在 Markdown 中，无需新增插入按钮。当前无浮动图表队列，\code{\clearpage} 与普通强制分页的可见效果相同。
+预期由 AI 读取项目的 Markdown 生成规范和用户要求，生成正文后复制粘贴或导入。\code{\newline}、\code{\linebreak} 强制换行；\code{\newpage}、\code{\pagebreak}、\code{\clearpage} 进入下一物理页；\code{\framebreak} 仅在连续正文流中进入下一个文本框。两类跳转不在表格单元格或固定字段中执行。控制语法直接包含在 Markdown 中，无需新增插入按钮。当前无浮动图表队列，\code{\clearpage} 与普通强制分页的可见效果相同。
 
 
 \section{两端对齐与自然书写（0.1.43）}

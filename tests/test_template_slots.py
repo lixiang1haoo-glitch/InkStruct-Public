@@ -254,10 +254,10 @@ def test_slot_requests_reject_ambiguous_or_stale_mapping(tmp_path, damage):
         read_bindings(path, "current", design())
 
 
-def test_slot_validation_preserves_field_footnotes_and_repeated_pages():
+def test_slot_validation_preserves_field_bindings_and_repeated_pages():
     base = design()
     template = replace(base, continuation=base.first, slots=(replace(base.slots[0], pages="all"),))
-    doc = parse_markdown(SourceSession("12[^a]\n\n" + "34\n\n" * 50 + "[^a]: 56"))
+    doc = parse_markdown(SourceSession("12\n\n" + "34\n\n" * 50 + "56"))
     binding = template.slots[0].bind((doc.nodes[0].node_id,))
     r = AssetResolver(builtin_numbers=True)
     flow = FlowStyle(template=template, template_bindings=(binding,))

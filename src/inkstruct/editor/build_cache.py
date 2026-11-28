@@ -10,7 +10,7 @@ from ..layout.continuation import ContinuationCache
 from ..layout.measurement_cache import MeasurementCache
 from ..math.schema import MATH_VERSION
 
-CACHE_VERSION = "markdown-build-cache-v1"
+CACHE_VERSION = "markdown-build-cache-v2"
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,6 @@ def source_key(session, dialect):
 
 def layout_key(source, resolver, page, style, flow):
     from ..layout.blocks import LAYOUT_VERSION
-    from ..layout.footnotes import VERSION as FOOTNOTE_VERSION
     from ..layout.template_fields import VERSION as FIELD_VERSION
     from ..math.handwritten import MATH_LAYOUT_VERSION
 
@@ -71,7 +70,6 @@ def layout_key(source, resolver, page, style, flow):
         settings,
         LAYOUT_VERSION,
         MATH_LAYOUT_VERSION,
-        FOOTNOTE_VERSION,
         FIELD_VERSION,
     )
 

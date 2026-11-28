@@ -46,12 +46,17 @@ def main():
                             template=template_json(template), size_mm=pdf.page_size_mm(index)
                         )
                 elif action == "render" and pdf is not None:
+                    from ..document.paper_candidates import body_candidates
                     index = request["index"]
+                    background = pdf.background(index)
+                    size = pdf.page_size_mm(index)
+                    target = request.get("frame_size") or size
                     result = {
                         "action": action,
                         "index": index,
-                        "size_mm": pdf.page_size_mm(index),
-                        "background": asdict(pdf.background(index)),
+                        "size_mm": size,
+                        "background": asdict(background),
+                        "body_frames": [asdict(f) for f in body_candidates(background, *target)],
                     }
                 else:
                     raise ValueError("PDF 请求无效或文件未打开")

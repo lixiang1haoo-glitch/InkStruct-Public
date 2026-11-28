@@ -91,7 +91,7 @@ class MeasurementCache(BoundedCache):
 
 @contextmanager
 def measurement_scope(cache):
-    """A worker-local scope inherited by nested footnote/template layout passes."""
+    """A worker-local scope inherited by nested template layout passes."""
     token = _active.set(cache)
     try:
         yield

@@ -44,7 +44,6 @@ if scenario=='no_op':
                    heading_scales=(1.6123456789,1.4,1.2,1.1,1,1),
                    math=replace(w.flow.math,fraction_scale=.8123456789),
                    code=replace(w.flow.code,em_mm=4.123456789),
-                   footnote=replace(w.flow.footnote,text_scale=.7123456789),
                    table_overrides=((tables[1].node_id,TableStyle(width_mm=123.123456789)),),
                    image_overrides=((images[1].node_id,ImageStyle(width_mm=43.123456789)),))
     before=(w.style,w.page,w.flow,w.source_session.atom_ids,w.resolver.selection_records())

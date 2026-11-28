@@ -32,11 +32,11 @@ def args(source="12.50 $12_3$"):
     }
 
 
-@pytest.mark.parametrize("change", ["tail", "shift", "math", "table", "code", "footnote", "page"])
+@pytest.mark.parametrize("change", ["tail", "shift", "math", "table", "code", "page"])
 def test_measurements_survive_full_layout_misses_with_exact_current_mapping(change):
     source = (
         "12.50\n\n$\\frac{12}{34}$\n\n|12|34|\n|---|---|\n|5.6|7.8|\n\n"
-        "```\n12.5\n```\n\n12[^n]\n\n[^n]: 34\n\n9.0"
+        "```\n12.5\n```\n\n12\n\n34\n\n9.0"
     )
     inputs, cache = args(source), MarkdownBuildCache()
     first = mixed.build_markdown(**inputs, cache=cache)
@@ -54,7 +54,6 @@ def test_measurements_survive_full_layout_misses_with_exact_current_mapping(chan
             "math": "em_mm",
             "table": "digit_height_mm",
             "code": "advance_mm",
-            "footnote": "text_scale",
         }[change]
         config = getattr(inputs["flow"], change)
         inputs["flow"] = replace(
@@ -102,7 +101,6 @@ def test_cold_and_warm_results_match_and_do_not_share_mutable_selections(monkeyp
         "math",
         "table",
         "code",
-        "footnote",
         "dialect",
         "seed",
         "anchors",
@@ -133,12 +131,11 @@ def test_invalidations_equal_uncached_rebuild(change, monkeypatch):
         inputs["style"] = replace(inputs["style"], em_mm=7)
     elif change == "flow":
         inputs["flow"] = replace(inputs["flow"], paragraph_gap_mm=3)
-    elif change in {"math", "table", "code", "footnote"}:
+    elif change in {"math", "table", "code"}:
         field = {
             "math": "em_mm",
             "table": "digit_height_mm",
             "code": "em_mm",
-            "footnote": "text_scale",
         }[change]
         current = getattr(inputs["flow"], change)
         inputs["flow"] = replace(

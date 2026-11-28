@@ -111,8 +111,8 @@ def test_nested_callouts_default_title_empty_body_and_keep_next():
     )
 
 
-def test_callout_title_math_tasks_table_and_footnotes_share_layout():
-    source = "> [!tip]- $\\vec{12}$[^a]\n>\n> - [x] [[远处|34]]\n>\n> |5|\n> |---|\n> |![[附件\\|6.5]]|\n\n[^a]:\n    > [!note] 7\n    > [[文件|89]]"
+def test_callout_title_math_tasks_and_table_share_layout():
+    source = "> [!tip]- $\\vec{12}$\n>\n> - [x] [[远处|34]]\n>\n> |5|\n> |---|\n> |![[附件\\|6.5]]|\n\n> [!note] 7\n> [[文件|89]]"
     doc = parse(source)
     s = layout_markdown(doc, resolver(), flow=FLOW)
     assert s.plotter_exportable, s.diagnostics

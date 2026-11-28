@@ -48,7 +48,7 @@ def imported_template(template, results, source_hash, *, adopt_size=False, group
             PageLayout(
                 key,
                 f"PDF 第 {r['index'] + 1} 页",
-                (frame,),
+                tuple(TextFrame(**f) for f in r.get("body_frames", ())) or (frame,),
                 background=TemplateBackground(**r["background"]),
                 source_page=r["index"] + 1,
                 source_sha256=source_hash,
@@ -164,7 +164,9 @@ class PdfPagesDialog(QtWidgets.QDialog):
 
     def next_page(self):
         if self.queue:
-            self.pdf.request({"action": "render", "index": self.queue.pop(0) - 1})
+            size = ((self.results[0]["size_mm"] if self.results else None) if self.adopt.isChecked()
+                    else (self.template.width_mm, self.template.height_mm))
+            self.pdf.request({"action": "render", "index": self.queue.pop(0) - 1, "frame_size": size})
         else:
             try:
                 group, mode = self.group.currentData(), self.mode.currentData()
@@ -187,7 +189,8 @@ class PdfPagesDialog(QtWidgets.QDialog):
                 )
                 if self.initial_blank is not None and self.initial_blank not in self.candidate.layouts:
                     self.impact.appendPlainText("自动清理：未编辑且已无引用的初始空白版式。")
-                self.error.setText("页面已读取。确定后应用，可在工作台撤销。")
+                counts = "、".join(str(len(r.get("body_frames", ()))) for r in self.results)
+                self.error.setText(f"各页识别正文框数：{counts}。确定后可在底图上调整，未识别的页使用普通正文框。")
                 self.set_busy(False)
             except (ValueError, TypeError) as error:
                 self.fail(str(error))

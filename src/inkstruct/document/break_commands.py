@@ -103,7 +103,7 @@ def constrain_flow_breaks(nodes, diagnostics, *, context="", cancelled=None):
     """Only body flow may advance its cursor; embedded/fixed content cannot."""
     from .cancellation import check_cancel
 
-    blocked = {"td", "th", "footnote_definition", "footnote_entry", "named_field", "image"}
+    blocked = {"td", "th", "named_field", "image"}
 
     def visit(node, container=""):
         check_cancel(cancelled)

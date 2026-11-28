@@ -128,7 +128,7 @@ class GlobalDefaultsStore:
             result=LayoutDefaults(
                 PageProfile(**data["page"]),
                 StyleProfile(**data["style"]),
-                FlowStyle(**data["flow"]).compact_body(),
+                FlowStyle(**{k: v for k, v in data["flow"].items() if k != "footnote"}).compact_body(),
                 data["mode"],
                 data["run"],
                 data["symbols"],

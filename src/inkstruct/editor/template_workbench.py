@@ -171,10 +171,11 @@ def interactive_canvas(owner):
                 if self.resize_drag:
                     # Keep at least the first paper line. Existing paper lines
                     # retain their positions when the bottom edge is dragged.
-                    height = max(round(max(0.1, r.height_mm + dy), 3), grid.first_mm if grid else 0)
+                    half_cell = grid.cell_height(r.height_mm) / 2 if grid and grid.columns else 0
+                    height = max(round(max(0.1, r.height_mm + dy), 3), grid.first_mm + half_cell if grid else 0)
                     region = replace(r, width_mm=round(max(0.1, r.width_mm + dx), 3), height_mm=height)
-                    if grid and height < grid.last_mm:
-                        baselines = [baseline for baseline in grid.baselines() if baseline <= height]
+                    if grid and height < grid.last_mm + half_cell:
+                        baselines = [b for b in grid.baselines() if b + half_cell <= height + 1e-9]
                         grid = replace(grid, last_mm=baselines[-1], rows=len(baselines))
                 else:
                     region = replace(r, x_mm=round(r.x_mm + dx, 3), y_mm=round(r.y_mm + dy, 3))
@@ -426,7 +427,8 @@ class WorkbenchUI:
         frame_form.addRow("正文顺序", self.frame_order)
         self.frame_flow = QtWidgets.QComboBox()
         self.frame_flow.addItem("按内容排版（默认）", "content")
-        self.frame_flow.addItem("按纸张行格排版", "paper")
+        self.frame_flow.addItem("横线正文", "paper")
+        self.frame_flow.addItem("方格正文", "cells")
         self.frame_flow.setToolTip("在设计预览中用蓝色虚线标出纸面基线。使用原字号，较高内容会占用多格。")
         self.frame_flow.currentIndexChanged.connect(self.frame_flow_changed)
         frame_form.addRow("排版方式", self.frame_flow)
@@ -442,6 +444,10 @@ class WorkbenchUI:
         self.grid_rows.valueChanged.connect(self.update_grid_rows)
         self.grid_rows.editingFinished.connect(self.flush)
         frame_form.addRow("可用行数", self.grid_rows)
+        self.grid_columns = QtWidgets.QSpinBox()
+        self.grid_columns.setRange(1, 1000)
+        self.grid_columns.editingFinished.connect(self.flush)
+        frame_form.addRow("每行格数", self.grid_columns)
         self.grid_pitch = QtWidgets.QLabel()
         frame_form.addRow("行格间距", self.grid_pitch)
         self.field_choice = QtWidgets.QComboBox()
@@ -692,7 +698,7 @@ class WorkbenchUI:
             )
             self.frame_order.setEnabled(frame.role == "body")
             self.frame_form.setRowVisible(self.frame_flow, frame.role == "body")
-            self.frame_flow.setCurrentIndex(1 if frame.paper_grid else 0)
+            self.frame_flow.setCurrentIndex(2 if frame.paper_grid and frame.paper_grid.columns else 1 if frame.paper_grid else 0)
             height = frame.region.height_mm
             first = min(7, height / 3)
             last = height - min(2, height / 5)
@@ -703,6 +709,7 @@ class WorkbenchUI:
             self.grid_first.setValue(grid.first_mm if grid else first)
             self.grid_last.setValue(grid.last_mm if grid else last)
             self.grid_rows.setValue(grid.rows if grid else rows)
+            self.grid_columns.setValue(grid.columns if grid and grid.columns else 20)
             self.grid_initial = self.grid_values()
             self.update_grid_rows()
             self.field_choice.setEnabled(frame.role == "field")
@@ -711,12 +718,16 @@ class WorkbenchUI:
     def grid_values(self):
         first = self.grid_first.value()
         rows = self.grid_rows.value()
-        return first, first if rows == 1 else self.grid_last.value(), rows
+        columns = self.grid_columns.value() if self.frame_flow.currentData() == "cells" else 0
+        return first, first if rows == 1 else self.grid_last.value(), rows, columns
 
     def update_grid_rows(self):
         frame = self.selected_frame()
-        show = frame is not None and frame.role == "body" and self.frame_flow.currentData() == "paper"
-        first, last, rows = self.grid_values()
+        show = frame is not None and frame.role == "body" and self.frame_flow.currentData() != "content"
+        first, last, rows, columns = self.grid_values()
+        self.frame_form.setRowVisible(self.grid_columns, show and bool(columns))
+        for control, which in ((self.grid_first, "首行"), (self.grid_last, "末行")):
+            self.frame_form.labelForField(control).setText(which + ("中心（距框顶）" if columns else "基线（距框顶）"))
         for control in (self.grid_first, self.grid_rows):
             self.frame_form.setRowVisible(control, show)
         for control in (self.grid_last, self.grid_pitch):
@@ -762,7 +773,7 @@ class WorkbenchUI:
                         if c.value() != self.geometry_initial[k]
                     }
                     paper_grid = None
-                    if frame.role == "body" and self.frame_flow.currentData() == "paper":
+                    if frame.role == "body" and self.frame_flow.currentData() != "content":
                         grid_values = self.grid_values()
                         paper_grid = (frame.paper_grid if frame.paper_grid and grid_values == self.grid_initial
                                       else PaperGrid(*grid_values))
