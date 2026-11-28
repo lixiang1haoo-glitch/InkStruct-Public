@@ -36,12 +36,12 @@ Function ShortcutPage
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 16u "安装完成。请选择从哪里打开 InkStruct。"
+  ${NSD_CreateLabel} 0 0 100% 16u "安装完成。请选择要添加的快捷方式。"
   Pop $0
   ${NSD_CreateCheckbox} 0 24u 100% 14u "添加桌面快捷方式"
   Pop $DesktopCheck
   ${NSD_Check} $DesktopCheck
-  ${NSD_CreateCheckbox} 0 46u 100% 14u "添加到开始菜单"
+  ${NSD_CreateCheckbox} 0 46u 100% 14u "添加开始菜单快捷方式"
   Pop $MenuCheck
   nsDialogs::Show
 FunctionEnd
