@@ -309,7 +309,8 @@ class FontMetadata:
                     or ('error' in item and not isinstance(item['error'], str))):
                 raise ValueError('字体管理条目无效；原文件保留')
             summary = item.get('summary')
-            if summary and (not isinstance(summary, dict) or set(summary) != {'stamp', 'manifest', 'title', 'detail', 'groups', 'origins'}
+            if summary and (not isinstance(summary, dict) or set(summary) - {'candidate_count'} != {'stamp', 'manifest', 'title', 'detail', 'groups', 'origins'}
+                            or ('candidate_count' in summary and (type(summary['candidate_count']) is not int or summary['candidate_count'] < 0))
                             or not isinstance(summary['manifest'], dict) or not isinstance(summary['stamp'], list)
                             or any(not isinstance(summary['manifest'].get(key), str) for key in ('name', 'font_id', 'writer_alias', 'font_version', 'release_id', 'package_id', 'package_kind'))):
                 raise ValueError('字体摘要索引无效；原文件保留')

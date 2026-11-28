@@ -728,6 +728,7 @@ class FontLibrary(FontManagement, QtWidgets.QWidget):
     def refresh(self, selected_path=None):
         try:
             self.catalog = self.management.read()
+            self.catalog_error = ''
         except (ValueError, OSError) as error:
             self.catalog_error = str(error)
         if selected_path is None and self.list.currentItem():

@@ -4,7 +4,7 @@ Windows 版提供安装程序、免安装 ZIP 和对应源码。应用源码、�
 
 ## 构建产物和验证
 
-- 0.1.152 为 Windows 公开测试版。免安装包 `InkStruct-0.1.152-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.152-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，补齐字体库中的参考字体。完成时可选桌面快捷方式和开始菜单，默认只勾选桌面。
+- 0.1.153 为 Windows 本机测试版。免安装包 `InkStruct-0.1.153-Windows-x64.zip` 解压后运行 `InkStruct.exe`。安装程序 `InkStruct-0.1.153-Windows-x64-Installer.exe` 默认安装到当前用户的程序目录，补齐字体库中的参考字体。完成时可选桌面快捷方式和开始菜单，默认只勾选桌面。
 - 更新后，写字机的所有 XY 移动共用「运动速度」。已有设备沿用保存的书写速度，新建设备默认 2500 mm/min。[写字机使用说明](USER_GUIDE.md#书写与限位提示)
 
 免安装用户可在字体库导入 ZIP 内的「参考字体.inkfont」。已有字体和文档绑定仍可继续使用。

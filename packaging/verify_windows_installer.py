@@ -7,11 +7,21 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 from zipfile import ZipFile
 
 from build_windows_installer import digest
 from verify_public_windows import synthetic_font, verify
+
+
+def access_rules(path):
+    return subprocess.check_output(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+         "([IO.File]::GetAccessControl($env:INKSTRUCT_TEST_PATH)).GetSecurityDescriptorSddlForm("
+         "[Security.AccessControl.AccessControlSections]::Access)"],
+        env={**os.environ, "INKSTRUCT_TEST_PATH": str(path)}, text=True,
+    ).strip()
 
 
 def main():
@@ -41,13 +51,23 @@ def main():
     library = output / "isolated-workspace" / "fonts"
     reference = library / "参考字体.inkfont"
     assert digest(reference) == digest(installed / reference.name)
-    reference = reference.rename(library / "renamed.inkfont")
+    control = library / "normal-file"
+    control.touch()
+    expected_rules = access_rules(control)
+    assert access_rules(reference) == expected_rules
+    # Recreate the 0.1.152 staging move before upgrading a renamed reference.
+    with tempfile.TemporaryDirectory(dir=library) as private:
+        staged = Path(private) / reference.name
+        staged.write_bytes(reference.read_bytes())
+        reference.unlink()
+        reference = staged.rename(library / "renamed.inkfont")
     modified = reference.stat().st_mtime_ns
     assert (output / "isolated-desktop/InkStruct.lnk").is_file()
     assert not (output / "isolated-menu/InkStruct.lnk").exists()
     subprocess.run(f'"{installer}" /S /ISOLATED /D={installed}', env=env, cwd=output,
                    timeout=120, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
     assert list(library.glob("*.inkfont")) == [reference] and reference.stat().st_mtime_ns == modified
+    assert access_rules(reference) == expected_rules
     font = synthetic_font(output)
     native = verify(installed / "InkStruct.exe", "installed-native", "--windows-style-check", font, output)
     sentinel = installed / "user-files" / "keep.txt"

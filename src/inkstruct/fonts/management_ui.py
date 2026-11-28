@@ -111,6 +111,7 @@ class FontManagement:
         except (OSError, ValueError) as error:
             self.catalog, self.catalog_error = {}, str(error)
         self.metadata_job = self.inspection_job = None
+        self.failed_metadata_reads = {}
         self.preview_cache = OrderedDict()
         self.inspection_epoch = 0
         self.inspection_sample = self.character_offset = 0
@@ -333,7 +334,7 @@ class FontManagement:
         self.folder_action = menu.addAction('打开字体包所在文件夹', self.open_font_folder)
         self.rename_action = menu.addAction('修改库内显示名称…', self.rename_font)
         self.archive_action = menu.addAction('移出字体库 / 恢复', self.archive_font)
-        menu.addAction('刷新资源列表', self.refresh)
+        menu.addAction('刷新资源列表', self.retry_font_reads)
         self.more_button.setMenu(menu)
         self.actions.addWidget(self.more_button)
         # Explicit order within the browser; hidden controls are skipped by Qt.
@@ -389,6 +390,10 @@ class FontManagement:
         except OSError:
             return None
 
+    def retry_font_reads(self):
+        self.failed_metadata_reads.clear()
+        self.refresh()
+
     def load_metadata(self):
         if self.metadata_job:
             return
@@ -396,7 +401,7 @@ class FontManagement:
         paths = []
         for path in self.root.glob('*.inkfont'):
             try:
-                if self.metadata_for(path) is None and self.catalog.get(path.name, {}).get('error_stamp') != list(fingerprint(path)):
+                if self.metadata_for(path) is None and self.failed_metadata_reads.get(path) != fingerprint(path):
                     paths.append(path)
             except OSError:
                 continue
@@ -430,7 +435,9 @@ class FontManagement:
                 self.font_entries[path] = (tuple(summary['stamp']), summary['title'], summary['detail'])
             elif error:
                 item['error'] = error
-                item['error_stamp'] = list(fingerprint(path))
+                stamp = fingerprint(path)
+                self.failed_metadata_reads[Path(path)] = stamp
+                item['error_stamp'] = list(stamp)
                 changes = {'error': error, 'error_stamp': item['error_stamp']}
             try:
                 if changes:
