@@ -69,6 +69,7 @@ class InitializationDialog(QtWidgets.QDialog):
         layout.addWidget(pair_widget((self.stop, self.cancel, self.advance)))
         panel.machine_state.connect(self.refresh)
         self.refresh()
+        self.feedback.clear()
 
     def draft_axes(self):
         return DeviceAxes(*(spin.value() / 100 for spin in self.scales),
@@ -140,10 +141,14 @@ class InitializationDialog(QtWidgets.QDialog):
         self.link.setVisible(rebooting or not connected)
         self.link.setText(panel.link_button.text())
         self.link.setEnabled(idle and (not connected or panel.pen_raised))
-        self.position.setText(panel.position_label.text())
-        if calibrating and self.bounds and connected:
-            x, y = panel.device.position[:2]
-            self.position.setText(f"设备当前读数 X {x:.3f} · Y {y:.3f} mm")
+        if connected:
+            pen = "已抬笔" if panel.pen_raised else "已落笔"
+            if calibrating and self.bounds:
+                x, y = panel.device.position[:2]
+                pen += f" · 设备当前读数 X {x:.3f} · Y {y:.3f} mm"
+            self.position.setText(pen)
+        else:
+            self.position.setText(panel.position_label.text())
         self.nudge.setVisible(not rebooting)
         panel.refresh_motion_controls(self.nudge, connected and idle and not rebooting)
         self.raise_pen.setVisible(connected and not panel.pen_raised)
